@@ -288,8 +288,144 @@ INSERT INTO score_logs (
 );
 
 -- name: GetScoringRules :many
-SELECT * FROM scoring_rules;
+SELECT * FROM scoring_rules
+ORDER BY id ASC;
 
 -- name: GetScoringRuleByKey :one
 SELECT * FROM scoring_rules
 WHERE rule_key = $1 LIMIT 1;
+
+-- name: UpsertScoringRule :one
+INSERT INTO scoring_rules (
+    rule_key, points, description
+) VALUES (
+    $1, $2, $3
+)
+ON CONFLICT (rule_key) DO UPDATE SET
+    points = EXCLUDED.points,
+    description = COALESCE(EXCLUDED.description, scoring_rules.description)
+RETURNING *;
+
+-- name: GetLocationScoreSumInWeek :one
+SELECT COALESCE(SUM(points), 0)::bigint AS sum_points
+FROM score_logs
+WHERE target_type = 'LOCATION'
+  AND target_id = $1
+  AND created_at >= $2;
+
+-- name: CountOpenIssuesByLocation :one
+SELECT COUNT(*)::bigint AS open_count
+FROM issues
+WHERE location_code = $1
+  AND status = 'OPEN';
+
+-- name: CountOverdueIssuesByLocation :one
+SELECT COUNT(*)::bigint AS overdue_count
+FROM issues
+WHERE location_code = $1
+  AND status = 'OPEN'
+  AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours';
+
+-- name: GetReporterLeaderboardInMonth :many
+SELECT u.id AS user_id,
+       u.full_name,
+       COALESCE(SUM(sl.points), 0)::bigint AS points,
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' THEN i.id END)::bigint AS valid_count,
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' AND i.category = '6S' THEN i.id END)::bigint AS safety_count
+FROM users u
+JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
+LEFT JOIN issues i ON i.id = sl.issue_id
+WHERE sl.created_at >= $1
+GROUP BY u.id, u.full_name
+ORDER BY points DESC, valid_count DESC, u.id ASC
+LIMIT 50;
+
+-- name: ListScoreLogsSince :many
+SELECT * FROM score_logs
+WHERE created_at >= $1
+ORDER BY id ASC;
+
+-- name: GetNotificationConfig :one
+SELECT * FROM notification_configs
+WHERE id = 1 LIMIT 1;
+
+-- name: UpsertNotificationConfig :one
+INSERT INTO notification_configs (
+    id, wxpusher_enabled, wxpusher_app_token, lan_webhook_url, public_base_url, updated_at, updated_by
+) VALUES (
+    1, $1, $2, $3, $4, CURRENT_TIMESTAMP, $5
+)
+ON CONFLICT (id) DO UPDATE SET
+    wxpusher_enabled = EXCLUDED.wxpusher_enabled,
+    wxpusher_app_token = CASE WHEN EXCLUDED.wxpusher_app_token = '' THEN notification_configs.wxpusher_app_token ELSE EXCLUDED.wxpusher_app_token END,
+    lan_webhook_url = CASE WHEN EXCLUDED.lan_webhook_url = '' THEN notification_configs.lan_webhook_url ELSE EXCLUDED.lan_webhook_url END,
+    public_base_url = EXCLUDED.public_base_url,
+    updated_at = CURRENT_TIMESTAMP,
+    updated_by = EXCLUDED.updated_by
+RETURNING *;
+
+-- name: ClaimOutboxTasks :many
+UPDATE notification_outbox
+SET status = 'SENDING',
+    next_retry_at = CURRENT_TIMESTAMP + INTERVAL '120 seconds'
+WHERE id IN (
+    SELECT id FROM notification_outbox
+    WHERE (status = 'PENDING' AND next_retry_at <= CURRENT_TIMESTAMP)
+       OR (status = 'SENDING' AND next_retry_at < CURRENT_TIMESTAMP)
+    ORDER BY id ASC
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: MarkOutboxSent :exec
+UPDATE notification_outbox
+SET status = 'SENT',
+    sent_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND status = 'SENDING';
+
+-- name: MarkOutboxFailed :exec
+UPDATE notification_outbox
+SET status = 'FAILED',
+    last_error = $1
+WHERE id = $2 AND status = 'SENDING';
+
+-- name: RetryOutboxTask :exec
+UPDATE notification_outbox
+SET status = 'PENDING',
+    retry_count = retry_count + 1,
+    last_error = $1,
+    next_retry_at = CURRENT_TIMESTAMP + ($2 * INTERVAL '1 second')
+WHERE id = $3 AND status = 'SENDING';
+
+-- name: GetLastCronTaskLog :one
+SELECT * FROM cron_task_logs
+WHERE task_name = $1
+ORDER BY last_run_at DESC
+LIMIT 1;
+
+-- name: InsertCronTaskLog :one
+INSERT INTO cron_task_logs (
+    task_name, last_run_at, status, details
+) VALUES (
+    $1, CURRENT_TIMESTAMP, $2, $3
+)
+RETURNING *;
+
+-- name: ListOpenOverdueIssues :many
+SELECT id, location_code, created_at
+FROM issues
+WHERE status = 'OPEN'
+  AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'
+ORDER BY id ASC;
+
+-- name: ListAllActivePhotoBasenames :many
+SELECT photo_before AS photo_name FROM issues WHERE photo_before != ''
+UNION
+SELECT photo_detail AS photo_name FROM issues WHERE photo_detail IS NOT NULL AND photo_detail != ''
+UNION
+SELECT photo_after AS photo_name FROM issues WHERE photo_after IS NOT NULL AND photo_after != '';
+
+-- name: CleanupOldAuditLogs :exec
+DELETE FROM system_audit_logs
+WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '12 months';

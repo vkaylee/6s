@@ -100,6 +100,11 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 		registerAPIRoutes(r, dbConn, cfg, cipher, ldapClient)
 	}
 
+	storageDir := ""
+	if cfg != nil {
+		storageDir = cfg.DataDir
+	}
+	registerStaticRoutes(r, storageDir)
 	return r
 }
 

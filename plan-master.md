@@ -10,9 +10,9 @@ Xây dựng hệ thống 6S mobile-first Go + React PWA offline-resilient, trans
 4. [x] Domain 4: Scoring & Outbox Worker (`plan-scoring-cron.md`)
 5. [x] Domain 5: PWA Offline Engine (`plan-pwa-offline.md`)
 6. [x] Domain 6: PWA Industrial UI (`plan-pwa-ui.md`)
-7. [ ] Verification & Binary Embed (`plan-verification.md`)
+7. [x] Domain 7: Verification & Binary Embed (`plan-verification.md`)
 
 ## Done When
-- [ ] Backend Go pass toàn bộ test suite (`./leedevkit test server --unit-only`)
-- [ ] Web PWA pass build và lint (`./leedevkit test web --lint-only`)
-- [ ] Binary duy nhất nhúng PWA serve HTTPS trên mạng LAN
+- [x] Backend Go pass toàn bộ test suite (`./leedevkit test server --unit-only`)
+- [x] Web PWA pass build và lint (`./leedevkit test web --lint-only`)
+- [x] Binary duy nhất nhúng PWA serve HTTPS trên mạng LAN
