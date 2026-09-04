@@ -12,6 +12,201 @@ import (
 	"time"
 )
 
+const closeIssue = `-- name: CloseIssue :one
+UPDATE issues
+SET status = 'CLOSED',
+    score_rating = $2,
+    closed_at = CURRENT_TIMESTAMP,
+    version = version + 1
+WHERE id = $1 
+  AND status = 'PENDING_REVIEW' 
+  AND ($3::int IS NULL OR version = $3)
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type CloseIssueParams struct {
+	ID              int64
+	ScoreRating     sql.NullInt16
+	ExpectedVersion sql.NullInt32
+}
+
+func (q *Queries) CloseIssue(ctx context.Context, arg CloseIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, closeIssue, arg.ID, arg.ScoreRating, arg.ExpectedVersion)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const countIssuesFiltered = `-- name: CountIssuesFiltered :one
+SELECT COUNT(*) FROM issues
+WHERE ($1::varchar IS NULL OR status = $1)
+  AND ($2::varchar IS NULL OR category = $2)
+  AND ($3::varchar IS NULL OR location_code = $3)
+`
+
+type CountIssuesFilteredParams struct {
+	Status       sql.NullString
+	Category     sql.NullString
+	LocationCode sql.NullString
+}
+
+func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilteredParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countIssuesFiltered, arg.Status, arg.Category, arg.LocationCode)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createIssue = `-- name: CreateIssue :one
+INSERT INTO issues (
+    client_uuid, version, creator_id, category, location_code, description, photo_before, photo_detail, status
+) VALUES (
+    $1, 1, $2, $3, $4, $5, $6, $7, 'OPEN'
+)
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type CreateIssueParams struct {
+	ClientUuid   string
+	CreatorID    int64
+	Category     string
+	LocationCode string
+	Description  sql.NullString
+	PhotoBefore  string
+	PhotoDetail  sql.NullString
+}
+
+func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, createIssue,
+		arg.ClientUuid,
+		arg.CreatorID,
+		arg.Category,
+		arg.LocationCode,
+		arg.Description,
+		arg.PhotoBefore,
+		arg.PhotoDetail,
+	)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const createLocation = `-- name: CreateLocation :one
+INSERT INTO locations (
+    code, name_vi, name_zh, name_en, qr_code, is_active
+) VALUES (
+    $1, $2, $3, $4, $5, TRUE
+)
+RETURNING id, code, name_vi, name_zh, name_en, qr_code, is_active, created_at
+`
+
+type CreateLocationParams struct {
+	Code   string
+	NameVi string
+	NameZh string
+	NameEn string
+	QrCode string
+}
+
+func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) (Location, error) {
+	row := q.db.QueryRowContext(ctx, createLocation,
+		arg.Code,
+		arg.NameVi,
+		arg.NameZh,
+		arg.NameEn,
+		arg.QrCode,
+	)
+	var i Location
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.QrCode,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createOutboxEntry = `-- name: CreateOutboxEntry :one
+INSERT INTO notification_outbox (
+    issue_id, event_type, channel, payload, status, next_retry_at
+) VALUES (
+    $1, $2, $3, $4, 'PENDING', CURRENT_TIMESTAMP
+)
+RETURNING id, issue_id, event_type, channel, payload, status, retry_count, max_retries, last_error, next_retry_at, created_at, sent_at
+`
+
+type CreateOutboxEntryParams struct {
+	IssueID   int64
+	EventType string
+	Channel   string
+	Payload   json.RawMessage
+}
+
+func (q *Queries) CreateOutboxEntry(ctx context.Context, arg CreateOutboxEntryParams) (NotificationOutbox, error) {
+	row := q.db.QueryRowContext(ctx, createOutboxEntry,
+		arg.IssueID,
+		arg.EventType,
+		arg.Channel,
+		arg.Payload,
+	)
+	var i NotificationOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.EventType,
+		&i.Channel,
+		&i.Payload,
+		&i.Status,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.CreatedAt,
+		&i.SentAt,
+	)
+	return i, err
+}
+
 const createRefreshToken = `-- name: CreateRefreshToken :one
 INSERT INTO refresh_tokens (
     user_id, token_hash, device_info, expires_at
@@ -94,6 +289,58 @@ func (q *Queries) CreateUserJIT(ctx context.Context, arg CreateUserJITParams) (U
 	return i, err
 }
 
+const deleteIssueTags = `-- name: DeleteIssueTags :exec
+DELETE FROM issue_tags
+WHERE issue_id = $1
+`
+
+func (q *Queries) DeleteIssueTags(ctx context.Context, issueID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteIssueTags, issueID)
+	return err
+}
+
+const forceResolveIssue = `-- name: ForceResolveIssue :one
+UPDATE issues
+SET status = 'PENDING_REVIEW',
+    resolver_id = $2,
+    photo_after = $3,
+    resolved_at = CURRENT_TIMESTAMP,
+    version = version + 1
+WHERE id = $1
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type ForceResolveIssueParams struct {
+	ID         int64
+	ResolverID sql.NullInt64
+	PhotoAfter sql.NullString
+}
+
+func (q *Queries) ForceResolveIssue(ctx context.Context, arg ForceResolveIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, forceResolveIssue, arg.ID, arg.ResolverID, arg.PhotoAfter)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}
+
 const getADConfig = `-- name: GetADConfig :one
 SELECT id, is_enabled, server, port, use_tls, skip_tls_verify, base_dn, bind_dn, bind_password, user_filter, group_admin_dn, group_safety_dn, group_leader_dn, updated_at, updated_by FROM ad_configs
 WHERE id = 1 LIMIT 1
@@ -118,6 +365,36 @@ func (q *Queries) GetADConfig(ctx context.Context) (AdConfig, error) {
 		&i.GroupLeaderDn,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const getIssueByID = `-- name: GetIssueByID :one
+SELECT id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, getIssueByID, id)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
 	)
 	return i, err
 }
@@ -194,6 +471,55 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getScoringRuleByKey = `-- name: GetScoringRuleByKey :one
+SELECT id, rule_key, points, description FROM scoring_rules
+WHERE rule_key = $1 LIMIT 1
+`
+
+func (q *Queries) GetScoringRuleByKey(ctx context.Context, ruleKey string) (ScoringRule, error) {
+	row := q.db.QueryRowContext(ctx, getScoringRuleByKey, ruleKey)
+	var i ScoringRule
+	err := row.Scan(
+		&i.ID,
+		&i.RuleKey,
+		&i.Points,
+		&i.Description,
+	)
+	return i, err
+}
+
+const getScoringRules = `-- name: GetScoringRules :many
+SELECT id, rule_key, points, description FROM scoring_rules
+`
+
+func (q *Queries) GetScoringRules(ctx context.Context) ([]ScoringRule, error) {
+	rows, err := q.db.QueryContext(ctx, getScoringRules)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScoringRule
+	for rows.Next() {
+		var i ScoringRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.RuleKey,
+			&i.Points,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserByBadgeCode = `-- name: GetUserByBadgeCode :one
@@ -280,6 +606,17 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const incrementTagUseCount = `-- name: IncrementTagUseCount :exec
+UPDATE tags
+SET use_count = use_count + 1
+WHERE code = $1
+`
+
+func (q *Queries) IncrementTagUseCount(ctx context.Context, code string) error {
+	_, err := q.db.ExecContext(ctx, incrementTagUseCount, code)
+	return err
+}
+
 const insertAuditLog = `-- name: InsertAuditLog :exec
 INSERT INTO system_audit_logs (
     user_id, action, target_table, target_id, old_value, new_value, ip_address, user_agent, created_at
@@ -311,6 +648,200 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.UserAgent,
 	)
 	return err
+}
+
+const insertIssueTag = `-- name: InsertIssueTag :exec
+INSERT INTO issue_tags (
+    issue_id, tag_code
+) VALUES (
+    $1, $2
+) ON CONFLICT DO NOTHING
+`
+
+type InsertIssueTagParams struct {
+	IssueID int64
+	TagCode string
+}
+
+func (q *Queries) InsertIssueTag(ctx context.Context, arg InsertIssueTagParams) error {
+	_, err := q.db.ExecContext(ctx, insertIssueTag, arg.IssueID, arg.TagCode)
+	return err
+}
+
+const insertScoreLog = `-- name: InsertScoreLog :exec
+INSERT INTO score_logs (
+    issue_id, target_type, target_id, rule_key, points, created_at, penalty_date
+) VALUES (
+    $1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6
+)
+`
+
+type InsertScoreLogParams struct {
+	IssueID     int64
+	TargetType  string
+	TargetID    string
+	RuleKey     string
+	Points      int32
+	PenaltyDate sql.NullTime
+}
+
+func (q *Queries) InsertScoreLog(ctx context.Context, arg InsertScoreLogParams) error {
+	_, err := q.db.ExecContext(ctx, insertScoreLog,
+		arg.IssueID,
+		arg.TargetType,
+		arg.TargetID,
+		arg.RuleKey,
+		arg.Points,
+		arg.PenaltyDate,
+	)
+	return err
+}
+
+const invalidateIssue = `-- name: InvalidateIssue :one
+UPDATE issues
+SET status = 'INVALID',
+    reject_reason = $2,
+    version = version + 1
+WHERE id = $1 
+  AND status IN ('OPEN', 'PENDING_REVIEW') 
+  AND ($3::int IS NULL OR version = $3)
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type InvalidateIssueParams struct {
+	ID              int64
+	RejectReason    sql.NullString
+	ExpectedVersion sql.NullInt32
+}
+
+func (q *Queries) InvalidateIssue(ctx context.Context, arg InvalidateIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, invalidateIssue, arg.ID, arg.RejectReason, arg.ExpectedVersion)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const listIssuesFiltered = `-- name: ListIssuesFiltered :many
+SELECT i.id, i.client_uuid, i.version, i.creator_id, i.resolver_id, i.category, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
+       loc.name_vi AS location_name_vi,
+       u.username AS creator_username,
+       u.full_name AS creator_full_name,
+       res.username AS resolver_username,
+       res.full_name AS resolver_full_name
+FROM issues i
+JOIN locations loc ON i.location_code = loc.code
+JOIN users u ON i.creator_id = u.id
+LEFT JOIN users res ON i.resolver_id = res.id
+WHERE ($1::varchar IS NULL OR i.status = $1)
+  AND ($2::varchar IS NULL OR i.category = $2)
+  AND ($3::varchar IS NULL OR i.location_code = $3)
+ORDER BY 
+    CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
+    i.created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListIssuesFilteredParams struct {
+	Status       sql.NullString
+	Category     sql.NullString
+	LocationCode sql.NullString
+	Offset       int32
+	Limit        int32
+}
+
+type ListIssuesFilteredRow struct {
+	ID               int64
+	ClientUuid       string
+	Version          int32
+	CreatorID        int64
+	ResolverID       sql.NullInt64
+	Category         string
+	LocationCode     string
+	Description      sql.NullString
+	RejectReason     sql.NullString
+	PhotoBefore      string
+	PhotoDetail      sql.NullString
+	PhotoAfter       sql.NullString
+	ScoreRating      sql.NullInt16
+	Status           string
+	CreatedAt        time.Time
+	ResolvedAt       sql.NullTime
+	ClosedAt         sql.NullTime
+	LocationNameVi   string
+	CreatorUsername  string
+	CreatorFullName  string
+	ResolverUsername sql.NullString
+	ResolverFullName sql.NullString
+}
+
+func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFilteredParams) ([]ListIssuesFilteredRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIssuesFiltered,
+		arg.Status,
+		arg.Category,
+		arg.LocationCode,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIssuesFilteredRow
+	for rows.Next() {
+		var i ListIssuesFilteredRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientUuid,
+			&i.Version,
+			&i.CreatorID,
+			&i.ResolverID,
+			&i.Category,
+			&i.LocationCode,
+			&i.Description,
+			&i.RejectReason,
+			&i.PhotoBefore,
+			&i.PhotoDetail,
+			&i.PhotoAfter,
+			&i.ScoreRating,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ResolvedAt,
+			&i.ClosedAt,
+			&i.LocationNameVi,
+			&i.CreatorUsername,
+			&i.CreatorFullName,
+			&i.ResolverUsername,
+			&i.ResolverFullName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLocations = `-- name: ListLocations :many
@@ -351,39 +882,73 @@ func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
 	return items, nil
 }
 
-const listOpenIssues = `-- name: ListOpenIssues :many
-SELECT id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
-WHERE status = 'OPEN'
-ORDER BY created_at DESC
+const listTags = `-- name: ListTags :many
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset FROM tags
+ORDER BY use_count DESC, id ASC
 `
 
-func (q *Queries) ListOpenIssues(ctx context.Context) ([]Issue, error) {
-	rows, err := q.db.QueryContext(ctx, listOpenIssues)
+func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTags)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Issue
+	var items []Tag
 	for rows.Next() {
-		var i Issue
+		var i Tag
 		if err := rows.Scan(
 			&i.ID,
-			&i.ClientUuid,
-			&i.Version,
-			&i.CreatorID,
-			&i.ResolverID,
+			&i.Code,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
 			&i.Category,
-			&i.LocationCode,
-			&i.Description,
-			&i.RejectReason,
-			&i.PhotoBefore,
-			&i.PhotoDetail,
-			&i.PhotoAfter,
-			&i.ScoreRating,
-			&i.Status,
-			&i.CreatedAt,
-			&i.ResolvedAt,
-			&i.ClosedAt,
+			&i.UseCount,
+			&i.IsPreset,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagsForIssue = `-- name: ListTagsForIssue :many
+SELECT t.code, t.name_vi, t.name_zh, t.name_en, t.category
+FROM tags t
+JOIN issue_tags it ON t.code = it.tag_code
+WHERE it.issue_id = $1
+`
+
+type ListTagsForIssueRow struct {
+	Code     string
+	NameVi   string
+	NameZh   string
+	NameEn   string
+	Category string
+}
+
+func (q *Queries) ListTagsForIssue(ctx context.Context, issueID int64) ([]ListTagsForIssueRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsForIssue, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTagsForIssueRow
+	for rows.Next() {
+		var i ListTagsForIssueRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.Category,
 		); err != nil {
 			return nil, err
 		}
@@ -450,12 +1015,12 @@ ORDER BY id ASC
 `
 
 type ListUsersParams struct {
-	Column1 string
-	Column2 bool
+	AssignedLocationCode sql.NullString
+	IsActive             sql.NullBool
 }
 
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, listUsers, arg.Column1, arg.Column2)
+	rows, err := q.db.QueryContext(ctx, listUsers, arg.AssignedLocationCode, arg.IsActive)
 	if err != nil {
 		return nil, err
 	}
@@ -491,6 +1056,136 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const patchIssue = `-- name: PatchIssue :one
+UPDATE issues
+SET category = COALESCE($2, category),
+    location_code = COALESCE($3, location_code),
+    version = version + 1
+WHERE id = $1
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type PatchIssueParams struct {
+	ID           int64
+	Category     sql.NullString
+	LocationCode sql.NullString
+}
+
+func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, patchIssue, arg.ID, arg.Category, arg.LocationCode)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const reopenIssue = `-- name: ReopenIssue :one
+UPDATE issues
+SET status = 'OPEN',
+    reject_reason = $2,
+    version = version + 1
+WHERE id = $1 
+  AND status = 'PENDING_REVIEW' 
+  AND ($3::int IS NULL OR version = $3)
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type ReopenIssueParams struct {
+	ID              int64
+	RejectReason    sql.NullString
+	ExpectedVersion sql.NullInt32
+}
+
+func (q *Queries) ReopenIssue(ctx context.Context, arg ReopenIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, reopenIssue, arg.ID, arg.RejectReason, arg.ExpectedVersion)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const resolveIssue = `-- name: ResolveIssue :one
+UPDATE issues
+SET status = 'PENDING_REVIEW',
+    resolver_id = $2,
+    photo_after = $3,
+    resolved_at = CURRENT_TIMESTAMP,
+    version = version + 1
+WHERE id = $1 AND status = 'OPEN' AND version = $4
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+`
+
+type ResolveIssueParams struct {
+	ID         int64
+	ResolverID sql.NullInt64
+	PhotoAfter sql.NullString
+	Version    int32
+}
+
+func (q *Queries) ResolveIssue(ctx context.Context, arg ResolveIssueParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, resolveIssue,
+		arg.ID,
+		arg.ResolverID,
+		arg.PhotoAfter,
+		arg.Version,
+	)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ClientUuid,
+		&i.Version,
+		&i.CreatorID,
+		&i.ResolverID,
+		&i.Category,
+		&i.LocationCode,
+		&i.Description,
+		&i.RejectReason,
+		&i.PhotoBefore,
+		&i.PhotoDetail,
+		&i.PhotoAfter,
+		&i.ScoreRating,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ClosedAt,
+	)
+	return i, err
 }
 
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
@@ -691,6 +1386,52 @@ func (q *Queries) UpsertADConfig(ctx context.Context, arg UpsertADConfigParams) 
 		&i.GroupLeaderDn,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const upsertTag = `-- name: UpsertTag :one
+INSERT INTO tags (
+    code, name_vi, name_zh, name_en, category, is_preset
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (code) DO UPDATE SET
+    name_vi = EXCLUDED.name_vi,
+    name_zh = EXCLUDED.name_zh,
+    name_en = EXCLUDED.name_en,
+    category = EXCLUDED.category
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset
+`
+
+type UpsertTagParams struct {
+	Code     string
+	NameVi   string
+	NameZh   string
+	NameEn   string
+	Category string
+	IsPreset bool
+}
+
+func (q *Queries) UpsertTag(ctx context.Context, arg UpsertTagParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, upsertTag,
+		arg.Code,
+		arg.NameVi,
+		arg.NameZh,
+		arg.NameEn,
+		arg.Category,
+		arg.IsPreset,
+	)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
 	)
 	return i, err
 }

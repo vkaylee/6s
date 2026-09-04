@@ -42,8 +42,8 @@ RETURNING *;
 
 -- name: ListUsers :many
 SELECT * FROM users
-WHERE ($1::varchar IS NULL OR assigned_location_code = $1)
-  AND ($2::boolean IS NULL OR is_active = $2)
+WHERE (sqlc.narg('assigned_location_code')::varchar IS NULL OR assigned_location_code = sqlc.narg('assigned_location_code'))
+  AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active'))
 ORDER BY id ASC;
 
 -- name: CreateRefreshToken :one
@@ -125,11 +125,171 @@ ORDER BY code ASC;
 SELECT * FROM locations
 WHERE code = $1 LIMIT 1;
 
+-- name: CreateLocation :one
+INSERT INTO locations (
+    code, name_vi, name_zh, name_en, qr_code, is_active
+) VALUES (
+    $1, $2, $3, $4, $5, TRUE
+)
+RETURNING *;
+
+-- name: ListTags :many
+SELECT * FROM tags
+ORDER BY use_count DESC, id ASC;
+
+-- name: UpsertTag :one
+INSERT INTO tags (
+    code, name_vi, name_zh, name_en, category, is_preset
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (code) DO UPDATE SET
+    name_vi = EXCLUDED.name_vi,
+    name_zh = EXCLUDED.name_zh,
+    name_en = EXCLUDED.name_en,
+    category = EXCLUDED.category
+RETURNING *;
+
+-- name: IncrementTagUseCount :exec
+UPDATE tags
+SET use_count = use_count + 1
+WHERE code = $1;
+
 -- name: GetIssueByUUID :one
 SELECT * FROM issues
 WHERE client_uuid = $1 LIMIT 1;
 
--- name: ListOpenIssues :many
+-- name: GetIssueByID :one
 SELECT * FROM issues
-WHERE status = 'OPEN'
-ORDER BY created_at DESC;
+WHERE id = $1 LIMIT 1;
+
+-- name: CreateIssue :one
+INSERT INTO issues (
+    client_uuid, version, creator_id, category, location_code, description, photo_before, photo_detail, status
+) VALUES (
+    $1, 1, $2, $3, $4, $5, $6, $7, 'OPEN'
+)
+RETURNING *;
+
+-- name: InsertIssueTag :exec
+INSERT INTO issue_tags (
+    issue_id, tag_code
+) VALUES (
+    $1, $2
+) ON CONFLICT DO NOTHING;
+
+-- name: ListTagsForIssue :many
+SELECT t.code, t.name_vi, t.name_zh, t.name_en, t.category
+FROM tags t
+JOIN issue_tags it ON t.code = it.tag_code
+WHERE it.issue_id = $1;
+
+-- name: DeleteIssueTags :exec
+DELETE FROM issue_tags
+WHERE issue_id = $1;
+
+-- name: ListIssuesFiltered :many
+SELECT i.*, 
+       loc.name_vi AS location_name_vi,
+       u.username AS creator_username,
+       u.full_name AS creator_full_name,
+       res.username AS resolver_username,
+       res.full_name AS resolver_full_name
+FROM issues i
+JOIN locations loc ON i.location_code = loc.code
+JOIN users u ON i.creator_id = u.id
+LEFT JOIN users res ON i.resolver_id = res.id
+WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
+  AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category'))
+  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+ORDER BY 
+    CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
+    i.created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountIssuesFiltered :one
+SELECT COUNT(*) FROM issues
+WHERE (sqlc.narg('status')::varchar IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('category')::varchar IS NULL OR category = sqlc.narg('category'))
+  AND (sqlc.narg('location_code')::varchar IS NULL OR location_code = sqlc.narg('location_code'));
+
+-- name: ResolveIssue :one
+UPDATE issues
+SET status = 'PENDING_REVIEW',
+    resolver_id = $2,
+    photo_after = $3,
+    resolved_at = CURRENT_TIMESTAMP,
+    version = version + 1
+WHERE id = $1 AND status = 'OPEN' AND version = $4
+RETURNING *;
+
+-- name: ForceResolveIssue :one
+UPDATE issues
+SET status = 'PENDING_REVIEW',
+    resolver_id = $2,
+    photo_after = $3,
+    resolved_at = CURRENT_TIMESTAMP,
+    version = version + 1
+WHERE id = $1
+RETURNING *;
+
+-- name: CloseIssue :one
+UPDATE issues
+SET status = 'CLOSED',
+    score_rating = $2,
+    closed_at = CURRENT_TIMESTAMP,
+    version = version + 1
+WHERE id = $1 
+  AND status = 'PENDING_REVIEW' 
+  AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version'))
+RETURNING *;
+
+-- name: ReopenIssue :one
+UPDATE issues
+SET status = 'OPEN',
+    reject_reason = $2,
+    version = version + 1
+WHERE id = $1 
+  AND status = 'PENDING_REVIEW' 
+  AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version'))
+RETURNING *;
+
+-- name: InvalidateIssue :one
+UPDATE issues
+SET status = 'INVALID',
+    reject_reason = $2,
+    version = version + 1
+WHERE id = $1 
+  AND status IN ('OPEN', 'PENDING_REVIEW') 
+  AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version'))
+RETURNING *;
+
+-- name: PatchIssue :one
+UPDATE issues
+SET category = COALESCE(sqlc.narg('category'), category),
+    location_code = COALESCE(sqlc.narg('location_code'), location_code),
+    version = version + 1
+WHERE id = $1
+RETURNING *;
+
+-- name: CreateOutboxEntry :one
+INSERT INTO notification_outbox (
+    issue_id, event_type, channel, payload, status, next_retry_at
+) VALUES (
+    $1, $2, $3, $4, 'PENDING', CURRENT_TIMESTAMP
+)
+RETURNING *;
+
+-- name: InsertScoreLog :exec
+INSERT INTO score_logs (
+    issue_id, target_type, target_id, rule_key, points, created_at, penalty_date
+) VALUES (
+    $1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6
+);
+
+-- name: GetScoringRules :many
+SELECT * FROM scoring_rules;
+
+-- name: GetScoringRuleByKey :one
+SELECT * FROM scoring_rules
+WHERE rule_key = $1 LIMIT 1;

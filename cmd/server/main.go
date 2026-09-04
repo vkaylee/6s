@@ -18,7 +18,10 @@ import (
 	"6s/internal/crypto"
 	"6s/internal/database"
 	"6s/internal/db"
+	"6s/internal/issue"
+	"6s/internal/masterdata"
 	"6s/internal/response"
+	"6s/internal/storage"
 )
 
 func main() {
@@ -91,50 +94,99 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	})
 
 	if dbConn != nil && cfg != nil {
-		queries := db.New(dbConn)
-		jwtKey := []byte(cfg.JWTSecret)
-		if len(jwtKey) == 0 {
-			jwtKey = []byte("default-secret-key-32-bytes-secure")
-		}
-		tm := auth.NewTokenManager(jwtKey)
-
-		var trustedProxies []string
-		if cfg.TrustedProxies != "" {
-			for _, p := range strings.Split(cfg.TrustedProxies, ",") {
-				if trimmed := strings.TrimSpace(p); trimmed != "" {
-					trustedProxies = append(trustedProxies, trimmed)
-				}
-			}
-		}
-		limiter := auth.NewLoginLimiter(trustedProxies)
-
-		authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient)
-		authMw := auth.NewMiddleware(tm, queries)
-		adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
-
-		// Public auth routes
-		r.Route("/api/auth", func(ar chi.Router) {
-			ar.Post("/login", authHandler.Login)
-			ar.Post("/refresh", authHandler.Refresh)
-
-			// Authenticated auth routes
-			ar.Group(func(pr chi.Router) {
-				pr.Use(authMw.Authenticate)
-				pr.Post("/revoke", authHandler.Revoke)
-				pr.Get("/sessions", authHandler.Sessions)
-			})
-		})
-
-		// Config routes (Admin only)
-		r.Route("/api/config", func(cr chi.Router) {
-			cr.Use(authMw.Authenticate)
-			cr.Use(auth.RequireRole("ADMIN"))
-
-			cr.Get("/ad", adHandler.GetADConfig)
-			cr.Put("/ad", adHandler.UpdateADConfig)
-			cr.Post("/ad/test", adHandler.TestADConfig)
-		})
+		registerAPIRoutes(r, dbConn, cfg, cipher, ldapClient)
 	}
 
 	return r
+}
+
+func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) {
+	queries := db.New(dbConn)
+	jwtKey := []byte(cfg.JWTSecret)
+	if len(jwtKey) == 0 {
+		jwtKey = []byte("default-secret-key-32-bytes-secure")
+	}
+	tm := auth.NewTokenManager(jwtKey)
+
+	var trustedProxies []string
+	if cfg.TrustedProxies != "" {
+		for _, p := range strings.Split(cfg.TrustedProxies, ",") {
+			if trimmed := strings.TrimSpace(p); trimmed != "" {
+				trustedProxies = append(trustedProxies, trimmed)
+			}
+		}
+	}
+	limiter := auth.NewLoginLimiter(trustedProxies)
+
+	authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient)
+	authMw := auth.NewMiddleware(tm, queries)
+	adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
+
+	// Public auth routes
+	r.Route("/api/auth", func(ar chi.Router) {
+		ar.Post("/login", authHandler.Login)
+		ar.Post("/refresh", authHandler.Refresh)
+
+		// Authenticated auth routes
+		ar.Group(func(pr chi.Router) {
+			pr.Use(authMw.Authenticate)
+			pr.Post("/revoke", authHandler.Revoke)
+			pr.Get("/sessions", authHandler.Sessions)
+		})
+	})
+
+	// Config routes (Admin only)
+	r.Route("/api/config", func(cr chi.Router) {
+		cr.Use(authMw.Authenticate)
+		cr.Use(auth.RequireRole("ADMIN"))
+
+		cr.Get("/ad", adHandler.GetADConfig)
+		cr.Put("/ad", adHandler.UpdateADConfig)
+		cr.Post("/ad/test", adHandler.TestADConfig)
+	})
+
+	registerBusinessRoutes(r, queries, authMw, cfg)
+}
+
+func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cfg *config.Config) {
+	storageDir := cfg.DataDir
+	if storageDir == "" {
+		storageDir = "./data"
+	}
+	storageMgr, err := storage.NewManager(storageDir)
+	if err != nil {
+		log.Printf("Warning: failed to init storage manager: %v", err)
+	} else {
+		r.Mount("/uploads", storageMgr.FileServer())
+	}
+
+	mdHandler := masterdata.NewHandler(queries)
+	r.Route("/api/locations", func(lr chi.Router) {
+		lr.Use(authMw.Authenticate)
+		lr.Get("/", mdHandler.ListLocations)
+		lr.With(auth.RequireRole("ADMIN")).Post("/", mdHandler.CreateLocation)
+	})
+	r.Route("/api/tags", func(tr chi.Router) {
+		tr.Use(authMw.Authenticate)
+		tr.Get("/", mdHandler.ListTags)
+		tr.With(auth.RequireRole("ADMIN")).Post("/", mdHandler.UpsertTag)
+	})
+
+	if storageMgr != nil {
+		notifyCh := make(chan struct{}, 10)
+		issueSvc := issue.NewService(queries, storageMgr, notifyCh)
+		issueHandler := issue.NewHandler(issueSvc)
+
+		r.Route("/api/issues", func(ir chi.Router) {
+			ir.Use(authMw.Authenticate)
+			ir.Get("/", issueHandler.List)
+			ir.Post("/sync", issueHandler.Sync)
+			ir.Get("/{id}", issueHandler.GetByID)
+			ir.Post("/{id}/resolve", issueHandler.Resolve)
+			ir.Post("/{id}/close", issueHandler.Close)
+			ir.Post("/{id}/reopen", issueHandler.Reopen)
+			ir.Post("/{id}/invalidate", issueHandler.Invalid)
+			ir.Patch("/{id}", issueHandler.Patch)
+		})
+	}
 }
