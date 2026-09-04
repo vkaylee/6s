@@ -44,6 +44,9 @@ func main() {
 				log.Printf("error closing db: %v", err)
 			}
 		}()
+		if err := database.RunMigrations(ctx, dbConn); err != nil {
+			log.Printf("warning: run migrations failed: %v", err)
+		}
 	}
 
 	var cipher *crypto.Cipher
@@ -79,8 +82,8 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	// Health check (unauthenticated)
-	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		dbStatus := "disconnected"
 		if dbConn != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
@@ -94,7 +97,9 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 			"status": "ok",
 			"db":     dbStatus,
 		})
-	})
+	}
+	r.Get("/api/health", healthHandler)
+	r.Head("/api/health", healthHandler)
 
 	if dbConn != nil && cfg != nil {
 		registerAPIRoutes(r, dbConn, cfg, cipher, ldapClient)

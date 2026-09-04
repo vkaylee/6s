@@ -3,11 +3,15 @@ package database
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 )
+
+//go:embed migrations/*.up.sql
+var migrationsFS embed.FS
 
 // PoolConfig defines connection pool limits and lifetimes.
 type PoolConfig struct {
@@ -49,4 +53,26 @@ func Connect(ctx context.Context, dsn string, poolCfg PoolConfig) (*sql.DB, erro
 	}
 
 	return db, nil
+}
+
+// RunMigrations executes embedded .up.sql migration scripts in order.
+func RunMigrations(ctx context.Context, db *sql.DB) error {
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		return fmt.Errorf("read migrations dir: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		content, err := migrationsFS.ReadFile("migrations/" + entry.Name())
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
+		}
+		if _, err := db.ExecContext(ctx, string(content)); err != nil {
+			return fmt.Errorf("exec migration %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
 }
