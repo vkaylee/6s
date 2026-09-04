@@ -7,13 +7,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"6s/internal/auth"
 	"6s/internal/config"
+	"6s/internal/crypto"
 	"6s/internal/database"
+	"6s/internal/db"
 	"6s/internal/response"
 )
 
@@ -24,18 +28,29 @@ func main() {
 	}
 
 	ctx := context.Background()
-	var db *sql.DB
-	db, err = database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
+	var dbConn *sql.DB
+	dbConn, err = database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
 	if err != nil {
 		log.Printf("warning: db connection failed (will retry or operate offline): %v", err)
 	} else {
 		defer func() {
-			if err := db.Close(); err != nil {
+			if err := dbConn.Close(); err != nil {
 				log.Printf("error closing db: %v", err)
 			}
 		}()
 	}
-	r := setupRouter(db)
+
+	var cipher *crypto.Cipher
+	if cfg.EncryptionKey != "" {
+		c, err := crypto.NewCipher(cfg.EncryptionKey)
+		if err != nil {
+			log.Printf("warning: invalid APP_ENCRYPTION_KEY: %v", err)
+		} else {
+			cipher = c
+		}
+	}
+
+	r := setupRouter(dbConn, cfg, cipher, nil)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%s", cfg.Port),
@@ -49,7 +64,7 @@ func main() {
 	}
 }
 
-func setupRouter(db *sql.DB) *chi.Mux {
+func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -58,12 +73,13 @@ func setupRouter(db *sql.DB) *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	// Health check (unauthenticated)
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		dbStatus := "disconnected"
-		if db != nil {
+		if dbConn != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 			defer cancel()
-			if err := db.PingContext(ctx); err == nil {
+			if err := dbConn.PingContext(ctx); err == nil {
 				dbStatus = "ok"
 			}
 		}
@@ -73,6 +89,52 @@ func setupRouter(db *sql.DB) *chi.Mux {
 			"db":     dbStatus,
 		})
 	})
+
+	if dbConn != nil && cfg != nil {
+		queries := db.New(dbConn)
+		jwtKey := []byte(cfg.JWTSecret)
+		if len(jwtKey) == 0 {
+			jwtKey = []byte("default-secret-key-32-bytes-secure")
+		}
+		tm := auth.NewTokenManager(jwtKey)
+
+		var trustedProxies []string
+		if cfg.TrustedProxies != "" {
+			for _, p := range strings.Split(cfg.TrustedProxies, ",") {
+				if trimmed := strings.TrimSpace(p); trimmed != "" {
+					trustedProxies = append(trustedProxies, trimmed)
+				}
+			}
+		}
+		limiter := auth.NewLoginLimiter(trustedProxies)
+
+		authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient)
+		authMw := auth.NewMiddleware(tm, queries)
+		adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
+
+		// Public auth routes
+		r.Route("/api/auth", func(ar chi.Router) {
+			ar.Post("/login", authHandler.Login)
+			ar.Post("/refresh", authHandler.Refresh)
+
+			// Authenticated auth routes
+			ar.Group(func(pr chi.Router) {
+				pr.Use(authMw.Authenticate)
+				pr.Post("/revoke", authHandler.Revoke)
+				pr.Get("/sessions", authHandler.Sessions)
+			})
+		})
+
+		// Config routes (Admin only)
+		r.Route("/api/config", func(cr chi.Router) {
+			cr.Use(authMw.Authenticate)
+			cr.Use(auth.RequireRole("ADMIN"))
+
+			cr.Get("/ad", adHandler.GetADConfig)
+			cr.Put("/ad", adHandler.UpdateADConfig)
+			cr.Post("/ad/test", adHandler.TestADConfig)
+		})
+	}
 
 	return r
 }

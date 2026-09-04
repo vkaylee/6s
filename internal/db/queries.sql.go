@@ -7,7 +7,120 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"time"
 )
+
+const createRefreshToken = `-- name: CreateRefreshToken :one
+INSERT INTO refresh_tokens (
+    user_id, token_hash, device_info, expires_at
+) VALUES (
+    $1, $2, $3, $4
+)
+RETURNING id, user_id, token_hash, device_info, expires_at, revoked_at, created_at
+`
+
+type CreateRefreshTokenParams struct {
+	UserID     int64
+	TokenHash  string
+	DeviceInfo sql.NullString
+	ExpiresAt  time.Time
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, createRefreshToken,
+		arg.UserID,
+		arg.TokenHash,
+		arg.DeviceInfo,
+		arg.ExpiresAt,
+	)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceInfo,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createUserJIT = `-- name: CreateUserJIT :one
+INSERT INTO users (
+    username, auth_source, ad_dn, full_name, email, role, is_active, last_login_at
+) VALUES (
+    $1, 'AD', $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP
+)
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+`
+
+type CreateUserJITParams struct {
+	Username string
+	AdDn     sql.NullString
+	FullName string
+	Email    sql.NullString
+	Role     string
+}
+
+func (q *Queries) CreateUserJIT(ctx context.Context, arg CreateUserJITParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createUserJIT,
+		arg.Username,
+		arg.AdDn,
+		arg.FullName,
+		arg.Email,
+		arg.Role,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.AuthSource,
+		&i.AdDn,
+		&i.PinHash,
+		&i.BadgeCode,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.AssignedLocationCode,
+		&i.WxUid,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
+const getADConfig = `-- name: GetADConfig :one
+SELECT id, is_enabled, server, port, use_tls, skip_tls_verify, base_dn, bind_dn, bind_password, user_filter, group_admin_dn, group_safety_dn, group_leader_dn, updated_at, updated_by FROM ad_configs
+WHERE id = 1 LIMIT 1
+`
+
+func (q *Queries) GetADConfig(ctx context.Context) (AdConfig, error) {
+	row := q.db.QueryRowContext(ctx, getADConfig)
+	var i AdConfig
+	err := row.Scan(
+		&i.ID,
+		&i.IsEnabled,
+		&i.Server,
+		&i.Port,
+		&i.UseTls,
+		&i.SkipTlsVerify,
+		&i.BaseDn,
+		&i.BindDn,
+		&i.BindPassword,
+		&i.UserFilter,
+		&i.GroupAdminDn,
+		&i.GroupSafetyDn,
+		&i.GroupLeaderDn,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
 
 const getIssueByUUID = `-- name: GetIssueByUUID :one
 SELECT id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
@@ -56,6 +169,57 @@ func (q *Queries) GetLocationByCode(ctx context.Context, code string) (Location,
 		&i.QrCode,
 		&i.IsActive,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
+SELECT id, user_id, token_hash, device_info, expires_at, revoked_at, created_at FROM refresh_tokens
+WHERE token_hash = $1
+  AND revoked_at IS NULL
+  AND expires_at > CURRENT_TIMESTAMP
+LIMIT 1
+`
+
+func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, getRefreshTokenByHash, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceInfo,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByBadgeCode = `-- name: GetUserByBadgeCode :one
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
+WHERE badge_code = $1 LIMIT 1
+`
+
+func (q *Queries) GetUserByBadgeCode(ctx context.Context, badgeCode sql.NullString) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByBadgeCode, badgeCode)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.AuthSource,
+		&i.AdDn,
+		&i.PinHash,
+		&i.BadgeCode,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.AssignedLocationCode,
+		&i.WxUid,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.LastLoginAt,
 	)
 	return i, err
 }
@@ -114,6 +278,39 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.LastLoginAt,
 	)
 	return i, err
+}
+
+const insertAuditLog = `-- name: InsertAuditLog :exec
+INSERT INTO system_audit_logs (
+    user_id, action, target_table, target_id, old_value, new_value, ip_address, user_agent, created_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP
+)
+`
+
+type InsertAuditLogParams struct {
+	UserID      sql.NullInt64
+	Action      string
+	TargetTable string
+	TargetID    string
+	OldValue    json.RawMessage
+	NewValue    json.RawMessage
+	IpAddress   sql.NullString
+	UserAgent   sql.NullString
+}
+
+func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error {
+	_, err := q.db.ExecContext(ctx, insertAuditLog,
+		arg.UserID,
+		arg.Action,
+		arg.TargetTable,
+		arg.TargetID,
+		arg.OldValue,
+		arg.NewValue,
+		arg.IpAddress,
+		arg.UserAgent,
+	)
+	return err
 }
 
 const listLocations = `-- name: ListLocations :many
@@ -199,4 +396,301 @@ func (q *Queries) ListOpenIssues(ctx context.Context) ([]Issue, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUserActiveSessions = `-- name: ListUserActiveSessions :many
+SELECT id, device_info, created_at, expires_at
+FROM refresh_tokens
+WHERE user_id = $1
+  AND revoked_at IS NULL
+  AND expires_at > CURRENT_TIMESTAMP
+ORDER BY created_at DESC
+`
+
+type ListUserActiveSessionsRow struct {
+	ID         int64
+	DeviceInfo sql.NullString
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+}
+
+func (q *Queries) ListUserActiveSessions(ctx context.Context, userID int64) ([]ListUserActiveSessionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserActiveSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserActiveSessionsRow
+	for rows.Next() {
+		var i ListUserActiveSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeviceInfo,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
+WHERE ($1::varchar IS NULL OR assigned_location_code = $1)
+  AND ($2::boolean IS NULL OR is_active = $2)
+ORDER BY id ASC
+`
+
+type ListUsersParams struct {
+	Column1 string
+	Column2 bool
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.PasswordHash,
+			&i.AuthSource,
+			&i.AdDn,
+			&i.PinHash,
+			&i.BadgeCode,
+			&i.FullName,
+			&i.Email,
+			&i.Role,
+			&i.AssignedLocationCode,
+			&i.WxUid,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
+UPDATE refresh_tokens
+SET revoked_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+func (q *Queries) RevokeRefreshToken(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, revokeRefreshToken, id)
+	return err
+}
+
+const revokeUserRefreshTokens = `-- name: RevokeUserRefreshTokens :exec
+UPDATE refresh_tokens
+SET revoked_at = CURRENT_TIMESTAMP
+WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeUserRefreshTokens(ctx context.Context, userID int64) error {
+	_, err := q.db.ExecContext(ctx, revokeUserRefreshTokens, userID)
+	return err
+}
+
+const updateUserADLogin = `-- name: UpdateUserADLogin :one
+UPDATE users
+SET full_name = $2,
+    email = $3,
+    role = $4,
+    last_login_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+`
+
+type UpdateUserADLoginParams struct {
+	ID       int64
+	FullName string
+	Email    sql.NullString
+	Role     string
+}
+
+func (q *Queries) UpdateUserADLogin(ctx context.Context, arg UpdateUserADLoginParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserADLogin,
+		arg.ID,
+		arg.FullName,
+		arg.Email,
+		arg.Role,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.AuthSource,
+		&i.AdDn,
+		&i.PinHash,
+		&i.BadgeCode,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.AssignedLocationCode,
+		&i.WxUid,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
+const updateUserAdmin = `-- name: UpdateUserAdmin :one
+UPDATE users
+SET role = COALESCE($2, role),
+    assigned_location_code = COALESCE($3, assigned_location_code),
+    is_active = COALESCE($4, is_active)
+WHERE id = $1
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+`
+
+type UpdateUserAdminParams struct {
+	ID                   int64
+	Role                 string
+	AssignedLocationCode sql.NullString
+	IsActive             bool
+}
+
+func (q *Queries) UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserAdmin,
+		arg.ID,
+		arg.Role,
+		arg.AssignedLocationCode,
+		arg.IsActive,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.AuthSource,
+		&i.AdDn,
+		&i.PinHash,
+		&i.BadgeCode,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.AssignedLocationCode,
+		&i.WxUid,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
+const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
+UPDATE users
+SET last_login_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+func (q *Queries) UpdateUserLastLogin(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, updateUserLastLogin, id)
+	return err
+}
+
+const upsertADConfig = `-- name: UpsertADConfig :one
+INSERT INTO ad_configs (
+    id, is_enabled, server, port, use_tls, skip_tls_verify,
+    base_dn, bind_dn, bind_password, user_filter,
+    group_admin_dn, group_safety_dn, group_leader_dn,
+    updated_at, updated_by
+) VALUES (
+    1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, $13
+)
+ON CONFLICT (id) DO UPDATE SET
+    is_enabled = EXCLUDED.is_enabled,
+    server = EXCLUDED.server,
+    port = EXCLUDED.port,
+    use_tls = EXCLUDED.use_tls,
+    skip_tls_verify = EXCLUDED.skip_tls_verify,
+    base_dn = EXCLUDED.base_dn,
+    bind_dn = EXCLUDED.bind_dn,
+    bind_password = CASE WHEN EXCLUDED.bind_password = '' THEN ad_configs.bind_password ELSE EXCLUDED.bind_password END,
+    user_filter = EXCLUDED.user_filter,
+    group_admin_dn = EXCLUDED.group_admin_dn,
+    group_safety_dn = EXCLUDED.group_safety_dn,
+    group_leader_dn = EXCLUDED.group_leader_dn,
+    updated_at = CURRENT_TIMESTAMP,
+    updated_by = EXCLUDED.updated_by
+RETURNING id, is_enabled, server, port, use_tls, skip_tls_verify, base_dn, bind_dn, bind_password, user_filter, group_admin_dn, group_safety_dn, group_leader_dn, updated_at, updated_by
+`
+
+type UpsertADConfigParams struct {
+	IsEnabled     bool
+	Server        string
+	Port          int32
+	UseTls        bool
+	SkipTlsVerify bool
+	BaseDn        string
+	BindDn        string
+	BindPassword  string
+	UserFilter    string
+	GroupAdminDn  string
+	GroupSafetyDn string
+	GroupLeaderDn string
+	UpdatedBy     sql.NullInt64
+}
+
+func (q *Queries) UpsertADConfig(ctx context.Context, arg UpsertADConfigParams) (AdConfig, error) {
+	row := q.db.QueryRowContext(ctx, upsertADConfig,
+		arg.IsEnabled,
+		arg.Server,
+		arg.Port,
+		arg.UseTls,
+		arg.SkipTlsVerify,
+		arg.BaseDn,
+		arg.BindDn,
+		arg.BindPassword,
+		arg.UserFilter,
+		arg.GroupAdminDn,
+		arg.GroupSafetyDn,
+		arg.GroupLeaderDn,
+		arg.UpdatedBy,
+	)
+	var i AdConfig
+	err := row.Scan(
+		&i.ID,
+		&i.IsEnabled,
+		&i.Server,
+		&i.Port,
+		&i.UseTls,
+		&i.SkipTlsVerify,
+		&i.BaseDn,
+		&i.BindDn,
+		&i.BindPassword,
+		&i.UserFilter,
+		&i.GroupAdminDn,
+		&i.GroupSafetyDn,
+		&i.GroupLeaderDn,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
 }

@@ -21,6 +21,12 @@ type Encryptor struct {
 	key []byte
 }
 
+// Cipher is an alias for Encryptor.
+type Cipher = Encryptor
+
+// NewCipher is an alias for NewEncryptor.
+var NewCipher = NewEncryptor
+
 // NewEncryptor creates a new Encryptor using a 32-byte raw string or base64 key.
 func NewEncryptor(base64OrRawKey string) (*Encryptor, error) {
 	key, err := base64.StdEncoding.DecodeString(base64OrRawKey)

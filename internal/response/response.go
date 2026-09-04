@@ -65,3 +65,43 @@ func Error(w http.ResponseWriter, status int, code, message string, details any)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// BadRequest helper.
+func BadRequest(w http.ResponseWriter, message string, details ...any) {
+	var d any
+	if len(details) > 0 {
+		d = details[0]
+	}
+	Error(w, http.StatusBadRequest, "BAD_REQUEST", message, d)
+}
+
+// Unauthorized helper.
+func Unauthorized(w http.ResponseWriter, message string) {
+	Error(w, http.StatusUnauthorized, "UNAUTHORIZED", message, nil)
+}
+
+// Forbidden helper.
+func Forbidden(w http.ResponseWriter, message string) {
+	Error(w, http.StatusForbidden, "FORBIDDEN", message, nil)
+}
+
+// NotFound helper.
+func NotFound(w http.ResponseWriter, message string) {
+	Error(w, http.StatusNotFound, "NOT_FOUND", message, nil)
+}
+
+// Conflict helper.
+func Conflict(w http.ResponseWriter, code, message string, details any) {
+	Error(w, http.StatusConflict, code, message, details)
+}
+
+// TooManyRequests helper.
+func TooManyRequests(w http.ResponseWriter, message string, retryAfter int) {
+	w.Header().Set("Retry-After", http.StatusText(http.StatusTooManyRequests))
+	Error(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", message, map[string]any{"retry_after": retryAfter})
+}
+
+// InternalServerError helper.
+func InternalServerError(w http.ResponseWriter, message string) {
+	Error(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", message, nil)
+}
