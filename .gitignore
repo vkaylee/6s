@@ -1,0 +1,15 @@
+# DevKit (per-project install)
+.leedevkit/
+leedevkit
+.leedevkit.bak/
+.test_logs/
+web/node_modules/
+web/dist/
+data/
+uploads/
+certs/
+tmp/
+build-errors.log
+.cache/
+.config/
+web/test-results/

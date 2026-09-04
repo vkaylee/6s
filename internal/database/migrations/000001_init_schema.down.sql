@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS ad_configs;
+DROP TABLE IF EXISTS notification_configs;
+DROP TABLE IF EXISTS system_audit_logs;
+DROP TABLE IF EXISTS score_logs;
+DROP TABLE IF EXISTS scoring_rules;
+DROP TABLE IF EXISTS cron_task_logs;
+DROP TABLE IF EXISTS notification_outbox;
+DROP TABLE IF EXISTS issue_tags;
+DROP TABLE IF EXISTS issues;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS locations;

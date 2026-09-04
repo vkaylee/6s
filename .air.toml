@@ -1,0 +1,18 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/main ./cmd/server"
+bin = "./tmp/main"
+include_ext = ["go", "sql", "tpl", "tmpl", "html"]
+exclude_dir = [".git", "tmp", "web", ".leedevkit", ".agent", ".claude", "data"]
+include_dir = ["cmd", "internal", "migrations", "queries"]
+delay = 500
+kill_delay = "500ms"
+log = "build-errors.log"
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true

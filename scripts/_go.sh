@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wrapper to run go inside the container hermetically
+CONTAINER_RUNTIME="podman"
+if ! command -v podman >/dev/null 2>&1; then
+    CONTAINER_RUNTIME="docker"
+fi
+
+IMAGE_NAME="6s-go:1.23"
+
+exec "$CONTAINER_RUNTIME" run --rm -i \
+    -v "$PWD":/workspace:Z \
+    -w /workspace \
+    -e CGO_ENABLED=0 \
+    "$IMAGE_NAME" go "$@"

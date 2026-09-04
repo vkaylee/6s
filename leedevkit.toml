@@ -1,0 +1,39 @@
+# =============================================================================
+# 6S Issue Management System — LeeDevKit Configuration
+# =============================================================================
+
+[devkit]
+version = "0.7.7"
+install = "per-project"
+source = "release"
+
+[project]
+name = "6s"
+namespace = "6s"
+languages = ["go", "typescript"]
+
+[services.server]
+lang = "go"
+go = true
+go_version = "1.23"
+
+[services.webdashboard]
+lang = "typescript"
+bun = true
+
+[targets]
+server = ["server"]
+web = ["webdashboard"]
+all = ["server", "webdashboard"]
+
+[ai]
+extra_rules = []
+rules_dir = ".agent/rules"
+override_manifest = ".agent/overrides.yaml"
+
+[ai.model_routing]
+enabled = false
+default_model = "sonnet"
+
+[addons]
+skills = []

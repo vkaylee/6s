@@ -1,0 +1,70 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: .compose/Dockerfile.golang
+    image: 6s-go-dev:1.23
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - go-module-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      CGO_ENABLED: "0"
+      SERVER_PORT: "8080"
+      DATA_DIR: "/workspace/data"
+    command: ["air", "-c", ".air.toml"]
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - 6s-network
+
+  web:
+    build:
+      context: .
+      dockerfile: .compose/Dockerfile.bun
+    image: 6s-bun-dev:1.1
+    working_dir: /workspace/web
+    volumes:
+      - .:/workspace
+      - web-node-modules:/workspace/web/node_modules
+    command: ["sh", "/workspace/scripts/dev-web.sh"]
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    networks:
+      - 6s-network
+
+  caddy:
+    image: docker.io/library/caddy:2.8.4
+    ports:
+      - "${CADDY_HTTP_PORT:-8080}:80"
+      - "${CADDY_HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./.compose/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - dev-caddy-certs:/etc/caddy/certs:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - 6s-network
+
+networks:
+  6s-network:
+
+volumes:
+  go-module-cache:
+    name: 6s-dev-go-module-cache
+  go-build-cache:
+    name: 6s-dev-go-build-cache
+  web-node-modules:
+    name: 6s-dev-web-node-modules
+  caddy-data:
+    name: 6s-dev-caddy-data
+  caddy-config:
+    name: 6s-dev-caddy-config
+  dev-caddy-certs:
+    name: 6s-dev-caddy-certs

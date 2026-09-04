@@ -1,0 +1,1453 @@
+openapi: 3.1.0
+info:
+  title: 6S Issue Management & Visual Reporting System API
+  version: 1.0.0
+  description: API phục vụ ghi nhận, đồng bộ offline, giải quyết và tính điểm sức khỏe 6S trong môi trường nhà xưởng.
+
+servers:
+  - url: https://6s.factory.lan/api
+    description: Production On-Premise LAN Server
+  - url: http://localhost:8080/api
+    description: Local Dev Server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: ISSUE_CONFLICT
+        message:
+          type: string
+          example: Phiên bản issue đã bị thay đổi bởi người dùng khác
+        details:
+          type: object
+          additionalProperties: true
+
+    ErrorEnvelope:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    PaginationMeta:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 142
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - username
+        - auth_source
+        - role
+        - full_name
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: leader_a2
+        auth_source:
+          type: string
+          enum: [LOCAL, AD]
+          example: LOCAL
+        role:
+          type: string
+          enum: [USER, LINE_LEADER, SAFETY_OFFICER, ADMIN]
+          example: LINE_LEADER
+        assigned_location_code:
+          type: string
+          nullable: true
+          example: LINE_A2
+        full_name:
+          type: string
+          example: Nguyễn Văn A
+        email:
+          type: string
+          nullable: true
+          example: nva@factory.lan
+
+    Location:
+      type: object
+      required:
+        - code
+        - name_vi
+        - name_zh
+        - name_en
+        - qr_code
+      properties:
+        code:
+          type: string
+          example: LINE_A1
+        name_vi:
+          type: string
+          example: Chuyền May A1
+        name_zh:
+          type: string
+          example: 缝纫 A1 线
+        name_en:
+          type: string
+          example: Sewing Line A1
+        qr_code:
+          type: string
+          example: LOC:LINE_A1
+        is_active:
+          type: boolean
+          default: true
+
+    Tag:
+      type: object
+      required:
+        - code
+        - name_vi
+        - name_zh
+        - name_en
+        - category
+        - use_count
+      properties:
+        code:
+          type: string
+          example: oil_leak
+        name_vi:
+          type: string
+          example: Rò rỉ dầu
+        name_zh:
+          type: string
+          example: 漏油
+        name_en:
+          type: string
+          example: Oil leak
+        category:
+          type: string
+          enum: [1S, 2S, 3S, 4S, 5S, 6S]
+          example: 3S
+        use_count:
+          type: integer
+          example: 45
+        is_preset:
+          type: boolean
+          default: false
+
+    Issue:
+      type: object
+      required:
+        - id
+        - client_uuid
+        - version
+        - creator_id
+        - category
+        - location_code
+        - tags
+        - photo_before
+        - status
+        - created_at
+      properties:
+        id:
+          type: integer
+          example: 123
+        client_uuid:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        version:
+          type: integer
+          example: 1
+        creator_id:
+          type: integer
+          example: 12
+        resolver_id:
+          type: integer
+          nullable: true
+          example: 15
+        category:
+          type: string
+          enum: [1S, 2S, 3S, 4S, 5S, 6S]
+          example: 6S
+        location_code:
+          type: string
+          example: LINE_A1
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["oil_leak", "safety_gear"]
+        description:
+          type: string
+          nullable: true
+          example: Dầu máy chảy ra sàn gần công tắc khẩn cấp
+        reject_reason:
+          type: string
+          nullable: true
+          example: Chưa dọn sạch dầu / Dây điện vẫn chưa bọc kỹ
+        photo_before:
+          type: string
+          example: /uploads/before/3fa85f64-5717-4562-b3fc-2c963f66afa6_wide.jpg
+        photo_detail:
+          type: string
+          nullable: true
+          example: /uploads/before/3fa85f64-5717-4562-b3fc-2c963f66afa6_detail.jpg
+        photo_after:
+          type: string
+          nullable: true
+          example: /uploads/after/7ca85f64-5717-4562-b3fc-2c963f66af99.jpg
+        score_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        status:
+          type: string
+          enum: [OPEN, PENDING_REVIEW, CLOSED, INVALID]
+          example: OPEN
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    LocationHealthScore:
+      type: object
+      required:
+        - location_code
+        - location_name
+        - health_score
+        - open_count
+        - overdue_count
+      properties:
+        location_code:
+          type: string
+          example: LINE_A2
+        location_name:
+          type: string
+          example: Chuyền May A2
+        health_score:
+          type: integer
+          minimum: 0
+          maximum: 120
+          example: 85
+        open_count:
+          type: integer
+          example: 4
+        overdue_count:
+          type: integer
+          example: 1
+
+    ReporterScore:
+      type: object
+      required:
+        - user_id
+        - full_name
+        - points
+        - valid_count
+        - safety_count
+      properties:
+        user_id:
+          type: integer
+          example: 12
+        full_name:
+          type: string
+          example: Nguyễn Văn A
+        points:
+          type: integer
+          example: 35
+        valid_count:
+          type: integer
+          example: 14
+        safety_count:
+          type: integer
+          example: 3
+
+    ADConfig:
+      type: object
+      required:
+        - is_enabled
+        - server
+        - port
+        - use_tls
+        - skip_tls_verify
+        - base_dn
+        - bind_dn
+        - user_filter
+      properties:
+        is_enabled:
+          type: boolean
+          example: true
+        server:
+          type: string
+          example: ad.factory.lan
+        port:
+          type: integer
+          example: 636
+        use_tls:
+          type: boolean
+          example: true
+        skip_tls_verify:
+          type: boolean
+          example: false
+        base_dn:
+          type: string
+          example: DC=factory,DC=lan
+        bind_dn:
+          type: string
+          example: CN=svc_6s_auth,OU=Services,DC=factory,DC=lan
+        has_bind_password:
+          type: boolean
+          example: true
+        user_filter:
+          type: string
+          example: "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=%s)(userPrincipalName=%s)))"
+        group_admin_dn:
+          type: string
+          example: CN=6S_Admins,OU=Groups,DC=factory,DC=lan
+        group_safety_dn:
+          type: string
+          example: CN=6S_SafetyOfficers,OU=Groups,DC=factory,DC=lan
+        group_leader_dn:
+          type: string
+          example: CN=6S_LineLeaders,OU=Groups,DC=factory,DC=lan
+        updated_at:
+          type: string
+          format: date-time
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      summary: Đăng nhập tài khoản Local hoặc Active Directory / LDAP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: P@ssw0rd123
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - access_token
+                      - expires_in
+                      - refresh_token
+                      - refresh_expires_in
+                      - user
+                    properties:
+                      access_token:
+                        type: string
+                      expires_in:
+                        type: integer
+                        example: 3600
+                      refresh_token:
+                        type: string
+                      refresh_expires_in:
+                        type: integer
+                        example: 2592000
+                      user:
+                        $ref: '#/components/schemas/UserSummary'
+        '401':
+          description: Sai thông tin đăng nhập
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt quá giới hạn thử đăng nhập (Rate limit 5 lần / 1 phút)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /auth/refresh:
+    post:
+      summary: Cấp mới Access Token bằng Refresh Token (Token Rotation)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token được làm mới thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - access_token
+                      - expires_in
+                      - refresh_token
+                      - refresh_expires_in
+                    properties:
+                      access_token:
+                        type: string
+                      expires_in:
+                        type: integer
+                        example: 3600
+                      refresh_token:
+                        type: string
+                      refresh_expires_in:
+                        type: integer
+                        example: 2592000
+        '401':
+          description: Refresh token đã hết hạn hoặc bị thu hồi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /auth/revoke:
+    post:
+      summary: Thu hồi phiên đăng nhập (Đăng xuất hoặc thu hồi khẩn cấp)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token_id:
+                  type: integer
+                user_id:
+                  type: integer
+      responses:
+        '200':
+          description: Thu hồi thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: boolean
+                        example: true
+
+  /auth/sessions:
+    get:
+      summary: Liệt kê các phiên đăng nhập đang hoạt động
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Chỉ định user_id khi caller là Admin
+      responses:
+        '200':
+          description: Danh sách phiên đăng nhập
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - created_at
+                        - expires_at
+                      properties:
+                        id:
+                          type: integer
+                          example: 123
+                        device_info:
+                          type: string
+                          nullable: true
+                          example: Mobile Safari / iOS 17
+                        created_at:
+                          type: string
+                          format: date-time
+                        expires_at:
+                          type: string
+                          format: date-time
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /locations:
+    get:
+      summary: Lấy danh mục vị trí chuẩn hóa (Master Data)
+      responses:
+        '200':
+          description: Danh sách vị trí
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Location'
+    post:
+      summary: Thêm mới vị trí (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+                - name_vi
+                - name_zh
+                - name_en
+                - qr_code
+              properties:
+                code:
+                  type: string
+                  example: LINE_A3
+                name_vi:
+                  type: string
+                  example: Chuyền May A3
+                name_zh:
+                  type: string
+                  example: 缝纫 A3 线
+                name_en:
+                  type: string
+                  example: Sewing Line A3
+                qr_code:
+                  type: string
+                  example: LOC:LINE_A3
+      responses:
+        '201':
+          description: Vị trí đã được tạo thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '403':
+          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /tags:
+    get:
+      summary: Lấy danh mục tags đa ngôn ngữ theo tần suất sử dụng
+      responses:
+        '200':
+          description: Danh sách tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tag'
+    post:
+      summary: Thêm hoặc cập nhật tag (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+                - name_vi
+                - name_zh
+                - name_en
+                - category
+              properties:
+                code:
+                  type: string
+                  example: fire_hazard
+                name_vi:
+                  type: string
+                  example: Nguy cơ cháy
+                name_zh:
+                  type: string
+                  example: 火灾隐患
+                name_en:
+                  type: string
+                  example: Fire hazard
+                category:
+                  type: string
+                  enum: [1S, 2S, 3S, 4S, 5S, 6S]
+                  example: 6S
+      responses:
+        '201':
+          description: Tag đã được lưu thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Tag'
+
+  /issues:
+    get:
+      summary: Lấy danh sách issues có phân trang và bộ lọc
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [OPEN, PENDING_REVIEW, CLOSED, INVALID]
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [1S, 2S, 3S, 4S, 5S, 6S]
+        - name: location_code
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Danh sách issues phân trang
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Issue'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /issues/{id}:
+    get:
+      summary: Xem chi tiết một issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Chi tiết issue
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '404':
+          description: Không tìm thấy issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    patch:
+      summary: Sửa nhanh phân loại S hoặc tags khi phát hiện sai
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category:
+                  type: string
+                  enum: [1S, 2S, 3S, 4S, 5S, 6S]
+                location_code:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '403':
+          description: Không có quyền sửa issue này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /issues/sync:
+    post:
+      summary: Đồng bộ tạo mới issue từ client (hỗ trợ offline sync với client_uuid)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - client_uuid
+                - category
+                - location_code
+                - photo_before
+              properties:
+                client_uuid:
+                  type: string
+                  format: uuid
+                  example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                category:
+                  type: string
+                  enum: [1S, 2S, 3S, 4S, 5S, 6S]
+                  example: 3S
+                location_code:
+                  type: string
+                  example: LINE_A1
+                tags:
+                  type: string
+                  description: JSON array string, vd '["oil_leak", "safety_gear"]'
+                description:
+                  type: string
+                photo_before:
+                  type: string
+                  format: binary
+                  description: Ảnh toàn cảnh bối cảnh (<= 2MB, JPEG/PNG)
+                photo_detail:
+                  type: string
+                  format: binary
+                  description: Ảnh cận cảnh / chú thích (<= 2MB, JPEG/PNG)
+      responses:
+        '201':
+          description: Issue tạo mới thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '200':
+          description: Idempotent replay (client_uuid đã tồn tại trước đó)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '413':
+          description: File vượt quá dung lượng quy định (Ảnh > 2MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '415':
+          description: Định dạng file không hợp lệ (Không đúng magic bytes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /issues/{id}/resolve:
+    post:
+      summary: Upload ảnh khắc phục (hỗ trợ offline sync với expected_version)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - resolved_client_uuid
+                - expected_version
+                - photo_after
+              properties:
+                resolved_client_uuid:
+                  type: string
+                  format: uuid
+                expected_version:
+                  type: integer
+                  example: 1
+                photo_after:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Khắc phục thành công, chuyển sang PENDING_REVIEW
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '409':
+          description: Xung đột trạng thái hoặc phiên bản (Optimistic Locking)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /issues/{id}/close:
+    post:
+      summary: Duyệt hoàn thành issue và chấm điểm Kaizen
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                score_rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  default: 3
+      responses:
+        '200':
+          description: Đóng issue thành công, cộng điểm Creator
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '403':
+          description: Không đủ thẩm quyền đóng issue (ví dụ công nhân không được duyệt 6S Safety)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /issues/{id}/reopen:
+    post:
+      summary: Từ chối duyệt khắc phục, yêu cầu làm lại (Reopen)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reject_reason
+              properties:
+                reject_reason:
+                  type: string
+                  example: Chưa dọn sạch dầu / Dây điện vẫn chưa bọc kỹ
+      responses:
+        '200':
+          description: Reopen thành công, trừ điểm chuyền và bắn thông báo khẩn
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '403':
+          description: Không có quyền thực hiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /issues/{id}/invalid:
+    post:
+      summary: Bác bỏ issue do báo sai hoặc spam (Admin / Safety Officer only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  example: Ảnh chụp không rõ / Báo sai thực tế
+      responses:
+        '200':
+          description: Bác bỏ thành công, trừ điểm phạt Creator
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Issue'
+        '403':
+          description: Không có quyền (Yêu cầu ADMIN hoặc SAFETY_OFFICER)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /leaderboard/locations:
+    get:
+      summary: Lấy bảng xếp hạng sức khỏe các khu vực/chuyền sản xuất
+      responses:
+        '200':
+          description: Danh sách sức khỏe khu vực
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LocationHealthScore'
+
+  /leaderboard/reporters:
+    get:
+      summary: Bảng vinh danh cá nhân (Top Thợ săn 6S)
+      responses:
+        '200':
+          description: Danh sách cá nhân xuất sắc
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReporterScore'
+
+  /config/scoring:
+    get:
+      summary: Lấy danh sách quy tắc chấm điểm
+      responses:
+        '200':
+          description: Danh sách điểm phạt / thưởng
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - rule_key
+                        - points
+                      properties:
+                        rule_key:
+                          type: string
+                        points:
+                          type: integer
+                        description:
+                          type: string
+    put:
+      summary: Cập nhật quy tắc chấm điểm & hồi tố điểm (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rules
+              properties:
+                rules:
+                  type: object
+                  additionalProperties:
+                    type: integer
+                apply_from:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Cập nhật quy tắc thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updated:
+                        type: boolean
+                        example: true
+
+  /config/ad:
+    get:
+      summary: Lấy cấu hình Active Directory / LDAP (Admin only)
+      responses:
+        '200':
+          description: Cấu hình AD hiện hành
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ADConfig'
+        '403':
+          description: Yêu cầu quyền ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      summary: Cập nhật cấu hình Active Directory / LDAP vào DB (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - is_enabled
+                - server
+                - port
+                - use_tls
+                - base_dn
+                - bind_dn
+              properties:
+                is_enabled:
+                  type: boolean
+                server:
+                  type: string
+                port:
+                  type: integer
+                use_tls:
+                  type: boolean
+                skip_tls_verify:
+                  type: boolean
+                base_dn:
+                  type: string
+                bind_dn:
+                  type: string
+                bind_password:
+                  type: string
+                user_filter:
+                  type: string
+                group_admin_dn:
+                  type: string
+                group_safety_dn:
+                  type: string
+                group_leader_dn:
+                  type: string
+      responses:
+        '200':
+          description: Cấu hình AD đã cập nhật và hot-reload thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updated:
+                        type: boolean
+                        example: true
+
+  /config/ad/test:
+    post:
+      summary: Kiểm tra kết nối và thử bind với Active Directory
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Kiểm tra kết nối thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      message:
+                        type: string
+                        example: LDAP connection & service bind OK
+        '400':
+          description: Kết nối thất bại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /users:
+    get:
+      summary: Danh mục nhân sự phục vụ màn Admin (Admin only)
+      parameters:
+        - name: location_code
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Lọc theo mã vị trí
+        - name: active
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Lọc theo trạng thái hoạt động
+      responses:
+        '200':
+          description: Danh sách người dùng
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserSummary'
+        '403':
+          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /users/{id}:
+    patch:
+      summary: Cập nhật thông tin/quyền nhân sự (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [USER, LINE_LEADER, SAFETY_OFFICER, ADMIN]
+                assigned_location_code:
+                  type: string
+                  nullable: true
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserSummary'
+        '403':
+          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /config/notifications:
+    get:
+      summary: Lấy cấu hình kênh thông báo (Admin only)
+      responses:
+        '200':
+          description: Cấu hình thông báo hiện hành
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - wxpusher_enabled
+                      - has_app_token
+                      - has_webhook_url
+                      - public_base_url
+                    properties:
+                      wxpusher_enabled:
+                        type: boolean
+                      has_app_token:
+                        type: boolean
+                      has_webhook_url:
+                        type: boolean
+                      public_base_url:
+                        type: string
+        '403':
+          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      summary: Cập nhật cấu hình kênh thông báo (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wxpusher_enabled:
+                  type: boolean
+                wxpusher_app_token:
+                  type: string
+                  description: Token mới (chỉ gửi khi thay đổi)
+                lan_webhook_url:
+                  type: string
+                  description: Webhook URL mới (chỉ gửi khi thay đổi)
+                public_base_url:
+                  type: string
+      responses:
+        '200':
+          description: Cập nhật cấu hình thông báo thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updated:
+                        type: boolean
+                        example: true
+        '403':
+          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /config/notifications/test:
+    post:
+      summary: Gửi tin nhắn test qua các kênh thông báo đang kích hoạt (Admin only)
+      responses:
+        '200':
+          description: Kết quả test thông báo per-kênh
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      wxpusher:
+                        type: object
+                        properties:
+                          success:
+                            type: boolean
+                          message:
+                            type: string
+                      lan_webhook:
+                        type: object
+                        properties:
+                          success:
+                            type: boolean
+                          message:
+                            type: string
+        '403':
+          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /health:
+    get:
+      summary: Kiểm tra tình trạng server và DB (Liveness probe, không cần auth)
+      security: []
+      responses:
+        '200':
+          description: Hệ thống hoạt động bình thường
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - status
+                      - db
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+                      db:
+                        type: string
+                        example: ok

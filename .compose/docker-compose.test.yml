@@ -1,0 +1,41 @@
+services:
+  server:
+    profiles: ["server", "lint-server", "unit-server", "int-server", "go", "lint-go", "unit-go", "int-go"]
+    container_name: ${COMPOSE_PROJECT_NAME}_go_1
+    build:
+      context: ..
+      dockerfile: .compose/Dockerfile.golang
+    image: 6s-go:1.23
+    volumes:
+      - ..:/workspace
+      - go-module-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    working_dir: /workspace
+    environment:
+      CGO_ENABLED: "0"
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD", "go", "version"]
+
+  webdashboard:
+    profiles: ["bun", "web", "lint-web", "unit-web", "e2e-web"]
+    build:
+      context: ..
+      dockerfile: .compose/Dockerfile.bun
+    image: 6s-bun:1.1
+    container_name: ${COMPOSE_PROJECT_NAME}_bun_init_1
+    volumes:
+      - ..:/workspace
+      - bun-install-cache:/root/.bun/install/cache
+    working_dir: /workspace/web
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD", "bun", "--version"]
+
+volumes:
+  go-module-cache:
+    name: 6s-test-go-module-cache
+  go-build-cache:
+    name: 6s-test-go-build-cache
+  bun-install-cache:
+    name: 6s-test-bun-install-cache

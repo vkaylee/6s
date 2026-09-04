@@ -1,0 +1,26 @@
+{
+  servers :443 {
+    protocols h1 h2
+  }
+}
+
+:80 {
+  redir https://{host}:8443{uri} 308
+}
+
+https://localhost, https://127.0.0.1 {
+  tls internal
+  encode gzip
+
+  header {
+    Strict-Transport-Security "max-age=31536000"
+  }
+
+  handle /api/* {
+    reverse_proxy server:8080
+  }
+
+  handle {
+    reverse_proxy web:5173
+  }
+}

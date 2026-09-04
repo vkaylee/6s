@@ -1,0 +1,18 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "sql/schema.sql"
+    queries: "sql/queries.sql"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        sql_package: "database/sql"
+        overrides:
+          - db_type: "uuid"
+            go_type: "string"
+          - db_type: "jsonb"
+            go_type: "encoding/json.RawMessage"
+          - db_type: "jsonb"
+            nullable: true
+            go_type: "encoding/json.RawMessage"

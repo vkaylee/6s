@@ -1,0 +1,88 @@
+# Enterprise-grade golangci-lint configuration
+run:
+  timeout: 5m
+  tests: true
+  allow-parallel-runners: true
+
+output:
+  sort-results: true
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  gocyclo:
+    min-complexity: 15
+  gocognit:
+    min-complexity: 20
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: blank-imports
+        disabled: false
+      - name: context-as-argument
+        disabled: false
+      - name: error-return
+        disabled: false
+      - name: error-strings
+        disabled: false
+      - name: error-naming
+        disabled: false
+      - name: if-return
+        disabled: false
+      - name: increment-decrement
+        disabled: false
+      - name: var-naming
+        disabled: false
+      - name: package-comments
+        disabled: true
+      - name: unused-parameter
+        disabled: false
+      - name: unreachable-code
+        disabled: false
+  misspell:
+    locale: US
+  gosec:
+    severity: medium
+    confidence: medium
+  dupl:
+    threshold: 100
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - revive
+    - gocyclo
+    - gocognit
+    - misspell
+    - gofmt
+    - goimports
+    - unconvert
+    - prealloc
+    - nakedret
+    - exportloopref
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - gocognit
+        - errcheck
+        - dupl
+        - gosec
