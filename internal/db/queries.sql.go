@@ -12,6 +12,67 @@ import (
 	"time"
 )
 
+const claimOutboxTasks = `-- name: ClaimOutboxTasks :many
+UPDATE notification_outbox
+SET status = 'SENDING',
+    next_retry_at = CURRENT_TIMESTAMP + INTERVAL '120 seconds'
+WHERE id IN (
+    SELECT id FROM notification_outbox
+    WHERE (status = 'PENDING' AND next_retry_at <= CURRENT_TIMESTAMP)
+       OR (status = 'SENDING' AND next_retry_at < CURRENT_TIMESTAMP)
+    ORDER BY id ASC
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, issue_id, event_type, channel, payload, status, retry_count, max_retries, last_error, next_retry_at, created_at, sent_at
+`
+
+func (q *Queries) ClaimOutboxTasks(ctx context.Context, limit int32) ([]NotificationOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, claimOutboxTasks, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NotificationOutbox
+	for rows.Next() {
+		var i NotificationOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.EventType,
+			&i.Channel,
+			&i.Payload,
+			&i.Status,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.CreatedAt,
+			&i.SentAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cleanupOldAuditLogs = `-- name: CleanupOldAuditLogs :exec
+DELETE FROM system_audit_logs
+WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '12 months'
+`
+
+func (q *Queries) CleanupOldAuditLogs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, cleanupOldAuditLogs)
+	return err
+}
+
 const closeIssue = `-- name: CloseIssue :one
 UPDATE issues
 SET status = 'CLOSED',
@@ -73,6 +134,35 @@ func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilter
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countOpenIssuesByLocation = `-- name: CountOpenIssuesByLocation :one
+SELECT COUNT(*)::bigint AS open_count
+FROM issues
+WHERE location_code = $1
+  AND status = 'OPEN'
+`
+
+func (q *Queries) CountOpenIssuesByLocation(ctx context.Context, locationCode string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOpenIssuesByLocation, locationCode)
+	var open_count int64
+	err := row.Scan(&open_count)
+	return open_count, err
+}
+
+const countOverdueIssuesByLocation = `-- name: CountOverdueIssuesByLocation :one
+SELECT COUNT(*)::bigint AS overdue_count
+FROM issues
+WHERE location_code = $1
+  AND status = 'OPEN'
+  AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'
+`
+
+func (q *Queries) CountOverdueIssuesByLocation(ctx context.Context, locationCode string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOverdueIssuesByLocation, locationCode)
+	var overdue_count int64
+	err := row.Scan(&overdue_count)
+	return overdue_count, err
 }
 
 const createIssue = `-- name: CreateIssue :one
@@ -429,6 +519,26 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 	return i, err
 }
 
+const getLastCronTaskLog = `-- name: GetLastCronTaskLog :one
+SELECT id, task_name, last_run_at, status, details FROM cron_task_logs
+WHERE task_name = $1
+ORDER BY last_run_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLastCronTaskLog(ctx context.Context, taskName string) (CronTaskLog, error) {
+	row := q.db.QueryRowContext(ctx, getLastCronTaskLog, taskName)
+	var i CronTaskLog
+	err := row.Scan(
+		&i.ID,
+		&i.TaskName,
+		&i.LastRunAt,
+		&i.Status,
+		&i.Details,
+	)
+	return i, err
+}
+
 const getLocationByCode = `-- name: GetLocationByCode :one
 SELECT id, code, name_vi, name_zh, name_en, qr_code, is_active, created_at FROM locations
 WHERE code = $1 LIMIT 1
@@ -446,6 +556,46 @@ func (q *Queries) GetLocationByCode(ctx context.Context, code string) (Location,
 		&i.QrCode,
 		&i.IsActive,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLocationScoreSumInWeek = `-- name: GetLocationScoreSumInWeek :one
+SELECT COALESCE(SUM(points), 0)::bigint AS sum_points
+FROM score_logs
+WHERE target_type = 'LOCATION'
+  AND target_id = $1
+  AND created_at >= $2
+`
+
+type GetLocationScoreSumInWeekParams struct {
+	TargetID  string
+	CreatedAt time.Time
+}
+
+func (q *Queries) GetLocationScoreSumInWeek(ctx context.Context, arg GetLocationScoreSumInWeekParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getLocationScoreSumInWeek, arg.TargetID, arg.CreatedAt)
+	var sum_points int64
+	err := row.Scan(&sum_points)
+	return sum_points, err
+}
+
+const getNotificationConfig = `-- name: GetNotificationConfig :one
+SELECT id, wxpusher_enabled, wxpusher_app_token, lan_webhook_url, public_base_url, updated_at, updated_by FROM notification_configs
+WHERE id = 1 LIMIT 1
+`
+
+func (q *Queries) GetNotificationConfig(ctx context.Context) (NotificationConfig, error) {
+	row := q.db.QueryRowContext(ctx, getNotificationConfig)
+	var i NotificationConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WxpusherEnabled,
+		&i.WxpusherAppToken,
+		&i.LanWebhookUrl,
+		&i.PublicBaseUrl,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
@@ -473,6 +623,58 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 	return i, err
 }
 
+const getReporterLeaderboardInMonth = `-- name: GetReporterLeaderboardInMonth :many
+SELECT u.id AS user_id,
+       u.full_name,
+       COALESCE(SUM(sl.points), 0)::bigint AS points,
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' THEN i.id END)::bigint AS valid_count,
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' AND i.category = '6S' THEN i.id END)::bigint AS safety_count
+FROM users u
+JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
+LEFT JOIN issues i ON i.id = sl.issue_id
+WHERE sl.created_at >= $1
+GROUP BY u.id, u.full_name
+ORDER BY points DESC, valid_count DESC, u.id ASC
+LIMIT 50
+`
+
+type GetReporterLeaderboardInMonthRow struct {
+	UserID      int64
+	FullName    string
+	Points      int64
+	ValidCount  int64
+	SafetyCount int64
+}
+
+func (q *Queries) GetReporterLeaderboardInMonth(ctx context.Context, createdAt time.Time) ([]GetReporterLeaderboardInMonthRow, error) {
+	rows, err := q.db.QueryContext(ctx, getReporterLeaderboardInMonth, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetReporterLeaderboardInMonthRow
+	for rows.Next() {
+		var i GetReporterLeaderboardInMonthRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.FullName,
+			&i.Points,
+			&i.ValidCount,
+			&i.SafetyCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getScoringRuleByKey = `-- name: GetScoringRuleByKey :one
 SELECT id, rule_key, points, description FROM scoring_rules
 WHERE rule_key = $1 LIMIT 1
@@ -492,6 +694,7 @@ func (q *Queries) GetScoringRuleByKey(ctx context.Context, ruleKey string) (Scor
 
 const getScoringRules = `-- name: GetScoringRules :many
 SELECT id, rule_key, points, description FROM scoring_rules
+ORDER BY id ASC
 `
 
 func (q *Queries) GetScoringRules(ctx context.Context) ([]ScoringRule, error) {
@@ -650,6 +853,34 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	return err
 }
 
+const insertCronTaskLog = `-- name: InsertCronTaskLog :one
+INSERT INTO cron_task_logs (
+    task_name, last_run_at, status, details
+) VALUES (
+    $1, CURRENT_TIMESTAMP, $2, $3
+)
+RETURNING id, task_name, last_run_at, status, details
+`
+
+type InsertCronTaskLogParams struct {
+	TaskName string
+	Status   string
+	Details  sql.NullString
+}
+
+func (q *Queries) InsertCronTaskLog(ctx context.Context, arg InsertCronTaskLogParams) (CronTaskLog, error) {
+	row := q.db.QueryRowContext(ctx, insertCronTaskLog, arg.TaskName, arg.Status, arg.Details)
+	var i CronTaskLog
+	err := row.Scan(
+		&i.ID,
+		&i.TaskName,
+		&i.LastRunAt,
+		&i.Status,
+		&i.Details,
+	)
+	return i, err
+}
+
 const insertIssueTag = `-- name: InsertIssueTag :exec
 INSERT INTO issue_tags (
     issue_id, tag_code
@@ -737,6 +968,37 @@ func (q *Queries) InvalidateIssue(ctx context.Context, arg InvalidateIssueParams
 		&i.ClosedAt,
 	)
 	return i, err
+}
+
+const listAllActivePhotoBasenames = `-- name: ListAllActivePhotoBasenames :many
+SELECT photo_before AS photo_name FROM issues WHERE photo_before != ''
+UNION
+SELECT photo_detail AS photo_name FROM issues WHERE photo_detail IS NOT NULL AND photo_detail != ''
+UNION
+SELECT photo_after AS photo_name FROM issues WHERE photo_after IS NOT NULL AND photo_after != ''
+`
+
+func (q *Queries) ListAllActivePhotoBasenames(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listAllActivePhotoBasenames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var photo_name string
+		if err := rows.Scan(&photo_name); err != nil {
+			return nil, err
+		}
+		items = append(items, photo_name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
@@ -868,6 +1130,81 @@ func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
 			&i.QrCode,
 			&i.IsActive,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenOverdueIssues = `-- name: ListOpenOverdueIssues :many
+SELECT id, location_code, created_at
+FROM issues
+WHERE status = 'OPEN'
+  AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'
+ORDER BY id ASC
+`
+
+type ListOpenOverdueIssuesRow struct {
+	ID           int64
+	LocationCode string
+	CreatedAt    time.Time
+}
+
+func (q *Queries) ListOpenOverdueIssues(ctx context.Context) ([]ListOpenOverdueIssuesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOpenOverdueIssues)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenOverdueIssuesRow
+	for rows.Next() {
+		var i ListOpenOverdueIssuesRow
+		if err := rows.Scan(&i.ID, &i.LocationCode, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listScoreLogsSince = `-- name: ListScoreLogsSince :many
+SELECT id, issue_id, target_type, target_id, rule_key, points, created_at, penalty_date FROM score_logs
+WHERE created_at >= $1
+ORDER BY id ASC
+`
+
+func (q *Queries) ListScoreLogsSince(ctx context.Context, createdAt time.Time) ([]ScoreLog, error) {
+	rows, err := q.db.QueryContext(ctx, listScoreLogsSince, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScoreLog
+	for rows.Next() {
+		var i ScoreLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.RuleKey,
+			&i.Points,
+			&i.CreatedAt,
+			&i.PenaltyDate,
 		); err != nil {
 			return nil, err
 		}
@@ -1058,6 +1395,35 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	return items, nil
 }
 
+const markOutboxFailed = `-- name: MarkOutboxFailed :exec
+UPDATE notification_outbox
+SET status = 'FAILED',
+    last_error = $1
+WHERE id = $2 AND status = 'SENDING'
+`
+
+type MarkOutboxFailedParams struct {
+	LastError sql.NullString
+	ID        int64
+}
+
+func (q *Queries) MarkOutboxFailed(ctx context.Context, arg MarkOutboxFailedParams) error {
+	_, err := q.db.ExecContext(ctx, markOutboxFailed, arg.LastError, arg.ID)
+	return err
+}
+
+const markOutboxSent = `-- name: MarkOutboxSent :exec
+UPDATE notification_outbox
+SET status = 'SENT',
+    sent_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND status = 'SENDING'
+`
+
+func (q *Queries) MarkOutboxSent(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, markOutboxSent, id)
+	return err
+}
+
 const patchIssue = `-- name: PatchIssue :one
 UPDATE issues
 SET category = COALESCE($2, category),
@@ -1186,6 +1552,26 @@ func (q *Queries) ResolveIssue(ctx context.Context, arg ResolveIssueParams) (Iss
 		&i.ClosedAt,
 	)
 	return i, err
+}
+
+const retryOutboxTask = `-- name: RetryOutboxTask :exec
+UPDATE notification_outbox
+SET status = 'PENDING',
+    retry_count = retry_count + 1,
+    last_error = $1,
+    next_retry_at = CURRENT_TIMESTAMP + ($2 * INTERVAL '1 second')
+WHERE id = $3 AND status = 'SENDING'
+`
+
+type RetryOutboxTaskParams struct {
+	LastError sql.NullString
+	Column2   interface{}
+	ID        int64
+}
+
+func (q *Queries) RetryOutboxTask(ctx context.Context, arg RetryOutboxTaskParams) error {
+	_, err := q.db.ExecContext(ctx, retryOutboxTask, arg.LastError, arg.Column2, arg.ID)
+	return err
 }
 
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
@@ -1386,6 +1772,81 @@ func (q *Queries) UpsertADConfig(ctx context.Context, arg UpsertADConfigParams) 
 		&i.GroupLeaderDn,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const upsertNotificationConfig = `-- name: UpsertNotificationConfig :one
+INSERT INTO notification_configs (
+    id, wxpusher_enabled, wxpusher_app_token, lan_webhook_url, public_base_url, updated_at, updated_by
+) VALUES (
+    1, $1, $2, $3, $4, CURRENT_TIMESTAMP, $5
+)
+ON CONFLICT (id) DO UPDATE SET
+    wxpusher_enabled = EXCLUDED.wxpusher_enabled,
+    wxpusher_app_token = CASE WHEN EXCLUDED.wxpusher_app_token = '' THEN notification_configs.wxpusher_app_token ELSE EXCLUDED.wxpusher_app_token END,
+    lan_webhook_url = CASE WHEN EXCLUDED.lan_webhook_url = '' THEN notification_configs.lan_webhook_url ELSE EXCLUDED.lan_webhook_url END,
+    public_base_url = EXCLUDED.public_base_url,
+    updated_at = CURRENT_TIMESTAMP,
+    updated_by = EXCLUDED.updated_by
+RETURNING id, wxpusher_enabled, wxpusher_app_token, lan_webhook_url, public_base_url, updated_at, updated_by
+`
+
+type UpsertNotificationConfigParams struct {
+	WxpusherEnabled  bool
+	WxpusherAppToken string
+	LanWebhookUrl    string
+	PublicBaseUrl    string
+	UpdatedBy        sql.NullInt64
+}
+
+func (q *Queries) UpsertNotificationConfig(ctx context.Context, arg UpsertNotificationConfigParams) (NotificationConfig, error) {
+	row := q.db.QueryRowContext(ctx, upsertNotificationConfig,
+		arg.WxpusherEnabled,
+		arg.WxpusherAppToken,
+		arg.LanWebhookUrl,
+		arg.PublicBaseUrl,
+		arg.UpdatedBy,
+	)
+	var i NotificationConfig
+	err := row.Scan(
+		&i.ID,
+		&i.WxpusherEnabled,
+		&i.WxpusherAppToken,
+		&i.LanWebhookUrl,
+		&i.PublicBaseUrl,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const upsertScoringRule = `-- name: UpsertScoringRule :one
+INSERT INTO scoring_rules (
+    rule_key, points, description
+) VALUES (
+    $1, $2, $3
+)
+ON CONFLICT (rule_key) DO UPDATE SET
+    points = EXCLUDED.points,
+    description = COALESCE(EXCLUDED.description, scoring_rules.description)
+RETURNING id, rule_key, points, description
+`
+
+type UpsertScoringRuleParams struct {
+	RuleKey     string
+	Points      int32
+	Description sql.NullString
+}
+
+func (q *Queries) UpsertScoringRule(ctx context.Context, arg UpsertScoringRuleParams) (ScoringRule, error) {
+	row := q.db.QueryRowContext(ctx, upsertScoringRule, arg.RuleKey, arg.Points, arg.Description)
+	var i ScoringRule
+	err := row.Scan(
+		&i.ID,
+		&i.RuleKey,
+		&i.Points,
+		&i.Description,
 	)
 	return i, err
 }

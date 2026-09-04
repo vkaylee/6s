@@ -15,12 +15,15 @@ import (
 
 	"6s/internal/auth"
 	"6s/internal/config"
+	"6s/internal/cron"
 	"6s/internal/crypto"
 	"6s/internal/database"
 	"6s/internal/db"
 	"6s/internal/issue"
 	"6s/internal/masterdata"
+	"6s/internal/notification"
 	"6s/internal/response"
+	"6s/internal/scoring"
 	"6s/internal/storage"
 )
 
@@ -145,10 +148,10 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 		cr.Post("/ad/test", adHandler.TestADConfig)
 	})
 
-	registerBusinessRoutes(r, queries, authMw, cfg)
+	registerBusinessRoutes(r, queries, authMw, cipher, cfg)
 }
 
-func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cfg *config.Config) {
+func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, cfg *config.Config) {
 	storageDir := cfg.DataDir
 	if storageDir == "" {
 		storageDir = "./data"
@@ -160,6 +163,14 @@ func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middle
 		r.Mount("/uploads", storageMgr.FileServer())
 	}
 
+	registerMasterDataRoutes(r, queries, authMw)
+
+	notifyCh := make(chan struct{}, 10)
+	registerIssueRoutes(r, queries, storageMgr, authMw, notifyCh)
+	registerScoringAndNotificationRoutes(r, queries, authMw, cipher, notifyCh, storageDir)
+}
+
+func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware) {
 	mdHandler := masterdata.NewHandler(queries)
 	r.Route("/api/locations", func(lr chi.Router) {
 		lr.Use(authMw.Authenticate)
@@ -171,22 +182,58 @@ func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middle
 		tr.Get("/", mdHandler.ListTags)
 		tr.With(auth.RequireRole("ADMIN")).Post("/", mdHandler.UpsertTag)
 	})
+}
 
-	if storageMgr != nil {
-		notifyCh := make(chan struct{}, 10)
-		issueSvc := issue.NewService(queries, storageMgr, notifyCh)
-		issueHandler := issue.NewHandler(issueSvc)
-
-		r.Route("/api/issues", func(ir chi.Router) {
-			ir.Use(authMw.Authenticate)
-			ir.Get("/", issueHandler.List)
-			ir.Post("/sync", issueHandler.Sync)
-			ir.Get("/{id}", issueHandler.GetByID)
-			ir.Post("/{id}/resolve", issueHandler.Resolve)
-			ir.Post("/{id}/close", issueHandler.Close)
-			ir.Post("/{id}/reopen", issueHandler.Reopen)
-			ir.Post("/{id}/invalidate", issueHandler.Invalid)
-			ir.Patch("/{id}", issueHandler.Patch)
-		})
+func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Manager, authMw *auth.Middleware, notifyCh chan struct{}) {
+	if storageMgr == nil {
+		return
 	}
+	issueSvc := issue.NewService(queries, storageMgr, notifyCh)
+	issueHandler := issue.NewHandler(issueSvc)
+
+	r.Route("/api/issues", func(ir chi.Router) {
+		ir.Use(authMw.Authenticate)
+		ir.Get("/", issueHandler.List)
+		ir.Post("/sync", issueHandler.Sync)
+		ir.Get("/{id}", issueHandler.GetByID)
+		ir.Post("/{id}/resolve", issueHandler.Resolve)
+		ir.Post("/{id}/close", issueHandler.Close)
+		ir.Post("/{id}/reopen", issueHandler.Reopen)
+		ir.Post("/{id}/invalidate", issueHandler.Invalid)
+		ir.Patch("/{id}", issueHandler.Patch)
+	})
+}
+
+func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
+	scoringSvc := scoring.NewService(queries, nil)
+	scoringHandler := scoring.NewHandler(scoringSvc)
+
+	r.Route("/api/leaderboard", func(lbr chi.Router) {
+		lbr.Use(authMw.Authenticate)
+		lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
+		lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
+	})
+
+	r.Route("/api/config/scoring", func(scr chi.Router) {
+		scr.Use(authMw.Authenticate)
+		scr.Get("/", scoringHandler.GetRules)
+		scr.With(auth.RequireRole("ADMIN")).Put("/", scoringHandler.UpdateRules)
+	})
+
+	httpSender := notification.NewHTTPSender(cipher)
+	notifHandler := notification.NewConfigHandler(queries, cipher, httpSender)
+	r.Route("/api/config/notifications", func(nr chi.Router) {
+		nr.Use(authMw.Authenticate)
+		nr.Use(auth.RequireRole("ADMIN"))
+		nr.Get("/", notifHandler.GetConfig)
+		nr.Put("/", notifHandler.UpdateConfig)
+		nr.Post("/test", notifHandler.TestConfig)
+	})
+
+	// Launch background workers
+	outboxWorker := notification.NewWorker(queries, httpSender, cipher, notifyCh)
+	go outboxWorker.Start(context.Background())
+
+	cronRunner := cron.NewRunner(queries, nil, storageDir)
+	go cronRunner.Start(context.Background())
 }

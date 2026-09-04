@@ -7,7 +7,7 @@ Xây dựng hệ thống 6S mobile-first Go + React PWA offline-resilient, trans
 1. [x] Domain 1: Backend Core & DB (`plan-backend-core.md`)
 2. [x] Domain 2: Auth & Identity (`plan-auth-rbac.md`)
 3. [x] Domain 3: Issues Engine & Storage (`plan-issues-storage.md`)
-4. [ ] Domain 4: Scoring & Outbox Worker (`plan-scoring-cron.md`)
+4. [x] Domain 4: Scoring & Outbox Worker (`plan-scoring-cron.md`)
 5. [ ] Domain 5: PWA Offline Engine (`plan-pwa-offline.md`)
 6. [ ] Domain 6: PWA Industrial UI (`plan-pwa-ui.md`)
 7. [ ] Verification & Binary Embed (`plan-verification.md`)
