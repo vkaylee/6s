@@ -1,0 +1,400 @@
+import { useState } from "react";
+import { apiClient } from "../api/client.ts";
+import { SplitSlider } from "../components/SplitSlider.tsx";
+import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
+import { useAuthStore } from "../store/authStore.ts";
+import { syncEngine } from "../sync/syncEngine.ts";
+import { type IssueCategory, type IssueItem, S_CATEGORIES } from "../types/index.ts";
+import { compressImage } from "../utils/compress.ts";
+import { haptics } from "../utils/haptics.ts";
+
+interface IssueDetailModalProps {
+  issue: IssueItem;
+  isOpen: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+}
+
+export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDetailModalProps) {
+  const { user } = useAuthStore();
+  const [isEditingCategory, setIsEditingCategory] = useState(false);
+  const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
+  const [rejectReason, setRejectReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmAction, setShowConfirmAction] = useState<"CLOSE" | "REOPEN" | "INVALID" | null>(
+    null,
+  );
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const role = user?.role || "USER";
+  const isSafetyIssue = issue.category === "6S";
+
+  // RBAC Permission Check (SPEC.md Section 3.2 & 9.9.F)
+  // Resolve: Anyone
+  // Close: Admin or Safety (for 6S); Admin, Safety, or matching Line Leader (for 1S-5S)
+  const canClose =
+    role === "ADMIN" ||
+    role === "SAFETY_OFFICER" ||
+    (role === "LINE_LEADER" &&
+      !isSafetyIssue &&
+      (!user?.assigned_location_code || user.assigned_location_code === issue.location_code));
+
+  const closeDisabledReason =
+    isSafetyIssue && role !== "ADMIN" && role !== "SAFETY_OFFICER"
+      ? "Cần quyền Safety Officer / 需安全员权限"
+      : role === "LINE_LEADER" &&
+          user?.assigned_location_code &&
+          user.assigned_location_code !== issue.location_code
+        ? "Chỉ được duyệt chuyền phụ trách"
+        : role === "USER"
+          ? "Cần quyền Line Leader trở lên"
+          : null;
+
+  const handleQuickChangeCategory = async (newCat: IssueCategory) => {
+    try {
+      await apiClient(`/api/issues/${issue.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: newCat }),
+      });
+      haptics.success();
+      setIsEditingCategory(false);
+      onRefresh();
+    } catch {
+      haptics.errorOrConflict();
+      alert("Không thể đổi phân loại issue");
+    }
+  };
+
+  const handleResolveOfflineOrOnline = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const compressed = await compressImage(file, { maxDimension: 1280, quality: 0.7 });
+
+      // Save draft resolve in local IndexedDB (SPEC.md Section 7.2)
+      const draft: DraftResolve = {
+        resolved_client_uuid: crypto.randomUUID(),
+        issue_id: issue.id,
+        expected_version: issue.version,
+        photo_after_blob: compressed,
+        resolved_at: Date.now(),
+        sync_status: "PENDING",
+      };
+
+      await saveDraftResolve(draft);
+      haptics.success();
+      syncEngine.triggerSync();
+      alert("Đã ghi nhận ảnh khắc phục! Đang đồng bộ lên máy chủ...");
+      onRefresh();
+      onClose();
+    } catch {
+      haptics.errorOrConflict();
+      alert("Lỗi khi xử lý ảnh khắc phục");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmClose = async () => {
+    setIsSubmitting(true);
+    try {
+      await apiClient(`/api/issues/${issue.id}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          score_rating: scoreRating,
+        }),
+      });
+      haptics.success();
+      setShowConfirmAction(null);
+      onRefresh();
+      onClose();
+    } catch {
+      haptics.errorOrConflict();
+      alert("Duyệt đạt thất bại");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmReopen = async () => {
+    setIsSubmitting(true);
+    try {
+      await apiClient(`/api/issues/${issue.id}/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
+        }),
+      });
+      haptics.success();
+      setShowConfirmAction(null);
+      onRefresh();
+      onClose();
+    } catch {
+      haptics.errorOrConflict();
+      alert("Mở lại issue thất bại");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmInvalid = async () => {
+    setIsSubmitting(true);
+    try {
+      await apiClient(`/api/issues/${issue.id}/invalidate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reject_reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
+        }),
+      });
+      haptics.success();
+      setShowConfirmAction(null);
+      onRefresh();
+      onClose();
+    } catch {
+      haptics.errorOrConflict();
+      alert("Bác bỏ thất bại");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col max-h-[92vh]">
+        {/* Header */}
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setIsEditingCategory(!isEditingCategory)}
+              className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1"
+              title="Chạm để sửa nhanh phân loại S (In-place Quick Edit)"
+            >
+              <span>{issue.category}</span>
+              <span className="text-xs opacity-50">✎</span>
+            </button>
+            <div>
+              <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
+                #{issue.id} - {issue.location_name || issue.location_code}
+              </h2>
+              <span className="text-xs text-zinc-400">v{issue.version}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-zinc-400 hover:text-zinc-600 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* In-place quick edit category drawer */}
+        {isEditingCategory && (
+          <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700 grid grid-cols-3 gap-2">
+            {S_CATEGORIES.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => handleQuickChangeCategory(s.key)}
+                className={`p-2 rounded-xl text-xs font-black min-h-[44px] border ${
+                  issue.category === s.key
+                    ? "bg-zinc-900 text-white"
+                    : "bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+                }`}
+              >
+                {s.key} ({s.name})
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Detail Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Split Slider if After photo exists, otherwise show Before photo */}
+          {issue.photo_after ? (
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+                So sánh Before / After (Kéo trượt thanh ở giữa)
+              </label>
+              <SplitSlider beforeUrl={issue.photo_before} afterUrl={issue.photo_after} />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+                Ảnh bằng chứng toàn cảnh (Before)
+              </label>
+              <img
+                src={issue.photo_before}
+                alt="Trước khắc phục"
+                className="w-full aspect-[4/3] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md"
+              />
+            </div>
+          )}
+
+          {/* Description & Tags */}
+          <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2">
+            <div className="flex items-center justify-between text-xs text-zinc-500">
+              <span>
+                Người báo cáo: <strong>{issue.creator_name}</strong>
+              </span>
+              <span>{new Date(issue.created_at).toLocaleDateString("vi-VN")}</span>
+            </div>
+            <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">
+              {issue.description || "Không có mô tả chi tiết."}
+            </p>
+            {issue.reject_reason && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
+                <strong>Lý do từ chối/mở lại:</strong> {issue.reject_reason}
+              </div>
+            )}
+          </div>
+
+          {/* Kaizen Rating Stars (SPEC.md Section 9.8.B) */}
+          {issue.status === "PENDING_REVIEW" && canClose && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
+              <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
+                Đánh giá chất lượng khắc phục (Kaizen Rating) *
+              </label>
+              <div className="flex items-center space-x-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setScoreRating(star)}
+                    className={`w-12 h-12 rounded-xl font-black text-lg flex items-center justify-center transition-all ${
+                      scoreRating >= star
+                        ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
+                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+                {scoreRating === 5 && (
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 ml-2 animate-bounce">
+                    🏆 Kaizen Xuất Sắc (+5 điểm)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Actions Bar (Glove Friendly, Explainable Disabled) */}
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col gap-2">
+          {/* Action: Resolve (Upload after photo) */}
+          {issue.status === "OPEN" && (
+            <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                disabled={isSubmitting}
+                onChange={handleResolveOfflineOrOnline}
+                className="hidden"
+              />
+              <span>📸 {isSubmitting ? "Đang xử lý ảnh..." : "CHỤP ẢNH KHẮC PHỤC (SAU)"}</span>
+            </label>
+          )}
+
+          {/* Action: Close (Duyệt đạt) */}
+          {issue.status === "PENDING_REVIEW" && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!canClose || isSubmitting}
+                onClick={() => setShowConfirmAction("CLOSE")}
+                className={`flex-1 font-black text-sm py-4 px-4 rounded-2xl min-h-[56px] flex items-center justify-center space-x-1 shadow-md ${
+                  canClose
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    : "opacity-40 bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                }`}
+                title={closeDisabledReason || undefined}
+              >
+                <span>{canClose ? "✓ DUYỆT ĐẠT" : `🔒 ${closeDisabledReason || "Khóa"}`}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={!canClose || isSubmitting}
+                onClick={() => setShowConfirmAction("REOPEN")}
+                className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs"
+              >
+                Mở lại
+              </button>
+            </div>
+          )}
+
+          {/* Action: Invalidate (Bác bỏ) */}
+          {issue.status === "OPEN" && (role === "ADMIN" || role === "SAFETY_OFFICER") && (
+            <button
+              type="button"
+              onClick={() => setShowConfirmAction("INVALID")}
+              className="text-xs text-rose-600 hover:text-rose-700 font-bold py-2 text-center"
+            >
+              Bác bỏ báo cáo này (Không hợp lệ)
+            </button>
+          )}
+        </div>
+
+        {/* Confirmation Modal */}
+        {showConfirmAction && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl max-w-sm w-full space-y-4 border border-zinc-200 dark:border-zinc-800 shadow-2xl">
+              <h3 className="font-black text-lg text-zinc-900 dark:text-zinc-100">
+                {showConfirmAction === "CLOSE"
+                  ? "Xác nhận duyệt đạt issue?"
+                  : showConfirmAction === "REOPEN"
+                    ? "Xác nhận mở lại issue?"
+                    : "Xác nhận bác bỏ issue?"}
+              </h3>
+
+              {(showConfirmAction === "REOPEN" || showConfirmAction === "INVALID") && (
+                <textarea
+                  rows={2}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Nhập lý do bắt buộc..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border rounded-xl p-3 text-sm focus:outline-none"
+                />
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showConfirmAction === "CLOSE") handleConfirmClose();
+                    if (showConfirmAction === "REOPEN") handleConfirmReopen();
+                    if (showConfirmAction === "INVALID") handleConfirmInvalid();
+                  }}
+                  className="flex-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-black py-3 rounded-xl min-h-[48px]"
+                >
+                  Xác nhận
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmAction(null)}
+                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-xl min-h-[48px]"
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
