@@ -353,3 +353,227 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 		t.Errorf("expected status CLOSED, got %s", closedResp.Status)
 	}
 }
+
+func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "6s_test_issue_svc_extra_*")
+	defer os.RemoveAll(tempDir)
+
+	mockStore := newMockIssueStore()
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	mockStore.locations["LINE_A2"] = db.Location{Code: "LINE_A2", NameVi: "Chuyền May A2"}
+
+	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
+	admin := db.User{ID: 1, Username: "admin", Role: "ADMIN", IsActive: true}
+	otherWorker := db.User{ID: 20, Username: "worker2", Role: "USER", IsActive: true}
+
+	mockStore.users[worker.ID] = worker
+	mockStore.users[admin.ID] = admin
+	mockStore.users[otherWorker.ID] = otherWorker
+
+	storageMgr, _ := storage.NewManager(tempDir)
+	notifyCh := make(chan struct{}, 10)
+	svc := NewService(mockStore, storageMgr, notifyCh)
+
+	jpegBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
+	fhDetail := createTestFileHeader(t, "photo_detail", "detail.jpg", jpegBytes)
+
+	// 1. Create issue with detail photo and tags
+	clientUUID := "c0a80101-0000-4000-8000-000000000010"
+	resp, created, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+		ClientUUID:   clientUUID,
+		Category:     "2S",
+		LocationCode: "LINE_A1",
+		Description:  "May A1 loi",
+		Tags:         []string{"machine", "oil"},
+		PhotoBefore:  fhBefore,
+		PhotoDetail:  fhDetail,
+	}, worker)
+	if err != nil || !created {
+		t.Fatalf("SyncIssue failed: %v", err)
+	}
+
+	// 2. Patch issue
+	newCat := "3S"
+	newLoc := "LINE_A2"
+	patchResp, err := svc.PatchIssue(context.Background(), PatchIssueRequest{
+		IssueID:      resp.ID,
+		Category:     &newCat,
+		LocationCode: &newLoc,
+		Tags:         []string{"safety"},
+	}, worker)
+	if err != nil {
+		t.Fatalf("PatchIssue error: %v", err)
+	}
+	if patchResp.Category != Category3S.String() || patchResp.LocationCode != "LINE_A2" {
+		t.Errorf("PatchIssue expected Category 3S, Location LINE_A2, got %s, %s", patchResp.Category, patchResp.LocationCode)
+	}
+
+	// Non-owner cannot patch
+	_, err = svc.PatchIssue(context.Background(), PatchIssueRequest{
+		IssueID:  resp.ID,
+		Category: &newCat,
+	}, otherWorker)
+	if err != ErrPermissionDenied {
+		t.Errorf("expected ErrPermissionDenied for non-owner, got %v", err)
+	}
+
+	// 3. Resolve issue
+	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
+	resolveUUID := "c0a80101-0000-4000-8000-000000000020"
+	resResp, err := svc.ResolveIssue(context.Background(), ResolveIssueRequest{
+		IssueID:            resp.ID,
+		ResolvedClientUUID: resolveUUID,
+		ExpectedVersion:    patchResp.Version,
+		PhotoAfter:         fhAfter,
+	}, worker)
+	if err != nil {
+		t.Fatalf("ResolveIssue error: %v", err)
+	}
+
+	// 4. Reopen issue by creator
+	expVer := resResp.Version
+	reopenedResp, err := svc.ReopenIssue(context.Background(), ReopenIssueRequest{
+		IssueID:         resResp.ID,
+		RejectReason:    "Chưa sạch dầu",
+		ExpectedVersion: &expVer,
+	}, worker)
+	if err != nil {
+		t.Fatalf("ReopenIssue error: %v", err)
+	}
+	if reopenedResp.Status != StatusOpen.String() {
+		t.Errorf("expected status OPEN after reopen, got %s", reopenedResp.Status)
+	}
+
+	// 5. Invalidate issue by Admin
+	invVer := reopenedResp.Version
+	invResp, err := svc.InvalidateIssue(context.Background(), InvalidateIssueRequest{
+		IssueID:         reopenedResp.ID,
+		Reason:          "Không phải lỗi 6S",
+		ExpectedVersion: &invVer,
+	}, admin)
+	if err != nil {
+		t.Fatalf("InvalidateIssue error: %v", err)
+	}
+	if invResp.Status != StatusInvalid.String() {
+		t.Errorf("expected status INVALID, got %s", invResp.Status)
+	}
+
+	// Worker cannot invalidate
+	_, err = svc.InvalidateIssue(context.Background(), InvalidateIssueRequest{
+		IssueID: reopenedResp.ID,
+		Reason:  "test",
+	}, worker)
+	if err != ErrPermissionDenied {
+		t.Errorf("expected ErrPermissionDenied for worker invalidating, got %v", err)
+	}
+}
+
+func TestIssueService_ValidationAndErrors(t *testing.T) {
+	mockStore := newMockIssueStore()
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
+	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
+
+	// Invalid category
+	_, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000000099",
+		Category:     "INVALID_CAT",
+		LocationCode: "LINE_A1",
+	}, worker)
+	if err == nil {
+		t.Fatal("expected error for invalid category")
+	}
+
+	// Issue not found
+	_, err = svc.GetIssueByID(context.Background(), 99999)
+	if err != ErrIssueNotFound {
+		t.Errorf("expected ErrIssueNotFound, got %v", err)
+	}
+}
+
+func TestIssueService_ListIssuesFiltered(t *testing.T) {
+	mockStore := newMockIssueStore()
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
+	mockStore.users[worker.ID] = worker
+	mockStore.issues[1] = db.Issue{
+		ID:           1,
+		ClientUuid:   "c0a80101-0000-4000-8000-000000000001",
+		CreatorID:    worker.ID,
+		Category:     Category1S.String(),
+		LocationCode: "LINE_A1",
+		Status:       StatusOpen.String(),
+		CreatedAt:    time.Now(),
+	}
+
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
+
+	items, total, err := svc.ListIssuesFiltered(context.Background(), StatusOpen.String(), Category1S.String(), "LINE_A1", 1, 10)
+	if err != nil {
+		t.Fatalf("ListIssuesFiltered err: %v", err)
+	}
+	if total != 1 || len(items) != 1 {
+		t.Errorf("expected 1 item, got total=%d, len=%d", total, len(items))
+	}
+}
+
+func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
+	mockStore := newMockIssueStore()
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
+	safety := db.User{ID: 2, Username: "safety", Role: "SAFETY_OFFICER", IsActive: true}
+	mockStore.users[worker.ID] = worker
+	mockStore.users[safety.ID] = safety
+
+	tempDir := t.TempDir()
+	storageMgr, _ := storage.NewManager(tempDir)
+	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
+
+	jpegBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
+	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
+
+	resp, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000000077",
+		Category:     Category6S.String(),
+		LocationCode: "LINE_A1",
+		PhotoBefore:  fhBefore,
+	}, worker)
+	if err != nil {
+		t.Fatalf("Sync 6S issue failed: %v", err)
+	}
+
+	// Force resolve
+	resResp, err := svc.ResolveIssue(context.Background(), ResolveIssueRequest{
+		IssueID:            resp.ID,
+		ResolvedClientUUID: "c0a80101-0000-4000-8000-000000000078",
+		Force:              true,
+		PhotoAfter:         fhAfter,
+	}, worker)
+	if err != nil {
+		t.Fatalf("Force resolve error: %v", err)
+	}
+
+	// Normal worker cannot close 6S issue
+	_, err = svc.CloseIssue(context.Background(), CloseIssueRequest{
+		IssueID:     resResp.ID,
+		ScoreRating: 5,
+	}, worker)
+	if err != ErrPermissionDenied {
+		t.Errorf("expected ErrPermissionDenied for worker closing 6S issue, got %v", err)
+	}
+
+	// Safety officer can close 6S issue
+	closed, err := svc.CloseIssue(context.Background(), CloseIssueRequest{
+		IssueID:     resResp.ID,
+		ScoreRating: 5,
+	}, safety)
+	if err != nil {
+		t.Fatalf("Safety officer close error: %v", err)
+	}
+	if closed.Status != StatusClosed.String() {
+		t.Errorf("expected status CLOSED, got %s", closed.Status)
+	}
+}

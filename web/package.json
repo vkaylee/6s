@@ -10,7 +10,8 @@
     "lint:fix": "biome check --write . && tsc --noEmit",
     "type-check": "tsc --noEmit",
     "check-i18n": "bun test test/i18n.test.tsx",
-    "test": "bun test"
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {
     "idb": "^8.0.2",

@@ -9,4 +9,12 @@ describe("compressImage", () => {
     expect(result).toBeDefined();
     expect(result.size).toBe(originalBlob.size);
   });
+
+  it("handles empty options with defaults safely", async () => {
+    const rawData = new Uint8Array([10, 20, 30]);
+    const originalBlob = new Blob([rawData], { type: "image/jpeg" });
+    const result = await compressImage(originalBlob);
+    expect(result).toBeDefined();
+    expect(result.size).toBe(originalBlob.size);
+  });
 });

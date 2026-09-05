@@ -168,3 +168,48 @@ func TestScoringService_RetroactiveRecalculate(t *testing.T) {
 		t.Errorf("expected 1 audit log entry, got %d", len(store.auditLogs))
 	}
 }
+
+func TestScoringService_ReporterLeaderboardAndRules(t *testing.T) {
+	store := &mockScoringStore{
+		reporters: []db.GetReporterLeaderboardInMonthRow{
+			{
+				UserID:      10,
+				FullName:    "Super Hunter",
+				Points:      50,
+				ValidCount:  10,
+				SafetyCount: 3,
+			},
+		},
+		rules: map[string]int32{
+			"reward_valid": 5,
+		},
+	}
+
+	svc := NewService(store, time.UTC)
+	ctx := context.Background()
+
+	// 1. Reporter leaderboard
+	items, err := svc.GetReporterLeaderboard(ctx)
+	if err != nil {
+		t.Fatalf("GetReporterLeaderboard error: %v", err)
+	}
+	if len(items) != 1 || items[0].UserID != 10 {
+		t.Errorf("expected 1 reporter with ID 10, got %+v", items)
+	}
+
+	// 2. Get rules
+	rules, err := svc.GetRules(ctx)
+	if err != nil {
+		t.Fatalf("GetRules error: %v", err)
+	}
+	if len(rules) != 1 || rules[0].RuleKey != "reward_valid" {
+		t.Errorf("expected reward_valid rule, got %+v", rules)
+	}
+
+	// 3. StartOfMonth verification
+	now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+	start := StartOfMonth(now, time.UTC)
+	if start.Day() != 1 || start.Month() != 9 || start.Year() != 2026 {
+		t.Errorf("expected 2026-09-01 00:00:00, got %v", start)
+	}
+}

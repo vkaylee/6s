@@ -125,3 +125,23 @@ func TestManager_SaveAfterPhoto(t *testing.T) {
 		t.Fatalf("expected file to exist at %s", fullPath)
 	}
 }
+
+func TestManager_SaveDetailPhoto(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	clientUUID := "c0a80101-0000-4000-8000-000000000003"
+	jpegBytes := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0x01}, 100)...)
+	fh := createTestFileHeader(t, "photo_detail", "detail.jpg", jpegBytes)
+
+	savedName, err := mgr.SaveDetailPhoto(fh, clientUUID)
+	if err != nil {
+		t.Fatalf("SaveDetailPhoto failed: %v", err)
+	}
+	if savedName != clientUUID+"_detail.jpg" {
+		t.Errorf("expected %s_detail.jpg, got %s", clientUUID, savedName)
+	}
+}

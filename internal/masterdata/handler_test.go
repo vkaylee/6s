@@ -133,4 +133,22 @@ func TestMasterDataHandler(t *testing.T) {
 	if rrTags.Code != http.StatusOK {
 		t.Fatalf("expected 200 for list tags, got %d", rrTags.Code)
 	}
+
+	// 5. Create Location Missing Fields (Validation error)
+	badReq := CreateLocationRequest{Code: ""}
+	badBody, _ := json.Marshal(badReq)
+	reqBad := httptest.NewRequest("POST", "/api/locations", bytes.NewReader(badBody))
+	rrBad := httptest.NewRecorder()
+	handler.CreateLocation(rrBad, reqBad)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 on missing location fields, got %d", rrBad.Code)
+	}
+
+	// 6. Update Location Status Missing Code
+	reqMissingCode := httptest.NewRequest("PATCH", "/api/locations//status", bytes.NewReader(bodyStatus))
+	rrMissingCode := httptest.NewRecorder()
+	handler.UpdateLocationStatus(rrMissingCode, reqMissingCode)
+	if rrMissingCode.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 on missing location code, got %d", rrMissingCode.Code)
+	}
 }

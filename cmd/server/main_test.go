@@ -1,13 +1,13 @@
 package main
 
 import (
+	"6s/internal/config"
+	"6s/internal/response"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"6s/internal/response"
 )
 
 func TestHealthEndpoint(t *testing.T) {
@@ -70,5 +70,25 @@ func TestSPAStaticFallback(t *testing.T) {
 	r.ServeHTTP(recCert, reqCert)
 	if recCert.Code != http.StatusOK && recCert.Code != http.StatusNotFound {
 		t.Errorf("expected 200 or 404 for cert, got %d", recCert.Code)
+	}
+}
+
+func TestRouter_ConfiguredSetup(t *testing.T) {
+	tempDir := t.TempDir()
+	cfg := &config.Config{
+		Port:           "8080",
+		DataDir:        tempDir,
+		JWTSecret:      "test-secret-at-least-32-bytes-long-key!",
+		TrustedProxies: "127.0.0.1",
+	}
+
+	r := setupRouter(nil, cfg, nil, nil)
+
+	// Test health HEAD method
+	reqHead := httptest.NewRequest(http.MethodHead, "/api/health", nil)
+	recHead := httptest.NewRecorder()
+	r.ServeHTTP(recHead, reqHead)
+	if recHead.Code != http.StatusOK {
+		t.Fatalf("expected 200 for HEAD /api/health, got %d", recHead.Code)
 	}
 }

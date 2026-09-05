@@ -60,3 +60,30 @@ func TestEncryptorEmptyString(t *testing.T) {
 		t.Errorf("expected empty string, got %q, err: %v", pt, err)
 	}
 }
+
+func TestEncryptor_Errors(t *testing.T) {
+	enc, _ := NewEncryptor("12345678901234567890123456789012")
+
+	// Invalid base64
+	_, err := enc.Decrypt("invalid-base64-!@#$")
+	if err == nil {
+		t.Fatal("expected error on invalid base64")
+	}
+
+	// Ciphertext too short (< nonce size 12 bytes)
+	shortData := base64.StdEncoding.EncodeToString([]byte("short"))
+	_, err = enc.Decrypt(shortData)
+	if err != ErrCiphertextTooShort {
+		t.Errorf("expected ErrCiphertextTooShort, got %v", err)
+	}
+
+	// Corrupted ciphertext (tampered authentication tag)
+	validCT, _ := enc.Encrypt("test message")
+	ctBytes, _ := base64.StdEncoding.DecodeString(validCT)
+	ctBytes[len(ctBytes)-1] ^= 0xFF // flip bit in tag
+	tamperedCT := base64.StdEncoding.EncodeToString(ctBytes)
+	_, err = enc.Decrypt(tamperedCT)
+	if err == nil {
+		t.Fatal("expected error on tampered ciphertext")
+	}
+}

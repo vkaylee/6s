@@ -413,3 +413,102 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 		t.Fatalf("expected 403 on repeated setup, got %d", rrSetupRepeat.Code)
 	}
 }
+
+func TestHandler_RevokeAndSessions(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	handler := NewHandler(store, tm, limiter, cipher, nil)
+	user := db.User{
+		ID:       10,
+		Username: "worker",
+		FullName: "Worker",
+		Role:     RoleUser.String(),
+		IsActive: true,
+	}
+	store.users[user.ID] = user
+	store.usersByName[user.Username] = user
+
+	// Seed active refresh token
+	_, hash, _ := GenerateRefreshToken()
+	_, _ = store.CreateRefreshToken(context.Background(), db.CreateRefreshTokenParams{
+		UserID:     user.ID,
+		TokenHash:  hash,
+		ExpiresAt:  time.Now().Add(24 * time.Hour),
+		DeviceInfo: sql.NullString{String: "Chrome on Linux", Valid: true},
+	})
+
+	// 1. List active sessions
+	reqSessions := httptest.NewRequest("GET", "/api/auth/sessions", nil)
+	ctxUser := context.WithValue(reqSessions.Context(), UserContextKey, user)
+	rrSessions := httptest.NewRecorder()
+	handler.Sessions(rrSessions, reqSessions.WithContext(ctxUser))
+	if rrSessions.Code != http.StatusOK {
+		t.Fatalf("expected 200 for sessions, got %d", rrSessions.Code)
+	}
+
+	// 2. Revoke current user refresh tokens
+	revokeBody, _ := json.Marshal(RevokeRequest{})
+	reqRevoke := httptest.NewRequest("POST", "/api/auth/revoke", bytes.NewReader(revokeBody))
+	rrRevoke := httptest.NewRecorder()
+	handler.Revoke(rrRevoke, reqRevoke.WithContext(ctxUser))
+	if rrRevoke.Code != http.StatusOK {
+		t.Fatalf("expected 200 for revoke, got %d", rrRevoke.Code)
+	}
+
+	// 3. Verify sessions are now empty
+	rrSessionsAfter := httptest.NewRecorder()
+	handler.Sessions(rrSessionsAfter, reqSessions.WithContext(ctxUser))
+	var sessionsList []map[string]any
+	_ = json.NewDecoder(rrSessionsAfter.Body).Decode(&sessionsList)
+	if len(sessionsList) != 0 {
+		t.Errorf("expected 0 active sessions after revocation, got %d", len(sessionsList))
+	}
+}
+
+func TestHandler_LoginAD_JITProvision(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	mockLDAP := &MockLDAPClient{
+		UserToReturn: &LDAPUser{
+			Username:    "aduser",
+			DN:          "CN=AD User,DC=factory,DC=lan",
+			FullName:    "AD User",
+			Email:       "aduser@factory.lan",
+			MatchedRole: RoleLineLeader.String(),
+		},
+	}
+	handler := NewHandler(store, tm, limiter, cipher, mockLDAP)
+
+	// Seed enabled AD config
+	store.adConfig = db.AdConfig{
+		IsEnabled: true,
+		Server:    "ad.factory.lan",
+		Port:      636,
+	}
+
+	loginReq := LoginRequest{
+		Username: "aduser",
+		Password: "adpassword",
+	}
+	body, _ := json.Marshal(loginReq)
+	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.Login(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for AD login, got %d", rr.Code)
+	}
+
+	// Verify JIT created user
+	u, err := store.GetUserByUsername(context.Background(), "aduser")
+	if err != nil {
+		t.Fatalf("expected user created via JIT: %v", err)
+	}
+	if u.Role != RoleLineLeader.String() {
+		t.Errorf("expected role LINE_LEADER, got %s", u.Role)
+	}
+}

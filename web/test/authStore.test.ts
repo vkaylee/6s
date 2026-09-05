@@ -38,4 +38,36 @@ describe("authStore", () => {
     expect(state.accessToken).toBe("mock-jwt-token");
     expect(state.user?.role).toBe(UserRole.USER);
   });
+
+  it("handles setAuth, clearAuth, and session transitions", async () => {
+    const store = useAuthStore.getState();
+    const user = {
+      id: 2,
+      username: "leader01",
+      full_name: "Tran Van B",
+      role: UserRole.LINE_LEADER,
+    };
+
+    await store.setAuth(user, "access-token-123", "refresh-token-456");
+    let state = useAuthStore.getState();
+    expect(state.user?.username).toBe("leader01");
+    expect(state.accessToken).toBe("access-token-123");
+    expect(state.isLoading).toBe(false);
+    expect(state.isOfflineGrace).toBe(false);
+
+    await store.clearAuth();
+    state = useAuthStore.getState();
+    expect(state.user).toBeNull();
+    expect(state.accessToken).toBeNull();
+    expect(state.isOfflineGrace).toBe(false);
+  });
+
+  it("restoreSession and getRefreshToken handle non-indexedDB runtime safely", async () => {
+    const store = useAuthStore.getState();
+    const restored = await store.restoreSession();
+    expect(typeof restored).toBe("boolean");
+
+    const token = await store.getRefreshToken();
+    expect(token === null || typeof token === "string").toBe(true);
+  });
 });

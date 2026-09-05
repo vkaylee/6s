@@ -98,3 +98,22 @@ func TestCron_OverduePenaltyCatchup(t *testing.T) {
 		t.Errorf("expected still 1 score log after second same-day check, got %d", len(store.scoreLogs))
 	}
 }
+
+func TestCron_RunCleanup(t *testing.T) {
+	store := &mockCronStore{}
+	tempDir := t.TempDir()
+	runner := NewRunner(store, time.UTC, tempDir)
+	ctx := context.Background()
+
+	// 1. Audit logs cleanup
+	runner.RunCleanupAuditLogs(ctx)
+	if !store.auditCleaned {
+		t.Fatal("expected audit logs to be cleaned")
+	}
+
+	// 2. Orphan photos cleanup
+	runner.RunCleanupOrphans(ctx)
+	if store.lastLogs[TaskCleanupOrphans].Status != "SUCCESS" {
+		t.Errorf("expected SUCCESS for cleanup orphans, got %s", store.lastLogs[TaskCleanupOrphans].Status)
+	}
+}
