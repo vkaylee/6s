@@ -29,12 +29,11 @@ import {
   type LocationItem,
   type ReporterLeaderboard,
   type TagItem,
-  UserRole,
 } from "./types/index.ts";
 
 export function App() {
   const { t } = useI18nStore();
-  const { user, accessToken, clearAuth, restoreSession } = useAuthStore();
+  const { user, accessToken, restoreSession } = useAuthStore();
   const { initTheme } = useThemeStore();
   const [, setLocation] = useLocation();
   const [issues, setIssues] = useState<IssueItem[]>([]);
@@ -590,62 +589,15 @@ export function App() {
         <Route path="/">
           <ProtectedRoute>
             <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
-              {/* Top Status Bar with Network indicator */}
-              <StatusBar onOpenDrawer={() => setIsDrawerOpen(true)} />
+              {/* Top Unified Header & Status Bar */}
+              <StatusBar
+                onOpenDrawer={() => setIsDrawerOpen(true)}
+                onNavigate={(path) => setLocation(path)}
+              />
 
               {/* Main Container */}
               <main className="pt-4">
                 <PageContainer className="space-y-4">
-                  {/* User bar & Login trigger */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
-                        {t("nav.title")}
-                      </h1>
-                      <p className="text-xs text-zinc-500">6S Issue Tracker</p>
-                    </div>
-                    <div>
-                      {user ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="text-right">
-                            <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                              {user.full_name}
-                            </div>
-                            <div className="text-[10px] text-zinc-400 font-medium">
-                              {user.role}{" "}
-                              {user.assigned_location_code && `• ${user.assigned_location_code}`}
-                            </div>
-                          </div>
-                          {user.role === UserRole.ADMIN && (
-                            <button
-                              type="button"
-                              onClick={() => setLocation("/admin")}
-                              className="p-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold min-h-[44px]"
-                              title={t("admin.title")}
-                            >
-                              ⚙️
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => clearAuth()}
-                            className="text-xs text-rose-600 dark:text-rose-400 font-bold p-2 min-h-[44px]"
-                          >
-                            {t("auth.logout")}
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setLocation("/login")}
-                          className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl min-h-[44px] shadow-sm"
-                        >
-                          {t("auth.login")}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Health Gauge Ring Widget (SPEC.md Section 9.8.A) */}
                   <HealthGauge
                     score={overallScore}

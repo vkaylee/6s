@@ -6,7 +6,7 @@ export function NavActions() {
   const { isDark, toggleTheme } = useThemeStore();
 
   return (
-    <div className="flex items-center space-x-2" data-testid="nav-actions">
+    <div className="flex items-center space-x-1.5" data-testid="nav-actions">
       <button
         type="button"
         data-testid="lang-toggle"
@@ -14,7 +14,7 @@ export function NavActions() {
           const nextLocale = locale === "vi" ? "en" : locale === "en" ? "zh" : "vi";
           setLocale(nextLocale);
         }}
-        className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-black min-h-[44px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700 uppercase"
+        className="px-2 py-1 h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-[11px] font-black flex items-center justify-center border border-zinc-200 dark:border-zinc-700 uppercase transition-colors min-w-[34px]"
         title={t("nav.language")}
       >
         {locale}
@@ -24,7 +24,7 @@ export function NavActions() {
         type="button"
         data-testid="theme-toggle"
         onClick={toggleTheme}
-        className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-sm font-bold min-w-[44px] min-h-[44px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700"
+        className="w-8 h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold flex items-center justify-center border border-zinc-200 dark:border-zinc-700 transition-colors"
         title={isDark ? t("nav.theme_light") : t("nav.theme_dark")}
       >
         {isDark ? "☀️" : "🌙"}

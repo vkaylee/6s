@@ -1,15 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
+import { useAuthStore } from "../store/authStore.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
+import { UserRole } from "../types/index.ts";
 import { NavActions } from "./NavActions.tsx";
 import { PageContainer } from "./PageContainer.tsx";
 
 interface StatusBarProps {
   onOpenDrawer: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export function StatusBar({ onOpenDrawer }: StatusBarProps) {
+export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
   const { t } = useI18nStore();
+  const storeUser = useAuthStore((s) => s.user);
+  const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
+  const clearAuth = useAuthStore((s) => s.clearAuth);
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
@@ -21,6 +27,19 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
     isSyncing: false,
     conflictCount: 0,
   });
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    }
+    if (isProfileOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isProfileOpen]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -44,48 +63,135 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
 
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none shadow-sm">
-      <PageContainer className="h-14 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onOpenDrawer}
-          className="flex items-center space-x-2 text-left focus:outline-none"
-        >
-          <span
-            className={`w-3.5 h-3.5 rounded-full ${
-              isOnline
-                ? hasPending
-                  ? "bg-amber-500 animate-pulse"
-                  : "bg-emerald-500"
-                : "bg-rose-500"
-            }`}
-          />
+      <PageContainer className="min-h-14 py-2 flex flex-wrap items-center justify-between gap-2">
+        {/* Left: Brand title & Sync/Network status */}
+        <div className="flex items-center space-x-3">
           <div className="flex flex-col">
-            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">
-              {isOnline ? (hasPending ? t("nav.syncing") : t("nav.online")) : t("nav.offline")}
-            </span>
-            {hasPending ? (
-              <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                {t("nav.pending_records", { count: progress.total - progress.completed })}
+            <h1 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-zinc-100 leading-tight">
+              {t("nav.title")}
+            </h1>
+            <button
+              type="button"
+              onClick={onOpenDrawer}
+              className="flex items-center space-x-1.5 text-left focus:outline-none group mt-0.5"
+            >
+              <span
+                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  isOnline
+                    ? hasPending
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-emerald-500"
+                    : "bg-rose-500"
+                }`}
+              />
+              <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider group-hover:underline">
+                {isOnline ? (hasPending ? t("nav.syncing") : t("nav.online")) : t("nav.offline")}
               </span>
-            ) : (
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {t("nav.tap_to_view")}
-              </span>
-            )}
+              {hasPending && (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                  ({progress.total - progress.completed})
+                </span>
+              )}
+            </button>
           </div>
-        </button>
 
-        <div className="flex items-center space-x-2">
           {progress.conflictCount > 0 && (
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-xs px-2.5 py-1 rounded-full font-bold border border-amber-300 dark:border-amber-700 animate-bounce"
+              className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-bold border border-amber-300 dark:border-amber-700 animate-bounce"
             >
               ⚠️ {progress.conflictCount}
             </button>
           )}
+        </div>
+
+        {/* Right: Lang/Theme + Profile avatar / Login */}
+        <div className="flex items-center space-x-2">
           <NavActions />
+
+          {user ? (
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen((prev) => !prev)}
+                aria-expanded={isProfileOpen}
+                aria-haspopup="true"
+                className="flex items-center space-x-1.5 p-1 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none min-h-[36px]"
+                title={user.full_name}
+              >
+                {/* Avatar Badge */}
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                  {user.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}
+                </div>
+                <div className="text-left hidden sm:block leading-tight pr-1">
+                  <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate max-w-[100px]">
+                    {user.full_name}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-medium truncate max-w-[100px]">
+                    {user.role}
+                  </div>
+                </div>
+                <span className="text-[10px] text-zinc-400">▾</span>
+              </button>
+
+              {/* Profile Dropdown Popover */}
+              {isProfileOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 p-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {/* User Profile Card */}
+                  <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 mb-1">
+                    <div className="text-xs font-black text-zinc-900 dark:text-zinc-100 truncate">
+                      {user.full_name}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                      @{user.username} • {user.role}
+                    </div>
+                    {user.assigned_location_code && (
+                      <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold mt-0.5">
+                        📍 {user.assigned_location_code}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action 1: Admin Settings (if admin) */}
+                  {user.role === UserRole.ADMIN && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        onNavigate?.("/admin");
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>⚙️</span>
+                      <span>{t("admin.title")}</span>
+                    </button>
+                  )}
+
+                  {/* Action 2: Logout */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      clearAuth();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2 transition-colors min-h-[40px]"
+                  >
+                    <span>🚪</span>
+                    <span>{t("auth.logout")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onNavigate?.("/login")}
+              className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl min-h-[36px] shadow-sm hover:bg-blue-700 transition-colors"
+            >
+              {t("auth.login")}
+            </button>
+          )}
         </div>
       </PageContainer>
 
