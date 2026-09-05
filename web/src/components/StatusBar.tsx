@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useI18nStore } from "../i18n/index.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
 
 interface StatusBarProps {
@@ -8,6 +9,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ onOpenDrawer, isDark, onToggleDark }: StatusBarProps) {
+  const { locale, setLocale, t } = useI18nStore();
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
@@ -59,7 +61,7 @@ export function StatusBar({ onOpenDrawer, isDark, onToggleDark }: StatusBarProps
           />
           <div className="flex flex-col">
             <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">
-              {isOnline ? (hasPending ? "Đang đồng bộ..." : "Đã kết nối LAN") : "Ngoại tuyến"}
+              {isOnline ? (hasPending ? t("nav.syncing") : t("nav.online")) : t("nav.offline")}
             </span>
             {hasPending ? (
               <span className="text-[11px] text-amber-600 dark:text-amber-400">
@@ -74,13 +76,25 @@ export function StatusBar({ onOpenDrawer, isDark, onToggleDark }: StatusBarProps
         </button>
 
         <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => {
+              const nextLocale = locale === "vi" ? "en" : locale === "en" ? "zh" : "vi";
+              setLocale(nextLocale);
+            }}
+            className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-black min-h-[44px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700 uppercase"
+            title={t("nav.language")}
+          >
+            {locale}
+          </button>
+
           {progress.conflictCount > 0 && (
             <button
               type="button"
               onClick={onOpenDrawer}
               className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-xs px-2.5 py-1 rounded-full font-bold border border-amber-300 dark:border-amber-700 animate-bounce"
             >
-              ⚠️ {progress.conflictCount} xung đột
+              ⚠️ {progress.conflictCount}
             </button>
           )}
 

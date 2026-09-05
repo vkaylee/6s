@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { useI18nStore } from "../i18n/index.ts";
 import { type UserProfile, useAuthStore } from "../store/authStore.ts";
 import { haptics } from "../utils/haptics.ts";
 
@@ -9,6 +10,7 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
+  const { t } = useI18nStore();
   const { setAuth } = useAuthStore();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +24,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
-      setErrorMsg("Vui lòng nhập tài khoản và mật khẩu");
+      setErrorMsg(t("auth.required_fields"));
       return;
     }
 
@@ -52,7 +54,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       if (typeof err === "object" && err !== null && "message" in err) {
         setErrorMsg((err as { message: string }).message);
       } else {
-        setErrorMsg("Đăng nhập thất bại");
+        setErrorMsg(t("auth.login_failed"));
       }
     } finally {
       setIsLoading(false);
@@ -66,9 +68,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
           <div className="w-12 h-12 bg-rose-600 text-white rounded-2xl mx-auto flex items-center justify-center font-black text-xl mb-3 shadow-lg shadow-rose-600/30">
             6S
           </div>
-          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">
-            Đăng nhập hệ thống 6S
-          </h2>
+          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">{t("auth.login")}</h2>
           <p className="text-xs text-zinc-500 mt-1">
             Hỗ trợ tài khoản nội bộ & Active Directory (AD)
           </p>
@@ -83,7 +83,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
           <div>
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-              Tên tài khoản / Mã thẻ *
+              {t("auth.username")} *
             </label>
             <input
               type="text"
@@ -97,7 +97,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
           <div>
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-              Mật khẩu *
+              {t("auth.password")} *
             </label>
             <input
               type="password"
@@ -113,7 +113,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             disabled={isLoading}
             className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 rounded-xl shadow-lg min-h-[56px] transition-transform flex items-center justify-center"
           >
-            {isLoading ? "Đang xác thực..." : "ĐĂNG NHẬP"}
+            {isLoading ? t("common.loading") : t("auth.login").toUpperCase()}
           </button>
         </form>
       </div>

@@ -7,10 +7,12 @@ import { OfflineOutboxDrawer } from "./components/OfflineOutboxDrawer.tsx";
 import { type FacetKey, QuickFacets } from "./components/QuickFacets.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
 import type { DraftResolve } from "./db/indexeddb.ts";
+import { useI18nStore } from "./i18n/index.ts";
 import { AdminConfigModal } from "./pages/AdminConfigModal.tsx";
 import { CreateIssueModal } from "./pages/CreateIssueModal.tsx";
 import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
 import { LoginModal } from "./pages/LoginModal.tsx";
+import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 import { useAuthStore } from "./store/authStore.ts";
 import { syncEngine } from "./sync/syncEngine.ts";
 import type {
@@ -22,6 +24,7 @@ import type {
 } from "./types/index.ts";
 
 export function App() {
+  const { t } = useI18nStore();
   const { user, clearAuth, restoreSession } = useAuthStore();
   const [isDark, setIsDark] = useState(false);
   const [issues, setIssues] = useState<IssueItem[]>([]);
@@ -39,6 +42,7 @@ export function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [conflictItem, setConflictItem] = useState<DraftResolve | null>(null);
+  const [isSetupOpen, setIsSetupOpen] = useState(false);
 
   useEffect(() => {
     restoreSession();
@@ -46,6 +50,7 @@ export function App() {
     loadMasterData();
     loadIssues();
     loadLeaderboards();
+    checkSetupStatus();
 
     // Check system preference for dark mode
     if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
@@ -132,6 +137,19 @@ export function App() {
     }
   };
 
+  const checkSetupStatus = async () => {
+    try {
+      const res = await apiClient<{ needs_setup: boolean }>("/api/auth/setup-status", {
+        skipAuth: true,
+      });
+      if (res?.needs_setup) {
+        setIsSetupOpen(true);
+      }
+    } catch {
+      // ignore offline or failed status checks
+    }
+  };
+
   // Filter issues according to quick facets (SPEC.md Section 9.8.A)
   const filteredIssues = issues.filter((iss) => {
     if (activeFacet === "MY_ISSUES") {
@@ -183,9 +201,9 @@ export function App() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
-              Quản Lý 6S Nhà Xưởng
+              {t("nav.title")}
             </h1>
-            <p className="text-xs text-zinc-500">Hệ thống ghi nhận & khắc phục trực quan</p>
+            <p className="text-xs text-zinc-500">6S Issue Tracker</p>
           </div>
           <div>
             {user ? (
@@ -212,7 +230,7 @@ export function App() {
                   onClick={() => clearAuth()}
                   className="text-xs text-rose-600 dark:text-rose-400 font-bold p-2 min-h-[44px]"
                 >
-                  Thoát
+                  {t("auth.logout")}
                 </button>
               </div>
             ) : (
@@ -221,7 +239,7 @@ export function App() {
                 onClick={() => setIsLoginOpen(true)}
                 className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl min-h-[44px] shadow-sm"
               >
-                Đăng nhập
+                {t("auth.login")}
               </button>
             )}
           </div>
@@ -331,9 +349,8 @@ export function App() {
             <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
               <span className="text-4xl mb-2 block">📋</span>
               <p className="font-bold text-sm text-zinc-700 dark:text-zinc-300">
-                Không có issue nào
+                {t("issue.no_issues")}
               </p>
-              <p className="text-xs text-zinc-400 mt-1">Bấm nút bên dưới để báo cáo vấn đề mới</p>
             </div>
           ) : (
             filteredIssues.map((iss) => (
@@ -352,7 +369,7 @@ export function App() {
             className="flex-1 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-xl shadow-rose-600/30 transition-transform"
           >
             <span className="text-xl">📸</span>
-            <span>BÁO CÁO LỖI 6S NGAY</span>
+            <span>{t("issue.create").toUpperCase()}</span>
           </button>
         </div>
       </div>
@@ -405,6 +422,15 @@ export function App() {
       <AdminConfigModal isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} />
 
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+
+      <SetupSuperadminModal
+        isOpen={isSetupOpen}
+        onSuccess={() => {
+          setIsSetupOpen(false);
+          loadMasterData();
+          loadIssues();
+        }}
+      />
     </div>
   );
 }

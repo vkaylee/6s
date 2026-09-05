@@ -1,0 +1,95 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "edit": "Edit",
+    "retry": "Retry",
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error",
+    "confirm": "Confirm",
+    "search": "Search",
+    "filter": "Filter",
+    "all": "All",
+    "status": "Status",
+    "category": "Category",
+    "location": "Location",
+    "reporter": "Reporter",
+    "created_at": "Created At",
+    "actions": "Actions"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "username": "Username",
+    "password": "Password",
+    "full_name": "Full Name",
+    "login_required": "Please login",
+    "login_failed": "Login failed",
+    "setup_superadmin": "Setup Superadmin",
+    "setup_success": "Superadmin account created successfully!",
+    "required_fields": "Please fill in all required fields (*)"
+  },
+  "status": {
+    "OPEN": "Open",
+    "IN_PROGRESS": "In Progress",
+    "PENDING_REVIEW": "Pending Review",
+    "CLOSED": "Closed",
+    "REOPENED": "Reopened",
+    "INVALIDATED": "Invalidated"
+  },
+  "category": {
+    "SAFETY": "Safety",
+    "6S": "6S",
+    "MAINTENANCE": "Maintenance",
+    "QUALITY": "Quality"
+  },
+  "nav": {
+    "title": "6S Issue Tracker",
+    "superadmin_setup": "System Setup Required",
+    "online": "Online",
+    "offline": "Offline",
+    "syncing": "Syncing",
+    "outbox": "Outbox",
+    "language": "Language"
+  },
+  "facets": {
+    "all": "All",
+    "my_issues": "My Issues",
+    "open": "Open",
+    "pending_review": "Pending Review",
+    "closed": "Closed"
+  },
+  "issue": {
+    "create": "Report Issue",
+    "create_title": "Report New 6S / Safety Issue",
+    "detail_title": "Issue Details",
+    "desc_placeholder": "Detailed description of the issue...",
+    "location_select": "-- Select Location --",
+    "photo_before": "Current State Photo (Required)",
+    "photo_after": "Resolution Photo",
+    "select_photo": "Take / Select Photo",
+    "take_photo": "Take Photo",
+    "resolve": "Submit Resolution",
+    "approve": "Approve",
+    "reopen": "Reopen",
+    "invalidate": "Invalidate",
+    "no_issues": "No issues match the selected criteria",
+    "saved_draft": "Draft saved offline. It will sync once online.",
+    "sync_resolve_msg": "Resolution photo recorded! Syncing to server...",
+    "compress_error": "Failed to compress image, please try again",
+    "missing_location": "Please select issue location",
+    "missing_photo": "Overview photo (Photo 1) is required"
+  },
+  "admin": {
+    "title": "System Settings",
+    "scoring_rules": "Scoring Rules",
+    "ad_ldap": "AD / LDAP Configuration",
+    "save_rules": "Save Rules",
+    "test_connection": "Test Connection",
+    "save_success": "Scoring rules updated successfully!",
+    "save_error": "Failed to update scoring rules"
+  }
+}

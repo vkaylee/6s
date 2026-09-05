@@ -1,0 +1,95 @@
+{
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "delete": "删除",
+    "edit": "编辑",
+    "retry": "重试",
+    "loading": "加载中...",
+    "success": "成功",
+    "error": "错误",
+    "confirm": "确认",
+    "search": "搜索",
+    "filter": "筛选",
+    "all": "全部",
+    "status": "状态",
+    "category": "类别",
+    "location": "位置",
+    "reporter": "上报人",
+    "created_at": "创建时间",
+    "actions": "操作"
+  },
+  "auth": {
+    "login": "登录",
+    "logout": "退出登录",
+    "username": "账号",
+    "password": "密码",
+    "full_name": "姓名",
+    "login_required": "请先登录",
+    "login_failed": "登录失败",
+    "setup_superadmin": "设置超级管理员",
+    "setup_success": "初始化账号成功！",
+    "required_fields": "请填写所有必填项 (*)"
+  },
+  "status": {
+    "OPEN": "待处理",
+    "IN_PROGRESS": "处理中",
+    "PENDING_REVIEW": "待审核",
+    "CLOSED": "已关闭",
+    "REOPENED": "已重新打开",
+    "INVALIDATED": "已作废"
+  },
+  "category": {
+    "SAFETY": "安全",
+    "6S": "6S",
+    "MAINTENANCE": "保养",
+    "QUALITY": "品质"
+  },
+  "nav": {
+    "title": "6S车间管理系统",
+    "superadmin_setup": "需要初始化系统",
+    "online": "已连接",
+    "offline": "离线",
+    "syncing": "同步中",
+    "outbox": "发件箱",
+    "language": "语言"
+  },
+  "facets": {
+    "all": "全部",
+    "my_issues": "我的上报",
+    "open": "待处理",
+    "pending_review": "待审核",
+    "closed": "已关闭"
+  },
+  "issue": {
+    "create": "上报新问题",
+    "create_title": "新建6S/安全问题报告",
+    "detail_title": "问题详情",
+    "desc_placeholder": "详细描述发现的问题...",
+    "location_select": "-- 选择发现位置 --",
+    "photo_before": "现状照片（必填）",
+    "photo_after": "改善后照片",
+    "select_photo": "拍照/选图",
+    "take_photo": "拍照",
+    "resolve": "提交改善",
+    "approve": "审核通过",
+    "reopen": "重新打开",
+    "invalidate": "作废",
+    "no_issues": "没有符合条件的问题",
+    "saved_draft": "草稿已离线保存，联网后自动同步。",
+    "sync_resolve_msg": "已记录改善照片！正在同步至服务器...",
+    "compress_error": "图片压缩失败，请重试",
+    "missing_location": "请选择问题发生位置",
+    "missing_photo": "必须拍摄全景照片（照片1）"
+  },
+  "admin": {
+    "title": "系统配置",
+    "scoring_rules": "评分规则",
+    "ad_ldap": "AD / LDAP 配置",
+    "save_rules": "保存规则",
+    "test_connection": "测试连接",
+    "save_success": "评分规则更新成功！",
+    "save_error": "更新失败"
+  }
+}

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { type DraftIssue, saveDraftIssue } from "../db/indexeddb.ts";
+import type { DraftIssue } from "../db/indexeddb.ts";
+import { saveDraftIssue } from "../db/indexeddb.ts";
+import { useI18nStore } from "../i18n/index.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
   type IssueCategory,
@@ -17,15 +19,15 @@ interface CreateIssueModalProps {
   tags: TagItem[];
   onSuccess: () => void;
 }
-
 export function CreateIssueModal({
   isOpen,
   onClose,
+  onSuccess,
   locations,
   tags,
-  onSuccess,
 }: CreateIssueModalProps) {
-  const [category, setCategory] = useState<IssueCategory>("1S");
+  const { t } = useI18nStore();
+  const [category, setCategory] = useState<IssueCategory>("6S");
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
@@ -79,17 +81,17 @@ export function CreateIssueModal({
       haptics.success();
     } catch {
       haptics.errorOrConflict();
-      alert("Lỗi khi nén ảnh, vui lòng thử lại");
+      alert(t("issue.compress_error"));
     }
   };
 
   const handleSubmit = async () => {
     if (!locationCode) {
-      alert("Vui lòng chọn vị trí xảy ra lỗi");
+      alert(t("issue.missing_location"));
       return;
     }
     if (!photoBefore) {
-      alert("Bắt buộc chụp ảnh toàn cảnh (Ảnh 1)");
+      alert(t("issue.missing_photo"));
       return;
     }
 
@@ -133,7 +135,7 @@ export function CreateIssueModal({
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-full bg-rose-600 animate-pulse" />
             <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
-              Báo cáo lỗi 6S mới
+              {t("issue.create_title")}
             </h2>
           </div>
           <button

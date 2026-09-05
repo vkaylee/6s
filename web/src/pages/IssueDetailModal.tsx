@@ -2,6 +2,7 @@ import { useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
+import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import { type IssueCategory, type IssueItem, S_CATEGORIES } from "../types/index.ts";
@@ -16,6 +17,7 @@ interface IssueDetailModalProps {
 }
 
 export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDetailModalProps) {
+  const { t } = useI18nStore();
   const { user } = useAuthStore();
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
@@ -92,7 +94,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       await saveDraftResolve(draft);
       haptics.success();
       syncEngine.triggerSync();
-      alert("Đã ghi nhận ảnh khắc phục! Đang đồng bộ lên máy chủ...");
+      alert(t("issue.sync_resolve_msg"));
       onRefresh();
       onClose();
     } catch {
@@ -323,7 +325,11 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 }`}
                 title={closeDisabledReason || undefined}
               >
-                <span>{canClose ? "✓ DUYỆT ĐẠT" : `🔒 ${closeDisabledReason || "Khóa"}`}</span>
+                <span>
+                  {canClose
+                    ? `✓ ${t("issue.approve").toUpperCase()}`
+                    : `🔒 ${closeDisabledReason || "Khóa"}`}
+                </span>
               </button>
 
               <button
@@ -332,7 +338,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 onClick={() => setShowConfirmAction("REOPEN")}
                 className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs"
               >
-                Mở lại
+                {t("issue.reopen")}
               </button>
             </div>
           )}
@@ -344,7 +350,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
               onClick={() => setShowConfirmAction("INVALID")}
               className="text-xs text-rose-600 hover:text-rose-700 font-bold py-2 text-center"
             >
-              Bác bỏ báo cáo này (Không hợp lệ)
+              {t("issue.invalidate")}
             </button>
           )}
         </div>

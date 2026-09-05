@@ -1,3 +1,5 @@
+import { useI18nStore } from "../i18n/index.ts";
+
 export type FacetKey =
   | "ALL"
   | "MY_ISSUES"
@@ -5,7 +7,6 @@ export type FacetKey =
   | "SAFETY_6S"
   | "OVERDUE_48H"
   | "WAITING_MY_REVIEW";
-
 interface QuickFacetsProps {
   activeFacet: FacetKey;
   onSelectFacet: (facet: FacetKey) => void;
@@ -26,6 +27,7 @@ export function QuickFacets({
   onSelectFacet,
   pendingReviewCount = 0,
 }: QuickFacetsProps) {
+  const { locale } = useI18nStore();
   return (
     <div className="w-full overflow-x-auto no-scrollbar py-2 px-4 flex items-center space-x-2 select-none">
       {FACETS.map((f) => {
@@ -45,8 +47,8 @@ export function QuickFacets({
                   : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
             }`}
           >
-            <span>{f.label_vi}</span>
-            <span className="opacity-60 text-[10px]">/ {f.label_zh}</span>
+            <span>{locale === "zh" ? f.label_zh : locale === "en" ? f.key : f.label_vi}</span>
+            {locale !== "zh" && <span className="opacity-60 text-[10px]">/ {f.label_zh}</span>}
             {f.key === "WAITING_MY_REVIEW" && pendingReviewCount > 0 && (
               <span className="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                 {pendingReviewCount}

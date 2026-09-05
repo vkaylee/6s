@@ -1,3 +1,4 @@
+import { useI18nStore } from "../i18n/index.ts";
 import type { IssueItem } from "../types/index.ts";
 
 interface IssueCardProps {
@@ -6,6 +7,7 @@ interface IssueCardProps {
 }
 
 export function IssueCard({ issue, onClick }: IssueCardProps) {
+  const { t } = useI18nStore();
   const isSafety = issue.category === "6S";
   const isOpen = issue.status === "OPEN";
   const isPendingReview = issue.status === "PENDING_REVIEW";
@@ -13,22 +15,19 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
 
   const statusBadge = isOpen ? (
     <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800">
-      <span>⚠️ Đang mở</span>
-      <span className="opacity-60">/ 待处理</span>
+      <span>⚠️ {t("status.OPEN")}</span>
     </span>
   ) : isPendingReview ? (
     <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
-      <span>⏳ Chờ duyệt</span>
-      <span className="opacity-60">/ 待审核</span>
+      <span>⏳ {t("status.PENDING_REVIEW")}</span>
     </span>
   ) : isClosed ? (
     <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
-      <span>✓ Đã duyệt</span>
-      <span className="opacity-60">/ 已关闭</span>
+      <span>✓ {t("status.CLOSED")}</span>
     </span>
   ) : (
     <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-black bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700">
-      <span>Bác bỏ</span>
+      <span>{t("status.INVALIDATED")}</span>
     </span>
   );
 

@@ -9,7 +9,7 @@
     "lint": "biome check . && tsc --noEmit",
     "lint:fix": "biome check --write . && tsc --noEmit",
     "type-check": "tsc --noEmit",
-    "check-i18n": "bun test",
+    "check-i18n": "bun test test/i18n.test.tsx",
     "test": "bun test"
   },
   "dependencies": {

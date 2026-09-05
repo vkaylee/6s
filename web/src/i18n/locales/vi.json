@@ -1,0 +1,95 @@
+{
+  "common": {
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "retry": "Thử lại",
+    "loading": "Đang tải...",
+    "success": "Thành công",
+    "error": "Lỗi",
+    "confirm": "Xác nhận",
+    "search": "Tìm kiếm",
+    "filter": "Lọc",
+    "all": "Tất cả",
+    "status": "Trạng thái",
+    "category": "Phân loại",
+    "location": "Vị trí",
+    "reporter": "Người báo cáo",
+    "created_at": "Thời gian tạo",
+    "actions": "Hành động"
+  },
+  "auth": {
+    "login": "Đăng nhập",
+    "logout": "Đăng xuất",
+    "username": "Tài khoản",
+    "password": "Mật khẩu",
+    "full_name": "Họ và tên",
+    "login_required": "Vui lòng đăng nhập",
+    "login_failed": "Đăng nhập thất bại",
+    "setup_superadmin": "Thiết lập Superadmin",
+    "setup_success": "Khởi tạo tài khoản thành công!",
+    "required_fields": "Vui lòng điền đầy đủ các thông tin bắt buộc (*)"
+  },
+  "status": {
+    "OPEN": "Mới ghi nhận",
+    "IN_PROGRESS": "Đang xử lý",
+    "PENDING_REVIEW": "Chờ duyệt",
+    "CLOSED": "Đã hoàn thành",
+    "REOPENED": "Đã mở lại",
+    "INVALIDATED": "Đã bác bỏ"
+  },
+  "category": {
+    "SAFETY": "An toàn",
+    "6S": "6S",
+    "MAINTENANCE": "Bảo trì",
+    "QUALITY": "Chất lượng"
+  },
+  "nav": {
+    "title": "Hệ thống 6S",
+    "superadmin_setup": "Cần khởi tạo hệ thống",
+    "online": "Trực tuyến",
+    "offline": "Ngoại tuyến",
+    "syncing": "Đang đồng bộ",
+    "outbox": "Hộp thư gửi",
+    "language": "Ngôn ngữ"
+  },
+  "facets": {
+    "all": "Tất cả",
+    "my_issues": "Của tôi",
+    "open": "Chưa xử lý",
+    "pending_review": "Chờ duyệt",
+    "closed": "Đã xong"
+  },
+  "issue": {
+    "create": "Báo cáo lỗi mới",
+    "create_title": "Tạo báo cáo lỗi 6S / An toàn",
+    "detail_title": "Chi tiết vấn đề",
+    "desc_placeholder": "Mô tả chi tiết lỗi phát hiện...",
+    "location_select": "-- Chọn vị trí phát hiện --",
+    "photo_before": "Ảnh hiện trạng (Bắt buộc)",
+    "photo_after": "Ảnh khắc phục",
+    "select_photo": "Chụp / Chọn ảnh",
+    "take_photo": "Chụp ảnh",
+    "resolve": "Báo cáo khắc phục",
+    "approve": "Duyệt đạt",
+    "reopen": "Mở lại",
+    "invalidate": "Bác bỏ",
+    "no_issues": "Không có vấn đề nào phù hợp tiêu chí",
+    "saved_draft": "Đã lưu bản nháp ngoại tuyến. Sẽ tự động gửi khi có mạng.",
+    "sync_resolve_msg": "Đã ghi nhận ảnh khắc phục! Đang đồng bộ lên máy chủ...",
+    "compress_error": "Lỗi khi nén ảnh, vui lòng thử lại",
+    "missing_location": "Vui lòng chọn vị trí xảy ra lỗi",
+    "missing_photo": "Bắt buộc chụp ảnh toàn cảnh (Ảnh 1)"
+  },
+  "admin": {
+    "title": "Cấu hình hệ thống",
+    "scoring_rules": "Quy tắc tính điểm",
+    "ad_ldap": "Cấu hình AD / LDAP",
+    "save_rules": "Lưu quy tắc",
+    "test_connection": "Kiểm tra kết nối",
+    "save_success": "Đã cập nhật quy tắc chấm điểm thành công!",
+    "save_error": "Cập nhật thất bại"
+  }
+}
