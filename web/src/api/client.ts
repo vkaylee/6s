@@ -107,13 +107,17 @@ export interface RequestOptions extends RequestInit {
  * Centralized fetch wrapper with automatic JWT injection, 401 refresh, and error envelope handling.
  */
 export async function apiClient<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const { accessToken, enableOfflineGrace } = useAuthStore.getState();
+  let { accessToken } = useAuthStore.getState();
+  const { user, enableOfflineGrace } = useAuthStore.getState();
   const headers = new Headers(options.headers || {});
+
+  if (!options.skipAuth && user && !accessToken) {
+    accessToken = await refreshAccessToken();
+  }
 
   if (!options.skipAuth && accessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
-
   let response: Response;
   try {
     response = await fetch(url, { ...options, headers });

@@ -47,7 +47,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       },
       updated_at: Date.now(),
     };
-    await saveAuthSession(session);
+    if (typeof indexedDB !== "undefined") {
+      await saveAuthSession(session);
+    }
     set({
       user,
       accessToken,
@@ -57,7 +59,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   },
 
   clearAuth: async () => {
-    await clearAuthSession();
+    if (typeof indexedDB !== "undefined") {
+      await clearAuthSession();
+    }
     set({
       user: null,
       accessToken: null,
@@ -75,6 +79,10 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
   restoreSession: async () => {
     try {
+      if (typeof indexedDB === "undefined") {
+        set({ isLoading: false });
+        return false;
+      }
       const session = await getAuthSession();
       if (!session) {
         set({ isLoading: false });
@@ -94,6 +102,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
   getRefreshToken: async () => {
     try {
+      if (typeof indexedDB === "undefined") {
+        return null;
+      }
       const session = await getAuthSession();
       return session?.refresh_token ?? null;
     } catch {
