@@ -4,6 +4,7 @@ import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
+import { useDebouncedQuery } from "../hooks/useDebouncedQuery.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
@@ -50,7 +51,16 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
   const [activeTagTab, setActiveTagTab] = useState<string>("ALL");
-  const [tagQuery, setTagQuery] = useState("");
+  const {
+    query: tagQuery,
+    setQuery: setTagQuery,
+    debouncedQuery: debouncedTagQuery,
+    isLoading: isSearchingTags,
+  } = useDebouncedQuery<string>({
+    delay: 250,
+    minChars: 0,
+    queryFn: async (q) => q,
+  });
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
 
   // Category badge color styling map
@@ -322,13 +332,18 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                 />
                 {tagQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setTagQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 hover:text-zinc-600 p-1"
-                  >
-                    ✕
-                  </button>
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {isSearchingTags && (
+                      <span className="animate-spin text-[10px] text-zinc-400">⏳</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setTagQuery("")}
+                      className="text-xs font-bold text-zinc-400 hover:text-zinc-600 p-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -376,7 +391,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
               {/* Display full tags without scroll-trap */}
               <div className="flex flex-wrap gap-2 pt-1">
                 {(() => {
-                  const queryNorm = normalizeSearchText(tagQuery);
+                  const queryNorm = normalizeSearchText(debouncedTagQuery);
                   const isSearching = queryNorm.length > 0;
 
                   const visibleTags = localTags.filter((t) => {
