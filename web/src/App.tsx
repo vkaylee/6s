@@ -270,7 +270,7 @@ export function App() {
                   : "text-zinc-500"
               }`}
             >
-              Sức khỏe khu vực
+              {t("leaderboard.location_health")}
             </button>
             <button
               type="button"
@@ -281,7 +281,7 @@ export function App() {
                   : "text-zinc-500"
               }`}
             >
-              Top Thợ săn 6S
+              {t("leaderboard.top_reporters")}
             </button>
           </div>
 
@@ -289,7 +289,7 @@ export function App() {
             <div className="space-y-2">
               {locationHealth.length === 0 ? (
                 <div className="text-xs text-zinc-400 py-2 text-center">
-                  Chưa có dữ liệu chấm điểm tuần
+                  {t("leaderboard.no_location_data")}
                 </div>
               ) : (
                 locationHealth.slice(0, 3).map((loc) => (
@@ -299,7 +299,7 @@ export function App() {
                   >
                     <span className="font-bold">{loc.location_name || loc.location_code}</span>
                     <span className="font-black text-blue-600 dark:text-blue-400">
-                      {loc.health_score} điểm
+                      {loc.health_score} {t("leaderboard.points_unit")}
                     </span>
                   </div>
                 ))
@@ -309,7 +309,7 @@ export function App() {
             <div className="space-y-2">
               {reporters.length === 0 ? (
                 <div className="text-xs text-zinc-400 py-2 text-center">
-                  Chưa có dữ liệu vinh danh tháng
+                  {t("leaderboard.no_reporter_data")}
                 </div>
               ) : (
                 reporters.slice(0, 3).map((rep, idx) => (
@@ -321,7 +321,8 @@ export function App() {
                       {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"} {rep.full_name}
                     </span>
                     <span className="font-black text-amber-600">
-                      {rep.points} điểm ({rep.valid_count} lỗi)
+                      {rep.points} {t("leaderboard.points_unit")} ({rep.valid_count}{" "}
+                      {t("leaderboard.issues_unit")})
                     </span>
                   </div>
                 ))

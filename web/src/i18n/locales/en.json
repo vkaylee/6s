@@ -55,6 +55,14 @@
     "outbox": "Outbox",
     "language": "Language"
   },
+  "leaderboard": {
+    "location_health": "Area Health",
+    "top_reporters": "Top 6S Hunters",
+    "no_location_data": "No weekly score data",
+    "no_reporter_data": "No monthly leaderboard data",
+    "points_unit": "pts",
+    "issues_unit": "issues"
+  },
   "facets": {
     "all": "All",
     "my_issues": "My Issues",

@@ -55,6 +55,14 @@
     "outbox": "发件箱",
     "language": "语言"
   },
+  "leaderboard": {
+    "location_health": "区域健康度",
+    "top_reporters": "6S猎人榜",
+    "no_location_data": "暂无周评分数据",
+    "no_reporter_data": "暂无月度荣誉榜数据",
+    "points_unit": "分",
+    "issues_unit": "条"
+  },
   "facets": {
     "all": "全部",
     "my_issues": "我的上报",

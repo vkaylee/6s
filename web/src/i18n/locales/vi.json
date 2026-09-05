@@ -55,6 +55,14 @@
     "outbox": "Hộp thư gửi",
     "language": "Ngôn ngữ"
   },
+  "leaderboard": {
+    "location_health": "Sức khỏe khu vực",
+    "top_reporters": "Top Thợ săn 6S",
+    "no_location_data": "Chưa có dữ liệu chấm điểm tuần",
+    "no_reporter_data": "Chưa có dữ liệu vinh danh tháng",
+    "points_unit": "điểm",
+    "issues_unit": "lỗi"
+  },
   "facets": {
     "all": "Tất cả",
     "my_issues": "Của tôi",
