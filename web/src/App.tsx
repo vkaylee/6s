@@ -34,7 +34,7 @@ import {
 
 export function App() {
   const { t } = useI18nStore();
-  const { user, clearAuth, restoreSession } = useAuthStore();
+  const { user, accessToken, clearAuth, restoreSession } = useAuthStore();
   const { initTheme } = useThemeStore();
   const [, setLocation] = useLocation();
   const [issues, setIssues] = useState<IssueItem[]>([]);
@@ -73,12 +73,23 @@ export function App() {
       }
       wasSyncing = p.isSyncing;
     });
+    let es: EventSource | null = null;
+    if (typeof window !== "undefined" && typeof EventSource !== "undefined" && accessToken) {
+      es = new EventSource(`/api/issues/events?token=${encodeURIComponent(accessToken)}`);
+      es.addEventListener("issue", () => {
+        loadIssues();
+        loadLeaderboards();
+      });
+    }
 
     return () => {
       unsub();
+      if (es) {
+        es.close();
+      }
       syncEngine.stop();
     };
-  }, [user]);
+  }, [user, accessToken]);
 
   const loadMasterData = async () => {
     try {

@@ -62,6 +62,13 @@ func TestMiddleware_Authenticate(t *testing.T) {
 	if rrValid.Code != http.StatusOK {
 		t.Errorf("expected 200 for valid token, got %d", rrValid.Code)
 	}
+	// 2b. Valid token via query param (used by SSE)
+	reqQuery := httptest.NewRequest("GET", "/protected?token="+token, nil)
+	rrQuery := httptest.NewRecorder()
+	handler.ServeHTTP(rrQuery, reqQuery)
+	if rrQuery.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid token in query param, got %d", rrQuery.Code)
+	}
 
 	// 3. Inactive user
 	getter.user.IsActive = false

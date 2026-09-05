@@ -43,19 +43,23 @@ func NewMiddleware(tokenManager *TokenManager, userGetter UserGetter) *Middlewar
 // and puts the user model into request context.
 func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenStr := ""
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidAuthFmt))
+				return
+			}
+			tokenStr = strings.TrimSpace(parts[1])
+		} else if qToken := r.URL.Query().Get("token"); qToken != "" {
+			tokenStr = strings.TrimSpace(qToken)
+		}
+
+		if tokenStr == "" {
 			response.AppError(w, r, apperror.Unauthorized(i18n.ErrMissingAuth))
 			return
 		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidAuthFmt))
-			return
-		}
-
-		tokenStr := strings.TrimSpace(parts[1])
 		userID, err := m.tokenManager.ValidateAccessToken(tokenStr)
 		if err != nil {
 			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err))

@@ -81,7 +81,16 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	timeoutMw := middleware.Timeout(60 * time.Second)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.URL.Path == "/api/issues/events" {
+				next.ServeHTTP(w, req)
+				return
+			}
+			timeoutMw(next).ServeHTTP(w, req)
+		})
+	})
 	r.Use(i18n.Middleware)
 	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -208,6 +217,7 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 
 	r.Route("/api/issues", func(ir chi.Router) {
 		ir.Use(authMw.Authenticate)
+		ir.Get("/events", issueHandler.Events)
 		ir.Get("/", issueHandler.List)
 		ir.Post("/sync", issueHandler.Sync)
 		ir.Get("/{id}", issueHandler.GetByID)

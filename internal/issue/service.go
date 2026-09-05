@@ -83,6 +83,7 @@ type ServiceImpl struct {
 	store          Store
 	storageManager *storage.Manager
 	notifyCh       chan struct{}
+	hub            *Hub
 }
 
 // NewService creates a new issue Service.
@@ -91,6 +92,19 @@ func NewService(store Store, storageManager *storage.Manager, notifyCh chan stru
 		store:          store,
 		storageManager: storageManager,
 		notifyCh:       notifyCh,
+		hub:            NewHub(),
+	}
+}
+
+// SubscribeEvents returns a channel receiving issue update events.
+func (s *ServiceImpl) SubscribeEvents() (<-chan Event, func()) {
+	return s.hub.Subscribe()
+}
+
+// broadcast emits an event to all active SSE subscribers.
+func (s *ServiceImpl) broadcast(evt Event) {
+	if s.hub != nil {
+		s.hub.Broadcast(evt)
 	}
 }
 
@@ -141,6 +155,9 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 	s.recordSyncPenalty(ctx, created.ID, req.Category, req.LocationCode)
 
 	resp, getErr := s.GetIssueByID(ctx, created.ID)
+	if getErr == nil {
+		s.broadcast(Event{Type: EventIssueCreated, IssueID: created.ID})
+	}
 	return resp, true, getErr
 }
 
@@ -286,7 +303,11 @@ func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest,
 		return nil, fmt.Errorf("%w: failed to resolve issue: %v", ErrIssueConflict, err)
 	}
 
-	return s.GetIssueByID(ctx, updated.ID)
+	res, err := s.GetIssueByID(ctx, updated.ID)
+	if err == nil {
+		s.broadcast(Event{Type: EventIssueResolved, IssueID: updated.ID})
+	}
+	return res, err
 }
 
 // CloseIssueRequest parameters for POST /api/issues/{id}/close.
@@ -340,7 +361,11 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 	}
 
 	s.recordCloseReward(ctx, issue, rating)
-	return s.GetIssueByID(ctx, updated.ID)
+	res, err := s.GetIssueByID(ctx, updated.ID)
+	if err == nil {
+		s.broadcast(Event{Type: EventIssueClosed, IssueID: updated.ID})
+	}
+	return res, err
 }
 
 func (s *ServiceImpl) recordCloseReward(ctx context.Context, issue db.Issue, rating int16) {
@@ -420,7 +445,11 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 		log.Printf("failed to insert reopen penalty: %v", scErr)
 	}
 
-	return s.GetIssueByID(ctx, updated.ID)
+	res, err := s.GetIssueByID(ctx, updated.ID)
+	if err == nil {
+		s.broadcast(Event{Type: EventIssueReopened, IssueID: updated.ID})
+	}
+	return res, err
 }
 
 // InvalidateIssueRequest parameters for POST /api/issues/{id}/invalid.
@@ -490,7 +519,11 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 		log.Printf("failed to log audit for invalidate: %v", alErr)
 	}
 
-	return s.GetIssueByID(ctx, updated.ID)
+	res, err := s.GetIssueByID(ctx, updated.ID)
+	if err == nil {
+		s.broadcast(Event{Type: EventIssueInvalidated, IssueID: updated.ID})
+	}
+	return res, err
 }
 
 // PatchIssueRequest parameters for PATCH /api/issues/{id}.
@@ -570,7 +603,11 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 		s.queueNotification(ctx, issue.ID, "SAFETY_ESCALATED", "6S", updated.LocationCode, currentUser.FullName)
 	}
 
-	return s.GetIssueByID(ctx, updated.ID)
+	res, err := s.GetIssueByID(ctx, updated.ID)
+	if err == nil {
+		s.broadcast(Event{Type: EventIssueUpdated, IssueID: updated.ID})
+	}
+	return res, err
 }
 
 // GetIssueByID retrieves detailed issue response with tags and creator.

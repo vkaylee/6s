@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -74,6 +76,10 @@ func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _, _, _ string,
 	}
 	return []Response{*m.issueResp}, 1, nil
 }
+func (m *mockIssueService) SubscribeEvents() (<-chan Event, func()) {
+	ch := make(chan Event, 1)
+	return ch, func() {}
+}
 
 func TestIssueHandler(t *testing.T) {
 	mockSvc := &mockIssueService{
@@ -124,5 +130,24 @@ func TestIssueHandler(t *testing.T) {
 	rClose.ServeHTTP(rrClose, reqClose.WithContext(ctxUser))
 	if rrClose.Code != http.StatusOK {
 		t.Fatalf("expected 200 for close, got %d", rrClose.Code)
+	}
+
+	// 4. Events SSE stream
+	ctxCancel, cancel := context.WithCancel(context.Background())
+	reqEvents := httptest.NewRequest("GET", "/api/issues/events", nil).WithContext(ctxCancel)
+	rrEvents := httptest.NewRecorder()
+
+	// Cancel context after brief moment to terminate SSE loop
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	handler.Events(rrEvents, reqEvents)
+	if rrEvents.Code != http.StatusOK {
+		t.Fatalf("expected 200 for events, got %d", rrEvents.Code)
+	}
+	if ct := rrEvents.Header().Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
+		t.Errorf("expected text/event-stream content-type, got %s", ct)
 	}
 }

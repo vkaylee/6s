@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -29,6 +31,7 @@ type Service interface {
 	PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error)
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
 	ListIssuesFiltered(ctx context.Context, status, category, locationCode string, page, limit int) ([]Response, int64, error)
+	SubscribeEvents() (<-chan Event, func())
 }
 
 // Handler handles Issue HTTP endpoints.
@@ -455,4 +458,51 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, resp)
+}
+
+// Events streams real-time issue updates via Server-Sent Events (SSE).
+func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(errors.New("streaming unsupported")))
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	eventsCh, unsubscribe := h.service.SubscribeEvents()
+	defer unsubscribe()
+
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case evt, open := <-eventsCh:
+			if !open {
+				return
+			}
+			data, err := json.Marshal(evt)
+			if err != nil {
+				continue
+			}
+			if _, writeErr := fmt.Fprintf(w, "event: issue\ndata: %s\n\n", data); writeErr != nil {
+				return
+			}
+			flusher.Flush()
+		case <-ticker.C:
+			// Periodic comment keepalive to prevent proxy idle connection drop
+			if _, pingErr := fmt.Fprintf(w, ": keepalive\n\n"); pingErr != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }

@@ -274,6 +274,9 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	notifyCh := make(chan struct{}, 10)
 	svc := NewService(store, storageMgr, notifyCh)
 
+	eventsCh, unsub := svc.SubscribeEvents()
+	defer unsub()
+
 	// Setup mock data
 	worker := db.User{ID: 10, Username: "worker", FullName: "Worker", Role: "USER", IsActive: true}
 	admin := db.User{ID: 1, Username: "admin", FullName: "Admin", Role: "ADMIN", IsActive: true}
@@ -303,6 +306,16 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if resp.Status != StatusOpen.String() {
 		t.Errorf("expected status OPEN, got %s", resp.Status)
 	}
+	// Verify ISSUE_CREATED event received
+	select {
+	case evt := <-eventsCh:
+		if evt.Type != EventIssueCreated || evt.IssueID != resp.ID {
+			t.Errorf("unexpected event received: %+v", evt)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for ISSUE_CREATED event")
+	}
+
 	expectedBeforeURL := "/uploads/before/" + clientUUID + "_wide.jpg"
 	if resp.PhotoBefore != expectedBeforeURL {
 		t.Errorf("expected photo_before %s, got %s", expectedBeforeURL, resp.PhotoBefore)
