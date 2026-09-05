@@ -1,6 +1,28 @@
-export type IssueCategory = "1S" | "2S" | "3S" | "4S" | "5S" | "6S";
-export type IssueStatus = "OPEN" | "PENDING_REVIEW" | "CLOSED" | "INVALID";
-export type UserRole = "USER" | "LINE_LEADER" | "SAFETY_OFFICER" | "ADMIN";
+export const IssueCategory = {
+  S1: "1S",
+  S2: "2S",
+  S3: "3S",
+  S4: "4S",
+  S5: "5S",
+  S6: "6S",
+} as const;
+export type IssueCategory = (typeof IssueCategory)[keyof typeof IssueCategory];
+
+export const IssueStatus = {
+  OPEN: "OPEN",
+  PENDING_REVIEW: "PENDING_REVIEW",
+  CLOSED: "CLOSED",
+  INVALID: "INVALID",
+} as const;
+export type IssueStatus = (typeof IssueStatus)[keyof typeof IssueStatus];
+
+export const UserRole = {
+  USER: "USER",
+  LINE_LEADER: "LINE_LEADER",
+  SAFETY_OFFICER: "SAFETY_OFFICER",
+  ADMIN: "ADMIN",
+} as const;
+export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export interface IssueItem {
   id: number;

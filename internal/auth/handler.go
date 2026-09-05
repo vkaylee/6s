@@ -387,7 +387,7 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.UserID != nil {
-		if currentUser.Role != "ADMIN" && currentUser.ID != *req.UserID {
+		if currentUser.Role != RoleAdmin.String() && currentUser.ID != *req.UserID {
 			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 			return
 		}
@@ -432,7 +432,7 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	targetUserID := currentUser.ID
 	queryUID := r.URL.Query().Get("user_id")
 	if queryUID != "" {
-		if currentUser.Role != "ADMIN" {
+		if currentUser.Role != RoleAdmin.String() {
 			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 			return
 		}

@@ -1,0 +1,75 @@
+import { useI18nStore } from "../i18n/index.ts";
+import type { DialogOptions } from "../store/dialogStore.ts";
+import { useDialogStore } from "../store/dialogStore.ts";
+
+export interface GlobalDialogProps {
+  isOpen?: boolean;
+  options?: DialogOptions;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}
+
+export function GlobalDialog(props: GlobalDialogProps = {}) {
+  const { t } = useI18nStore();
+  const store = useDialogStore();
+  const isOpen = props.isOpen !== undefined ? props.isOpen : store.isOpen;
+  const options = props.options !== undefined ? props.options : store.options;
+  const handleConfirm = props.onConfirm || store.handleConfirm;
+  const handleCancel = props.onCancel || store.handleCancel;
+
+  if (!isOpen) return null;
+
+  const isConfirm = options.type === "confirm";
+  const isDestructive = options.destructive;
+
+  const defaultTitle = isConfirm ? t("common.confirm") : "Notice";
+  const defaultCancelText = t("common.cancel");
+  const defaultConfirmText = isConfirm ? t("common.confirm") : t("common.close");
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="global-dialog-title"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+    >
+      <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-zinc-100 dark:border-zinc-800">
+          <h3
+            id="global-dialog-title"
+            className={`text-lg font-bold ${
+              isDestructive ? "text-red-600 dark:text-red-400" : "text-zinc-900 dark:text-zinc-100"
+            }`}
+          >
+            {options.title || defaultTitle}
+          </h3>
+        </div>
+
+        <div className="p-5 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
+          {options.message}
+        </div>
+
+        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-end gap-2">
+          {isConfirm && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              {options.cancelText || defaultCancelText}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+              isDestructive ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+            }`}
+          >
+            {options.confirmText || defaultConfirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

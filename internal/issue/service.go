@@ -1,6 +1,9 @@
 package issue
 
 import (
+	"6s/internal/auth"
+	"6s/internal/db"
+	"6s/internal/storage"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -10,9 +13,6 @@ import (
 	"mime/multipart"
 	"strconv"
 	"time"
-
-	"6s/internal/db"
-	"6s/internal/storage"
 )
 
 // Domain errors.
@@ -184,7 +184,7 @@ func (s *ServiceImpl) insertTags(ctx context.Context, issueID int64, tags []stri
 func (s *ServiceImpl) recordSyncPenalty(ctx context.Context, issueID int64, category, locationCode string) {
 	penaltyKey := "penalty_normal"
 	points := int32(-2)
-	if category == "6S" {
+	if category == Category6S.String() {
 		penaltyKey = "penalty_safety"
 		points = int32(-10)
 	}
@@ -253,7 +253,7 @@ func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest,
 	if err != nil {
 		return nil, ErrIssueNotFound
 	}
-	if issue.Status != "OPEN" {
+	if issue.Status != StatusOpen.String() {
 		return nil, fmt.Errorf("%w: current status %s", ErrIssueConflict, issue.Status)
 	}
 
@@ -297,11 +297,11 @@ type CloseIssueRequest struct {
 
 // CloseIssue handles closing and scoring a resolved issue.
 func (s *ServiceImpl) canCloseIssue(currentUser db.User, issue db.Issue) bool {
-	if issue.Category == "6S" {
-		return currentUser.Role == "SAFETY_OFFICER" || currentUser.Role == "ADMIN"
+	if issue.Category == Category6S.String() {
+		return currentUser.Role == auth.RoleSafetyOfficer.String() || currentUser.Role == auth.RoleAdmin.String()
 	}
 	isCreator := (currentUser.ID == issue.CreatorID)
-	isPrivileged := (currentUser.Role == "ADMIN" || currentUser.Role == "SAFETY_OFFICER")
+	isPrivileged := (currentUser.Role == auth.RoleAdmin.String() || currentUser.Role == auth.RoleSafetyOfficer.String())
 	return isCreator || isPrivileged
 }
 
@@ -311,7 +311,7 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 	if err != nil {
 		return nil, ErrIssueNotFound
 	}
-	if issue.Status != "PENDING_REVIEW" {
+	if issue.Status != StatusPendingReview.String() {
 		return nil, fmt.Errorf("%w: issue must be PENDING_REVIEW", ErrIssueConflict)
 	}
 
@@ -345,7 +345,7 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 func (s *ServiceImpl) recordCloseReward(ctx context.Context, issue db.Issue, rating int16) {
 	rewardKey := "reward_reporter_normal"
 	rewardPoints := int32(2)
-	if issue.Category == "6S" {
+	if issue.Category == Category6S.String() {
 		rewardKey = "reward_reporter_safety"
 		rewardPoints = int32(5)
 	}
@@ -385,12 +385,12 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 	if err != nil {
 		return nil, ErrIssueNotFound
 	}
-	if issue.Status != "PENDING_REVIEW" {
+	if issue.Status != StatusPendingReview.String() {
 		return nil, fmt.Errorf("%w: issue must be PENDING_REVIEW", ErrIssueConflict)
 	}
 
 	isCreator := (currentUser.ID == issue.CreatorID)
-	isPrivileged := (currentUser.Role == "ADMIN" || currentUser.Role == "SAFETY_OFFICER")
+	isPrivileged := (currentUser.Role == auth.RoleAdmin.String() || currentUser.Role == auth.RoleSafetyOfficer.String())
 	if !isCreator && !isPrivileged {
 		return nil, ErrPermissionDenied
 	}
@@ -436,11 +436,11 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 		return nil, ErrIssueNotFound
 	}
 
-	if currentUser.Role != "ADMIN" && currentUser.Role != "SAFETY_OFFICER" {
+	if currentUser.Role != auth.RoleAdmin.String() && currentUser.Role != auth.RoleSafetyOfficer.String() {
 		return nil, ErrPermissionDenied
 	}
 
-	if issue.Status != "OPEN" && issue.Status != "PENDING_REVIEW" {
+	if issue.Status != StatusOpen.String() && issue.Status != StatusPendingReview.String() {
 		return nil, fmt.Errorf("%w: cannot invalidate closed or invalid issue", ErrIssueConflict)
 	}
 
@@ -503,7 +503,7 @@ type PatchIssueRequest struct {
 func (s *ServiceImpl) canPatchIssue(currentUser db.User, issue db.Issue) bool {
 	isCreator := (currentUser.ID == issue.CreatorID)
 	isResolver := (issue.ResolverID.Valid && currentUser.ID == issue.ResolverID.Int64)
-	isPrivileged := (currentUser.Role == "ADMIN" || currentUser.Role == "SAFETY_OFFICER")
+	isPrivileged := (currentUser.Role == auth.RoleAdmin.String() || currentUser.Role == auth.RoleSafetyOfficer.String())
 	return isCreator || isResolver || isPrivileged
 }
 
@@ -516,7 +516,7 @@ func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (s
 			return catVal, sql.NullString{}, false, ErrInvalidCategory
 		}
 		catVal = sql.NullString{String: *req.Category, Valid: true}
-		if *req.Category == "6S" && issue.Category != "6S" {
+		if *req.Category == Category6S.String() && issue.Category != Category6S.String() {
 			escalatedToSafety = true
 		}
 	}
@@ -751,10 +751,5 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 }
 
 func isValidCategory(c string) bool {
-	switch c {
-	case "1S", "2S", "3S", "4S", "5S", "6S":
-		return true
-	default:
-		return false
-	}
+	return Category(c).IsValid()
 }

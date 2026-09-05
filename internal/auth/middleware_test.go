@@ -76,7 +76,7 @@ func TestRequireRole(t *testing.T) {
 	adminUser := db.User{ID: 1, Role: "ADMIN", IsActive: true}
 	workerUser := db.User{ID: 2, Role: "USER", IsActive: true}
 
-	protected := RequireRole("ADMIN", "SAFETY_OFFICER")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	protected := RequireRole(RoleAdmin, RoleSafetyOfficer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 

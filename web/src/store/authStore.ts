@@ -5,12 +5,13 @@ import {
   getAuthSession,
   saveAuthSession,
 } from "../db/indexeddb.ts";
+import type { UserRole } from "../types/index.ts";
 
 export interface UserProfile {
   id: number;
   username: string;
   full_name: string;
-  role: "USER" | "LINE_LEADER" | "SAFETY_OFFICER" | "ADMIN";
+  role: UserRole;
   assigned_location_code?: string;
 }
 

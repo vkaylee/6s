@@ -207,18 +207,18 @@ func (c *LiveLDAPClient) Authenticate(username, password string) (*LDAPUser, err
 func MapRoleFromGroups(userGroups []string, adminDN, safetyDN, leaderDN string) string {
 	for _, g := range userGroups {
 		if adminDN != "" && strings.EqualFold(strings.TrimSpace(g), strings.TrimSpace(adminDN)) {
-			return "ADMIN"
+			return RoleAdmin.String()
 		}
 	}
 	for _, g := range userGroups {
 		if safetyDN != "" && strings.EqualFold(strings.TrimSpace(g), strings.TrimSpace(safetyDN)) {
-			return "SAFETY_OFFICER"
+			return RoleSafetyOfficer.String()
 		}
 	}
 	for _, g := range userGroups {
 		if leaderDN != "" && strings.EqualFold(strings.TrimSpace(g), strings.TrimSpace(leaderDN)) {
-			return "LINE_LEADER"
+			return RoleLineLeader.String()
 		}
 	}
-	return "USER"
+	return RoleUser.String()
 }

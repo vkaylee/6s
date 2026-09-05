@@ -7,6 +7,7 @@ import {
   getAllDraftIssues,
   getAllDraftResolves,
 } from "../db/indexeddb.ts";
+import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import { haptics } from "../utils/haptics.ts";
 
@@ -56,14 +57,16 @@ export function OfflineOutboxDrawer({
   };
 
   const handleDeleteIssue = async (clientUuid: string) => {
-    if (confirm("Hủy bản nháp báo cáo này khỏi máy?")) {
+    const ok = await modalDialog.confirm("Hủy bản nháp báo cáo này khỏi máy?", undefined, true);
+    if (ok) {
       await deleteDraftIssue(clientUuid);
       loadData();
     }
   };
 
   const handleDeleteResolve = async (resolvedUuid: string) => {
-    if (confirm("Hủy bản nháp khắc phục này khỏi máy?")) {
+    const ok = await modalDialog.confirm("Hủy bản nháp khắc phục này khỏi máy?", undefined, true);
+    if (ok) {
       await deleteDraftResolve(resolvedUuid);
       loadData();
     }

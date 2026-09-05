@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { modalDialog } from "../store/dialogStore.ts";
 import { haptics } from "../utils/haptics.ts";
 
 interface AdminConfigModalProps {
@@ -97,7 +98,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
 
   const handleSaveScoring = async () => {
     if (isRetroactive && (!applyFrom || !reason.trim())) {
-      alert("Bắt buộc chọn mốc ngày và nhập lý do khi áp dụng hồi tố điểm!");
+      modalDialog.alert("Bắt buộc chọn mốc ngày và nhập lý do khi áp dụng hồi tố điểm!");
       return;
     }
 
@@ -113,11 +114,11 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
         }),
       });
       haptics.success();
-      alert("Đã cập nhật quy tắc chấm điểm thành công!");
+      await modalDialog.alert("Đã cập nhật quy tắc chấm điểm thành công!");
       onClose();
     } catch {
       haptics.errorOrConflict();
-      alert("Cập nhật thất bại");
+      modalDialog.alert("Cập nhật thất bại");
     } finally {
       setIsSaving(false);
     }
@@ -162,9 +163,9 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
         }),
       });
       haptics.success();
-      alert("Đã lưu cấu hình AD / LDAP!");
+      modalDialog.alert("Đã lưu cấu hình AD / LDAP!");
     } catch {
-      alert("Lỗi lưu cấu hình AD");
+      modalDialog.alert("Lỗi lưu cấu hình AD");
     } finally {
       setIsSaving(false);
     }

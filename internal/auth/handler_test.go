@@ -178,7 +178,7 @@ func (m *mockFullStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogP
 func (m *mockFullStore) CountAdmins(_ context.Context) (int64, error) {
 	var count int64
 	for _, u := range m.users {
-		if u.Role == "ADMIN" && u.IsActive {
+		if u.Role == RoleAdmin.String() && u.IsActive {
 			count++
 		}
 	}
@@ -193,7 +193,7 @@ func (m *mockFullStore) CreateLocalAdmin(_ context.Context, arg db.CreateLocalAd
 		AuthSource:   "LOCAL",
 		FullName:     arg.FullName,
 		Email:        arg.Email,
-		Role:         "ADMIN",
+		Role:         RoleAdmin.String(),
 		IsActive:     true,
 	}
 	m.users[u.ID] = u
@@ -213,7 +213,7 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 		Username:     "worker1",
 		PasswordHash: sql.NullString{String: hashedPass, Valid: true},
 		AuthSource:   "LOCAL",
-		Role:         "USER",
+		Role:         RoleUser.String(),
 		FullName:     "Worker One",
 		IsActive:     true,
 	}
@@ -309,7 +309,7 @@ func TestADConfigHandler_CRUDAndTest(t *testing.T) {
 	cipher, _ := crypto.NewCipher("01234567890123456789012345678901") // 32 bytes
 	mockLDAP := &MockLDAPClient{}
 
-	adminUser := db.User{ID: 1, Role: "ADMIN", FullName: "Admin", IsActive: true}
+	adminUser := db.User{ID: 1, Role: RoleAdmin.String(), FullName: "Admin", IsActive: true}
 	adHandler := NewADConfigHandler(store, cipher, mockLDAP)
 
 	// Update AD Config

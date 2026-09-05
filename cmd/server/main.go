@@ -154,7 +154,7 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	// Config routes (Admin only)
 	r.Route("/api/config", func(cr chi.Router) {
 		cr.Use(authMw.Authenticate)
-		cr.Use(auth.RequireRole("ADMIN"))
+		cr.Use(auth.RequireRole(auth.RoleAdmin))
 
 		cr.Get("/ad", adHandler.GetADConfig)
 		cr.Put("/ad", adHandler.UpdateADConfig)
@@ -188,12 +188,12 @@ func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Midd
 	r.Route("/api/locations", func(lr chi.Router) {
 		lr.Use(authMw.Authenticate)
 		lr.Get("/", mdHandler.ListLocations)
-		lr.With(auth.RequireRole("ADMIN")).Post("/", mdHandler.CreateLocation)
+		lr.With(auth.RequireRole(auth.RoleAdmin)).Post("/", mdHandler.CreateLocation)
 	})
 	r.Route("/api/tags", func(tr chi.Router) {
 		tr.Use(authMw.Authenticate)
 		tr.Get("/", mdHandler.ListTags)
-		tr.With(auth.RequireRole("ADMIN")).Post("/", mdHandler.UpsertTag)
+		tr.With(auth.RequireRole(auth.RoleAdmin)).Post("/", mdHandler.UpsertTag)
 	})
 }
 
@@ -230,14 +230,14 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 	r.Route("/api/config/scoring", func(scr chi.Router) {
 		scr.Use(authMw.Authenticate)
 		scr.Get("/", scoringHandler.GetRules)
-		scr.With(auth.RequireRole("ADMIN")).Put("/", scoringHandler.UpdateRules)
+		scr.With(auth.RequireRole(auth.RoleAdmin)).Put("/", scoringHandler.UpdateRules)
 	})
 
 	httpSender := notification.NewHTTPSender(cipher)
 	notifHandler := notification.NewConfigHandler(queries, cipher, httpSender)
 	r.Route("/api/config/notifications", func(nr chi.Router) {
 		nr.Use(authMw.Authenticate)
-		nr.Use(auth.RequireRole("ADMIN"))
+		nr.Use(auth.RequireRole(auth.RoleAdmin))
 		nr.Get("/", notifHandler.GetConfig)
 		nr.Put("/", notifHandler.UpdateConfig)
 		nr.Post("/test", notifHandler.TestConfig)

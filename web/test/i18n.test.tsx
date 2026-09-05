@@ -6,7 +6,7 @@ import { useI18nStore } from "../src/i18n/index.ts";
 import en from "../src/i18n/locales/en.json";
 import vi from "../src/i18n/locales/vi.json";
 import zh from "../src/i18n/locales/zh.json";
-import type { IssueItem } from "../src/types/index.ts";
+import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
 
 function extractKeys(obj: Record<string, unknown>, prefix = ""): string[] {
   let keys: string[] = [];
@@ -68,14 +68,14 @@ describe("UI Components i18n Integration", () => {
   const sampleIssue: IssueItem = {
     id: 101,
     client_uuid: "test-uuid-101",
-    category: "6S",
+    category: IssueCategory.S6,
     creator_id: 1,
     creator_name: "Worker01",
     location_code: "LINE_A1",
     location_name: "Chuyền May A1",
     description: "Sample description",
     photo_before: "data:image/png;base64,sample",
-    status: "OPEN",
+    status: IssueStatus.OPEN,
     tags: ["safety"],
     created_at: new Date().toISOString(),
     version: 1,

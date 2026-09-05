@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "./api/client.ts";
 import { ConflictModal } from "./components/ConflictModal.tsx";
+import { GlobalDialog } from "./components/GlobalDialog.tsx";
 import { HealthGauge } from "./components/HealthGauge.tsx";
 import { IssueCard } from "./components/IssueCard.tsx";
 import { OfflineOutboxDrawer } from "./components/OfflineOutboxDrawer.tsx";
@@ -14,13 +15,17 @@ import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
 import { LoginModal } from "./pages/LoginModal.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 import { useAuthStore } from "./store/authStore.ts";
+import { modalDialog } from "./store/dialogStore.ts";
 import { syncEngine } from "./sync/syncEngine.ts";
-import type {
-  IssueItem,
-  LocationHealthScore,
-  LocationItem,
-  ReporterLeaderboard,
-  TagItem,
+import {
+  IssueCategory,
+  type IssueItem,
+  IssueStatus,
+  type LocationHealthScore,
+  type LocationItem,
+  type ReporterLeaderboard,
+  type TagItem,
+  UserRole,
 } from "./types/index.ts";
 
 export function App() {
@@ -161,14 +166,14 @@ export function App() {
         : true;
     }
     if (activeFacet === "SAFETY_6S") {
-      return iss.category === "6S";
+      return iss.category === IssueCategory.S6;
     }
     if (activeFacet === "OVERDUE_48H") {
       const isOverdue = Date.now() - new Date(iss.created_at).getTime() > 48 * 3600 * 1000;
-      return iss.status === "OPEN" && isOverdue;
+      return iss.status === IssueStatus.OPEN && isOverdue;
     }
     if (activeFacet === "WAITING_MY_REVIEW") {
-      return iss.status === "PENDING_REVIEW";
+      return iss.status === IssueStatus.PENDING_REVIEW;
     }
     return true;
   });
@@ -180,10 +185,10 @@ export function App() {
         )
       : 100;
 
-  const totalOpen = issues.filter((i) => i.status === "OPEN").length;
+  const totalOpen = issues.filter((i) => i.status === IssueStatus.OPEN).length;
   const totalOverdue = issues.filter((i) => {
     const isOverdue = Date.now() - new Date(i.created_at).getTime() > 48 * 3600 * 1000;
-    return i.status === "OPEN" && isOverdue;
+    return i.status === IssueStatus.OPEN && isOverdue;
   }).length;
 
   return (
@@ -216,7 +221,7 @@ export function App() {
                     {user.role} {user.assigned_location_code && `• ${user.assigned_location_code}`}
                   </div>
                 </div>
-                {user.role === "ADMIN" && (
+                {user.role === UserRole.ADMIN && (
                   <button
                     type="button"
                     onClick={() => setIsAdminOpen(true)}
@@ -329,7 +334,7 @@ export function App() {
         <QuickFacets
           activeFacet={activeFacet}
           onSelectFacet={(f) => setActiveFacet(f)}
-          pendingReviewCount={issues.filter((i) => i.status === "PENDING_REVIEW").length}
+          pendingReviewCount={issues.filter((i) => i.status === IssueStatus.PENDING_REVIEW).length}
         />
 
         {/* Issue List */}
@@ -409,7 +414,7 @@ export function App() {
           resolveItem={conflictItem}
           serverVersion={2}
           onOverwrite={() => {
-            alert("Đã gửi yêu cầu ghi đè");
+            modalDialog.alert("Đã gửi yêu cầu ghi đè");
             setConflictItem(null);
           }}
           onDiscard={() => {
@@ -431,6 +436,8 @@ export function App() {
           loadIssues();
         }}
       />
+
+      <GlobalDialog />
     </div>
   );
 }

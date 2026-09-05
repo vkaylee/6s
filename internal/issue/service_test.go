@@ -61,7 +61,7 @@ func (m *mockIssueStore) CreateIssue(_ context.Context, arg db.CreateIssueParams
 		Description:  arg.Description,
 		PhotoBefore:  arg.PhotoBefore,
 		PhotoDetail:  arg.PhotoDetail,
-		Status:       "OPEN",
+		Status:       StatusOpen.String(),
 		CreatedAt:    time.Now(),
 	}
 	m.issues[iss.ID] = iss
@@ -120,10 +120,10 @@ func (m *mockIssueStore) CountIssuesFiltered(_ context.Context, _ db.CountIssues
 
 func (m *mockIssueStore) ResolveIssue(_ context.Context, arg db.ResolveIssueParams) (db.Issue, error) {
 	iss, ok := m.issues[arg.ID]
-	if !ok || iss.Status != "OPEN" || iss.Version != arg.Version {
+	if !ok || iss.Status != StatusOpen.String() || iss.Version != arg.Version {
 		return db.Issue{}, sql.ErrNoRows
 	}
-	iss.Status = "PENDING_REVIEW"
+	iss.Status = StatusPendingReview.String()
 	iss.ResolverID = arg.ResolverID
 	iss.PhotoAfter = arg.PhotoAfter
 	iss.Version++
@@ -138,7 +138,7 @@ func (m *mockIssueStore) ForceResolveIssue(_ context.Context, arg db.ForceResolv
 	if !ok {
 		return db.Issue{}, sql.ErrNoRows
 	}
-	iss.Status = "PENDING_REVIEW"
+	iss.Status = StatusPendingReview.String()
 	iss.ResolverID = arg.ResolverID
 	iss.PhotoAfter = arg.PhotoAfter
 	iss.Version++
@@ -150,13 +150,13 @@ func (m *mockIssueStore) ForceResolveIssue(_ context.Context, arg db.ForceResolv
 
 func (m *mockIssueStore) CloseIssue(_ context.Context, arg db.CloseIssueParams) (db.Issue, error) {
 	iss, ok := m.issues[arg.ID]
-	if !ok || iss.Status != "PENDING_REVIEW" {
+	if !ok || iss.Status != StatusPendingReview.String() {
 		return db.Issue{}, sql.ErrNoRows
 	}
 	if arg.ExpectedVersion.Valid && iss.Version != arg.ExpectedVersion.Int32 {
 		return db.Issue{}, sql.ErrNoRows
 	}
-	iss.Status = "CLOSED"
+	iss.Status = StatusClosed.String()
 	iss.ScoreRating = arg.ScoreRating
 	iss.Version++
 	now := time.Now()
@@ -167,13 +167,13 @@ func (m *mockIssueStore) CloseIssue(_ context.Context, arg db.CloseIssueParams) 
 
 func (m *mockIssueStore) ReopenIssue(_ context.Context, arg db.ReopenIssueParams) (db.Issue, error) {
 	iss, ok := m.issues[arg.ID]
-	if !ok || iss.Status != "PENDING_REVIEW" {
+	if !ok || iss.Status != StatusPendingReview.String() {
 		return db.Issue{}, sql.ErrNoRows
 	}
 	if arg.ExpectedVersion.Valid && iss.Version != arg.ExpectedVersion.Int32 {
 		return db.Issue{}, sql.ErrNoRows
 	}
-	iss.Status = "OPEN"
+	iss.Status = StatusOpen.String()
 	iss.RejectReason = arg.RejectReason
 	iss.Version++
 	m.issues[iss.ID] = iss
@@ -182,13 +182,13 @@ func (m *mockIssueStore) ReopenIssue(_ context.Context, arg db.ReopenIssueParams
 
 func (m *mockIssueStore) InvalidateIssue(_ context.Context, arg db.InvalidateIssueParams) (db.Issue, error) {
 	iss, ok := m.issues[arg.ID]
-	if !ok || (iss.Status != "OPEN" && iss.Status != "PENDING_REVIEW") {
+	if !ok || (iss.Status != StatusOpen.String() && iss.Status != StatusPendingReview.String()) {
 		return db.Issue{}, sql.ErrNoRows
 	}
 	if arg.ExpectedVersion.Valid && iss.Version != arg.ExpectedVersion.Int32 {
 		return db.Issue{}, sql.ErrNoRows
 	}
-	iss.Status = "INVALID"
+	iss.Status = StatusInvalid.String()
 	iss.RejectReason = arg.RejectReason
 	iss.Version++
 	m.issues[iss.ID] = iss
@@ -300,7 +300,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if !created {
 		t.Fatal("expected created=true")
 	}
-	if resp.Status != "OPEN" {
+	if resp.Status != StatusOpen.String() {
 		t.Errorf("expected status OPEN, got %s", resp.Status)
 	}
 
@@ -316,7 +316,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveIssue error: %v", err)
 	}
-	if resResp.Status != "PENDING_REVIEW" {
+	if resResp.Status != StatusPendingReview.String() {
 		t.Errorf("expected status PENDING_REVIEW, got %s", resResp.Status)
 	}
 
@@ -330,7 +330,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CloseIssue error: %v", err)
 	}
-	if closedResp.Status != "CLOSED" {
+	if closedResp.Status != StatusClosed.String() {
 		t.Errorf("expected status CLOSED, got %s", closedResp.Status)
 	}
 }

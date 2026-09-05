@@ -4,8 +4,15 @@ import { SplitSlider } from "../components/SplitSlider.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
+import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
-import { type IssueCategory, type IssueItem, S_CATEGORIES } from "../types/index.ts";
+import {
+  IssueCategory,
+  type IssueItem,
+  IssueStatus,
+  S_CATEGORIES,
+  UserRole,
+} from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 
@@ -31,27 +38,27 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
     return null;
   }
 
-  const role = user?.role || "USER";
-  const isSafetyIssue = issue.category === "6S";
+  const role = user?.role || UserRole.USER;
+  const isSafetyIssue = issue.category === IssueCategory.S6;
 
   // RBAC Permission Check (SPEC.md Section 3.2 & 9.9.F)
   // Resolve: Anyone
   // Close: Admin or Safety (for 6S); Admin, Safety, or matching Line Leader (for 1S-5S)
   const canClose =
-    role === "ADMIN" ||
-    role === "SAFETY_OFFICER" ||
-    (role === "LINE_LEADER" &&
+    role === UserRole.ADMIN ||
+    role === UserRole.SAFETY_OFFICER ||
+    (role === UserRole.LINE_LEADER &&
       !isSafetyIssue &&
       (!user?.assigned_location_code || user.assigned_location_code === issue.location_code));
 
   const closeDisabledReason =
-    isSafetyIssue && role !== "ADMIN" && role !== "SAFETY_OFFICER"
+    isSafetyIssue && role !== UserRole.ADMIN && role !== UserRole.SAFETY_OFFICER
       ? "Cần quyền Safety Officer / 需安全员权限"
-      : role === "LINE_LEADER" &&
+      : role === UserRole.LINE_LEADER &&
           user?.assigned_location_code &&
           user.assigned_location_code !== issue.location_code
         ? "Chỉ được duyệt chuyền phụ trách"
-        : role === "USER"
+        : role === UserRole.USER
           ? "Cần quyền Line Leader trở lên"
           : null;
 
@@ -67,7 +74,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       onRefresh();
     } catch {
       haptics.errorOrConflict();
-      alert("Không thể đổi phân loại issue");
+      modalDialog.alert("Không thể đổi phân loại issue");
     }
   };
 
@@ -94,12 +101,12 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       await saveDraftResolve(draft);
       haptics.success();
       syncEngine.triggerSync();
-      alert(t("issue.sync_resolve_msg"));
+      await modalDialog.alert(t("issue.sync_resolve_msg"));
       onRefresh();
       onClose();
     } catch {
       haptics.errorOrConflict();
-      alert("Lỗi khi xử lý ảnh khắc phục");
+      modalDialog.alert("Lỗi khi xử lý ảnh khắc phục");
     } finally {
       setIsSubmitting(false);
     }
@@ -121,7 +128,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       onClose();
     } catch {
       haptics.errorOrConflict();
-      alert("Duyệt đạt thất bại");
+      modalDialog.alert("Duyệt đạt thất bại");
     } finally {
       setIsSubmitting(false);
     }
@@ -143,7 +150,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       onClose();
     } catch {
       haptics.errorOrConflict();
-      alert("Mở lại issue thất bại");
+      modalDialog.alert("Mở lại issue thất bại");
     } finally {
       setIsSubmitting(false);
     }
@@ -165,7 +172,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       onClose();
     } catch {
       haptics.errorOrConflict();
-      alert("Bác bỏ thất bại");
+      modalDialog.alert("Bác bỏ thất bại");
     } finally {
       setIsSubmitting(false);
     }
@@ -264,7 +271,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           </div>
 
           {/* Kaizen Rating Stars (SPEC.md Section 9.8.B) */}
-          {issue.status === "PENDING_REVIEW" && canClose && (
+          {issue.status === IssueStatus.PENDING_REVIEW && canClose && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
               <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
                 Đánh giá chất lượng khắc phục (Kaizen Rating) *
@@ -297,7 +304,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
         {/* Bottom Actions Bar (Glove Friendly, Explainable Disabled) */}
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col gap-2">
           {/* Action: Resolve (Upload after photo) */}
-          {issue.status === "OPEN" && (
+          {issue.status === IssueStatus.OPEN && (
             <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
               <input
                 type="file"
@@ -312,7 +319,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           )}
 
           {/* Action: Close (Duyệt đạt) */}
-          {issue.status === "PENDING_REVIEW" && (
+          {issue.status === IssueStatus.PENDING_REVIEW && (
             <div className="flex gap-2">
               <button
                 type="button"
@@ -344,15 +351,16 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           )}
 
           {/* Action: Invalidate (Bác bỏ) */}
-          {issue.status === "OPEN" && (role === "ADMIN" || role === "SAFETY_OFFICER") && (
-            <button
-              type="button"
-              onClick={() => setShowConfirmAction("INVALID")}
-              className="text-xs text-rose-600 hover:text-rose-700 font-bold py-2 text-center"
-            >
-              {t("issue.invalidate")}
-            </button>
-          )}
+          {issue.status === IssueStatus.OPEN &&
+            (role === UserRole.ADMIN || role === UserRole.SAFETY_OFFICER) && (
+              <button
+                type="button"
+                onClick={() => setShowConfirmAction("INVALID")}
+                className="text-xs text-rose-600 hover:text-rose-700 font-bold py-2 text-center"
+              >
+                {t("issue.invalidate")}
+              </button>
+            )}
         </div>
 
         {/* Confirmation Modal */}
@@ -367,7 +375,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                     : "Xác nhận bác bỏ issue?"}
               </h3>
 
-              {(showConfirmAction === "REOPEN" || showConfirmAction === "INVALID") && (
+              {(showConfirmAction === IssueStatus.INVALID || showConfirmAction === "REOPEN") && (
                 <textarea
                   rows={2}
                   value={rejectReason}
@@ -383,7 +391,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                   onClick={() => {
                     if (showConfirmAction === "CLOSE") handleConfirmClose();
                     if (showConfirmAction === "REOPEN") handleConfirmReopen();
-                    if (showConfirmAction === "INVALID") handleConfirmInvalid();
+                    if (showConfirmAction === IssueStatus.INVALID) handleConfirmInvalid();
                   }}
                   className="flex-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-black py-3 rounded-xl min-h-[48px]"
                 >

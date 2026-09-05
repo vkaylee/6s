@@ -34,27 +34,27 @@ func TestMapRoleFromGroups(t *testing.T) {
 		{
 			name:     "Admin Group",
 			groups:   []string{"CN=Users,OU=Groups,DC=factory,DC=lan", adminDN},
-			expected: "ADMIN",
+			expected: RoleAdmin.String(),
 		},
 		{
 			name:     "Safety Group",
 			groups:   []string{safetyDN},
-			expected: "SAFETY_OFFICER",
+			expected: RoleSafetyOfficer.String(),
 		},
 		{
 			name:     "Line Leader Group",
 			groups:   []string{leaderDN},
-			expected: "LINE_LEADER",
+			expected: RoleLineLeader.String(),
 		},
 		{
 			name:     "Normal User",
 			groups:   []string{"CN=Users,OU=Groups,DC=factory,DC=lan"},
-			expected: "USER",
+			expected: RoleUser.String(),
 		},
 		{
 			name:     "Empty Groups",
 			groups:   nil,
-			expected: "USER",
+			expected: RoleUser.String(),
 		},
 	}
 
@@ -75,7 +75,7 @@ func TestMockLDAPClient(t *testing.T) {
 			DN:          "CN=John Doe,OU=Users,DC=factory,DC=lan",
 			FullName:    "John Doe",
 			Email:       "johndoe@factory.lan",
-			MatchedRole: "USER",
+			MatchedRole: RoleUser.String(),
 		},
 	}
 

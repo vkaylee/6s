@@ -1,5 +1,5 @@
 import { useI18nStore } from "../i18n/index.ts";
-import type { IssueItem } from "../types/index.ts";
+import { IssueCategory, type IssueItem, IssueStatus } from "../types/index.ts";
 
 interface IssueCardProps {
   issue: IssueItem;
@@ -8,10 +8,10 @@ interface IssueCardProps {
 
 export function IssueCard({ issue, onClick }: IssueCardProps) {
   const { t } = useI18nStore();
-  const isSafety = issue.category === "6S";
-  const isOpen = issue.status === "OPEN";
-  const isPendingReview = issue.status === "PENDING_REVIEW";
-  const isClosed = issue.status === "CLOSED";
+  const isSafety = issue.category === IssueCategory.S6;
+  const isOpen = issue.status === IssueStatus.OPEN;
+  const isPendingReview = issue.status === IssueStatus.PENDING_REVIEW;
+  const isClosed = issue.status === IssueStatus.CLOSED;
 
   const statusBadge = isOpen ? (
     <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800">

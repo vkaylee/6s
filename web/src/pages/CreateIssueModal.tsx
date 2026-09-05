@@ -2,13 +2,9 @@ import { useState } from "react";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
+import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
-import {
-  type IssueCategory,
-  type LocationItem,
-  S_CATEGORIES,
-  type TagItem,
-} from "../types/index.ts";
+import { IssueCategory, type LocationItem, S_CATEGORIES, type TagItem } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 
@@ -27,7 +23,7 @@ export function CreateIssueModal({
   tags,
 }: CreateIssueModalProps) {
   const { t } = useI18nStore();
-  const [category, setCategory] = useState<IssueCategory>("6S");
+  const [category, setCategory] = useState<IssueCategory>(IssueCategory.S6);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
@@ -46,7 +42,7 @@ export function CreateIssueModal({
 
   const handleSelectCategory = (cat: IssueCategory) => {
     setCategory(cat);
-    if (cat === "6S") {
+    if (cat === IssueCategory.S6) {
       haptics.safetyAlert();
     } else {
       haptics.success();
@@ -81,17 +77,17 @@ export function CreateIssueModal({
       haptics.success();
     } catch {
       haptics.errorOrConflict();
-      alert(t("issue.compress_error"));
+      modalDialog.alert(t("issue.compress_error"));
     }
   };
 
   const handleSubmit = async () => {
     if (!locationCode) {
-      alert(t("issue.missing_location"));
+      modalDialog.alert(t("issue.missing_location"));
       return;
     }
     if (!photoBefore) {
-      alert(t("issue.missing_photo"));
+      modalDialog.alert(t("issue.missing_photo"));
       return;
     }
 
@@ -121,7 +117,7 @@ export function CreateIssueModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      alert("Không thể lưu bản nháp vào IndexedDB");
+      modalDialog.alert("Không thể lưu bản nháp vào IndexedDB");
     } finally {
       setIsSubmitting(false);
     }
@@ -317,7 +313,7 @@ export function CreateIssueModal({
             disabled={isSubmitting}
             onClick={handleSubmit}
             className={`w-full font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-xl active:scale-[0.98] transition-transform ${
-              category === "6S"
+              category === IssueCategory.S6
                 ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30 ring-4 ring-rose-500/20 animate-pulse"
                 : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 shadow-zinc-900/20"
             }`}
@@ -325,7 +321,7 @@ export function CreateIssueModal({
             <span>
               {isSubmitting
                 ? "Đang lưu..."
-                : category === "6S"
+                : category === IssueCategory.S6
                   ? "🚨 GỬI BÁO CÁO NGUY HIỂM 6S"
                   : "✓ GỬI BÁO CÁO 6S"}
             </span>

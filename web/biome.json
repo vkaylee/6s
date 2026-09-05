@@ -25,7 +25,8 @@
         "noStaticElementInteractions": "off"
       },
       "suspicious": {
-        "noUnknownAtRules": "off"
+        "noUnknownAtRules": "off",
+        "noAlert": "error"
       },
       "correctness": {
         "noUnusedVariables": "error",

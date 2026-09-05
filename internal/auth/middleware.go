@@ -89,7 +89,7 @@ func GetUserFromContext(ctx context.Context) (db.User, bool) {
 }
 
 // RequireRole checks if the authenticated user has at least one of the allowed roles.
-func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
+func RequireRole(allowedRoles ...Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := GetUserFromContext(r.Context())
@@ -99,7 +99,7 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 			}
 
 			for _, role := range allowedRoles {
-				if user.Role == role {
+				if user.Role == role.String() {
 					next.ServeHTTP(w, r)
 					return
 				}
