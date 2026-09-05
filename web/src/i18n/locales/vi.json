@@ -85,13 +85,13 @@
   "health_gauge": {
     "score_unit": "ĐIỂM",
     "workshop_health": "Sức khỏe 6S Xưởng",
-    "workshop_health_sub": "/ 车间健康分",
+    "workshop_health_sub": "/ Điểm xưởng",
     "open_count": "Đang mở: {count}",
     "overdue_count": "Quá hạn 48h: {count}"
   },
   "slider": {
-    "before": "TRƯỚC / 前",
-    "after": "SAU / 后",
+    "before": "TRƯỚC",
+    "after": "SAU",
     "before_alt": "Trước khi khắc phục",
     "after_alt": "Sau khi khắc phục"
   },
@@ -172,7 +172,7 @@
     "location_name_vi": "Tên tiếng Việt *",
     "location_name_vi_placeholder": "VD: Chuyền May A3",
     "location_name_zh": "Tên tiếng Trung",
-    "location_name_zh_placeholder": "VD: 缝纫三拉",
+    "location_name_zh_placeholder": "VD: Chuyền may 3",
     "location_name_en": "Tên tiếng Anh",
     "location_name_en_placeholder": "VD: Sewing Line A3",
     "location_qr_label": "Mã QR Code *",
@@ -236,7 +236,7 @@
     "tag_name_vi": "Tên tiếng Việt *",
     "tag_name_vi_placeholder": "VD: Rò rỉ dầu",
     "tag_name_zh": "Tên tiếng Trung",
-    "tag_name_zh_placeholder": "VD: 漏油",
+    "tag_name_zh_placeholder": "VD: Ro ri dau",
     "tag_name_en": "Tên tiếng Anh",
     "tag_name_en_placeholder": "VD: Oil leak",
     "tag_add_success": "Đã lưu thẻ thành công!",
@@ -282,8 +282,8 @@
   },
   "issue_detail": {
     "quick_edit_category": "Chạm để sửa nhanh phân loại S (In-place Quick Edit)",
-    "compare_slider_label": "So sánh Before / After (Kéo trượt thanh ở giữa)",
-    "photo_before_label": "Ảnh bằng chứng toàn cảnh (Before)",
+    "compare_slider_label": "So sánh Trước / Sau (Kéo trượt thanh ở giữa)",
+    "photo_before_label": "Ảnh bằng chứng toàn cảnh (Trước)",
     "photo_before_alt": "Trước khắc phục",
     "reporter_label": "Người báo cáo:",
     "reject_reason_label": "Lý do từ chối/mở lại:",
@@ -295,7 +295,7 @@
     "confirm_reopen_title": "Xác nhận mở lại issue?",
     "confirm_invalid_title": "Xác nhận bác bỏ issue?",
     "reason_placeholder": "Nhập lý do bắt buộc...",
-    "need_safety_officer": "Cần quyền Safety Officer / 需安全员权限",
+    "need_safety_officer": "Cần quyền Safety Officer",
     "only_assigned_line": "Chỉ được duyệt chuyền phụ trách",
     "need_line_leader": "Cần quyền Line Leader trở lên",
     "locked": "Khóa"
