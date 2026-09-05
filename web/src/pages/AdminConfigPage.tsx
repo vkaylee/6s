@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
+import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { IssueCategory, type LocationItem, resolveI18n, S_CATEGORIES } from "../types/index.ts";
@@ -42,6 +43,7 @@ interface TagItemData {
 export function AdminConfigPage() {
   const { t, locale } = useI18nStore();
   const [, setLocation] = useLocation();
+  const isHeaderVisible = useHeaderVisibility();
   const [activeTab, setActiveTab] = useState<
     "LOCATIONS" | "SCORING" | "AD" | "NOTIFICATIONS" | "TAGS"
   >("LOCATIONS");
@@ -548,7 +550,11 @@ export function AdminConfigPage() {
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+      <header
+        className={`sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 transition-transform duration-300 ${
+          isHeaderVisible ? "translate-y-0" : "-translate-y-full"
+        }`}
+      >
         <PageContainer className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <button

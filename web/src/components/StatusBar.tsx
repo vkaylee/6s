@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
@@ -27,6 +28,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
     isSyncing: false,
     conflictCount: 0,
   });
+  const isVisible = useHeaderVisibility();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -62,7 +64,11 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
   const hasPending = progress.total > 0;
 
   return (
-    <header className="sticky top-0 z-40 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none shadow-sm">
+    <header
+      className={`sticky top-0 z-40 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none shadow-sm transition-transform duration-300 ${
+        isVisible ? "translate-y-0" : "-translate-y-full"
+      }`}
+    >
       <PageContainer className="min-h-14 py-2 flex flex-wrap items-center justify-between gap-2">
         {/* Left: Brand title & Sync/Network status */}
         <div className="flex items-center space-x-3">

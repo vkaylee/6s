@@ -7,6 +7,7 @@ import { PageContainer } from "../components/PageContainer.tsx";
 import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
+import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
@@ -31,7 +32,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const [, setLocation] = useLocation();
-
+  const isHeaderVisible = useHeaderVisibility();
   // Form states
   const [category, setCategory] = useState<IssueCategory | null>(null);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
@@ -268,7 +269,11 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       />
 
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+      <header
+        className={`sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 transition-transform duration-300 ${
+          isHeaderVisible ? "translate-y-0" : "-translate-y-full"
+        }`}
+      >
         <PageContainer className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <button
