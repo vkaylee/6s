@@ -106,7 +106,6 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("Khoanh tròn");
     expect(html).toContain("Khung chữ nhật");
     expect(html).toContain("Vẽ tự do");
-    expect(html).toContain("Di chuyển");
   });
 
   it("returns null when ImageAnnotatorModal isOpen is false", () => {

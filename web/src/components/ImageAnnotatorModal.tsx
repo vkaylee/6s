@@ -11,7 +11,7 @@ interface ImageAnnotatorModalProps {
   onClose: () => void;
 }
 
-type ToolMode = "circle" | "rect" | "pen" | "move";
+type ToolMode = "circle" | "rect" | "pen";
 
 interface StrokePoint {
   x: number;
@@ -20,7 +20,7 @@ interface StrokePoint {
 
 interface ShapeItem {
   id: string;
-  type: Exclude<ToolMode, "move">;
+  type: ToolMode;
   color: string;
   lineWidth: number;
   points: StrokePoint[];
@@ -59,6 +59,35 @@ function getShapeBounds(shape: ShapeItem): {
   return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 }
 
+type CornerType = "nw" | "ne" | "se" | "sw";
+
+interface ResizeHandle {
+  corner: CornerType;
+  point: StrokePoint;
+}
+
+function getResizeHandles(shape: ShapeItem): ResizeHandle[] {
+  if (shape.type === "pen" || !shape.start || !shape.end) return [];
+  const { minX, minY, maxX, maxY } = getShapeBounds(shape);
+  return [
+    { corner: "nw", point: { x: minX, y: minY } },
+    { corner: "ne", point: { x: maxX, y: minY } },
+    { corner: "se", point: { x: maxX, y: maxY } },
+    { corner: "sw", point: { x: minX, y: maxY } },
+  ];
+}
+
+function findResizeHandleAtPoint(pt: StrokePoint, shape: ShapeItem): CornerType | null {
+  const handles = getResizeHandles(shape);
+  const touchRadius = 28; // easy touch target for mobile/factory gloves
+  for (const h of handles) {
+    if (Math.hypot(pt.x - h.point.x, pt.y - h.point.y) <= touchRadius) {
+      return h.corner;
+    }
+  }
+  return null;
+}
+
 function isPointInShape(pt: StrokePoint, shape: ShapeItem): boolean {
   const { minX, minY, maxX, maxY } = getShapeBounds(shape);
   const padding = 24; // Easy touch target for factory gloves
@@ -87,11 +116,12 @@ export function ImageAnnotatorModal({
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
+  const [resizingCorner, setResizingCorner] = useState<CornerType | null>(null);
 
   const currentShapeRef = useRef<ShapeItem | null>(null);
   const moveStartPointRef = useRef<StrokePoint | null>(null);
   const originalShapeRef = useRef<ShapeItem | null>(null);
-
+  const activeCornerRef = useRef<CornerType | null>(null);
   const imageObjRef = useRef<HTMLImageElement | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -167,14 +197,28 @@ export function ImageAnnotatorModal({
         ctx.strokeRect(x, y, w, h);
       }
 
-      // Draw bounding selection handle if selected in MOVE mode
-      if (isSelected && tool === "move") {
+      // Draw bounding selection and 4 resize handles whenever a shape is selected
+      if (isSelected) {
         const { minX, minY, maxX, maxY } = getShapeBounds(shape);
         const pad = 8;
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 6]);
         ctx.strokeRect(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2);
+
+        // 4 corner handles for intuitive resizing
+        const handles = getResizeHandles(shape);
+        for (const h of handles) {
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#2563eb";
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2.5;
+          const size = 16;
+          ctx.beginPath();
+          ctx.arc(h.point.x, h.point.y, size / 2, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        }
       }
       ctx.restore();
     }
@@ -208,22 +252,35 @@ export function ImageAnnotatorModal({
     const pt = getCanvasPoint(clientX, clientY);
     if (!pt) return;
 
-    if (tool === "move") {
-      // Find top-most clicked shape
-      const clickedShape = [...shapes].reverse().find((s) => isPointInShape(pt, s));
-      if (clickedShape) {
-        setSelectedShapeId(clickedShape.id);
-        setIsMoving(true);
-        moveStartPointRef.current = pt;
-        originalShapeRef.current = JSON.parse(JSON.stringify(clickedShape));
-        haptics.selection();
-      } else {
-        setSelectedShapeId(null);
+    // Priority 1: Check if tapping resize handle on currently selected shape
+    if (selectedShapeId) {
+      const currentSelected = shapes.find((s) => s.id === selectedShapeId);
+      if (currentSelected) {
+        const corner = findResizeHandleAtPoint(pt, currentSelected);
+        if (corner) {
+          setResizingCorner(corner);
+          activeCornerRef.current = corner;
+          moveStartPointRef.current = pt;
+          originalShapeRef.current = JSON.parse(JSON.stringify(currentSelected));
+          haptics.selection();
+          return;
+        }
       }
+    }
+
+    // Priority 2: Check if tapping on any shape body (selected or unselected) -> Move / Select
+    const clickedShape = [...shapes].reverse().find((s) => isPointInShape(pt, s));
+    if (clickedShape) {
+      setSelectedShapeId(clickedShape.id);
+      setIsMoving(true);
+      moveStartPointRef.current = pt;
+      originalShapeRef.current = JSON.parse(JSON.stringify(clickedShape));
+      haptics.selection();
       return;
     }
 
-    // Drawing mode (circle, rect, pen)
+    // Priority 3: Tapping empty area -> Deselect current shape and start drawing new shape
+    setSelectedShapeId(null);
     setIsDrawing(true);
     const newShape: ShapeItem = {
       id: crypto.randomUUID(),
@@ -242,34 +299,68 @@ export function ImageAnnotatorModal({
     const pt = getCanvasPoint(clientX, clientY);
     if (!pt) return;
 
-    if (
-      tool === "move" &&
-      isMoving &&
-      selectedShapeId &&
-      moveStartPointRef.current &&
-      originalShapeRef.current
-    ) {
-      const dx = pt.x - moveStartPointRef.current.x;
-      const dy = pt.y - moveStartPointRef.current.y;
+    if (selectedShapeId && moveStartPointRef.current && originalShapeRef.current) {
       const orig = originalShapeRef.current;
 
-      setShapes((prev) =>
-        prev.map((s) => {
-          if (s.id !== selectedShapeId) return s;
-          if (orig.type === "pen") {
+      // Handling corner resize
+      if (resizingCorner && orig.start && orig.end) {
+        const origMinX = Math.min(orig.start.x, orig.end.x);
+        const origMinY = Math.min(orig.start.y, orig.end.y);
+        const origMaxX = Math.max(orig.start.x, orig.end.x);
+        const origMaxY = Math.max(orig.start.y, orig.end.y);
+
+        let newMinX = origMinX;
+        let newMinY = origMinY;
+        let newMaxX = origMaxX;
+        let newMaxY = origMaxY;
+
+        if (resizingCorner === "nw") {
+          newMinX = Math.min(pt.x, origMaxX - 20);
+          newMinY = Math.min(pt.y, origMaxY - 20);
+        } else if (resizingCorner === "ne") {
+          newMaxX = Math.max(pt.x, origMinX + 20);
+          newMinY = Math.min(pt.y, origMaxY - 20);
+        } else if (resizingCorner === "se") {
+          newMaxX = Math.max(pt.x, origMinX + 20);
+          newMaxY = Math.max(pt.y, origMinY + 20);
+        } else if (resizingCorner === "sw") {
+          newMinX = Math.min(pt.x, origMaxX - 20);
+          newMaxY = Math.max(pt.y, origMinY + 20);
+        }
+
+        setShapes((prev) =>
+          prev.map((s) =>
+            s.id === selectedShapeId
+              ? { ...s, start: { x: newMinX, y: newMinY }, end: { x: newMaxX, y: newMaxY } }
+              : s,
+          ),
+        );
+        return;
+      }
+
+      // Handling move
+      if (isMoving) {
+        const dx = pt.x - moveStartPointRef.current.x;
+        const dy = pt.y - moveStartPointRef.current.y;
+
+        setShapes((prev) =>
+          prev.map((s) => {
+            if (s.id !== selectedShapeId) return s;
+            if (orig.type === "pen") {
+              return {
+                ...s,
+                points: orig.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+              };
+            }
             return {
               ...s,
-              points: orig.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+              start: orig.start ? { x: orig.start.x + dx, y: orig.start.y + dy } : undefined,
+              end: orig.end ? { x: orig.end.x + dx, y: orig.end.y + dy } : undefined,
             };
-          }
-          return {
-            ...s,
-            start: orig.start ? { x: orig.start.x + dx, y: orig.start.y + dy } : undefined,
-            end: orig.end ? { x: orig.end.x + dx, y: orig.end.y + dy } : undefined,
-          };
-        }),
-      );
-      return;
+          }),
+        );
+        return;
+      }
     }
 
     if (!isDrawing || !currentShapeRef.current) return;
@@ -283,8 +374,10 @@ export function ImageAnnotatorModal({
   };
 
   const handlePointerUp = () => {
-    if (isMoving) {
+    if (isMoving || resizingCorner) {
       setIsMoving(false);
+      setResizingCorner(null);
+      activeCornerRef.current = null;
       moveStartPointRef.current = null;
       originalShapeRef.current = null;
       haptics.selection();
@@ -397,17 +490,6 @@ export function ImageAnnotatorModal({
             >
               ✎ {t("issue.tool_pen")}
             </button>
-            <button
-              type="button"
-              onClick={() => setTool("move")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
-                tool === "move"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900"
-              }`}
-            >
-              ✋ {t("issue.tool_move")}
-            </button>
           </div>
 
           {/* Color & Actions */}
@@ -485,7 +567,7 @@ export function ImageAnnotatorModal({
             onTouchEnd={handlePointerUp}
             onTouchCancel={handlePointerUp}
             className={`max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl border border-zinc-800 ${
-              tool === "move" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair"
+              isMoving ? "cursor-grabbing" : selectedShapeId ? "cursor-grab" : "cursor-crosshair"
             }`}
           />
         </div>
