@@ -27,45 +27,72 @@ type UserGetter interface {
 
 // Middleware handles authentication and authorization.
 type Middleware struct {
-	tokenManager *TokenManager
-	userGetter   UserGetter
+	tokenManager  *TokenManager
+	ticketManager *TicketManager
+	userGetter    UserGetter
 }
 
 // NewMiddleware instantiates auth Middleware.
-func NewMiddleware(tokenManager *TokenManager, userGetter UserGetter) *Middleware {
-	return &Middleware{
-		tokenManager: tokenManager,
-		userGetter:   userGetter,
+func NewMiddleware(tokenManager *TokenManager, userGetter UserGetter, ticketManager ...*TicketManager) *Middleware {
+	var tm *TicketManager
+	if len(ticketManager) > 0 {
+		tm = ticketManager[0]
 	}
+	return &Middleware{
+		tokenManager:  tokenManager,
+		ticketManager: tm,
+		userGetter:    userGetter,
+	}
+}
+
+func (m *Middleware) extractUserID(r *http.Request) (int64, error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			return 0, apperror.Unauthorized(i18n.ErrInvalidAuthFmt)
+		}
+		userID, err := m.tokenManager.ValidateAccessToken(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
+		}
+		return userID, nil
+	}
+
+	if qTicket := strings.TrimSpace(r.URL.Query().Get("ticket")); qTicket != "" && m.ticketManager != nil {
+		userID, err := m.ticketManager.Consume(qTicket)
+		if err != nil {
+			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
+		}
+		return userID, nil
+	}
+
+	if qToken := strings.TrimSpace(r.URL.Query().Get("token")); qToken != "" {
+		// ponytail: backwards compatibility with legacy query token; remove when all clients use ticket
+		userID, err := m.tokenManager.ValidateAccessToken(qToken)
+		if err != nil {
+			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
+		}
+		return userID, nil
+	}
+
+	return 0, apperror.Unauthorized(i18n.ErrMissingAuth)
 }
 
 // Authenticate extracts Bearer JWT token, validates it, fetches the user from DB,
 // and puts the user model into request context.
 func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokenStr := ""
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidAuthFmt))
-				return
-			}
-			tokenStr = strings.TrimSpace(parts[1])
-		} else if qToken := r.URL.Query().Get("token"); qToken != "" {
-			tokenStr = strings.TrimSpace(qToken)
-		}
-
-		if tokenStr == "" {
-			response.AppError(w, r, apperror.Unauthorized(i18n.ErrMissingAuth))
-			return
-		}
-		userID, err := m.tokenManager.ValidateAccessToken(tokenStr)
+		userID, err := m.extractUserID(r)
 		if err != nil {
-			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err))
+			var appErr *apperror.AppError
+			if errors.As(err, &appErr) {
+				response.AppError(w, r, appErr)
+			} else {
+				response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err))
+			}
 			return
 		}
-
 		user, err := m.userGetter.GetUserByID(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {

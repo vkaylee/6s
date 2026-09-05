@@ -35,4 +35,39 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("Dầu loang dưới sàn máy may");
     expect(html).toContain("Nguyễn Văn A");
   });
+
+  it("renders detail photo when photo_detail exists", () => {
+    const issueWithDetail: IssueItem = {
+      ...mockIssue,
+      photo_detail: "c0a80101-0000-4000-8000-000000000101_detail.jpg",
+    };
+    const html = renderToString(
+      <IssueDetailModal
+        issue={issueWithDetail}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(html).toContain("/uploads/detail/c0a80101-0000-4000-8000-000000000101_detail.jpg");
+    expect(html).toContain("Chạm ảnh để xem toàn màn hình");
+  });
+
+  it("renders zoom preview buttons when issue has photo_after", () => {
+    const resolvedIssue: IssueItem = {
+      ...mockIssue,
+      photo_after: "c0a80101-0000-4000-8000-000000000101_after.jpg",
+      status: IssueStatus.PENDING_REVIEW,
+    };
+    const html = renderToString(
+      <IssueDetailModal
+        issue={resolvedIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(html).toContain("/uploads/before/before.jpg");
+    expect(html).toContain("/uploads/after/c0a80101-0000-4000-8000-000000000101_after.jpg");
+  });
 });

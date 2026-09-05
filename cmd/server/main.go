@@ -141,8 +141,9 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	}
 	limiter := auth.NewLoginLimiter(trustedProxies)
 
-	authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient)
-	authMw := auth.NewMiddleware(tm, queries)
+	ticketMgr := auth.NewTicketManager()
+	authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient, ticketMgr)
+	authMw := auth.NewMiddleware(tm, queries, ticketMgr)
 	adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
 
 	// Public auth routes
@@ -155,6 +156,7 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 		// Authenticated auth routes
 		ar.Group(func(pr chi.Router) {
 			pr.Use(authMw.Authenticate)
+			pr.Post("/ticket", authHandler.CreateTicket)
 			pr.Post("/revoke", authHandler.Revoke)
 			pr.Get("/sessions", authHandler.Sessions)
 		})

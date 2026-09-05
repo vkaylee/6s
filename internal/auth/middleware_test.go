@@ -32,8 +32,8 @@ func TestMiddleware_Authenticate(t *testing.T) {
 			IsActive: true,
 		},
 	}
-	mw := NewMiddleware(tm, getter)
-
+	ticketMgr := NewTicketManager()
+	mw := NewMiddleware(tm, getter, ticketMgr)
 	handler := mw.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := GetUserFromContext(r.Context())
 		if !ok {
@@ -68,6 +68,23 @@ func TestMiddleware_Authenticate(t *testing.T) {
 	handler.ServeHTTP(rrQuery, reqQuery)
 	if rrQuery.Code != http.StatusOK {
 		t.Errorf("expected 200 for valid token in query param, got %d", rrQuery.Code)
+	}
+	// 2c. Valid single-use ticket via query param
+	ticket, err := ticketMgr.Issue(1)
+	if err != nil {
+		t.Fatalf("failed to issue ticket: %v", err)
+	}
+	reqTicket := httptest.NewRequest("GET", "/protected?ticket="+ticket, nil)
+	rrTicket := httptest.NewRecorder()
+	handler.ServeHTTP(rrTicket, reqTicket)
+	if rrTicket.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid ticket, got %d", rrTicket.Code)
+	}
+	// 2d. Second use of same ticket must fail (single-use)
+	rrTicketReuse := httptest.NewRecorder()
+	handler.ServeHTTP(rrTicketReuse, reqTicket)
+	if rrTicketReuse.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for reused ticket, got %d", rrTicketReuse.Code)
 	}
 
 	// 3. Inactive user

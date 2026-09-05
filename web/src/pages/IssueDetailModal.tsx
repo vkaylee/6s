@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
@@ -36,7 +36,19 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
   const [showConfirmAction, setShowConfirmAction] = useState<"CLOSE" | "REOPEN" | "INVALID" | null>(
     null,
   );
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; alt: string } | null>(null);
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const touchDistanceRef = useRef<number | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
+  // Reset pan & zoom when photo changes
+  useEffect(() => {
+    if (previewPhoto) {
+      setZoomScale(1);
+      setPanOffset({ x: 0, y: 0 });
+    }
+  }, [previewPhoto]);
   if (!isOpen) {
     return null;
   }
@@ -236,10 +248,40 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Split Slider if After photo exists, otherwise show Before photo */}
           {issue.photo_after ? (
-            <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                {t("issue_detail.compare_slider_label")}
-              </label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  {t("issue_detail.compare_slider_label")}
+                </label>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomScale(1);
+                      setPreviewPhoto({
+                        url: resolvePhotoUrl(issue.photo_before, "before"),
+                        alt: t("issue_detail.photo_before_alt"),
+                      });
+                    }}
+                    className="hover:underline px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900"
+                  >
+                    🔍 {t("slider.before")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomScale(1);
+                      setPreviewPhoto({
+                        url: resolvePhotoUrl(issue.photo_after, "after"),
+                        alt: t("slider.after_alt"),
+                      });
+                    }}
+                    className="hover:underline px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400"
+                  >
+                    🔍 {t("slider.after")}
+                  </button>
+                </div>
+              </div>
               <SplitSlider
                 beforeUrl={resolvePhotoUrl(issue.photo_before, "before")}
                 afterUrl={resolvePhotoUrl(issue.photo_after, "after")}
@@ -247,14 +289,72 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
             </div>
           ) : (
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                {t("issue_detail.photo_before_label")}
-              </label>
-              <img
-                src={resolvePhotoUrl(issue.photo_before, "before")}
-                alt={t("issue_detail.photo_before_alt")}
-                className="w-full aspect-[4/3] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  {t("issue_detail.photo_before_label")}
+                </label>
+                <span className="text-[11px] text-zinc-400">
+                  🔍 {t("issue_detail.tap_to_zoom")}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomScale(1);
+                  setPreviewPhoto({
+                    url: resolvePhotoUrl(issue.photo_before, "before"),
+                    alt: t("issue_detail.photo_before_alt"),
+                  });
+                }}
+                className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
+              >
+                <img
+                  src={resolvePhotoUrl(issue.photo_before, "before")}
+                  alt={t("issue_detail.photo_before_alt")}
+                  className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
+                    🔍 {t("issue_detail.tap_to_zoom")}
+                  </span>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Detail photo (Before) if available */}
+          {issue.photo_detail && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  {t("issue_detail.photo_detail_label")}
+                </label>
+                <span className="text-[11px] text-zinc-400">
+                  🔍 {t("issue_detail.tap_to_zoom")}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomScale(1);
+                  setPreviewPhoto({
+                    url: resolvePhotoUrl(issue.photo_detail, "detail"),
+                    alt: t("issue_detail.photo_detail_alt"),
+                  });
+                }}
+                className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
+              >
+                <img
+                  src={resolvePhotoUrl(issue.photo_detail, "detail")}
+                  alt={t("issue_detail.photo_detail_alt")}
+                  className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
+                    🔍 {t("issue_detail.tap_to_zoom")}
+                  </span>
+                </div>
+              </button>
             </div>
           )}
 
@@ -416,6 +516,150 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                   {t("common.cancel")}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fullscreen Image Previewer with Zoom */}
+        {previewPhoto && (
+          <div
+            className="fixed inset-0 z-70 bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-4 animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Top Bar */}
+            <div className="w-full flex items-center justify-between z-10">
+              <span className="text-xs font-bold text-zinc-300 max-w-[70%] truncate">
+                {previewPhoto.alt}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewPhoto(null);
+                  setZoomScale(1);
+                }}
+                className="w-10 h-10 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-white font-bold flex items-center justify-center transition-colors"
+                aria-label={t("common.close")}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Image Container with Zoom, Mouse Wheel, Two-Finger Pinch & Drag/Pan */}
+            <div
+              className="flex-1 w-full flex items-center justify-center overflow-hidden p-2 touch-none select-none cursor-grab active:cursor-grabbing"
+              onWheel={(e) => {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.2 : -0.2;
+                setZoomScale((s) => Math.min(5, Math.max(0.5, Number((s + delta).toFixed(2)))));
+              }}
+              onTouchStart={(e) => {
+                if (e.touches.length === 2) {
+                  const dx = e.touches[0].clientX - e.touches[1].clientX;
+                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  touchDistanceRef.current = Math.hypot(dx, dy);
+                } else if (e.touches.length === 1) {
+                  dragStartRef.current = {
+                    x: e.touches[0].clientX,
+                    y: e.touches[0].clientY,
+                    panX: panOffset.x,
+                    panY: panOffset.y,
+                  };
+                }
+              }}
+              onTouchMove={(e) => {
+                if (e.touches.length === 2 && touchDistanceRef.current) {
+                  const dx = e.touches[0].clientX - e.touches[1].clientX;
+                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  const newDist = Math.hypot(dx, dy);
+                  const ratio = newDist / touchDistanceRef.current;
+                  touchDistanceRef.current = newDist;
+                  setZoomScale((s) => Math.min(5, Math.max(0.5, Number((s * ratio).toFixed(2)))));
+                } else if (e.touches.length === 1 && dragStartRef.current) {
+                  const dx = e.touches[0].clientX - dragStartRef.current.x;
+                  const dy = e.touches[0].clientY - dragStartRef.current.y;
+                  setPanOffset({
+                    x: dragStartRef.current.panX + dx,
+                    y: dragStartRef.current.panY + dy,
+                  });
+                }
+              }}
+              onTouchEnd={() => {
+                touchDistanceRef.current = null;
+                dragStartRef.current = null;
+              }}
+              onMouseDown={(e) => {
+                if (e.button === 0) {
+                  dragStartRef.current = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    panX: panOffset.x,
+                    panY: panOffset.y,
+                  };
+                }
+              }}
+              onMouseMove={(e) => {
+                if (dragStartRef.current) {
+                  const dx = e.clientX - dragStartRef.current.x;
+                  const dy = e.clientY - dragStartRef.current.y;
+                  setPanOffset({
+                    x: dragStartRef.current.panX + dx,
+                    y: dragStartRef.current.panY + dy,
+                  });
+                }
+              }}
+              onMouseUp={() => {
+                dragStartRef.current = null;
+              }}
+              onMouseLeave={() => {
+                dragStartRef.current = null;
+              }}
+              onDoubleClick={() => {
+                if (zoomScale > 1) {
+                  setZoomScale(1);
+                  setPanOffset({ x: 0, y: 0 });
+                } else {
+                  setZoomScale(2.5);
+                }
+              }}
+            >
+              <img
+                src={previewPhoto.url}
+                alt={previewPhoto.alt}
+                style={{
+                  transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoomScale})`,
+                }}
+                className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-75 select-none pointer-events-none"
+              />
+            </div>
+            {/* Bottom Controls */}
+            <div className="flex items-center gap-2 p-2 bg-zinc-900/90 border border-zinc-700/60 rounded-2xl backdrop-blur-md z-10">
+              <button
+                type="button"
+                onClick={() => setZoomScale((s) => Math.max(0.5, Number((s - 0.25).toFixed(2))))}
+                disabled={zoomScale <= 0.5}
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white text-xs font-bold transition-all"
+              >
+                ➖ {t("issue_detail.zoom_out")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomScale(1);
+                  setPanOffset({ x: 0, y: 0 });
+                }}
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold transition-all min-w-[60px] text-center"
+              >
+                {Math.round(zoomScale * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoomScale((s) => Math.min(4, Number((s + 0.25).toFixed(2))))}
+                disabled={zoomScale >= 4}
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white text-xs font-bold transition-all"
+              >
+                ➕ {t("issue_detail.zoom_in")}
+              </button>
             </div>
           </div>
         )}

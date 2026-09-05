@@ -512,3 +512,51 @@ func TestHandler_LoginAD_JITProvision(t *testing.T) {
 		t.Errorf("expected role LINE_LEADER, got %s", u.Role)
 	}
 }
+
+func TestHandler_CreateTicket(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	ticketMgr := NewTicketManager()
+	handler := NewHandler(store, tm, limiter, cipher, nil, ticketMgr)
+
+	// 1. Unauthenticated request fails
+	reqUnauth := httptest.NewRequest("POST", "/api/auth/ticket", nil)
+	rrUnauth := httptest.NewRecorder()
+	handler.CreateTicket(rrUnauth, reqUnauth)
+	if rrUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated ticket request, got %d", rrUnauth.Code)
+	}
+
+	// 2. Authenticated request succeeds and issues consumable ticket
+	user := db.User{ID: 10, Username: "testuser", IsActive: true}
+	reqAuth := httptest.NewRequest("POST", "/api/auth/ticket", nil)
+	reqAuth = reqAuth.WithContext(context.WithValue(reqAuth.Context(), UserContextKey, user))
+	rrAuth := httptest.NewRecorder()
+	handler.CreateTicket(rrAuth, reqAuth)
+
+	if rrAuth.Code != http.StatusOK {
+		t.Fatalf("expected 200 for authenticated ticket request, got %d", rrAuth.Code)
+	}
+
+	var resp struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(rrAuth.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode ticket response: %v", err)
+	}
+	ticket := resp.Data["ticket"]
+	if ticket == "" {
+		t.Fatal("expected non-empty ticket in response")
+	}
+
+	// Verify issued ticket is valid for user 10
+	consumedUserID, err := ticketMgr.Consume(ticket)
+	if err != nil {
+		t.Fatalf("failed to consume issued ticket: %v", err)
+	}
+	if consumedUserID != 10 {
+		t.Fatalf("expected ticket bound to userID 10, got %d", consumedUserID)
+	}
+}

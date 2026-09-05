@@ -74,15 +74,30 @@ export function App() {
       wasSyncing = p.isSyncing;
     });
     let es: EventSource | null = null;
+    let active = true;
     if (typeof window !== "undefined" && typeof EventSource !== "undefined" && accessToken) {
-      es = new EventSource(`/api/issues/events?token=${encodeURIComponent(accessToken)}`);
-      es.addEventListener("issue", () => {
-        loadIssues();
-        loadLeaderboards();
-      });
+      apiClient<{ ticket: string }>("/api/auth/ticket", { method: "POST" })
+        .then(({ ticket }) => {
+          if (!active) return;
+          es = new EventSource(`/api/issues/events?ticket=${encodeURIComponent(ticket)}`);
+          es.addEventListener("issue", () => {
+            loadIssues();
+            loadLeaderboards();
+          });
+        })
+        .catch(() => {
+          // ponytail: fallback if ticket endpoint unavailable
+          if (!active) return;
+          es = new EventSource(`/api/issues/events?token=${encodeURIComponent(accessToken)}`);
+          es.addEventListener("issue", () => {
+            loadIssues();
+            loadLeaderboards();
+          });
+        });
     }
 
     return () => {
+      active = false;
       unsub();
       if (es) {
         es.close();

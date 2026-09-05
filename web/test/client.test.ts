@@ -133,4 +133,36 @@ describe("apiClient authentication", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("requests one-time ticket with Authorization Bearer header", async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "worker1",
+        full_name: "Worker One",
+        role: UserRole.USER,
+      },
+      accessToken: "mock-valid-access-token",
+      getRefreshToken: async () => null,
+    });
+
+    const originalFetch = globalThis.fetch;
+    let capturedAuthHeader = "";
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      capturedAuthHeader = headers.get("Authorization") ?? "";
+      return new Response(JSON.stringify({ ticket: "mock-one-time-ticket-abc123" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const data = await apiClient<{ ticket: string }>("/api/auth/ticket", { method: "POST" });
+      expect(data.ticket).toBe("mock-one-time-ticket-abc123");
+      expect(capturedAuthHeader).toBe("Bearer mock-valid-access-token");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

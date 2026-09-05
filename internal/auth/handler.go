@@ -39,21 +39,27 @@ type Store interface {
 
 // Handler handles authentication endpoints.
 type Handler struct {
-	store        Store
-	tokenManager *TokenManager
-	limiter      *LoginLimiter
-	cipher       *crypto.Cipher
-	ldapClient   LDAPClient
+	store         Store
+	tokenManager  *TokenManager
+	ticketManager *TicketManager
+	limiter       *LoginLimiter
+	cipher        *crypto.Cipher
+	ldapClient    LDAPClient
 }
 
 // NewHandler creates a new Handler.
-func NewHandler(store Store, tokenManager *TokenManager, limiter *LoginLimiter, cipher *crypto.Cipher, ldapClient LDAPClient) *Handler {
+func NewHandler(store Store, tokenManager *TokenManager, limiter *LoginLimiter, cipher *crypto.Cipher, ldapClient LDAPClient, ticketManager ...*TicketManager) *Handler {
+	var tm *TicketManager
+	if len(ticketManager) > 0 {
+		tm = ticketManager[0]
+	}
 	return &Handler{
-		store:        store,
-		tokenManager: tokenManager,
-		limiter:      limiter,
-		cipher:       cipher,
-		ldapClient:   ldapClient,
+		store:         store,
+		tokenManager:  tokenManager,
+		ticketManager: tm,
+		limiter:       limiter,
+		cipher:        cipher,
+		ldapClient:    ldapClient,
 	}
 }
 
@@ -570,4 +576,27 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.issueTokensAndRespond(w, r, user)
+}
+
+// CreateTicket handles POST /api/auth/ticket to issue single-use tickets for streaming/WebSocket/SSE.
+func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := GetUserFromContext(r.Context())
+	if !ok {
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+	if h.ticketManager == nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		return
+	}
+
+	ticket, err := h.ticketManager.Issue(currentUser.ID)
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]string{
+		"ticket": ticket,
+	})
 }
