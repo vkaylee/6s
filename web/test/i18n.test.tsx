@@ -1,11 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
+import ts from "typescript";
+import { GlobalDialog } from "../src/components/GlobalDialog.tsx";
 import { IssueCard } from "../src/components/IssueCard.tsx";
 import { QuickFacets } from "../src/components/QuickFacets.tsx";
 import { useI18nStore } from "../src/i18n/index.ts";
 import en from "../src/i18n/locales/en.json";
 import vi from "../src/i18n/locales/vi.json";
 import zh from "../src/i18n/locales/zh.json";
+import type { DialogOptions } from "../src/store/dialogStore.ts";
 import {
   type I18nObject,
   IssueCategory,
@@ -196,6 +199,103 @@ describe("I18nObject resolution", () => {
   it("falls back to vi when locale missing", () => {
     const partial = { vi: "Mặc định" } as unknown as I18nObject;
     expect(resolveI18n(partial, "en")).toBe("Mặc định");
+  });
+});
+
+describe("Component I18nObject compliance & rendering", () => {
+  it("renders GlobalDialog with localized I18nObject props", () => {
+    const options: DialogOptions = {
+      title: { vi: "Tiêu đề tiếng Việt", en: "English Title", zh: "中文标题" },
+      message: { vi: "Nội dung tiếng Việt", en: "English Content", zh: "中文内容" },
+      confirmText: { vi: "Xác nhận VN", en: "Confirm EN", zh: "确认 ZH" },
+      cancelText: { vi: "Hủy VN", en: "Cancel EN", zh: "取消 ZH" },
+      type: "confirm",
+    };
+
+    useI18nStore.getState().setLocale("en");
+    const htmlEn = renderToString(<GlobalDialog isOpen={true} options={options} />);
+    expect(htmlEn).toContain("English Title");
+    expect(htmlEn).toContain("English Content");
+    expect(htmlEn).toContain("Confirm EN");
+    expect(htmlEn).toContain("Cancel EN");
+
+    useI18nStore.getState().setLocale("vi");
+    const htmlVi = renderToString(<GlobalDialog isOpen={true} options={options} />);
+    expect(htmlVi).toContain("Tiêu đề tiếng Việt");
+    expect(htmlVi).toContain("Nội dung tiếng Việt");
+    expect(htmlVi).toContain("Xác nhận VN");
+    expect(htmlVi).toContain("Hủy VN");
+  });
+
+  it("enforces I18nObject interface contract statically", () => {
+    // Compile-time assignment check: valid I18nObject satisfies DialogOptions message
+    const validI18n: I18nObject = { vi: "Chào", en: "Hello", zh: "你好" };
+    const opts: DialogOptions = { message: validI18n };
+    expect(opts.message).toEqual(validI18n);
+  });
+});
+
+describe("Component Props I18n Enforcement Guard", () => {
+  const sourceRoot = new URL("../src/", import.meta.url).pathname;
+
+  // Allowed non-localizable string props (URLs, IDs, code keys, CSS classes)
+  const nonI18nProps: Record<string, true> = {
+    className: true,
+    key: true,
+    id: true,
+    clientUuid: true,
+    resolvedUuid: true,
+    beforeUrl: true,
+    afterUrl: true,
+    serverPhotoAfter: true,
+  };
+
+  it("forbids raw string props for UI text across all components and pages, requiring I18nObject", async () => {
+    const files = await Array.fromAsync(new Bun.Glob("**/*.tsx").scan({ cwd: sourceRoot }));
+
+    const violations: { file: string; prop: string; type: string }[] = [];
+
+    for (const file of files) {
+      const content = await Bun.file(`${sourceRoot}${file}`).text();
+      const sf = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
+
+      function inspectNode(node: ts.Node) {
+        // Detect interface *Props or type *Props = { ... }
+        let members: ts.NodeArray<ts.TypeElement> | undefined;
+        if (ts.isInterfaceDeclaration(node) && node.name.text.endsWith("Props")) {
+          members = node.members;
+        } else if (
+          ts.isTypeAliasDeclaration(node) &&
+          node.name.text.endsWith("Props") &&
+          ts.isTypeLiteralNode(node.type)
+        ) {
+          members = node.type.members;
+        }
+
+        if (members) {
+          for (const member of members) {
+            if (ts.isPropertySignature(member)) {
+              const propName = member.name.getText(sf);
+              if (nonI18nProps[propName]) continue;
+              const propType = member.type ? member.type.getText(sf) : "";
+              // If prop type is raw 'string' without I18nObject
+              if (
+                propType === "string" ||
+                propType === "string | undefined" ||
+                (propType.includes("string") && !propType.includes("I18nObject"))
+              ) {
+                violations.push({ file, prop: propName, type: propType });
+              }
+            }
+          }
+        }
+        ts.forEachChild(node, inspectNode);
+      }
+
+      inspectNode(sf);
+    }
+
+    expect(violations).toEqual([]);
   });
 });
 

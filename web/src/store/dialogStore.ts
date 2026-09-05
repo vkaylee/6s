@@ -1,12 +1,13 @@
 import { create } from "zustand";
+import type { I18nObject } from "../types/index.ts";
 
 export type DialogType = "alert" | "confirm";
 
 export interface DialogOptions {
-  title?: string;
-  message: string;
-  confirmText?: string;
-  cancelText?: string;
+  title?: string | I18nObject;
+  message: string | I18nObject;
+  confirmText?: string | I18nObject;
+  cancelText?: string | I18nObject;
   type?: DialogType;
   destructive?: boolean;
 }
@@ -16,8 +17,12 @@ export interface DialogState {
   options: DialogOptions;
   resolvePromise: ((value: boolean) => void) | null;
   showDialog: (options: DialogOptions) => Promise<boolean>;
-  confirm: (message: string, title?: string, destructive?: boolean) => Promise<boolean>;
-  alert: (message: string, title?: string) => Promise<void>;
+  confirm: (
+    message: string | I18nObject,
+    title?: string | I18nObject,
+    destructive?: boolean,
+  ) => Promise<boolean>;
+  alert: (message: string | I18nObject, title?: string | I18nObject) => Promise<void>;
   handleConfirm: () => void;
   handleCancel: () => void;
 }
@@ -37,23 +42,20 @@ export const useDialogStore = create<DialogState>((set, get) => ({
     });
   },
 
-  confirm: (message: string, title?: string, destructive = false) => {
+  confirm: (message: string | I18nObject, title?: string | I18nObject, destructive = false) => {
     return get().showDialog({
       title,
       message,
       type: "confirm",
       destructive,
-      confirmText: "Đồng ý",
-      cancelText: "Hủy",
     });
   },
 
-  alert: async (message: string, title?: string) => {
+  alert: async (message: string | I18nObject, title?: string | I18nObject) => {
     await get().showDialog({
       title,
       message,
       type: "alert",
-      confirmText: "Đóng",
     });
   },
 
@@ -78,7 +80,8 @@ export const useDialogStore = create<DialogState>((set, get) => ({
  * Convenient standalone async helpers to replace window.alert and window.confirm
  */
 export const modalDialog = {
-  alert: (message: string, title?: string) => useDialogStore.getState().alert(message, title),
-  confirm: (message: string, title?: string, destructive?: boolean) =>
+  alert: (message: string | I18nObject, title?: string | I18nObject) =>
+    useDialogStore.getState().alert(message, title),
+  confirm: (message: string | I18nObject, title?: string | I18nObject, destructive?: boolean) =>
     useDialogStore.getState().confirm(message, title, destructive),
 };

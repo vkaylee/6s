@@ -1,7 +1,7 @@
 import { useI18nStore } from "../i18n/index.ts";
 import type { DialogOptions } from "../store/dialogStore.ts";
 import { useDialogStore } from "../store/dialogStore.ts";
-
+import { resolveI18n } from "../types/index.ts";
 export interface GlobalDialogProps {
   isOpen?: boolean;
   options?: DialogOptions;
@@ -11,6 +11,7 @@ export interface GlobalDialogProps {
 
 export function GlobalDialog(props: GlobalDialogProps = {}) {
   const { t } = useI18nStore();
+  const currentLocale = useI18nStore.getState().locale;
   const store = useDialogStore();
   const isOpen = props.isOpen !== undefined ? props.isOpen : store.isOpen;
   const options = props.options !== undefined ? props.options : store.options;
@@ -25,6 +26,15 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
   const defaultTitle = isConfirm ? t("common.confirm") : "Notice";
   const defaultCancelText = t("common.cancel");
   const defaultConfirmText = isConfirm ? t("common.confirm") : t("common.close");
+
+  const titleText = options.title ? resolveI18n(options.title, currentLocale) : defaultTitle;
+  const messageText = resolveI18n(options.message, currentLocale);
+  const cancelText = options.cancelText
+    ? resolveI18n(options.cancelText, currentLocale)
+    : defaultCancelText;
+  const confirmText = options.confirmText
+    ? resolveI18n(options.confirmText, currentLocale)
+    : defaultConfirmText;
 
   return (
     <div
@@ -41,12 +51,12 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
               isDestructive ? "text-red-600 dark:text-red-400" : "text-zinc-900 dark:text-zinc-100"
             }`}
           >
-            {options.title || defaultTitle}
+            {titleText}
           </h3>
         </div>
 
         <div className="p-5 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
-          {options.message}
+          {messageText}
         </div>
 
         <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-end gap-2">
@@ -56,7 +66,7 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
               onClick={handleCancel}
               className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
             >
-              {options.cancelText || defaultCancelText}
+              {cancelText}
             </button>
           )}
           <button
@@ -66,7 +76,7 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
               isDestructive ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
-            {options.confirmText || defaultConfirmText}
+            {confirmText}
           </button>
         </div>
       </div>

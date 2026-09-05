@@ -48,8 +48,8 @@ describe("Frontend Modal Policy Enforcement", () => {
             prefix.endsWith("modalDialog.") ||
             prefix.endsWith("store.") ||
             prefix.endsWith("dialogStore.") ||
-            prefix.endsWith("state.");
-
+            prefix.endsWith("state.") ||
+            prefix.endsWith("getState().");
           // If inside dialogStore.ts defining alert: / confirm:, allow method definitions
           const isStoreDef =
             file.endsWith("dialogStore.ts") &&
