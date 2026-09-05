@@ -41,6 +41,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchDistanceRef = useRef<number | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
 
   // Reset pan & zoom when photo changes
   useEffect(() => {
@@ -48,6 +49,19 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       setZoomScale(1);
       setPanOffset({ x: 0, y: 0 });
     }
+  }, [previewPhoto]);
+
+  // Non-passive wheel listener to allow e.preventDefault()
+  useEffect(() => {
+    const el = imageContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.2 : -0.2;
+      setZoomScale((s) => Math.min(5, Math.max(0.5, Number((s + delta).toFixed(2)))));
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
   }, [previewPhoto]);
   if (!isOpen) {
     return null;
@@ -547,12 +561,8 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
 
             {/* Image Container with Zoom, Mouse Wheel, Two-Finger Pinch & Drag/Pan */}
             <div
+              ref={imageContainerRef}
               className="flex-1 w-full flex items-center justify-center overflow-hidden p-2 touch-none select-none cursor-grab active:cursor-grabbing"
-              onWheel={(e) => {
-                e.preventDefault();
-                const delta = e.deltaY < 0 ? 0.2 : -0.2;
-                setZoomScale((s) => Math.min(5, Math.max(0.5, Number((s + delta).toFixed(2)))));
-              }}
               onTouchStart={(e) => {
                 if (e.touches.length === 2) {
                   const dx = e.touches[0].clientX - e.touches[1].clientX;

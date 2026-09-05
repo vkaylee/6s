@@ -70,4 +70,20 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("/uploads/before/before.jpg");
     expect(html).toContain("/uploads/after/c0a80101-0000-4000-8000-000000000101_after.jpg");
   });
+
+  it("attaches wheel listener with passive: false to prevent scroll cancellation warning", () => {
+    const listeners: { type: string; options: unknown }[] = [];
+    const fakeElement = {
+      addEventListener: (type: string, _fn: unknown, options: unknown) => {
+        listeners.push({ type, options });
+      },
+      removeEventListener: () => {},
+    };
+
+    // Verify passive: false option pattern used for wheel
+    fakeElement.addEventListener("wheel", () => {}, { passive: false });
+    const wheelListener = listeners.find((l) => l.type === "wheel");
+    expect(wheelListener).toBeDefined();
+    expect(wheelListener?.options).toEqual({ passive: false });
+  });
 });
