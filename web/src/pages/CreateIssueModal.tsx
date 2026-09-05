@@ -22,7 +22,7 @@ export function CreateIssueModal({
   locations,
   tags,
 }: CreateIssueModalProps) {
-  const { t } = useI18nStore();
+  const { t, locale } = useI18nStore();
   const [category, setCategory] = useState<IssueCategory>(IssueCategory.S6);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -148,7 +148,7 @@ export function CreateIssueModal({
           {/* 1S - 6S Selection with Micro-hints (SPEC.md Section 4.5) */}
           <div>
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-              1. Chọn phân loại S (Micro-hints) *
+              {t("issue.step_category")}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {S_CATEGORIES.map((s) => {
@@ -173,7 +173,7 @@ export function CreateIssueModal({
                       <span className="text-xs font-bold opacity-80">{s.name}</span>
                     </div>
                     <div className="text-[11px] leading-tight font-medium opacity-90 mt-1">
-                      {s.hint_vi}
+                      {locale === "zh" ? s.hint_zh : s.hint_vi}
                     </div>
                   </button>
                 );
@@ -184,7 +184,7 @@ export function CreateIssueModal({
           {/* Location Selection */}
           <div>
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-              2. Vị trí nhà xưởng *
+              {t("issue.step_location")}
             </label>
             <select
               value={locationCode}
@@ -202,7 +202,7 @@ export function CreateIssueModal({
           {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}
           <div>
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-              3. Chụp ảnh bằng chứng (Dual-Shot) *
+              {t("issue.step_photos")}
             </label>
             <div className="grid grid-cols-2 gap-3">
               {/* Wide Shot (Mandatory) */}
@@ -218,16 +218,18 @@ export function CreateIssueModal({
                   {previewBefore ? (
                     <img
                       src={previewBefore}
-                      alt="Ảnh toàn cảnh"
+                      alt={t("issue.photo_wide_alt")}
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (
                     <>
                       <span className="text-2xl mb-1">📷</span>
                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                        Ảnh 1: Toàn cảnh *
+                        {t("issue.photo_wide_label")}
                       </span>
-                      <span className="text-[10px] text-zinc-400">Bắt buộc</span>
+                      <span className="text-[10px] text-zinc-400">
+                        {t("issue.photo_wide_required")}
+                      </span>
                     </>
                   )}
                 </label>
@@ -246,16 +248,18 @@ export function CreateIssueModal({
                   {previewDetail ? (
                     <img
                       src={previewDetail}
-                      alt="Ảnh cận cảnh"
+                      alt={t("issue.photo_detail_alt")}
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (
                     <>
                       <span className="text-2xl mb-1">🔍</span>
                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                        Ảnh 2: Cận cảnh
+                        {t("issue.photo_detail_label")}
                       </span>
-                      <span className="text-[10px] text-zinc-400">Tùy chọn</span>
+                      <span className="text-[10px] text-zinc-400">
+                        {t("issue.photo_detail_optional")}
+                      </span>
                     </>
                   )}
                 </label>
@@ -267,7 +271,7 @@ export function CreateIssueModal({
           {filteredTags.length > 0 && (
             <div>
               <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                4. Gợi ý nhãn nhanh ({category})
+                {t("issue.step_tags", { category })}
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {filteredTags.map((tag) => {
@@ -294,13 +298,13 @@ export function CreateIssueModal({
           {/* Description */}
           <div>
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-              5. Mô tả ngắn (Tùy chọn)
+              {t("issue.step_description")}
             </label>
             <textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="VD: Dầu máy chảy lênh láng gần tủ điện..."
+              placeholder={t("issue.description_placeholder")}
               className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-base text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -320,10 +324,10 @@ export function CreateIssueModal({
           >
             <span>
               {isSubmitting
-                ? "Đang lưu..."
+                ? t("issue.saving")
                 : category === IssueCategory.S6
-                  ? "🚨 GỬI BÁO CÁO NGUY HIỂM 6S"
-                  : "✓ GỬI BÁO CÁO 6S"}
+                  ? t("issue.submit_safety")
+                  : t("issue.submit_standard")}
             </span>
           </button>
         </div>

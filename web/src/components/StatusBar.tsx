@@ -64,11 +64,11 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
             </span>
             {hasPending ? (
               <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                Còn {progress.total - progress.completed} bản ghi chờ gửi
+                {t("nav.pending_records", { count: progress.total - progress.completed })}
               </span>
             ) : (
               <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Chạm để xem hàng đợi
+                {t("nav.tap_to_view")}
               </span>
             )}
           </div>

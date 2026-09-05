@@ -53,13 +53,13 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
 
   const closeDisabledReason =
     isSafetyIssue && role !== UserRole.ADMIN && role !== UserRole.SAFETY_OFFICER
-      ? "Cần quyền Safety Officer / 需安全员权限"
+      ? t("issue_detail.need_safety_officer")
       : role === UserRole.LINE_LEADER &&
           user?.assigned_location_code &&
           user.assigned_location_code !== issue.location_code
-        ? "Chỉ được duyệt chuyền phụ trách"
+        ? t("issue_detail.only_assigned_line")
         : role === UserRole.USER
-          ? "Cần quyền Line Leader trở lên"
+          ? t("issue_detail.need_line_leader")
           : null;
 
   const handleQuickChangeCategory = async (newCat: IssueCategory) => {
@@ -188,7 +188,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
               type="button"
               onClick={() => setIsEditingCategory(!isEditingCategory)}
               className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1"
-              title="Chạm để sửa nhanh phân loại S (In-place Quick Edit)"
+              title={t("issue_detail.quick_edit_category")}
             >
               <span>{issue.category}</span>
               <span className="text-xs opacity-50">✎</span>
@@ -235,18 +235,18 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           {issue.photo_after ? (
             <div>
               <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                So sánh Before / After (Kéo trượt thanh ở giữa)
+                {t("issue_detail.compare_slider_label")}
               </label>
               <SplitSlider beforeUrl={issue.photo_before} afterUrl={issue.photo_after} />
             </div>
           ) : (
             <div>
               <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                Ảnh bằng chứng toàn cảnh (Before)
+                {t("issue_detail.photo_before_label")}
               </label>
               <img
                 src={issue.photo_before}
-                alt="Trước khắc phục"
+                alt={t("issue_detail.photo_before_alt")}
                 className="w-full aspect-[4/3] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md"
               />
             </div>
@@ -256,7 +256,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2">
             <div className="flex items-center justify-between text-xs text-zinc-500">
               <span>
-                Người báo cáo: <strong>{issue.creator_name}</strong>
+                {t("issue_detail.reporter_label")} <strong>{issue.creator_name}</strong>
               </span>
               <span>{new Date(issue.created_at).toLocaleDateString("vi-VN")}</span>
             </div>
@@ -265,7 +265,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
             </p>
             {issue.reject_reason && (
               <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
-                <strong>Lý do từ chối/mở lại:</strong> {issue.reject_reason}
+                <strong>{t("issue_detail.reject_reason_label")}</strong> {issue.reject_reason}
               </div>
             )}
           </div>
@@ -274,7 +274,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           {issue.status === IssueStatus.PENDING_REVIEW && canClose && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
               <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
-                Đánh giá chất lượng khắc phục (Kaizen Rating) *
+                {t("issue_detail.kaizen_rating_label")}
               </label>
               <div className="flex items-center space-x-2">
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -293,7 +293,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 ))}
                 {scoreRating === 5 && (
                   <span className="text-xs font-bold text-amber-700 dark:text-amber-300 ml-2 animate-bounce">
-                    🏆 Kaizen Xuất Sắc (+5 điểm)
+                    {t("issue_detail.kaizen_excellent")}
                   </span>
                 )}
               </div>
@@ -314,7 +314,12 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 onChange={handleResolveOfflineOrOnline}
                 className="hidden"
               />
-              <span>📸 {isSubmitting ? "Đang xử lý ảnh..." : "CHỤP ẢNH KHẮC PHỤC (SAU)"}</span>
+              <span>
+                📸{" "}
+                {isSubmitting
+                  ? t("issue_detail.processing_image")
+                  : t("issue_detail.capture_after")}
+              </span>
             </label>
           )}
 
@@ -335,7 +340,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 <span>
                   {canClose
                     ? `✓ ${t("issue.approve").toUpperCase()}`
-                    : `🔒 ${closeDisabledReason || "Khóa"}`}
+                    : `🔒 ${closeDisabledReason || t("issue_detail.locked")}`}
                 </span>
               </button>
 
@@ -369,10 +374,10 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
             <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl max-w-sm w-full space-y-4 border border-zinc-200 dark:border-zinc-800 shadow-2xl">
               <h3 className="font-black text-lg text-zinc-900 dark:text-zinc-100">
                 {showConfirmAction === "CLOSE"
-                  ? "Xác nhận duyệt đạt issue?"
+                  ? t("issue_detail.confirm_close_title")
                   : showConfirmAction === "REOPEN"
-                    ? "Xác nhận mở lại issue?"
-                    : "Xác nhận bác bỏ issue?"}
+                    ? t("issue_detail.confirm_reopen_title")
+                    : t("issue_detail.confirm_invalid_title")}
               </h3>
 
               {(showConfirmAction === IssueStatus.INVALID || showConfirmAction === "REOPEN") && (
@@ -380,7 +385,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                   rows={2}
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Nhập lý do bắt buộc..."
+                  placeholder={t("issue_detail.reason_placeholder")}
                   className="w-full bg-zinc-50 dark:bg-zinc-800 border rounded-xl p-3 text-sm focus:outline-none"
                 />
               )}
@@ -395,14 +400,14 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                   }}
                   className="flex-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-black py-3 rounded-xl min-h-[48px]"
                 >
-                  Xác nhận
+                  {t("common.confirm")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowConfirmAction(null)}
                   className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-xl min-h-[48px]"
                 >
-                  Hủy
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>

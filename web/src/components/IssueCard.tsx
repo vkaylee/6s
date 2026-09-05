@@ -57,7 +57,7 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
               {issue.location_name || issue.location_code}
             </div>
             <div className="text-xs text-zinc-400 mt-0.5">
-              Mã: {issue.location_code} • {issue.creator_name}
+              {t("issue.code_prefix")}: {issue.location_code} • {issue.creator_name}
             </div>
           </div>
         </div>
@@ -68,13 +68,13 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
         {issue.photo_before && (
           <img
             src={issue.photo_before}
-            alt="Toàn cảnh lỗi"
+            alt={t("issue.photo_before_alt")}
             className="w-20 h-15 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 flex-shrink-0"
           />
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-2 leading-snug">
-            {issue.description || "Không có mô tả chi tiết"}
+            {issue.description || t("issue.no_description")}
           </p>
           {issue.tags && issue.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">

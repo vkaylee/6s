@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useI18nStore } from "../i18n/index.ts";
 
 interface SplitSliderProps {
   beforeUrl: string;
@@ -9,6 +10,7 @@ interface SplitSliderProps {
  * Split Slider Before/After 4:3 industrial comparison (SPEC.md Section 9.8.B)
  */
 export function SplitSlider({ beforeUrl, afterUrl }: SplitSliderProps) {
+  const { t } = useI18nStore();
   const [sliderPos, setSliderPos] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -42,11 +44,11 @@ export function SplitSlider({ beforeUrl, afterUrl }: SplitSliderProps) {
       {/* After image (Bottom layer) */}
       <img
         src={afterUrl}
-        alt="Sau khi khắc phục"
+        alt={t("slider.after_alt")}
         className="absolute inset-0 w-full h-full object-cover"
       />
       <div className="absolute bottom-3 right-3 bg-emerald-600/90 text-white text-[10px] font-black px-2 py-1 rounded-md backdrop-blur-xs">
-        SAU / 后
+        {t("slider.after")}
       </div>
 
       {/* Before image (Top layer, clipped by width) */}
@@ -54,7 +56,7 @@ export function SplitSlider({ beforeUrl, afterUrl }: SplitSliderProps) {
         <div className="relative w-full h-full">
           <img
             src={beforeUrl}
-            alt="Trước khi khắc phục"
+            alt={t("slider.before_alt")}
             className="absolute inset-0 max-w-none h-full object-cover"
             style={{
               width: containerRef.current ? `${containerRef.current.clientWidth}px` : "100%",
@@ -63,7 +65,7 @@ export function SplitSlider({ beforeUrl, afterUrl }: SplitSliderProps) {
         </div>
       </div>
       <div className="absolute bottom-3 left-3 bg-zinc-900/90 text-white text-[10px] font-black px-2 py-1 rounded-md backdrop-blur-xs">
-        TRƯỚC / 前
+        {t("slider.before")}
       </div>
 
       {/* Draggable Divider Bar */}

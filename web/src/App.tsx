@@ -355,13 +355,13 @@ export function App() {
                 {/* Issue List */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase px-1">
-                    <span>Danh sách vấn đề ({filteredIssues.length})</span>
+                    <span>{t("app.issues_list", { count: filteredIssues.length })}</span>
                     <button
                       type="button"
                       onClick={loadIssues}
                       className="text-blue-600 min-h-[44px] flex items-center"
                     >
-                      Làm mới ↻
+                      {t("app.refresh")}
                     </button>
                   </div>
 

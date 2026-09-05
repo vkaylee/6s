@@ -7,6 +7,7 @@ import {
   getAllDraftIssues,
   getAllDraftResolves,
 } from "../db/indexeddb.ts";
+import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import { haptics } from "../utils/haptics.ts";
@@ -22,6 +23,7 @@ export function OfflineOutboxDrawer({
   onClose,
   onResolveConflict,
 }: OfflineOutboxDrawerProps) {
+  const { t } = useI18nStore();
   const [issues, setIssues] = useState<DraftIssue[]>([]);
   const [resolves, setResolves] = useState<DraftResolve[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +59,7 @@ export function OfflineOutboxDrawer({
   };
 
   const handleDeleteIssue = async (clientUuid: string) => {
-    const ok = await modalDialog.confirm("Hủy bản nháp báo cáo này khỏi máy?", undefined, true);
+    const ok = await modalDialog.confirm(t("outbox.discard_issue_confirm"), undefined, true);
     if (ok) {
       await deleteDraftIssue(clientUuid);
       loadData();
@@ -65,7 +67,7 @@ export function OfflineOutboxDrawer({
   };
 
   const handleDeleteResolve = async (resolvedUuid: string) => {
-    const ok = await modalDialog.confirm("Hủy bản nháp khắc phục này khỏi máy?", undefined, true);
+    const ok = await modalDialog.confirm(t("outbox.discard_resolve_confirm"), undefined, true);
     if (ok) {
       await deleteDraftResolve(resolvedUuid);
       loadData();
@@ -80,11 +82,9 @@ export function OfflineOutboxDrawer({
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-              Hàng đợi ngoại tuyến ({total})
+              {t("outbox.title", { total })}
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Lưu an toàn trong bộ nhớ máy (IndexedDB)
-            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("outbox.subtitle")}</p>
           </div>
           <button
             type="button"
@@ -97,27 +97,23 @@ export function OfflineOutboxDrawer({
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {isLoading && (
-            <div className="text-center py-8 text-zinc-500 text-sm">
-              Đang đọc dữ liệu IndexedDB...
-            </div>
+            <div className="text-center py-8 text-zinc-500 text-sm">{t("outbox.reading")}</div>
           )}
 
           {!isLoading && total === 0 && (
             <div className="text-center py-12">
               <div className="text-4xl mb-3">✅</div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                Không có dữ liệu chờ đồng bộ
+                {t("outbox.empty_title")}
               </p>
-              <p className="text-xs text-zinc-500 mt-1">
-                Tất cả báo cáo đã được chuyển an toàn lên máy chủ.
-              </p>
+              <p className="text-xs text-zinc-500 mt-1">{t("outbox.empty_desc")}</p>
             </div>
           )}
 
           {issues.length > 0 && (
             <div>
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                Báo cáo lỗi mới ({issues.length})
+                {t("outbox.new_issues_title", { count: issues.length })}
               </h3>
               <div className="space-y-2">
                 {issues.map((item) => (
@@ -134,7 +130,7 @@ export function OfflineOutboxDrawer({
                           {item.location_code}
                         </div>
                         <div className="text-xs text-zinc-500 truncate max-w-[180px]">
-                          {item.description || "Không có mô tả"}
+                          {item.description || t("outbox.no_desc")}
                         </div>
                         <span
                           className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
@@ -154,7 +150,7 @@ export function OfflineOutboxDrawer({
                       onClick={() => handleDeleteIssue(item.client_uuid)}
                       className="text-xs text-rose-600 hover:text-rose-800 font-bold p-2 min-h-[44px]"
                     >
-                      Hủy
+                      {t("outbox.discard")}
                     </button>
                   </div>
                 ))}
@@ -165,7 +161,7 @@ export function OfflineOutboxDrawer({
           {resolves.length > 0 && (
             <div>
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                Khắc phục lỗi ({resolves.length})
+                {t("outbox.resolves_title", { count: resolves.length })}
               </h3>
               <div className="space-y-2">
                 {resolves.map((item) => (
@@ -175,10 +171,10 @@ export function OfflineOutboxDrawer({
                   >
                     <div>
                       <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                        Khắc phục Issue #{item.issue_id}
+                        {t("outbox.resolve_issue_title", { id: item.issue_id })}
                       </div>
                       <div className="text-xs text-zinc-500">
-                        Phiên bản kỳ vọng: v{item.expected_version}
+                        {t("outbox.expected_version", { version: item.expected_version })}
                       </div>
                       <span
                         className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
@@ -204,7 +200,7 @@ export function OfflineOutboxDrawer({
                           }}
                           className="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold min-h-[44px]"
                         >
-                          Xử lý xung đột
+                          {t("outbox.resolve_conflict")}
                         </button>
                       )}
                       <button
@@ -212,7 +208,7 @@ export function OfflineOutboxDrawer({
                         onClick={() => handleDeleteResolve(item.resolved_client_uuid)}
                         className="text-xs text-rose-600 hover:text-rose-800 font-bold p-2 min-h-[44px]"
                       >
-                        Hủy
+                        {t("outbox.discard")}
                       </button>
                     </div>
                   </div>
@@ -229,7 +225,7 @@ export function OfflineOutboxDrawer({
               onClick={handleRetryAll}
               className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold py-3.5 px-4 rounded-xl min-h-[56px] flex items-center justify-center space-x-2 shadow-lg"
             >
-              <span>🔄 Thử lại tất cả ngay bây giờ</span>
+              <span>🔄 {t("outbox.retry_all")}</span>
             </button>
           </div>
         )}

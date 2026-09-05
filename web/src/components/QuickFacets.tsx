@@ -13,13 +13,13 @@ interface QuickFacetsProps {
   pendingReviewCount?: number;
 }
 
-const FACETS: { key: FacetKey; label_vi: string; label_zh: string; isAlert?: boolean }[] = [
-  { key: "ALL", label_vi: "Tất cả", label_zh: "全部" },
-  { key: "MY_ISSUES", label_vi: "Của tôi", label_zh: "我的上报" },
-  { key: "MY_LINE", label_vi: "Chuyền của tôi", label_zh: "我的产线" },
-  { key: "SAFETY_6S", label_vi: "Khẩn cấp 6S", label_zh: "6S安全紧急", isAlert: true },
-  { key: "OVERDUE_48H", label_vi: "Tồn đọng >48h", label_zh: "超期滞留", isAlert: true },
-  { key: "WAITING_MY_REVIEW", label_vi: "Chờ tôi duyệt", label_zh: "待我审核" },
+const FACETS: { key: FacetKey; labelKey: string; isAlert?: boolean }[] = [
+  { key: "ALL", labelKey: "facets.all" },
+  { key: "MY_ISSUES", labelKey: "facets.my_issues" },
+  { key: "MY_LINE", labelKey: "facets.my_line" },
+  { key: "SAFETY_6S", labelKey: "facets.safety_6s", isAlert: true },
+  { key: "OVERDUE_48H", labelKey: "facets.overdue_48h", isAlert: true },
+  { key: "WAITING_MY_REVIEW", labelKey: "facets.waiting_my_review" },
 ];
 
 export function QuickFacets({
@@ -27,7 +27,7 @@ export function QuickFacets({
   onSelectFacet,
   pendingReviewCount = 0,
 }: QuickFacetsProps) {
-  const { locale } = useI18nStore();
+  const { t } = useI18nStore();
   return (
     <div className="w-full overflow-x-auto no-scrollbar py-2 px-4 flex items-center space-x-2 select-none">
       {FACETS.map((f) => {
@@ -47,8 +47,7 @@ export function QuickFacets({
                   : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
             }`}
           >
-            <span>{locale === "zh" ? f.label_zh : locale === "en" ? f.key : f.label_vi}</span>
-            {locale !== "zh" && <span className="opacity-60 text-[10px]">/ {f.label_zh}</span>}
+            <span>{t(f.labelKey)}</span>
             {f.key === "WAITING_MY_REVIEW" && pendingReviewCount > 0 && (
               <span className="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                 {pendingReviewCount}

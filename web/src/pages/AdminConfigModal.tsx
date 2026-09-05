@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { haptics } from "../utils/haptics.ts";
 
@@ -15,6 +16,7 @@ interface ScoringRuleItem {
 }
 
 export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
+  const { t } = useI18nStore();
   const [activeTab, setActiveTab] = useState<"SCORING" | "AD" | "NOTIFY">("SCORING");
   const [rules, setRules] = useState<Record<string, number>>({});
   const [applyFrom, setApplyFrom] = useState("");
@@ -98,7 +100,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
 
   const handleSaveScoring = async () => {
     if (isRetroactive && (!applyFrom || !reason.trim())) {
-      modalDialog.alert("Bắt buộc chọn mốc ngày và nhập lý do khi áp dụng hồi tố điểm!");
+      modalDialog.alert(t("admin.retroactive_required"));
       return;
     }
 
@@ -114,18 +116,18 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
         }),
       });
       haptics.success();
-      await modalDialog.alert("Đã cập nhật quy tắc chấm điểm thành công!");
+      await modalDialog.alert(t("admin.save_success"));
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Cập nhật thất bại");
+      modalDialog.alert(t("admin.save_error"));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleTestAD = async () => {
-    setAdTestResult("Đang kiểm tra kết nối...");
+    setAdTestResult(t("admin.testing_connection"));
     try {
       const res = await apiClient<{ success: boolean; message: string }>("/api/config/ad/test", {
         method: "POST",
@@ -141,7 +143,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
       });
       setAdTestResult(`✅ ${res.message}`);
     } catch {
-      setAdTestResult("❌ Kết nối thất bại");
+      setAdTestResult(t("admin.connection_failed"));
     }
   };
 
@@ -163,9 +165,9 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
         }),
       });
       haptics.success();
-      modalDialog.alert("Đã lưu cấu hình AD / LDAP!");
+      modalDialog.alert(t("admin.save_ad_success"));
     } catch {
-      modalDialog.alert("Lỗi lưu cấu hình AD");
+      modalDialog.alert(t("admin.save_ad_error"));
     } finally {
       setIsSaving(false);
     }
@@ -176,7 +178,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
       <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col max-h-[92vh]">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
-            Quản trị hệ thống (Admin)
+            {t("admin.system_admin")}
           </h2>
           <button
             type="button"
@@ -198,7 +200,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                 : "text-zinc-600 dark:text-zinc-400"
             }`}
           >
-            Điểm số 6S
+            {t("admin.score_6s_tab")}
           </button>
           <button
             type="button"
@@ -209,16 +211,14 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                 : "text-zinc-600 dark:text-zinc-400"
             }`}
           >
-            Active Directory
+            {t("admin.ad_tab")}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {activeTab === "SCORING" && (
             <div className="space-y-3">
-              <p className="text-xs text-zinc-500">
-                Chạm [-] [+] để tăng giảm bước nhảy 1 điểm (Quick Stepper)
-              </p>
+              <p className="text-xs text-zinc-500">{t("admin.stepper_hint")}</p>
 
               {Object.keys(rules).map((ruleKey) => (
                 <div
@@ -262,7 +262,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                     className="w-5 h-5 rounded text-blue-600"
                   />
                   <span className="font-bold text-sm text-amber-900 dark:text-amber-200">
-                    Áp dụng hồi tố cho quá khứ (Retroactive)
+                    {t("admin.retroactive_label")}
                   </span>
                 </label>
 
@@ -270,7 +270,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                   <div className="space-y-2 pt-2">
                     <div>
                       <label className="block text-xs font-bold text-zinc-500 mb-1">
-                        Áp dụng từ ngày (apply_from) *
+                        {t("admin.apply_from_label")}
                       </label>
                       <input
                         type="date"
@@ -281,13 +281,13 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-zinc-500 mb-1">
-                        Lý do điều chỉnh (bắt buộc) *
+                        {t("admin.reason_label")}
                       </label>
                       <input
                         type="text"
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
-                        placeholder="VD: Chỉ đạo tăng điểm phạt 6S..."
+                        placeholder={t("admin.reason_placeholder")}
                         className="w-full p-2.5 rounded-xl border bg-white dark:bg-zinc-800 text-sm"
                       />
                     </div>
@@ -307,13 +307,13 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                   className="w-5 h-5 rounded text-blue-600"
                 />
                 <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                  Bật xác thực Active Directory / LDAP
+                  {t("admin.enable_ad_label")}
                 </span>
               </label>
 
               <div>
                 <label className="block text-xs font-bold text-zinc-500 mb-1">
-                  Server Host / IP
+                  {t("admin.server_host_label")}
                 </label>
                 <input
                   type="text"
@@ -325,7 +325,9 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">Port</label>
+                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                    {t("admin.port_label")}
+                  </label>
                   <input
                     type="number"
                     value={adPort}
@@ -334,19 +336,23 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">TLS (LDAPS)</label>
+                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                    {t("admin.tls_label")}
+                  </label>
                   <button
                     type="button"
                     onClick={() => setAdUseTls(!adUseTls)}
                     className="w-full p-2.5 rounded-xl border font-bold text-sm min-h-[44px]"
                   >
-                    {adUseTls ? "BẬT" : "TẮT"}
+                    {adUseTls ? t("admin.on") : t("admin.off")}
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">Base DN</label>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.base_dn_label")}
+                </label>
                 <input
                   type="text"
                   value={adBaseDn}
@@ -356,7 +362,9 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">Bind DN</label>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.bind_dn_label")}
+                </label>
                 <input
                   type="text"
                   value={adBindDn}
@@ -366,12 +374,14 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">Bind Password</label>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.bind_pw_label")}
+                </label>
                 <input
                   type="password"
                   value={adBindPassword}
                   onChange={(e) => setAdBindPassword(e.target.value)}
-                  placeholder="Nhập nếu muốn đổi..."
+                  placeholder={t("admin.bind_pw_placeholder")}
                   className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm"
                 />
               </div>
@@ -381,7 +391,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
                 onClick={handleTestAD}
                 className="w-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold py-3 rounded-xl min-h-[48px] text-xs"
               >
-                Kiểm tra kết nối AD (Test Bind)
+                {t("admin.test_ad_btn")}
               </button>
 
               {adTestResult && (
@@ -400,7 +410,7 @@ export function AdminConfigModal({ isOpen, onClose }: AdminConfigModalProps) {
             onClick={activeTab === "SCORING" ? handleSaveScoring : handleSaveAD}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-2xl min-h-[56px] text-sm shadow-lg"
           >
-            {isSaving ? "Đang lưu..." : "LƯU CẤU HÌNH"}
+            {isSaving ? t("admin.saving_btn") : t("admin.save_config_btn")}
           </button>
         </div>
       </div>

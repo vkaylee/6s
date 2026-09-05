@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import ts from "typescript";
 import { GlobalDialog } from "../src/components/GlobalDialog.tsx";
+import { HealthGauge } from "../src/components/HealthGauge.tsx";
 import { IssueCard } from "../src/components/IssueCard.tsx";
 import { QuickFacets } from "../src/components/QuickFacets.tsx";
 import { useI18nStore } from "../src/i18n/index.ts";
@@ -126,25 +127,38 @@ describe("UI Components i18n Integration", () => {
     );
     expect(html).toContain("全部");
   });
+
+  it("renders HealthGauge reflecting the selected locale", () => {
+    const { setLocale } = useI18nStore.getState();
+
+    // VI
+    setLocale("vi");
+    let html = renderToString(<HealthGauge score={90} openCount={2} overdueCount={1} />);
+    expect(html).toContain("ĐIỂM");
+    expect(html).toContain("Sức khỏe 6S Xưởng");
+    expect(html).toContain("Đang mở: 2");
+    expect(html).toContain("Quá hạn 48h: 1");
+
+    // EN
+    setLocale("en");
+    html = renderToString(<HealthGauge score={90} openCount={2} overdueCount={1} />);
+    expect(html).toContain("PTS");
+    expect(html).toContain("Workshop 6S Health");
+    expect(html).toContain("Open: 2");
+    expect(html).toContain("Overdue 48h: 1");
+
+    // ZH
+    setLocale("zh");
+    html = renderToString(<HealthGauge score={90} openCount={2} overdueCount={1} />);
+    expect(html).toContain("分");
+    expect(html).toContain("车间6S健康度");
+    expect(html).toContain("待处理: 2");
+    expect(html).toContain("超期48h: 1");
+  });
 });
 
 describe("Frontend i18n usage guard", () => {
   const sourceRoot = new URL("../src/", import.meta.url).pathname;
-  const legacyFiles = [
-    "App.tsx",
-    "components/ConflictModal.tsx",
-    "components/HealthGauge.tsx",
-    "components/IssueCard.tsx",
-    "components/OfflineOutboxDrawer.tsx",
-    "components/QuickFacets.tsx",
-    "components/SplitSlider.tsx",
-    "components/StatusBar.tsx",
-    "pages/AdminConfigModal.tsx",
-    "pages/CreateIssueModal.tsx",
-    "pages/CreateIssuePage.tsx",
-    "pages/IssueDetailModal.tsx",
-    "pages/SetupSuperadminModal.tsx",
-  ];
   const localized =
     /[\u00c0-\u024f\u1e00-\u1eff\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
 
@@ -165,7 +179,7 @@ describe("Frontend i18n usage guard", () => {
       if (jsxText || attributeText) current.push(file);
     }
 
-    expect(current.sort()).toEqual(legacyFiles.sort());
+    expect(current).toEqual([]);
   });
 
   it("resolves all static t() calls against all locales", async () => {
