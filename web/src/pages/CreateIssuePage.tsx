@@ -1,12 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
+import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
-import { useDebouncedQuery } from "../hooks/useDebouncedQuery.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
@@ -27,16 +27,6 @@ interface CreateIssuePageProps {
   onSuccess: () => void;
 }
 
-function normalizeSearchText(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "d")
-    .trim();
-}
-
 export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageProps) {
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
@@ -46,6 +36,17 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [category, setCategory] = useState<IssueCategory | null>(null);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [localTags, setLocalTags] = useState<TagItem[]>(tags);
+
+  // Sync tags prop from parent (e.g. after async fetch) into local state
+  useEffect(() => {
+    if (tags && tags.length > 0) {
+      setLocalTags((prev) => {
+        const existingCodes = new Set(prev.map((t) => t.tag_code));
+        const newItems = tags.filter((t) => !existingCodes.has(t.tag_code));
+        return newItems.length > 0 ? [...prev, ...newItems] : prev.length === 0 ? tags : prev;
+      });
+    }
+  }, [tags]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [photoBefore, setPhotoBefore] = useState<Blob | null>(null);
@@ -66,24 +67,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const wideInputRef = useRef<HTMLInputElement | null>(null);
   const detailInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Wizard state
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
-
-  // Tag search & filter
-  const [activeTagTab, setActiveTagTab] = useState<string>("ALL");
-  const {
-    query: tagQuery,
-    setQuery: setTagQuery,
-    debouncedQuery: debouncedTagQuery,
-    isLoading: isSearchingTags,
-  } = useDebouncedQuery<string>({
-    delay: 250,
-    minChars: 0,
-    queryFn: async (q) => q,
-  });
+  // Taxonomy Modal state
+  const [isTaxonomyOpen, setIsTaxonomyOpen] = useState(false);
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
-
   // Category badge color styling map
   const categoryBadgeColors: Record<string, string> = {
     [IssueCategory.S1]:
@@ -103,7 +89,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const handleSelectCategory = (cat: IssueCategory) => {
     setCategory(cat);
     setCategoryError(false);
-    setActiveTagTab(cat);
     if (cat === IssueCategory.S6) {
       haptics.safetyAlert();
     } else {
@@ -137,31 +122,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       }
     }
   };
-
-  const handleAddCustomTag = () => {
-    const trimmed = tagQuery.trim();
-    if (!trimmed) return;
-
-    const codeSlug = `c_${normalizeSearchText(trimmed).replace(/[^a-z0-9]+/g, "_")}`.slice(0, 48);
-    const assignedCat =
-      category || (activeTagTab !== "ALL" ? (activeTagTab as IssueCategory) : IssueCategory.S3);
-
-    const newTag: TagItem = {
-      tag_code: codeSlug,
-      category: assignedCat,
-      label_vi: trimmed,
-      label_zh: trimmed,
-    };
-
+  const handleAddCustomTag = (newTag: TagItem) => {
     setLocalTags((prev) => [newTag, ...prev]);
-    setSelectedTags((prev) => [...prev, codeSlug]);
-    handleSelectCategory(assignedCat);
-    setAutoFeedback(assignedCat);
-    setTimeout(() => setAutoFeedback(null), 2500);
-    setTagQuery("");
-    haptics.success();
   };
-
   const handleCapturePhoto = async (e: React.ChangeEvent<HTMLInputElement>, isWide: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -577,11 +540,11 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
               </div>
             </div>
 
-            {/* Right Column (7/12 on LG/XL): 6S Categorization, Taxonomy & Description */}
+            {/* Right Column (7/12 on LG/XL): Unified 6S Categorization & Taxonomy Tags */}
             <div className="lg:col-span-7 space-y-5">
-              {/* 1S - 6S Selection with Micro-hints & Decision Tree Wizard */}
+              {/* Unified 6S Card: Micro-hints + Selected Tags */}
               <section
-                className={`bg-white dark:bg-zinc-900 rounded-3xl p-5 border shadow-sm space-y-3 transition-colors ${
+                className={`bg-white dark:bg-zinc-900 rounded-3xl p-5 border shadow-sm space-y-4 transition-colors ${
                   touched && categoryError
                     ? "border-rose-500 ring-2 ring-rose-500/20"
                     : "border-zinc-200 dark:border-zinc-800"
@@ -591,17 +554,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue.step_category")}
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWizardStep(1);
-                      setIsWizardOpen(true);
-                    }}
-                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 min-h-[36px] px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/40"
-                  >
-                    <span>💡</span>
-                    <span>{t("issue.wizard_button")}</span>
-                  </button>
                 </div>
 
                 {touched && categoryError && (
@@ -610,7 +562,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   </p>
                 )}
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {/* 1S-6S Enterprise 2x3 Grid with Clean Typography Hierarchy */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {S_CATEGORIES.map((s) => {
                     const isSelected = category === s.key;
                     return (
@@ -619,23 +572,23 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                         type="button"
                         aria-pressed={isSelected}
                         onClick={() => handleSelectCategory(s.key)}
-                        className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[76px] ${
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[76px] ${
                           isSelected
                             ? s.isSafety
                               ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/30 ring-2 ring-rose-400"
                               : "bg-zinc-900 dark:bg-zinc-100 border-zinc-900 dark:border-zinc-100 text-white dark:text-zinc-900 shadow-md"
                             : s.isSafety
-                              ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-300 hover:border-rose-500"
-                              : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:border-zinc-400"
+                              ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 hover:border-rose-400 hover:bg-rose-50"
+                              : "bg-zinc-50/70 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:border-zinc-400 hover:bg-zinc-100/60 dark:hover:bg-zinc-800"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-base font-black">{s.key}</span>
-                          <span className="text-xs font-bold opacity-80">
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-base font-black tracking-tight">{s.key}</span>
+                          <span className="text-xs font-bold opacity-85">
                             {s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name}
                           </span>
                         </div>
-                        <div className="text-[11px] leading-tight font-medium opacity-90 mt-1.5">
+                        <div className="text-[11px] leading-snug font-medium opacity-85 mt-2">
                           {s.hint_i18n
                             ? resolveI18n(s.hint_i18n, locale)
                             : locale === "zh"
@@ -646,164 +599,116 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                     );
                   })}
                 </div>
-              </section>
 
-              {/* Full 6S Tag Matrix: Enterprise Instant Search & Taxonomy */}
-              {localTags.length > 0 && (
-                <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                      {t("issue.quick_tags_title")}
-                    </label>
-                    <span className="text-[11px] font-bold text-zinc-400">
-                      ({localTags.length})
-                    </span>
-                  </div>
-
-                  {/* Instant Search Bar */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={tagQuery}
-                      onChange={(e) => setTagQuery(e.target.value)}
-                      placeholder={t("issue.tag_search_placeholder")}
-                      className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
-                    />
-                    {tagQuery && (
-                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        {isSearchingTags && (
-                          <span className="animate-spin text-[10px] text-zinc-400">⏳</span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setTagQuery("")}
-                          className="text-xs font-bold text-zinc-400 hover:text-zinc-600 p-1"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                {/* Dynamic Contextual Micro-hint Banner */}
+                <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800 flex items-start gap-2.5 text-xs">
+                  <span className="text-sm">ℹ️</span>
+                  <div className="flex-1 min-w-0">
+                    {category ? (
+                      (() => {
+                        const currentCatObj = S_CATEGORIES.find((s) => s.key === category);
+                        const hint = currentCatObj?.hint_i18n
+                          ? resolveI18n(currentCatObj.hint_i18n, locale)
+                          : locale === "zh"
+                            ? currentCatObj?.hint_zh
+                            : currentCatObj?.hint_vi;
+                        return (
+                          <p className="font-semibold text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                            <span className="font-black text-zinc-900 dark:text-zinc-100 mr-1.5">
+                              {category} (
+                              {currentCatObj?.name_i18n
+                                ? resolveI18n(currentCatObj.name_i18n, locale)
+                                : currentCatObj?.name}
+                              ):
+                            </span>
+                            {hint}
+                          </p>
+                        );
+                      })()
+                    ) : (
+                      <p className="text-zinc-400 font-medium italic">
+                        {t("issue.select_category_placeholder") ||
+                          "Chọn 1 phân loại 6S bên trên để xem gợi ý hành động"}
+                      </p>
                     )}
                   </div>
+                </div>
 
-                  {/* S Filter Tabs for quick browsing */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                {/* Auto feedback if triggered */}
+                {autoFeedback && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-fade-in">
+                    <span>✓</span>
+                    <span>{t("issue.auto_classified", { category: autoFeedback })}</span>
+                  </div>
+                )}
+
+                {/* Issue Taxonomies Section inside card */}
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        {t("issue.quick_tags_title")}
+                      </span>
+                      <span className="text-[11px] font-bold text-zinc-400">
+                        ({selectedTags.length})
+                      </span>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setActiveTagTab("ALL")}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors min-h-[36px] ${
-                        activeTagTab === "ALL"
-                          ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200"
-                      }`}
+                      onClick={() => setIsTaxonomyOpen(true)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/80 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center gap-1.5 min-h-[36px]"
                     >
-                      {t("issue.filter_all_tags", { count: localTags.length })}
+                      <span>🏷️</span>
+                      <span>{t("issue.add_tags_button") || "Thêm thẻ sự cố"}</span>
                     </button>
-                    {S_CATEGORIES.map((s) => (
-                      <button
-                        key={s.key}
-                        type="button"
-                        onClick={() => setActiveTagTab(s.key)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors min-h-[36px] border ${
-                          activeTagTab === s.key
-                            ? s.isSafety
-                              ? "bg-rose-600 border-rose-600 text-white shadow-sm shadow-rose-600/20"
-                              : "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/20"
-                            : s.isSafety
-                              ? "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300"
-                              : "bg-zinc-100 dark:bg-zinc-800 border-transparent text-zinc-700 dark:text-zinc-300"
-                        }`}
-                      >
-                        <span>{s.key}</span>
-                      </button>
-                    ))}
                   </div>
 
-                  {/* Dynamic Auto-selection Visual Feedback */}
-                  {autoFeedback && (
-                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-fade-in">
-                      <span>✓</span>
-                      <span>{t("issue.auto_classified", { category: autoFeedback })}</span>
-                    </div>
-                  )}
-
-                  {/* Display tags */}
-                  <div className="flex flex-wrap gap-2 pt-1 max-h-72 overflow-y-auto pr-1">
-                    {(() => {
-                      const queryNorm = normalizeSearchText(debouncedTagQuery);
-                      const isSearching = queryNorm.length > 0;
-
-                      const visibleTags = localTags.filter((tg) => {
-                        const matchTab =
-                          isSearching || activeTagTab === "ALL" || tg.category === activeTagTab;
-                        if (!matchTab) return false;
-                        if (!isSearching) return true;
-
-                        const labelViNorm = normalizeSearchText(tg.label_vi);
-                        const labelZh = tg.label_zh.toLowerCase();
-                        const labelEn = tg.label_en ? normalizeSearchText(tg.label_en) : "";
-                        const tagCode = tg.tag_code.toLowerCase();
+                  {/* Selected Tags Chips or Empty Placeholder */}
+                  {selectedTags.length === 0 ? (
+                    <p className="text-xs text-zinc-400 italic py-1">
+                      {t("issue.no_tags_selected") || "Chưa chọn thẻ lỗi nào"}
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {selectedTags.map((tagCode) => {
+                        const tagObj = localTags.find((t) => t.tag_code === tagCode);
+                        const badgeColor = tagObj?.category
+                          ? categoryBadgeColors[tagObj.category] ||
+                            "bg-zinc-100 text-zinc-700 border-zinc-200"
+                          : "bg-zinc-100 text-zinc-700 border-zinc-200";
 
                         return (
-                          labelViNorm.includes(queryNorm) ||
-                          labelZh.includes(tagQuery.toLowerCase().trim()) ||
-                          labelEn.includes(queryNorm) ||
-                          tagCode.includes(queryNorm)
-                        );
-                      });
-
-                      if (visibleTags.length === 0) {
-                        return (
-                          <div className="w-full py-4 text-center space-y-3">
-                            <p className="text-xs text-zinc-400 font-medium">
-                              {t("issue.no_tags_found")}
-                            </p>
-                            {tagQuery.trim() && (
-                              <button
-                                type="button"
-                                onClick={handleAddCustomTag}
-                                className="px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold text-xs hover:bg-blue-100 min-h-[44px]"
-                              >
-                                {t("issue.add_custom_tag", { query: tagQuery.trim() })}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      }
-                      return visibleTags.map((tag) => {
-                        const isChecked = selectedTags.includes(tag.tag_code);
-                        const badgeColor =
-                          categoryBadgeColors[tag.category] ||
-                          "bg-zinc-100 text-zinc-700 border-zinc-200";
-                        return (
-                          <button
-                            key={tag.tag_code}
-                            type="button"
-                            onClick={() => handleToggleTag(tag.tag_code)}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all min-h-[44px] border flex items-center gap-1.5 ${
-                              isChecked
-                                ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20 ring-2 ring-blue-400"
-                                : "bg-zinc-50 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:border-blue-400 active:scale-95"
-                            }`}
+                          <span
+                            key={tagCode}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-800 dark:text-zinc-200 shadow-sm"
                           >
                             <span>
-                              {tag.label_vi} / {tag.label_zh}
+                              {tagObj?.label_vi || tagCode}
+                              {tagObj?.label_zh ? ` / ${tagObj.label_zh}` : ""}
                             </span>
-                            {tag.category && (
+                            {tagObj?.category && (
                               <span
-                                className={`text-[10px] px-1.5 py-0.5 rounded border font-mono font-black ${
-                                  isChecked ? "bg-white/20 text-white border-white/30" : badgeColor
-                                }`}
+                                className={`text-[10px] px-1.5 py-0.2 rounded border font-mono font-black ${badgeColor}`}
                               >
-                                {tag.category}
+                                {tagObj.category}
                               </span>
                             )}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTag(tagCode)}
+                              aria-label="Remove tag"
+                              className="ml-0.5 text-zinc-400 hover:text-rose-500 font-bold text-xs"
+                            >
+                              ✕
+                            </button>
+                          </span>
                         );
-                      });
-                    })()}
-                  </div>
-                </section>
-              )}
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
 
               {/* Description */}
               <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
@@ -858,124 +763,17 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         />
       )}
 
-      {/* Socratic 2-Step Decision Tree Wizard Modal */}
-      {isWizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-2xl w-full max-w-md space-y-5">
-            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              <h2 className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span>⚡</span>
-                <span>{t("issue.wizard_title")}</span>
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsWizardOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {wizardStep === 1 ? (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                    {t("issue.wizard_q1_title")}
-                  </h3>
-                  <p className="text-xs text-zinc-500 mt-1">{t("issue.wizard_q1_desc")}</p>
-                </div>
-
-                <div className="space-y-2.5 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSelectCategory(IssueCategory.S6);
-                      setIsWizardOpen(false);
-                    }}
-                    className="w-full text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-800 hover:border-rose-500 text-rose-900 dark:text-rose-200 font-bold text-sm flex items-center justify-between transition-colors"
-                  >
-                    <span>🚨 {t("issue.wizard_q1_yes")}</span>
-                    <span className="text-xs font-black bg-rose-600 text-white px-2 py-1 rounded-lg">
-                      6S
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setWizardStep(2)}
-                    className="w-full text-left p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 text-zinc-800 dark:text-zinc-200 font-bold text-sm flex items-center justify-between transition-colors"
-                  >
-                    <span>✓ {t("issue.wizard_q1_no")}</span>
-                    <span className="text-xs font-bold text-zinc-400">→</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                    {t("issue.wizard_q2_title")}
-                  </h3>
-                  <p className="text-xs text-zinc-500 mt-1">{t("issue.wizard_q2_desc")}</p>
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  {[
-                    {
-                      key: IssueCategory.S1,
-                      text: t("issue.wizard_opt_1s"),
-                      badge: "1S",
-                    },
-                    {
-                      key: IssueCategory.S2,
-                      text: t("issue.wizard_opt_2s"),
-                      badge: "2S",
-                    },
-                    {
-                      key: IssueCategory.S3,
-                      text: t("issue.wizard_opt_3s"),
-                      badge: "3S",
-                    },
-                    {
-                      key: IssueCategory.S4,
-                      text: t("issue.wizard_opt_4s"),
-                      badge: "4S",
-                    },
-                    {
-                      key: IssueCategory.S5,
-                      text: t("issue.wizard_opt_5s"),
-                      badge: "5S",
-                    },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      onClick={() => {
-                        handleSelectCategory(opt.key);
-                        setIsWizardOpen(false);
-                      }}
-                      className="w-full text-left p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-blue-500 text-zinc-800 dark:text-zinc-200 font-semibold text-xs flex items-center justify-between transition-colors"
-                    >
-                      <span className="flex-1 pr-2">{opt.text}</span>
-                      <span className="text-xs font-black bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-2 py-1 rounded-md">
-                        {opt.badge}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(1)}
-                  className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 pt-2"
-                >
-                  ← {t("issue.back_aria")}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* 6S Issue Taxonomy Selector Modal */}
+      <TaxonomySelectorModal
+        isOpen={isTaxonomyOpen}
+        onClose={() => setIsTaxonomyOpen(false)}
+        tags={localTags}
+        selectedTags={selectedTags}
+        currentCategory={category}
+        onToggleTag={handleToggleTag}
+        onSelectCategory={handleSelectCategory}
+        onAddCustomTag={handleAddCustomTag}
+      />
     </div>
   );
 }

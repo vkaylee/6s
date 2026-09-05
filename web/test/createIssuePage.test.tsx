@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { ImageAnnotatorModal } from "../src/components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../src/components/LocationCombobox.tsx";
+import { TaxonomySelectorModal } from "../src/components/TaxonomySelectorModal.tsx";
 import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
 import { IssueCategory, type LocationItem, type TagItem } from "../src/types/index.ts";
 
@@ -48,7 +49,39 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("lg:col-span-5");
     expect(html).toContain("lg:col-span-7");
     expect(html).toContain("LINE_A1");
+  });
+
+  it("renders TaxonomySelectorModal with tags correctly when opened", () => {
+    const html = renderToString(
+      <TaxonomySelectorModal
+        isOpen={true}
+        onClose={() => {}}
+        tags={mockTags}
+        selectedTags={["s3_oil_spill"]}
+        currentCategory={null}
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
     expect(html).toContain("Rò rỉ dầu mỡ");
+    expect(html).toContain("Nguy cơ cháy nổ");
+  });
+
+  it("renders TaxonomySelectorModal falling back to ALL tags when category has no matching tags", () => {
+    const html = renderToString(
+      <TaxonomySelectorModal
+        isOpen={true}
+        onClose={() => {}}
+        tags={mockTags} // Only has S3 and S6
+        selectedTags={[]}
+        currentCategory={IssueCategory.S1} // S1 has 0 tags in mockTags
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
+    // Should gracefully fallback to show ALL tags instead of empty state
+    expect(html).toContain("Rò rỉ dầu mỡ");
+    expect(html).toContain("Nguy cơ cháy nổ");
   });
 
   it("renders searchable LocationCombobox correctly", () => {
@@ -102,16 +135,14 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("border-rose-500");
   });
 
-  it("renders CreateIssuePage 6S decision tree button and glove-friendly submit triggers", () => {
-    const html = renderToString(
+  it("renders CreateIssuePage glove-friendly submit triggers", () => {
+    const pageHtml = renderToString(
       <Router ssrPath="/issues/new">
         <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
       </Router>,
     );
-    // Decision tree wizard trigger
-    expect(html).toContain("Trợ giúp phân loại 6S");
     // Both mobile and desktop action buttons
-    expect(html).toContain("GỬI BÁO CÁO 6S");
-    expect(html).toContain("min-h-[64px]");
+    expect(pageHtml).toContain("GỬI BÁO CÁO 6S");
+    expect(pageHtml).toContain("min-h-[64px]");
   });
 });
