@@ -9,9 +9,10 @@ export default defineConfig({
     port: 5173,
     watch: {
       usePolling: true,
-      interval: 100,
+      interval: 1000,
     },
     hmr: {
+      protocol: "wss",
       clientPort: 8443,
     },
   },
