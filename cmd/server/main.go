@@ -19,6 +19,7 @@ import (
 	"6s/internal/crypto"
 	"6s/internal/database"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/issue"
 	"6s/internal/masterdata"
 	"6s/internal/notification"
@@ -81,7 +82,7 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
-
+	r.Use(i18n.Middleware)
 	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		dbStatus := "disconnected"
@@ -139,6 +140,8 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	r.Route("/api/auth", func(ar chi.Router) {
 		ar.Post("/login", authHandler.Login)
 		ar.Post("/refresh", authHandler.Refresh)
+		ar.Get("/setup-status", authHandler.SetupStatus)
+		ar.Post("/setup", authHandler.SetupSuperadmin)
 
 		// Authenticated auth routes
 		ar.Group(func(pr chi.Router) {

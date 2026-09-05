@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	"6s/internal/apperror"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -43,35 +45,35 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			response.Unauthorized(w, "Thiếu header Authorization")
+			response.AppError(w, r, apperror.Unauthorized(i18n.ErrMissingAuth))
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			response.Unauthorized(w, "Định dạng header Authorization không hợp lệ (cần Bearer <token>)")
+			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidAuthFmt))
 			return
 		}
 
 		tokenStr := strings.TrimSpace(parts[1])
 		userID, err := m.tokenManager.ValidateAccessToken(tokenStr)
 		if err != nil {
-			response.Unauthorized(w, "Access token không hợp lệ hoặc đã hết hạn")
+			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err))
 			return
 		}
 
 		user, err := m.userGetter.GetUserByID(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				response.Unauthorized(w, "Người dùng không tồn tại")
+				response.AppError(w, r, apperror.Unauthorized(i18n.ErrUserNotFound))
 				return
 			}
-			response.InternalServerError(w, "Lỗi kiểm tra thông tin người dùng")
+			response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 			return
 		}
 
 		if !user.IsActive {
-			response.Forbidden(w, "Tài khoản người dùng đã bị khóa")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrAccountLocked))
 			return
 		}
 
@@ -92,7 +94,7 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := GetUserFromContext(r.Context())
 			if !ok {
-				response.Unauthorized(w, "Yêu cầu đăng nhập")
+				response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 				return
 			}
 
@@ -102,8 +104,7 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 					return
 				}
 			}
-
-			response.Forbidden(w, "Bạn không có quyền thực hiện hành động này")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 		})
 	}
 }

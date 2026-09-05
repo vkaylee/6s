@@ -2,14 +2,19 @@
   servers :443 {
     protocols h1 h2
   }
+  on_demand_tls {
+    ask http://server:8080/api/health
+  }
 }
 
 :80 {
   redir https://{host}:8443{uri} 308
 }
 
-https://localhost, https://127.0.0.1 {
-  tls internal
+:443 {
+  tls internal {
+    on_demand
+  }
   encode gzip
 
   header {

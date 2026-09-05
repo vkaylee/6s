@@ -175,6 +175,32 @@ func (m *mockFullStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogP
 	return nil
 }
 
+func (m *mockFullStore) CountAdmins(_ context.Context) (int64, error) {
+	var count int64
+	for _, u := range m.users {
+		if u.Role == "ADMIN" && u.IsActive {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockFullStore) CreateLocalAdmin(_ context.Context, arg db.CreateLocalAdminParams) (db.User, error) {
+	u := db.User{
+		ID:           int64(len(m.users) + 1),
+		Username:     arg.Username,
+		PasswordHash: arg.PasswordHash,
+		AuthSource:   "LOCAL",
+		FullName:     arg.FullName,
+		Email:        arg.Email,
+		Role:         "ADMIN",
+		IsActive:     true,
+	}
+	m.users[u.ID] = u
+	m.usersByName[u.Username] = u
+	return u, nil
+}
+
 func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 	store := newMockFullStore()
 	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
@@ -332,5 +358,58 @@ func TestADConfigHandler_CRUDAndTest(t *testing.T) {
 	adHandler.TestADConfig(rrTest, reqTest.WithContext(ctxAdmin))
 	if rrTest.Code != http.StatusOK {
 		t.Fatalf("expected 200 on test AD config, got %d", rrTest.Code)
+	}
+}
+
+func TestHandler_SetupSuperadmin(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	handler := NewHandler(store, tm, limiter, nil, nil)
+
+	// 1. Initial check: NeedsSetup should be true
+	reqStatus := httptest.NewRequest("GET", "/api/auth/setup-status", nil)
+	rrStatus := httptest.NewRecorder()
+	handler.SetupStatus(rrStatus, reqStatus)
+	if rrStatus.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrStatus.Code)
+	}
+	var statusResp struct {
+		Data SetupStatusResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrStatus.Body).Decode(&statusResp)
+	if !statusResp.Data.NeedsSetup {
+		t.Error("expected NeedsSetup to be true initially")
+	}
+
+	// 2. Setup superadmin successfully
+	bodySetup, _ := json.Marshal(SetupSuperadminRequest{
+		Username: "admin",
+		Password: "SuperAdminPassword123!",
+		FullName: "System Superadmin",
+		Email:    "admin@factory.lan",
+	})
+	reqSetup := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodySetup))
+	rrSetup := httptest.NewRecorder()
+	handler.SetupSuperadmin(rrSetup, reqSetup)
+	if rrSetup.Code != http.StatusOK {
+		t.Fatalf("expected 200 on setup, got %d: %s", rrSetup.Code, rrSetup.Body.String())
+	}
+
+	// 3. Subsequent check: NeedsSetup should be false
+	rrStatus2 := httptest.NewRecorder()
+	handler.SetupStatus(rrStatus2, reqStatus)
+	var statusResp2 struct {
+		Data SetupStatusResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrStatus2.Body).Decode(&statusResp2)
+	if statusResp2.Data.NeedsSetup {
+		t.Error("expected NeedsSetup to be false after setup")
+	}
+	rrSetupRepeat := httptest.NewRecorder()
+	reqSetupRepeat := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodySetup))
+	handler.SetupSuperadmin(rrSetupRepeat, reqSetupRepeat)
+	if rrSetupRepeat.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 on repeated setup, got %d", rrSetupRepeat.Code)
 	}
 }

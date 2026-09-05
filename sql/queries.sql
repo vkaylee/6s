@@ -46,6 +46,18 @@ WHERE (sqlc.narg('assigned_location_code')::varchar IS NULL OR assigned_location
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active'))
 ORDER BY id ASC;
 
+-- name: CountAdmins :one
+SELECT COUNT(*) FROM users
+WHERE role = 'ADMIN' AND is_active = TRUE;
+
+-- name: CreateLocalAdmin :one
+INSERT INTO users (
+    username, password_hash, auth_source, full_name, email, role, is_active
+) VALUES (
+    $1, $2, 'LOCAL', $3, $4, 'ADMIN', TRUE
+)
+RETURNING *;
+
 -- name: CreateRefreshToken :one
 INSERT INTO refresh_tokens (
     user_id, token_hash, device_info, expires_at

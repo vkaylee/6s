@@ -118,3 +118,71 @@ describe("UI Components i18n Integration", () => {
     expect(html).toContain("全部");
   });
 });
+
+describe("Frontend i18n usage guard", () => {
+  const sourceRoot = new URL("../src/", import.meta.url).pathname;
+  const legacyFiles = [
+    "App.tsx",
+    "components/ConflictModal.tsx",
+    "components/HealthGauge.tsx",
+    "components/IssueCard.tsx",
+    "components/OfflineOutboxDrawer.tsx",
+    "components/QuickFacets.tsx",
+    "components/SplitSlider.tsx",
+    "components/StatusBar.tsx",
+    "pages/AdminConfigModal.tsx",
+    "pages/CreateIssueModal.tsx",
+    "pages/IssueDetailModal.tsx",
+    "pages/LoginModal.tsx",
+    "pages/SetupSuperadminModal.tsx",
+  ];
+  const localized =
+    /[\u00c0-\u024f\u1e00-\u1eff\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
+
+  it("does not add hardcoded localized UI text", async () => {
+    const files = await Array.fromAsync(new Bun.Glob("**/*.tsx").scan({ cwd: sourceRoot }));
+    const current: string[] = [];
+
+    for (const file of files) {
+      const source = await Bun.file(`${sourceRoot}${file}`).text();
+      const jsxText = [...source.matchAll(/>([^<>]*)</g)].some((match) => {
+        const literal = match[1].replace(/\{[^{}]*\}/g, "");
+        return localized.test(literal);
+      });
+      const attributeText =
+        /(?:alt|title|placeholder|aria-label)="[^"]*[\u00c0-\u024f\u1e00-\u1eff\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/u.test(
+          source,
+        );
+      if (jsxText || attributeText) current.push(file);
+    }
+
+    expect(current.sort()).toEqual(legacyFiles.sort());
+  });
+
+  it("resolves all static t() calls against all locales", async () => {
+    const files = await Array.fromAsync(new Bun.Glob("**/*.tsx").scan({ cwd: sourceRoot }));
+    const dictionaries = [vi, en, zh];
+    const missing: string[] = [];
+
+    for (const file of files) {
+      const source = await Bun.file(`${sourceRoot}${file}`).text();
+      for (const match of source.matchAll(/\bt\(["']([^"']+)["']/g)) {
+        const key = match[1];
+        if (dictionaries.some((d) => resolvePath(d, key) === undefined)) {
+          missing.push(`${file}: ${key}`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+});
+
+function resolvePath(obj: Record<string, unknown>, path: string): string | undefined {
+  let cur: unknown = obj;
+  for (const part of path.split(".")) {
+    if (typeof cur !== "object" || cur === null) return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return typeof cur === "string" ? cur : undefined;
+}

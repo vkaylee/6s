@@ -116,6 +116,18 @@ func (q *Queries) CloseIssue(ctx context.Context, arg CloseIssueParams) (Issue, 
 	return i, err
 }
 
+const countAdmins = `-- name: CountAdmins :one
+SELECT COUNT(*) FROM users
+WHERE role = 'ADMIN' AND is_active = TRUE
+`
+
+func (q *Queries) CountAdmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAdmins)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countIssuesFiltered = `-- name: CountIssuesFiltered :one
 SELECT COUNT(*) FROM issues
 WHERE ($1::varchar IS NULL OR status = $1)
@@ -213,6 +225,50 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		&i.CreatedAt,
 		&i.ResolvedAt,
 		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const createLocalAdmin = `-- name: CreateLocalAdmin :one
+INSERT INTO users (
+    username, password_hash, auth_source, full_name, email, role, is_active
+) VALUES (
+    $1, $2, 'LOCAL', $3, $4, 'ADMIN', TRUE
+)
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+`
+
+type CreateLocalAdminParams struct {
+	Username     string
+	PasswordHash sql.NullString
+	FullName     string
+	Email        sql.NullString
+}
+
+func (q *Queries) CreateLocalAdmin(ctx context.Context, arg CreateLocalAdminParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createLocalAdmin,
+		arg.Username,
+		arg.PasswordHash,
+		arg.FullName,
+		arg.Email,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.AuthSource,
+		&i.AdDn,
+		&i.PinHash,
+		&i.BadgeCode,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.AssignedLocationCode,
+		&i.WxUid,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.LastLoginAt,
 	)
 	return i, err
 }

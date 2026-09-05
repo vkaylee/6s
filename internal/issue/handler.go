@@ -12,8 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"6s/internal/apperror"
 	"6s/internal/auth"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -61,7 +63,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	items, total, err := h.service.ListIssuesFiltered(r.Context(), status, category, locationCode, page, limit)
 	if err != nil {
-		response.InternalServerError(w, "Không thể lấy danh sách issue")
+		response.AppError(w, r, apperror.Internal(i18n.ErrIssueListFailed).WithCause(err))
 		return
 	}
 
@@ -73,17 +75,17 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.BadRequest(w, "id không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
 	resp, err := h.service.GetIssueByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.NotFound(w, "Không tìm thấy issue")
+			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
-		response.InternalServerError(w, "Không thể tải chi tiết issue")
+		response.AppError(w, r, apperror.Internal(i18n.ErrIssueGetFailed).WithCause(err))
 		return
 	}
 
@@ -94,12 +96,12 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	if err := r.ParseMultipartForm(10 * 1024 * 1024); err != nil {
-		response.BadRequest(w, "Dữ liệu multipart không hợp lệ: dung lượng vượt quá giới hạn")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMultipartTooLarge).WithCause(err))
 		return
 	}
 
@@ -110,7 +112,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	tagsStr := strings.TrimSpace(r.FormValue("tags"))
 
 	if clientUUID == "" || category == "" || locationCode == "" {
-		response.BadRequest(w, "Thiếu trường bắt buộc: client_uuid, category, location_code")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingIssueFields))
 		return
 	}
 
@@ -123,7 +125,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	photoBefore, _, fileErr := r.FormFile("photo_before")
 	if fileErr != nil {
-		response.BadRequest(w, "Thiếu ảnh bắt buộc: photo_before")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingPhotoBefore).WithCause(fileErr))
 		return
 	}
 	if cErr := photoBefore.Close(); cErr != nil {
@@ -151,10 +153,10 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	resp, created, err := h.service.SyncIssue(r.Context(), syncReq, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCategory) {
-			response.BadRequest(w, "Phân loại 6S không hợp lệ (1S - 6S)")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
 			return
 		}
-		response.BadRequest(w, "Không thể lưu issue: "+err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrIssueSaveFailed, err.Error()).WithCause(err))
 		return
 	}
 
@@ -169,19 +171,19 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, parseErr := strconv.ParseInt(idStr, 10, 64)
 	if parseErr != nil {
-		response.BadRequest(w, "id không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseErr))
 		return
 	}
 
 	if err := r.ParseMultipartForm(10 * 1024 * 1024); err != nil {
-		response.BadRequest(w, "Dữ liệu multipart không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidMultipart).WithCause(err))
 		return
 	}
 
@@ -191,7 +193,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	force := (forceStr == "true" || forceStr == "1")
 
 	if resolvedUUID == "" {
-		response.BadRequest(w, "Thiếu resolved_client_uuid")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingResolvedUUID))
 		return
 	}
 
@@ -204,7 +206,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	photoAfter, _, fileErr := r.FormFile("photo_after")
 	if fileErr != nil {
-		response.BadRequest(w, "Thiếu ảnh bắt buộc: photo_after")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingPhotoAfter).WithCause(fileErr))
 		return
 	}
 	if err := photoAfter.Close(); err != nil {
@@ -225,17 +227,18 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.NotFound(w, "Không tìm thấy issue")
+			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.Conflict(w, "ISSUE_CONFLICT", "Phiên bản issue đã bị thay đổi bởi người dùng khác", map[string]any{
+			appErr := apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueVersionChanged).WithDetails(map[string]any{
 				"current_status":  resp,
 				"current_version": expectedVersion,
 			})
+			response.AppError(w, r, appErr)
 			return
 		}
-		response.BadRequest(w, err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -252,14 +255,14 @@ type CloseRequest struct {
 func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.BadRequest(w, "id không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
@@ -277,18 +280,18 @@ func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.NotFound(w, "Không tìm thấy issue")
+			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.Forbidden(w, "Bạn không có quyền duyệt đạt issue này")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueCloseForbidden))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.Conflict(w, "ISSUE_CONFLICT", err.Error(), nil)
+			response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
 			return
 		}
-		response.BadRequest(w, err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -305,14 +308,14 @@ type ReopenRequest struct {
 func (h *Handler) Reopen(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.BadRequest(w, "id không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
@@ -330,18 +333,18 @@ func (h *Handler) Reopen(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.NotFound(w, "Không tìm thấy issue")
+			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.Forbidden(w, "Bạn không có quyền mở lại issue này")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueReopenForbidden))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.Conflict(w, "ISSUE_CONFLICT", err.Error(), nil)
+			response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
 			return
 		}
-		response.BadRequest(w, err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -358,14 +361,14 @@ type InvalidRequest struct {
 func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.BadRequest(w, "id không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
@@ -383,18 +386,18 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.NotFound(w, "Không tìm thấy issue")
+			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.Forbidden(w, "Chỉ quản trị viên hoặc cán bộ an toàn mới được bác bỏ issue")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueInvalidForbidden))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.Conflict(w, "ISSUE_CONFLICT", err.Error(), nil)
+			response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
 			return
 		}
-		response.BadRequest(w, err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -412,23 +415,22 @@ type PatchRequest struct {
 func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.BadRequest(w, "id không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
 	var req PatchRequest
 	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-		response.BadRequest(w, "Dữ liệu JSON không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decErr))
 		return
 	}
-
 	resp, err := h.service.PatchIssue(r.Context(), PatchIssueRequest{
 		IssueID:      id,
 		Category:     req.Category,
@@ -437,18 +439,18 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.NotFound(w, "Không tìm thấy issue")
+			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.Forbidden(w, "Bạn không có quyền chỉnh sửa issue này")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssuePatchForbidden))
 			return
 		}
 		if errors.Is(err, ErrInvalidCategory) {
-			response.BadRequest(w, "Phân loại 6S không hợp lệ")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
 			return
 		}
-		response.BadRequest(w, err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 

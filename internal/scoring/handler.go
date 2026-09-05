@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"time"
 
+	"6s/internal/apperror"
 	"6s/internal/auth"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -34,7 +36,7 @@ func NewHandler(service BusinessService) *Handler {
 func (h *Handler) GetLocationLeaderboard(w http.ResponseWriter, r *http.Request) {
 	items, err := h.service.GetLocationLeaderboard(r.Context())
 	if err != nil {
-		response.InternalServerError(w, "Không thể tải bảng xếp hạng khu vực")
+		response.AppError(w, r, apperror.Internal(i18n.ErrLeaderboardFailed).WithCause(err))
 		return
 	}
 	response.JSON(w, http.StatusOK, items)
@@ -44,7 +46,7 @@ func (h *Handler) GetLocationLeaderboard(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetReporterLeaderboard(w http.ResponseWriter, r *http.Request) {
 	items, err := h.service.GetReporterLeaderboard(r.Context())
 	if err != nil {
-		response.InternalServerError(w, "Không thể tải bảng thợ săn 6S")
+		response.AppError(w, r, apperror.Internal(i18n.ErrLeaderboardFailed).WithCause(err))
 		return
 	}
 	response.JSON(w, http.StatusOK, items)
@@ -54,7 +56,7 @@ func (h *Handler) GetReporterLeaderboard(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 	rules, err := h.service.GetRules(r.Context())
 	if err != nil {
-		response.InternalServerError(w, "Không thể tải quy tắc chấm điểm")
+		response.AppError(w, r, apperror.Internal(i18n.ErrRulesLoadFailed).WithCause(err))
 		return
 	}
 	response.JSON(w, http.StatusOK, rules)
@@ -71,28 +73,27 @@ type UpdateRulesPayload struct {
 func (h *Handler) UpdateRules(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var payload UpdateRulesPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		response.BadRequest(w, "Dữ liệu JSON không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
-
 	err := h.service.UpdateRules(r.Context(), UpdateRulesRequest(payload), currentUser.ID)
 
 	if err != nil {
 		if errors.Is(err, ErrMissingReason) {
-			response.BadRequest(w, "Bắt buộc cung cấp lý do (reason) khi áp dụng hồi tố điểm (apply_from)")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRulesReason))
 			return
 		}
 		if errors.Is(err, ErrInvalidRules) {
-			response.BadRequest(w, "Quy tắc điểm không hợp lệ")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidRules))
 			return
 		}
-		response.BadRequest(w, err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 

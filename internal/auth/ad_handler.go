@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"6s/internal/apperror"
 	"6s/internal/crypto"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -101,13 +103,13 @@ type UpdateADConfigRequest struct {
 func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var req UpdateADConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "Dữ liệu cấu hình không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -118,12 +120,12 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 	var encryptedBindPass string
 	if req.BindPassword != "" {
 		if h.cipher == nil {
-			response.InternalServerError(w, "Chưa cấu hình khóa mã hóa APP_ENCRYPTION_KEY")
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 			return
 		}
 		enc, err := h.cipher.Encrypt(req.BindPassword)
 		if err != nil {
-			response.InternalServerError(w, "Lỗi mã hóa bind_password")
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 		encryptedBindPass = enc
@@ -146,7 +148,7 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		UpdatedBy:     sql.NullInt64{Int64: currentUser.ID, Valid: true},
 	})
 	if err != nil {
-		response.InternalServerError(w, "Lỗi lưu cấu hình Active Directory")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -158,10 +160,9 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		IpAddress:   sql.NullString{String: r.RemoteAddr, Valid: true},
 		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
 	}); auditErr != nil {
-		response.InternalServerError(w, "Lỗi ghi audit log")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(auditErr))
 		return
 	}
-
 	response.JSON(w, http.StatusOK, ADConfigResponse{
 		IsEnabled:       saved.IsEnabled,
 		Server:          saved.Server,
@@ -184,14 +185,14 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 	var req UpdateADConfigRequest
 	if r.Body != nil {
 		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil && decErr.Error() != "EOF" {
-			response.BadRequest(w, "Dữ liệu kiểm tra không hợp lệ")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decErr))
 			return
 		}
 	}
 	if req.Server == "" {
 		cfg, err := h.store.GetADConfig(r.Context())
 		if err != nil {
-			response.BadRequest(w, "Chưa có cấu hình Active Directory để kiểm tra")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrADConfigNotFound).WithCause(err))
 			return
 		}
 		req.Server = cfg.Server
@@ -222,7 +223,7 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	if err := client.TestConnection(); err != nil {
-		response.BadRequest(w, "Kiểm tra kết nối Active Directory thất bại: "+err.Error())
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrADTestFailed, err.Error()).WithCause(err))
 		return
 	}
 

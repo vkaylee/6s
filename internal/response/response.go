@@ -3,6 +3,9 @@ package response
 import (
 	"encoding/json"
 	"net/http"
+
+	"6s/internal/apperror"
+	"6s/internal/i18n"
 )
 
 // Envelope represents the unified API response format.
@@ -22,6 +25,7 @@ type Pagination struct {
 // ErrorBody details for failure responses.
 type ErrorBody struct {
 	Code    string `json:"code"`
+	Key     string `json:"key,omitempty"`
 	Message string `json:"message"`
 	Details any    `json:"details,omitempty"`
 }
@@ -51,57 +55,32 @@ func Paginated(w http.ResponseWriter, status int, data any, page, limit, total i
 	}
 }
 
-// Error renders structured error responses in the standard Envelope format.
-func Error(w http.ResponseWriter, status int, code, message string, details any) {
+// (Deprecated direct error helpers removed to enforce AppError with i18n)
+
+// AppError renders an *apperror.AppError with localized message based on request context.
+func AppError(w http.ResponseWriter, r *http.Request, appErr *apperror.AppError) {
+	locale := i18n.FromContext(r.Context())
+	msg := i18n.Translate(locale, appErr.Key, appErr.Args...)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	w.WriteHeader(appErr.HTTPStatus)
 	if err := json.NewEncoder(w).Encode(Envelope{
 		Error: &ErrorBody{
-			Code:    code,
-			Message: message,
-			Details: details,
+			Code:    appErr.Code,
+			Key:     string(appErr.Key),
+			Message: msg,
+			Details: appErr.Details,
 		},
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-// BadRequest helper.
-func BadRequest(w http.ResponseWriter, message string, details ...any) {
-	var d any
-	if len(details) > 0 {
-		d = details[0]
+// RenderError handles generic errors, extracting *apperror.AppError if present or falling back to internal server error.
+func RenderError(w http.ResponseWriter, r *http.Request, err error) {
+	if appErr, ok := apperror.As(err); ok {
+		AppError(w, r, appErr)
+		return
 	}
-	Error(w, http.StatusBadRequest, "BAD_REQUEST", message, d)
-}
-
-// Unauthorized helper.
-func Unauthorized(w http.ResponseWriter, message string) {
-	Error(w, http.StatusUnauthorized, "UNAUTHORIZED", message, nil)
-}
-
-// Forbidden helper.
-func Forbidden(w http.ResponseWriter, message string) {
-	Error(w, http.StatusForbidden, "FORBIDDEN", message, nil)
-}
-
-// NotFound helper.
-func NotFound(w http.ResponseWriter, message string) {
-	Error(w, http.StatusNotFound, "NOT_FOUND", message, nil)
-}
-
-// Conflict helper.
-func Conflict(w http.ResponseWriter, code, message string, details any) {
-	Error(w, http.StatusConflict, code, message, details)
-}
-
-// TooManyRequests helper.
-func TooManyRequests(w http.ResponseWriter, message string, retryAfter int) {
-	w.Header().Set("Retry-After", http.StatusText(http.StatusTooManyRequests))
-	Error(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", message, map[string]any{"retry_after": retryAfter})
-}
-
-// InternalServerError helper.
-func InternalServerError(w http.ResponseWriter, message string) {
-	Error(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", message, nil)
+	AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 }

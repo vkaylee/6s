@@ -7,10 +7,13 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"6s/internal/apperror"
 	"6s/internal/crypto"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -30,6 +33,8 @@ type Store interface {
 	GetADConfig(ctx context.Context) (db.AdConfig, error)
 	UpsertADConfig(ctx context.Context, arg db.UpsertADConfigParams) (db.AdConfig, error)
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
+	CountAdmins(ctx context.Context) (int64, error)
+	CreateLocalAdmin(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error)
 }
 
 // Handler handles authentication endpoints.
@@ -91,7 +96,7 @@ func toUserResponse(u db.User) UserResponse {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "Dữ liệu đăng nhập không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -100,43 +105,46 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		accountKey = req.BadgeCode
 	}
 	if accountKey == "" {
-		response.BadRequest(w, "Vui lòng nhập tên tài khoản hoặc mã thẻ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingLoginInput))
 		return
 	}
-
 	clientIP := h.limiter.GetClientIP(r)
-	if !h.checkRateAndLockout(w, clientIP, accountKey) {
+	if !h.checkRateAndLockout(w, r, clientIP, accountKey) {
 		return
 	}
 
 	user, ok := h.authenticateUser(r.Context(), req, clientIP, r.UserAgent())
 	if !ok {
 		h.recordFailureAndLock(r.Context(), clientIP, accountKey, r.UserAgent())
-		response.Unauthorized(w, "Thông tin đăng nhập không chính xác")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidCreds))
 		return
 	}
 
 	if !user.IsActive {
-		response.Forbidden(w, "Tài khoản đã bị khóa")
+		response.AppError(w, r, apperror.Forbidden(i18n.ErrAccountLocked))
 		return
 	}
 
 	h.limiter.RecordSuccess(accountKey)
 	if loginErr := h.store.UpdateUserLastLogin(r.Context(), user.ID); loginErr != nil {
-		response.InternalServerError(w, "Lỗi cập nhật thời gian đăng nhập")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(loginErr))
 		return
 	}
 	h.issueTokensAndRespond(w, r, user)
 }
 
-func (h *Handler) checkRateAndLockout(w http.ResponseWriter, clientIP, accountKey string) bool {
+func (h *Handler) checkRateAndLockout(w http.ResponseWriter, r *http.Request, clientIP, accountKey string) bool {
 	okIP, okAccount, retryAfter := h.limiter.CheckAllowed(clientIP, accountKey)
 	if !okIP {
-		response.TooManyRequests(w, "Vượt quá giới hạn thử đăng nhập (5 lần/phút)", retryAfter)
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		appErr := apperror.TooManyRequests(i18n.ErrLoginRateLimit).WithDetails(map[string]any{"retry_after": retryAfter})
+		response.AppError(w, r, appErr)
 		return false
 	}
 	if !okAccount {
-		response.TooManyRequests(w, "Tài khoản bị tạm khóa 15 phút do nhập sai 10 lần liên tiếp", retryAfter)
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		appErr := apperror.TooManyRequests(i18n.ErrAccountLockedTemp).WithDetails(map[string]any{"retry_after": retryAfter})
+		response.AppError(w, r, appErr)
 		return false
 	}
 	return true
@@ -254,13 +262,13 @@ func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.U
 func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, user db.User) {
 	accessToken, exp, err := h.tokenManager.GenerateAccessToken(user.ID)
 	if err != nil {
-		response.InternalServerError(w, "Lỗi tạo access token")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
 	rawRefresh, refreshHash, err := GenerateRefreshToken()
 	if err != nil {
-		response.InternalServerError(w, "Lỗi tạo refresh token")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -274,10 +282,9 @@ func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, 
 		ExpiresAt:  refreshExpiresAt,
 	})
 	if err != nil {
-		response.InternalServerError(w, "Lỗi lưu refresh token")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-
 	response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       accessToken,
 		"expires_in":         exp,
@@ -311,32 +318,31 @@ type RefreshRequest struct {
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
-		response.BadRequest(w, "Thiếu refresh token")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRefreshToken))
 		return
 	}
 
 	tokenHash := HashRefreshToken(req.RefreshToken)
 	oldToken, err := h.store.GetRefreshTokenByHash(r.Context(), tokenHash)
 	if err != nil {
-		response.Unauthorized(w, "Refresh token không hợp lệ hoặc đã hết hạn")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken).WithCause(err))
 		return
 	}
-
 	// Revoke old token (Rotation)
 	if revErr := h.store.RevokeRefreshToken(r.Context(), oldToken.ID); revErr != nil {
-		response.InternalServerError(w, "Lỗi thu hồi token cũ")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(revErr))
 		return
 	}
 	// Issue new token pair
 	newAccess, exp, err := h.tokenManager.GenerateAccessToken(oldToken.UserID)
 	if err != nil {
-		response.InternalServerError(w, "Lỗi tạo access token")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
 	newRawRefresh, newHash, err := GenerateRefreshToken()
 	if err != nil {
-		response.InternalServerError(w, "Lỗi tạo refresh token")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -348,7 +354,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
 	})
 	if err != nil {
-		response.InternalServerError(w, "Lỗi lưu refresh token mới")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -370,33 +376,33 @@ type RevokeRequest struct {
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var req RevokeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "Dữ liệu yêu cầu không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.UserID != nil {
 		if currentUser.Role != "ADMIN" && currentUser.ID != *req.UserID {
-			response.Forbidden(w, "Chỉ quản trị viên mới có quyền thu hồi toàn bộ phiên của người dùng khác")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 			return
 		}
 		if err := h.store.RevokeUserRefreshTokens(r.Context(), *req.UserID); err != nil {
-			response.InternalServerError(w, "Lỗi thu hồi phiên người dùng")
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 	} else if req.RefreshTokenID != nil {
 		if err := h.store.RevokeRefreshToken(r.Context(), *req.RefreshTokenID); err != nil {
-			response.InternalServerError(w, "Lỗi thu hồi token")
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 	} else {
 		if err := h.store.RevokeUserRefreshTokens(r.Context(), currentUser.ID); err != nil {
-			response.InternalServerError(w, "Lỗi thu hồi phiên đăng nhập")
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 	}
@@ -409,7 +415,7 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 		IpAddress:   sql.NullString{String: h.limiter.GetClientIP(r), Valid: true},
 		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
 	}); aErr != nil {
-		response.InternalServerError(w, "Lỗi ghi audit log")
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(aErr))
 		return
 	}
 	response.JSON(w, http.StatusOK, map[string]any{"revoked": true})
@@ -419,7 +425,7 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
@@ -427,12 +433,12 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	queryUID := r.URL.Query().Get("user_id")
 	if queryUID != "" {
 		if currentUser.Role != "ADMIN" {
-			response.Forbidden(w, "Chỉ quản trị viên mới được xem phiên của người dùng khác")
+			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 			return
 		}
 		uid, err := strconv.ParseInt(queryUID, 10, 64)
 		if err != nil {
-			response.BadRequest(w, "user_id không hợp lệ")
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 			return
 		}
 		targetUserID = uid
@@ -440,7 +446,7 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 
 	sessions, err := h.store.ListUserActiveSessions(r.Context(), targetUserID)
 	if err != nil {
-		response.InternalServerError(w, "Lỗi truy vấn danh sách phiên đăng nhập")
+		response.AppError(w, r, apperror.Internal(i18n.ErrSessionsQueryFailed).WithCause(err))
 		return
 	}
 
@@ -465,4 +471,103 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, items)
+}
+
+// SetupStatusResponse describes whether initial superadmin setup is required.
+type SetupStatusResponse struct {
+	NeedsSetup bool `json:"needs_setup"`
+}
+
+// SetupStatus handles GET /api/auth/setup-status.
+func (h *Handler) SetupStatus(w http.ResponseWriter, r *http.Request) {
+	adminCount, err := h.store.CountAdmins(r.Context())
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, SetupStatusResponse{
+		NeedsSetup: adminCount == 0,
+	})
+}
+
+// SetupSuperadminRequest defines payload for initial superadmin creation.
+type SetupSuperadminRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+}
+
+// SetupSuperadmin handles POST /api/auth/setup.
+func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
+	adminCount, err := h.store.CountAdmins(r.Context())
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	if adminCount > 0 {
+		response.AppError(w, r, apperror.Forbidden(i18n.ErrAdminExists))
+		return
+	}
+
+	var req SetupSuperadminRequest
+	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decodeErr))
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.FullName = strings.TrimSpace(req.FullName)
+	req.Email = strings.TrimSpace(req.Email)
+
+	if req.Username == "" || len(req.Username) < 3 {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrUsernameTooShort))
+		return
+	}
+	if len(req.Password) < 8 {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrPasswordTooShort))
+		return
+	}
+	if req.FullName == "" {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingFullName))
+		return
+	}
+
+	var hash string
+	hash, err = HashPassword(req.Password)
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+
+	var emailVal sql.NullString
+	if req.Email != "" {
+		emailVal = sql.NullString{String: req.Email, Valid: true}
+	}
+
+	var user db.User
+	user, err = h.store.CreateLocalAdmin(r.Context(), db.CreateLocalAdminParams{
+		Username:     req.Username,
+		PasswordHash: sql.NullString{String: hash, Valid: true},
+		FullName:     req.FullName,
+		Email:        emailVal,
+	})
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrSetupFailed).WithCause(err))
+		return
+	}
+
+	clientIP := h.limiter.GetClientIP(r)
+	if logErr := h.store.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
+		UserID:      sql.NullInt64{Int64: user.ID, Valid: true},
+		Action:      "INITIAL_SUPERADMIN_SETUP",
+		TargetTable: "users",
+		TargetID:    user.Username,
+		IpAddress:   sql.NullString{String: clientIP, Valid: true},
+		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
+	}); logErr != nil {
+		return
+	}
+
+	h.issueTokensAndRespond(w, r, user)
 }

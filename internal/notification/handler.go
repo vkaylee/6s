@@ -8,9 +8,11 @@ import (
 	"log"
 	"net/http"
 
+	"6s/internal/apperror"
 	"6s/internal/auth"
 	"6s/internal/crypto"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -57,7 +59,7 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		response.InternalServerError(w, "Không thể tải cấu hình thông báo")
+		response.AppError(w, r, apperror.Internal(i18n.ErrNotificationLoadFailed).WithCause(err))
 		return
 	}
 
@@ -84,13 +86,13 @@ type UpdateConfigRequest struct {
 func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.Unauthorized(w, "Yêu cầu đăng nhập")
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var req UpdateConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "Dữ liệu JSON không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -99,7 +101,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		if h.cipher != nil {
 			enc, err := h.cipher.Encrypt(req.WxPusherAppToken)
 			if err != nil {
-				response.InternalServerError(w, "Mã hóa token thất bại")
+				response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 				return
 			}
 			encryptedAppToken = enc
@@ -113,7 +115,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		if h.cipher != nil {
 			enc, err := h.cipher.Encrypt(req.LANWebhookURL)
 			if err != nil {
-				response.InternalServerError(w, "Mã hóa webhook URL thất bại")
+				response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 				return
 			}
 			encryptedWebhookURL = enc
@@ -140,7 +142,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		UpdatedBy:        sql.NullInt64{Int64: currentUser.ID, Valid: true},
 	})
 	if err != nil {
-		response.InternalServerError(w, "Lưu cấu hình thông báo thất bại")
+		response.AppError(w, r, apperror.Internal(i18n.ErrNotificationSaveFailed).WithCause(err))
 		return
 	}
 
@@ -173,7 +175,7 @@ type TestConfigResult struct {
 func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 	cfgRow, err := h.store.GetNotificationConfig(r.Context())
 	if err != nil {
-		response.BadRequest(w, "Chưa thiết lập cấu hình thông báo để test")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrNotificationTestMissing).WithCause(err))
 		return
 	}
 

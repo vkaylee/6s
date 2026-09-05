@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"6s/internal/apperror"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/response"
 )
 
@@ -52,7 +54,7 @@ type TagResponse struct {
 func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 	locs, err := h.store.ListLocations(r.Context())
 	if err != nil {
-		response.InternalServerError(w, "Lỗi truy vấn danh mục vị trí")
+		response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
 		return
 	}
 
@@ -84,15 +86,14 @@ type CreateLocationRequest struct {
 func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 	var req CreateLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "Dữ liệu vị trí không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.Code == "" || req.NameVi == "" || req.QRCode == "" {
-		response.BadRequest(w, "Mã vị trí, tên tiếng Việt và QR code là bắt buộc")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationMissingFields))
 		return
 	}
-
 	loc, err := h.store.CreateLocation(r.Context(), db.CreateLocationParams{
 		Code:   req.Code,
 		NameVi: req.NameVi,
@@ -101,7 +102,7 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 		QrCode: req.QRCode,
 	})
 	if err != nil {
-		response.BadRequest(w, "Không thể tạo vị trí (có thể trùng mã code hoặc qr_code)")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationCreateFailed).WithCause(err))
 		return
 	}
 
@@ -119,7 +120,7 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
 	tags, err := h.store.ListTags(r.Context())
 	if err != nil {
-		response.InternalServerError(w, "Lỗi truy vấn danh mục tags")
+		response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
 		return
 	}
 
@@ -153,15 +154,14 @@ type UpsertTagRequest struct {
 func (h *Handler) UpsertTag(w http.ResponseWriter, r *http.Request) {
 	var req UpsertTagRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "Dữ liệu tag không hợp lệ")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.Code == "" || req.NameVi == "" || req.Category == "" {
-		response.BadRequest(w, "Mã tag, tên tiếng Việt và phân loại S là bắt buộc")
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrTagMissingFields))
 		return
 	}
-
 	tag, err := h.store.UpsertTag(r.Context(), db.UpsertTagParams{
 		Code:     req.Code,
 		NameVi:   req.NameVi,
@@ -171,7 +171,7 @@ func (h *Handler) UpsertTag(w http.ResponseWriter, r *http.Request) {
 		IsPreset: req.IsPreset,
 	})
 	if err != nil {
-		response.InternalServerError(w, "Lỗi lưu thông tin tag")
+		response.AppError(w, r, apperror.Internal(i18n.ErrTagSaveFailed).WithCause(err))
 		return
 	}
 
