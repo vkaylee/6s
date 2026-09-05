@@ -36,10 +36,12 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left bg-white dark:bg-zinc-900 rounded-2xl p-4 border shadow-sm transition active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-500 flex flex-col gap-3 min-h-[96px] ${
+      className={`w-full text-left bg-white dark:bg-zinc-900 rounded-2xl p-4 border shadow-sm transition active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-500 flex flex-col gap-3.5 min-h-[96px] ${
         isSafety
           ? "border-rose-500/80 dark:border-rose-600/80 ring-2 ring-rose-500/20"
-          : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+          : isPendingReview
+            ? "border-amber-400/80 dark:border-amber-500/80 ring-1 ring-amber-400/30"
+            : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -59,28 +61,69 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
             </div>
             <div className="text-xs text-zinc-400 mt-0.5 truncate">
               {t("issue.code_prefix")}: {issue.location_code}
-              {issue.creator_name ? ` • ${issue.creator_name}` : ""}
+              {issue.creator_name ? ` • 👤 ${issue.creator_name}` : ""}
+              {issue.resolver_name ? ` • 🔧 ${issue.resolver_name}` : ""}
             </div>
           </div>
         </div>
-        {statusBadge}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {statusBadge}
+          {issue.score_rating && issue.score_rating > 0 && isClosed && (
+            <span className="text-xs text-amber-500 font-medium">
+              {"★".repeat(issue.score_rating)}
+            </span>
+          )}
+        </div>
       </div>
+      {/* Body: Vertical on mobile, 2-column horizontal on medium/large screens (meetings/projectors) */}
+      <div className="flex flex-col md:flex-row md:items-start gap-3.5 w-full">
+        {/* Photos: Before & After side-by-side */}
+        {(issue.photo_before || issue.photo_after) && (
+          <div className="flex items-center gap-2.5 shrink-0 overflow-hidden">
+            {issue.photo_before && (
+              <div className="relative group shrink-0">
+                <img
+                  src={resolvePhotoUrl(issue.photo_before, "before")}
+                  alt={t("slider.before_alt")}
+                  loading="lazy"
+                  className={`${
+                    issue.photo_after ? "w-32 h-24 sm:w-36 sm:h-26" : "w-44 h-28 sm:w-48 sm:h-32"
+                  } rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800`}
+                />
+                <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white tracking-wide uppercase">
+                  {t("slider.before")}
+                </span>
+                {issue.photo_detail && !issue.photo_after && (
+                  <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white">
+                    📷 +1
+                  </span>
+                )}
+              </div>
+            )}
 
-      <div className="flex items-center gap-3">
-        {issue.photo_before && (
-          <img
-            src={resolvePhotoUrl(issue.photo_before, "before")}
-            alt={t("issue.photo_before_alt")}
-            loading="lazy"
-            className="w-20 h-14 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 shrink-0"
-          />
+            {issue.photo_after && (
+              <div className="relative group shrink-0">
+                <img
+                  src={resolvePhotoUrl(issue.photo_after, "after")}
+                  alt={t("slider.after_alt")}
+                  loading="lazy"
+                  className="w-32 h-24 sm:w-36 sm:h-26 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border-2 border-emerald-500/60 dark:border-emerald-500/80"
+                />
+                <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-emerald-600 text-[10px] font-bold text-white tracking-wide uppercase">
+                  {t("slider.after")}
+                </span>
+              </div>
+            )}
+          </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-2 leading-snug">
+
+        {/* Description & Tags: Right column on desktop, below photos on mobile */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch gap-2">
+          <p className="text-sm text-zinc-700 dark:text-zinc-200 line-clamp-3 leading-snug">
             {issue.description || t("issue.no_description")}
           </p>
           {issue.tags && issue.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="flex flex-wrap gap-1 pt-1">
               {issue.tags.map((tag) => (
                 <span
                   key={tag}

@@ -37,4 +37,26 @@ describe("IssueCard Component", () => {
     expect(html).toContain("A1");
     expect(html).not.toContain("•");
   });
+
+  it("renders both before and after photos when photo_after is present", () => {
+    const issueWithAfter: IssueItem = {
+      ...mockIssue,
+      status: IssueStatus.PENDING_REVIEW,
+      photo_after: "after.jpg",
+      resolver_name: "Thợ Sửa B",
+    };
+    const html = renderToString(<IssueCard issue={issueWithAfter} onClick={() => {}} />);
+    expect(html).toContain("after.jpg");
+    expect(html).toContain("Thợ Sửa B");
+  });
+
+  it("renders +1 badge when photo_detail is present without photo_after", () => {
+    const issueWithDetail: IssueItem = {
+      ...mockIssue,
+      status: IssueStatus.OPEN,
+      photo_detail: "detail.jpg",
+    };
+    const html = renderToString(<IssueCard issue={issueWithDetail} onClick={() => {}} />);
+    expect(html).toContain("📷 +1");
+  });
 });
