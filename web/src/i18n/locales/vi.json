@@ -132,6 +132,7 @@
     "saved_draft": "Đã lưu bản nháp ngoại tuyến. Sẽ tự động gửi khi có mạng.",
     "sync_resolve_msg": "Đã ghi nhận ảnh khắc phục! Đang đồng bộ lên máy chủ...",
     "compress_error": "Lỗi khi nén ảnh, vui lòng thử lại",
+    "missing_category": "Vui lòng chọn phân loại 6S",
     "missing_location": "Vui lòng chọn vị trí xảy ra lỗi",
     "missing_photo": "Bắt buộc chụp ảnh toàn cảnh (Ảnh 1)",
     "photo_before_alt": "Toàn cảnh lỗi",

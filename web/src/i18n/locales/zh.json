@@ -132,6 +132,7 @@
     "saved_draft": "草稿已离线保存，联网后自动同步。",
     "sync_resolve_msg": "已记录改善照片！正在同步至服务器...",
     "compress_error": "图片压缩失败，请重试",
+    "missing_category": "请选择6S分类",
     "missing_location": "请选择问题发生位置",
     "missing_photo": "必须拍摄全景照片（照片1）",
     "photo_before_alt": "问题全景照片",

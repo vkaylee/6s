@@ -30,7 +30,7 @@ export function CreateIssueModal({
 }: CreateIssueModalProps) {
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
-  const [category, setCategory] = useState<IssueCategory>(IssueCategory.S6);
+  const [category, setCategory] = useState<IssueCategory | null>(null);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
@@ -45,7 +45,7 @@ export function CreateIssueModal({
   }
 
   // Cascade tag filtering (SPEC.md Section 4.5): tags prioritized by chosen category
-  const filteredTags = tags.filter((t) => !t.category || t.category === category);
+  const filteredTags = tags.filter((t) => !t.category || (category && t.category === category));
 
   const handleSelectCategory = (cat: IssueCategory) => {
     setCategory(cat);
@@ -89,6 +89,10 @@ export function CreateIssueModal({
   };
 
   const handleSubmit = async () => {
+    if (!category) {
+      modalDialog.alert(t("issue.missing_category"));
+      return;
+    }
     if (!locationCode) {
       modalDialog.alert(t("issue.missing_location"));
       return;
@@ -284,7 +288,7 @@ export function CreateIssueModal({
           {filteredTags.length > 0 && (
             <div>
               <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                {t("issue.step_tags", { category })}
+                {t("issue.step_tags", { category: category || "" })}
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {filteredTags.map((tag) => {

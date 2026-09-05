@@ -132,6 +132,7 @@
     "saved_draft": "Draft saved offline. It will sync once online.",
     "sync_resolve_msg": "Resolution photo recorded! Syncing to server...",
     "compress_error": "Failed to compress image, please try again",
+    "missing_category": "Please select 6S category",
     "missing_location": "Please select issue location",
     "missing_photo": "Overview photo (Photo 1) is required",
     "photo_before_alt": "Overview photo of issue",
