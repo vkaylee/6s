@@ -226,9 +226,9 @@ class SyncEngine {
   ): Promise<"SUCCESS" | "CONFLICT" | "FAILED"> {
     try {
       const formData = new FormData();
+      formData.append("resolved_client_uuid", resolveItem.resolved_client_uuid);
       formData.append("expected_version", String(resolveItem.expected_version));
       formData.append("photo_after", resolveItem.photo_after_blob, "after.jpg");
-
       await apiClient(`/api/issues/${resolveItem.issue_id}/resolve`, {
         method: "POST",
         body: formData,

@@ -16,6 +16,7 @@ import {
 } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
+import { resolvePhotoUrl } from "../utils/photo.ts";
 
 interface IssueDetailModalProps {
   issue: IssueItem;
@@ -239,7 +240,10 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
               <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
                 {t("issue_detail.compare_slider_label")}
               </label>
-              <SplitSlider beforeUrl={issue.photo_before} afterUrl={issue.photo_after} />
+              <SplitSlider
+                beforeUrl={resolvePhotoUrl(issue.photo_before, "before")}
+                afterUrl={resolvePhotoUrl(issue.photo_after, "after")}
+              />
             </div>
           ) : (
             <div>
@@ -247,7 +251,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 {t("issue_detail.photo_before_label")}
               </label>
               <img
-                src={issue.photo_before}
+                src={resolvePhotoUrl(issue.photo_before, "before")}
                 alt={t("issue_detail.photo_before_alt")}
                 className="w-full aspect-[4/3] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md"
               />

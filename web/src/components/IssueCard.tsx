@@ -1,5 +1,6 @@
 import { useI18nStore } from "../i18n/index.ts";
 import { IssueCategory, type IssueItem, IssueStatus } from "../types/index.ts";
+import { resolvePhotoUrl } from "../utils/photo.ts";
 
 interface IssueCardProps {
   issue: IssueItem;
@@ -67,7 +68,7 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
       <div className="flex items-center space-x-3">
         {issue.photo_before && (
           <img
-            src={issue.photo_before}
+            src={resolvePhotoUrl(issue.photo_before, "before")}
             alt={t("issue.photo_before_alt")}
             className="w-20 h-15 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 flex-shrink-0"
           />

@@ -25,6 +25,14 @@
     reverse_proxy server:8080
   }
 
+  handle /uploads/* {
+    reverse_proxy server:8080
+  }
+
+  handle /cert/* {
+    reverse_proxy server:8080
+  }
+
   handle {
     reverse_proxy web:5173
   }

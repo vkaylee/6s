@@ -65,7 +65,17 @@ export function App() {
     loadIssues();
     loadLeaderboards();
 
+    let wasSyncing = false;
+    const unsub = syncEngine.subscribe((p) => {
+      if (wasSyncing && !p.isSyncing) {
+        loadIssues();
+        loadLeaderboards();
+      }
+      wasSyncing = p.isSyncing;
+    });
+
     return () => {
+      unsub();
       syncEngine.stop();
     };
   }, [user]);

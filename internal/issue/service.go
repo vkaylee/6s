@@ -12,6 +12,7 @@ import (
 	"log"
 	"mime/multipart"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -728,11 +729,13 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 	if issue.RejectReason.Valid {
 		resp.RejectReason = &issue.RejectReason.String
 	}
-	if issue.PhotoDetail.Valid {
-		resp.PhotoDetail = &issue.PhotoDetail.String
+	if issue.PhotoDetail.Valid && issue.PhotoDetail.String != "" {
+		pDetail := formatPhotoURL("detail", issue.PhotoDetail.String)
+		resp.PhotoDetail = &pDetail
 	}
-	if issue.PhotoAfter.Valid {
-		resp.PhotoAfter = &issue.PhotoAfter.String
+	if issue.PhotoAfter.Valid && issue.PhotoAfter.String != "" {
+		pAfter := formatPhotoURL("after", issue.PhotoAfter.String)
+		resp.PhotoAfter = &pAfter
 	}
 	if issue.ScoreRating.Valid {
 		resp.ScoreRating = issue.ScoreRating.Int16
@@ -745,9 +748,19 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 		tStr := issue.ClosedAt.Time.Format(time.RFC3339)
 		resp.ClosedAt = &tStr
 	}
-	resp.PhotoBefore = issue.PhotoBefore
+	resp.PhotoBefore = formatPhotoURL("before", issue.PhotoBefore)
 
 	return resp
+}
+
+func formatPhotoURL(folder, filename string) string {
+	if filename == "" {
+		return ""
+	}
+	if strings.HasPrefix(filename, "/") || strings.HasPrefix(filename, "data:") {
+		return filename
+	}
+	return fmt.Sprintf("/uploads/%s/%s", folder, filename)
 }
 
 func isValidCategory(c string) bool {

@@ -303,7 +303,10 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if resp.Status != StatusOpen.String() {
 		t.Errorf("expected status OPEN, got %s", resp.Status)
 	}
-
+	expectedBeforeURL := "/uploads/before/" + clientUUID + "_wide.jpg"
+	if resp.PhotoBefore != expectedBeforeURL {
+		t.Errorf("expected photo_before %s, got %s", expectedBeforeURL, resp.PhotoBefore)
+	}
 	// 2. Resolve issue
 	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
 	resolveUUID := "c0a80101-0000-4000-8000-000000000002"
@@ -319,7 +322,10 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if resResp.Status != StatusPendingReview.String() {
 		t.Errorf("expected status PENDING_REVIEW, got %s", resResp.Status)
 	}
-
+	expectedAfterURL := "/uploads/after/" + resolveUUID + ".jpg"
+	if resResp.PhotoAfter == nil || *resResp.PhotoAfter != expectedAfterURL {
+		t.Errorf("expected photo_after %s, got %v", expectedAfterURL, resResp.PhotoAfter)
+	}
 	// 3. Close issue by Admin (score rating 5)
 	expVer := resResp.Version
 	closedResp, err := svc.CloseIssue(context.Background(), CloseIssueRequest{
