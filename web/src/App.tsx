@@ -13,7 +13,7 @@ import { useI18nStore } from "./i18n/index.ts";
 import { AdminConfigModal } from "./pages/AdminConfigModal.tsx";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
 import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
-import { LoginModal } from "./pages/LoginModal.tsx";
+import { LoginPage } from "./pages/LoginPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 import { useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
@@ -46,7 +46,6 @@ export function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueItem | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [conflictItem, setConflictItem] = useState<DraftResolve | null>(null);
   const [isSetupOpen, setIsSetupOpen] = useState(false);
 
@@ -195,6 +194,9 @@ export function App() {
   return (
     <>
       <Switch>
+        <Route path="/login">
+          <LoginPage />
+        </Route>
         <Route path="/issues/new">
           <CreateIssuePage
             locations={locations}
@@ -256,7 +258,7 @@ export function App() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setIsLoginOpen(true)}
+                      onClick={() => setLocation("/login")}
                       className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl min-h-[44px] shadow-sm"
                     >
                       {t("auth.login")}
@@ -434,8 +436,6 @@ export function App() {
             )}
 
             <AdminConfigModal isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} />
-
-            <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
 
             <SetupSuperadminModal
               isOpen={isSetupOpen}

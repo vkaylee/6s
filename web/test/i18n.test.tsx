@@ -143,7 +143,6 @@ describe("Frontend i18n usage guard", () => {
     "pages/CreateIssueModal.tsx",
     "pages/CreateIssuePage.tsx",
     "pages/IssueDetailModal.tsx",
-    "pages/LoginModal.tsx",
     "pages/SetupSuperadminModal.tsx",
   ];
   const localized =
