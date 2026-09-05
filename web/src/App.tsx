@@ -495,7 +495,9 @@ export function App() {
   const loadIssues = async () => {
     try {
       const data = await apiClient<IssueItem[]>("/api/issues");
-      setIssues(data || []);
+      const list = data || [];
+      setIssues(list);
+      setSelectedIssue((prev) => (prev ? list.find((i) => i.id === prev.id) || prev : null));
     } catch {
       // ignore
     }
@@ -749,9 +751,10 @@ export function App() {
                     loadIssues();
                     loadLeaderboards();
                   }}
+                  locations={locations}
+                  tags={tags}
                 />
               )}
-
               {conflictItem && (
                 <ConflictModal
                   resolveItem={conflictItem}

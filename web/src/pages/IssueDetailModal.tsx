@@ -10,25 +10,45 @@ import {
   IssueCategory,
   type IssueItem,
   IssueStatus,
+  type LocationItem,
   resolveI18n,
   S_CATEGORIES,
+  type TagItem,
   UserRole,
 } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
+import { CreateIssueModal } from "./CreateIssueModal.tsx";
 
 interface IssueDetailModalProps {
   issue: IssueItem;
   isOpen: boolean;
   onClose: () => void;
   onRefresh: () => void;
+  locations?: LocationItem[];
+  tags?: TagItem[];
 }
 
-export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDetailModalProps) {
+export function IssueDetailModal({
+  issue,
+  isOpen,
+  onClose,
+  onRefresh,
+  locations = [],
+  tags = [],
+}: IssueDetailModalProps) {
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
-  const { user } = useAuthStore();
+  const storeUser = useAuthStore((s) => s.user);
+  const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
+  const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
+
+  useEffect(() => {
+    setCurrentIssue(issue);
+  }, [issue]);
+
+  const [isEditingFull, setIsEditingFull] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
   const [rejectReason, setRejectReason] = useState("");
@@ -68,7 +88,15 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
   }
 
   const role = user?.role || UserRole.USER;
-  const isSafetyIssue = issue.category === IssueCategory.S6;
+  const isSafetyIssue = currentIssue.category === IssueCategory.S6;
+
+  // Edit Permission: Creator, Resolver, Admin, Safety Officer
+  const canEdit =
+    currentIssue.status === IssueStatus.OPEN &&
+    (user?.id === currentIssue.creator_id ||
+      (currentIssue.resolver_id && user?.id === currentIssue.resolver_id) ||
+      role === UserRole.ADMIN ||
+      role === UserRole.SAFETY_OFFICER);
 
   // RBAC Permission Check (SPEC.md Section 3.2 & 9.9.F)
   // Resolve: Anyone
@@ -78,27 +106,29 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
     role === UserRole.SAFETY_OFFICER ||
     (role === UserRole.LINE_LEADER &&
       !isSafetyIssue &&
-      (!user?.assigned_location_code || user.assigned_location_code === issue.location_code));
-
+      (!user?.assigned_location_code ||
+        user.assigned_location_code === currentIssue.location_code));
   const closeDisabledReason =
     isSafetyIssue && role !== UserRole.ADMIN && role !== UserRole.SAFETY_OFFICER
       ? t("issue_detail.need_safety_officer")
       : role === UserRole.LINE_LEADER &&
           user?.assigned_location_code &&
-          user.assigned_location_code !== issue.location_code
+          user.assigned_location_code !== currentIssue.location_code
         ? t("issue_detail.only_assigned_line")
         : role === UserRole.USER
           ? t("issue_detail.need_line_leader")
           : null;
-
   const handleQuickChangeCategory = async (newCat: IssueCategory) => {
     try {
-      await apiClient(`/api/issues/${issue.id}`, {
+      const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: newCat }),
       });
       haptics.success();
+      if (updated) {
+        setCurrentIssue(updated);
+      }
       setIsEditingCategory(false);
       onRefresh();
     } catch {
@@ -120,8 +150,8 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
       // Save draft resolve in local IndexedDB (SPEC.md Section 7.2)
       const draft: DraftResolve = {
         resolved_client_uuid: crypto.randomUUID(),
-        issue_id: issue.id,
-        expected_version: issue.version,
+        issue_id: currentIssue.id,
+        expected_version: currentIssue.version,
         photo_after_blob: compressed,
         resolved_at: Date.now(),
         sync_status: "PENDING",
@@ -144,8 +174,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
   const handleConfirmClose = async () => {
     setIsSubmitting(true);
     try {
-      await apiClient(`/api/issues/${issue.id}/close`, {
-        method: "POST",
+      await apiClient(`/api/issues/${currentIssue.id}/close`, {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           score_rating: scoreRating,
@@ -166,8 +195,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
   const handleConfirmReopen = async () => {
     setIsSubmitting(true);
     try {
-      await apiClient(`/api/issues/${issue.id}/reopen`, {
-        method: "POST",
+      await apiClient(`/api/issues/${currentIssue.id}/reopen`, {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
@@ -188,8 +216,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
   const handleConfirmInvalid = async () => {
     setIsSubmitting(true);
     try {
-      await apiClient(`/api/issues/${issue.id}/invalidate`, {
-        method: "POST",
+      await apiClient(`/api/issues/${currentIssue.id}/invalidate`, {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reject_reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
@@ -219,23 +246,36 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
               className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1"
               title={t("issue_detail.quick_edit_category")}
             >
-              <span>{issue.category}</span>
+              <span>{currentIssue.category}</span>
               <span className="text-xs opacity-50">✎</span>
             </button>
             <div>
               <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
-                #{issue.id} - {issue.location_name || issue.location_code}
+                #{currentIssue.id} - {currentIssue.location_name || currentIssue.location_code}
               </h2>
-              <span className="text-xs text-zinc-400">v{issue.version}</span>
+              <span className="text-xs text-zinc-400">v{currentIssue.version}</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-zinc-600 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
-          >
-            ✕
-          </button>
+          <div className="flex items-center space-x-1">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setIsEditingFull(true)}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 hover:bg-blue-100 transition-colors flex items-center space-x-1"
+                title={t("issue.edit")}
+              >
+                <span>✏️</span>
+                <span>{t("issue.edit")}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-zinc-400 hover:text-zinc-600 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* In-place quick edit category drawer */}
@@ -247,7 +287,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 type="button"
                 onClick={() => handleQuickChangeCategory(s.key)}
                 className={`p-2 rounded-xl text-xs font-black min-h-[44px] border ${
-                  issue.category === s.key
+                  currentIssue.category === s.key
                     ? "bg-zinc-900 text-white"
                     : "bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
                 }`}
@@ -261,7 +301,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
         {/* Detail Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Split Slider if After photo exists, otherwise show Before photo */}
-          {issue.photo_after ? (
+          {currentIssue.photo_after ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -273,7 +313,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                     onClick={() => {
                       setZoomScale(1);
                       setPreviewPhoto({
-                        url: resolvePhotoUrl(issue.photo_before, "before"),
+                        url: resolvePhotoUrl(currentIssue.photo_before, "before"),
                         alt: t("issue_detail.photo_before_alt"),
                       });
                     }}
@@ -286,7 +326,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                     onClick={() => {
                       setZoomScale(1);
                       setPreviewPhoto({
-                        url: resolvePhotoUrl(issue.photo_after, "after"),
+                        url: resolvePhotoUrl(currentIssue.photo_after, "after"),
                         alt: t("slider.after_alt"),
                       });
                     }}
@@ -297,8 +337,8 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 </div>
               </div>
               <SplitSlider
-                beforeUrl={resolvePhotoUrl(issue.photo_before, "before")}
-                afterUrl={resolvePhotoUrl(issue.photo_after, "after")}
+                beforeUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
+                afterUrl={resolvePhotoUrl(currentIssue.photo_after, "after")}
               />
             </div>
           ) : (
@@ -316,14 +356,14 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 onClick={() => {
                   setZoomScale(1);
                   setPreviewPhoto({
-                    url: resolvePhotoUrl(issue.photo_before, "before"),
+                    url: resolvePhotoUrl(currentIssue.photo_before, "before"),
                     alt: t("issue_detail.photo_before_alt"),
                   });
                 }}
                 className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
               >
                 <img
-                  src={resolvePhotoUrl(issue.photo_before, "before")}
+                  src={resolvePhotoUrl(currentIssue.photo_before, "before")}
                   alt={t("issue_detail.photo_before_alt")}
                   className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
                 />
@@ -337,7 +377,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           )}
 
           {/* Detail photo (Before) if available */}
-          {issue.photo_detail && (
+          {currentIssue.photo_detail && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -352,14 +392,14 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                 onClick={() => {
                   setZoomScale(1);
                   setPreviewPhoto({
-                    url: resolvePhotoUrl(issue.photo_detail, "detail"),
+                    url: resolvePhotoUrl(currentIssue.photo_detail, "detail"),
                     alt: t("issue_detail.photo_detail_alt"),
                   });
                 }}
                 className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
               >
                 <img
-                  src={resolvePhotoUrl(issue.photo_detail, "detail")}
+                  src={resolvePhotoUrl(currentIssue.photo_detail, "detail")}
                   alt={t("issue_detail.photo_detail_alt")}
                   className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
                 />
@@ -376,22 +416,23 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2">
             <div className="flex items-center justify-between text-xs text-zinc-500">
               <span>
-                {t("issue_detail.reporter_label")} <strong>{issue.creator_name}</strong>
+                {t("issue_detail.reporter_label")} <strong>{currentIssue.creator_name}</strong>
               </span>
-              <span>{new Date(issue.created_at).toLocaleDateString("vi-VN")}</span>
+              <span>{new Date(currentIssue.created_at).toLocaleDateString("vi-VN")}</span>
             </div>
             <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">
-              {issue.description || "Không có mô tả chi tiết."}
+              {currentIssue.description || "Không có mô tả chi tiết."}
             </p>
-            {issue.reject_reason && (
+            {currentIssue.reject_reason && (
               <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
-                <strong>{t("issue_detail.reject_reason_label")}</strong> {issue.reject_reason}
+                <strong>{t("issue_detail.reject_reason_label")}</strong>{" "}
+                {currentIssue.reject_reason}
               </div>
             )}
           </div>
 
           {/* Kaizen Rating Stars (SPEC.md Section 9.8.B) */}
-          {issue.status === IssueStatus.PENDING_REVIEW && canClose && (
+          {currentIssue.status === IssueStatus.PENDING_REVIEW && canClose && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
               <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
                 {t("issue_detail.kaizen_rating_label")}
@@ -424,7 +465,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
         {/* Bottom Actions Bar (Glove Friendly, Explainable Disabled) */}
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col gap-2">
           {/* Action: Resolve (Upload after photo) */}
-          {issue.status === IssueStatus.OPEN && (
+          {currentIssue.status === IssueStatus.OPEN && (
             <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
               <input
                 type="file"
@@ -444,7 +485,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           )}
 
           {/* Action: Close (Duyệt đạt) */}
-          {issue.status === IssueStatus.PENDING_REVIEW && (
+          {currentIssue.status === IssueStatus.PENDING_REVIEW && (
             <div className="flex gap-2">
               <button
                 type="button"
@@ -476,7 +517,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           )}
 
           {/* Action: Invalidate (Bác bỏ) */}
-          {issue.status === IssueStatus.OPEN &&
+          {currentIssue.status === IssueStatus.OPEN &&
             (role === UserRole.ADMIN || role === UserRole.SAFETY_OFFICER) && (
               <button
                 type="button"
@@ -674,6 +715,23 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
           </div>
         )}
       </div>
+
+      {isEditingFull && (
+        <CreateIssueModal
+          isOpen={isEditingFull}
+          onClose={() => setIsEditingFull(false)}
+          onSuccess={(updated) => {
+            if (updated) {
+              setCurrentIssue(updated);
+            }
+            setIsEditingFull(false);
+            onRefresh();
+          }}
+          locations={locations}
+          tags={tags}
+          initialIssue={currentIssue}
+        />
+      )}
     </div>
   );
 }

@@ -117,6 +117,9 @@
   "issue": {
     "create": "Report Issue",
     "create_title": "Report New 6S / Safety Issue",
+    "edit_title": "Edit 6S / Safety Issue",
+    "edit": "Edit",
+    "save_changes": "Save Changes",
     "detail_title": "Issue Details",
     "desc_placeholder": "Detailed description of the issue...",
     "location_select": "-- Select Location --",

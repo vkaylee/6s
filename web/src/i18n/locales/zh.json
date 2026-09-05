@@ -117,6 +117,9 @@
   "issue": {
     "create": "上报新问题",
     "create_title": "新建6S/安全问题报告",
+    "edit_title": "编辑6S/安全问题报告",
+    "edit": "编辑",
+    "save_changes": "保存修改",
     "detail_title": "问题详情",
     "desc_placeholder": "详细描述发现的问题...",
     "location_select": "-- 选择发现位置 --",

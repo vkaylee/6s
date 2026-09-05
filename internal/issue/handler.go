@@ -411,10 +411,53 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 type PatchRequest struct {
 	Category     *string  `json:"category"`
 	LocationCode *string  `json:"location_code"`
+	Description  *string  `json:"description"`
 	Tags         []string `json:"tags"`
 }
 
-// Patch handles PATCH /api/issues/{id}.
+func (h *Handler) parseMultipartPatch(r *http.Request) (PatchIssueRequest, error) {
+	var patchReq PatchIssueRequest
+	if parseErr := r.ParseMultipartForm(10 * 1024 * 1024); parseErr != nil {
+		return patchReq, parseErr
+	}
+	if cat := strings.TrimSpace(r.FormValue("category")); cat != "" {
+		patchReq.Category = &cat
+	}
+	if loc := strings.TrimSpace(r.FormValue("location_code")); loc != "" {
+		patchReq.LocationCode = &loc
+	}
+	if desc := strings.TrimSpace(r.FormValue("description")); desc != "" || r.Form.Has("description") {
+		patchReq.Description = &desc
+	}
+	if tagsStr := strings.TrimSpace(r.FormValue("tags")); tagsStr != "" {
+		var tags []string
+		if unmarshalErr := json.Unmarshal([]byte(tagsStr), &tags); unmarshalErr == nil {
+			patchReq.Tags = tags
+		}
+	}
+	if fhs := r.MultipartForm.File["photo_before"]; len(fhs) > 0 {
+		patchReq.PhotoBefore = fhs[0]
+	}
+	if fhs := r.MultipartForm.File["photo_detail"]; len(fhs) > 0 {
+		patchReq.PhotoDetail = fhs[0]
+	}
+	return patchReq, nil
+}
+
+func (h *Handler) parseJSONPatch(r *http.Request) (PatchIssueRequest, error) {
+	var req PatchRequest
+	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+		return PatchIssueRequest{}, decErr
+	}
+	return PatchIssueRequest{
+		Category:     req.Category,
+		LocationCode: req.LocationCode,
+		Description:  req.Description,
+		Tags:         req.Tags,
+	}, nil
+}
+
+// Patch handles PATCH /api/issues/{id} (JSON or multipart/form-data).
 func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -423,23 +466,29 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+	id, parseIDErr := strconv.ParseInt(idStr, 10, 64)
+	if parseIDErr != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseIDErr))
 		return
 	}
 
-	var req PatchRequest
-	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decErr))
-		return
+	var patchReq PatchIssueRequest
+	var parseErr error
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		patchReq, parseErr = h.parseMultipartPatch(r)
+		if parseErr != nil {
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrMultipartTooLarge).WithCause(parseErr))
+			return
+		}
+	} else {
+		patchReq, parseErr = h.parseJSONPatch(r)
+		if parseErr != nil {
+			response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(parseErr))
+			return
+		}
 	}
-	resp, err := h.service.PatchIssue(r.Context(), PatchIssueRequest{
-		IssueID:      id,
-		Category:     req.Category,
-		LocationCode: req.LocationCode,
-		Tags:         req.Tags,
-	}, currentUser)
+	patchReq.IssueID = id
+	resp, err := h.service.PatchIssue(r.Context(), patchReq, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
 			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))

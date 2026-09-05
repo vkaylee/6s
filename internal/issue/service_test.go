@@ -206,6 +206,15 @@ func (m *mockIssueStore) PatchIssue(_ context.Context, arg db.PatchIssueParams) 
 	if arg.LocationCode.Valid {
 		iss.LocationCode = arg.LocationCode.String
 	}
+	if arg.Description.Valid {
+		iss.Description = arg.Description
+	}
+	if arg.PhotoBefore.Valid {
+		iss.PhotoBefore = arg.PhotoBefore.String
+	}
+	if arg.PhotoDetail.Valid {
+		iss.PhotoDetail = arg.PhotoDetail
+	}
 	iss.Version++
 	m.issues[iss.ID] = iss
 	return iss, nil
@@ -396,17 +405,19 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 	// 2. Patch issue
 	newCat := "3S"
 	newLoc := "LINE_A2"
+	newDesc := "Updated description text"
 	patchResp, err := svc.PatchIssue(context.Background(), PatchIssueRequest{
 		IssueID:      resp.ID,
 		Category:     &newCat,
 		LocationCode: &newLoc,
+		Description:  &newDesc,
 		Tags:         []string{"safety"},
 	}, worker)
 	if err != nil {
 		t.Fatalf("PatchIssue error: %v", err)
 	}
-	if patchResp.Category != Category3S.String() || patchResp.LocationCode != "LINE_A2" {
-		t.Errorf("PatchIssue expected Category 3S, Location LINE_A2, got %s, %s", patchResp.Category, patchResp.LocationCode)
+	if patchResp.Category != Category3S.String() || patchResp.LocationCode != "LINE_A2" || patchResp.Description == nil || *patchResp.Description != newDesc {
+		t.Errorf("PatchIssue mismatch: %s, %s, %v", patchResp.Category, patchResp.LocationCode, patchResp.Description)
 	}
 
 	// Non-owner cannot patch

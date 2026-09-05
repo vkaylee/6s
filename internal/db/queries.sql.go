@@ -1562,6 +1562,9 @@ const patchIssue = `-- name: PatchIssue :one
 UPDATE issues
 SET category = COALESCE($2, category),
     location_code = COALESCE($3, location_code),
+    description = COALESCE($4, description),
+    photo_before = COALESCE($5, photo_before),
+    photo_detail = COALESCE($6, photo_detail),
     version = version + 1
 WHERE id = $1
 RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
@@ -1571,10 +1574,20 @@ type PatchIssueParams struct {
 	ID           int64
 	Category     sql.NullString
 	LocationCode sql.NullString
+	Description  sql.NullString
+	PhotoBefore  sql.NullString
+	PhotoDetail  sql.NullString
 }
 
 func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, error) {
-	row := q.db.QueryRowContext(ctx, patchIssue, arg.ID, arg.Category, arg.LocationCode)
+	row := q.db.QueryRowContext(ctx, patchIssue,
+		arg.ID,
+		arg.Category,
+		arg.LocationCode,
+		arg.Description,
+		arg.PhotoBefore,
+		arg.PhotoDetail,
+	)
 	var i Issue
 	err := row.Scan(
 		&i.ID,

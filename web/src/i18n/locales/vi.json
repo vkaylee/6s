@@ -117,6 +117,9 @@
   "issue": {
     "create": "Báo cáo lỗi mới",
     "create_title": "Tạo báo cáo lỗi 6S / An toàn",
+    "edit_title": "Chỉnh sửa báo cáo 6S / An toàn",
+    "edit": "Chỉnh sửa",
+    "save_changes": "Lưu thay đổi",
     "detail_title": "Chi tiết vấn đề",
     "desc_placeholder": "Mô tả chi tiết lỗi phát hiện...",
     "location_select": "-- Chọn vị trí phát hiện --",

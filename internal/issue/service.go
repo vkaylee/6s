@@ -531,7 +531,10 @@ type PatchIssueRequest struct {
 	IssueID      int64
 	Category     *string
 	LocationCode *string
+	Description  *string
 	Tags         []string
+	PhotoBefore  *multipart.FileHeader
+	PhotoDetail  *multipart.FileHeader
 }
 
 func (s *ServiceImpl) canPatchIssue(currentUser db.User, issue db.Issue) bool {
@@ -541,13 +544,13 @@ func (s *ServiceImpl) canPatchIssue(currentUser db.User, issue db.Issue) bool {
 	return isCreator || isResolver || isPrivileged
 }
 
-// PatchIssue handles quick edit of category and tags.
-func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (sql.NullString, sql.NullString, bool, error) {
+// PatchIssue handles quick or full edit of an issue.
+func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullString, bool, error) {
 	var catVal sql.NullString
 	escalatedToSafety := false
 	if req.Category != nil && *req.Category != "" {
 		if !isValidCategory(*req.Category) {
-			return catVal, sql.NullString{}, false, ErrInvalidCategory
+			return catVal, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, false, ErrInvalidCategory
 		}
 		catVal = sql.NullString{String: *req.Category, Valid: true}
 		if *req.Category == Category6S.String() && issue.Category != Category6S.String() {
@@ -559,10 +562,34 @@ func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (s
 	if req.LocationCode != nil && *req.LocationCode != "" {
 		locVal = sql.NullString{String: *req.LocationCode, Valid: true}
 	}
-	return catVal, locVal, escalatedToSafety, nil
+
+	var descVal sql.NullString
+	if req.Description != nil {
+		descVal = sql.NullString{String: *req.Description, Valid: true}
+	}
+
+	var beforeVal sql.NullString
+	if req.PhotoBefore != nil {
+		bName, bErr := s.storageManager.SaveBeforePhoto(req.PhotoBefore, issue.ClientUuid)
+		if bErr != nil {
+			return catVal, locVal, descVal, beforeVal, sql.NullString{}, false, bErr
+		}
+		beforeVal = sql.NullString{String: bName, Valid: true}
+	}
+
+	var detailVal sql.NullString
+	if req.PhotoDetail != nil {
+		dName, dErr := s.storageManager.SaveDetailPhoto(req.PhotoDetail, issue.ClientUuid)
+		if dErr != nil {
+			return catVal, locVal, descVal, beforeVal, detailVal, false, dErr
+		}
+		detailVal = sql.NullString{String: dName, Valid: true}
+	}
+
+	return catVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, nil
 }
 
-// PatchIssue handles quick edit of category and tags.
+// PatchIssue handles edit of issue properties.
 func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
 	if err != nil {
@@ -572,7 +599,7 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 		return nil, ErrPermissionDenied
 	}
 
-	catVal, locVal, escalatedToSafety, parseErr := s.parsePatchParams(req, issue)
+	catVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, parseErr := s.parsePatchParams(req, issue)
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -581,6 +608,9 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 		ID:           issue.ID,
 		Category:     catVal,
 		LocationCode: locVal,
+		Description:  descVal,
+		PhotoBefore:  beforeVal,
+		PhotoDetail:  detailVal,
 	})
 	if patchErr != nil {
 		return nil, fmt.Errorf("failed to patch issue: %w", patchErr)

@@ -306,6 +306,9 @@ RETURNING *;
 UPDATE issues
 SET category = COALESCE(sqlc.narg('category'), category),
     location_code = COALESCE(sqlc.narg('location_code'), location_code),
+    description = COALESCE(sqlc.narg('description'), description),
+    photo_before = COALESCE(sqlc.narg('photo_before'), photo_before),
+    photo_detail = COALESCE(sqlc.narg('photo_detail'), photo_detail),
     version = version + 1
 WHERE id = $1
 RETURNING *;

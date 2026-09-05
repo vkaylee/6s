@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
-import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
+import { useAuthStore } from "../src/store/authStore.ts";
+import { IssueCategory, type IssueItem, IssueStatus, UserRole } from "../src/types/index.ts";
 
 describe("IssueDetailModal Component", () => {
   const mockIssue: IssueItem = {
@@ -28,14 +29,22 @@ describe("IssueDetailModal Component", () => {
   });
 
   it("renders issue details, category and description when isOpen is true", () => {
+    useAuthStore.setState({
+      user: {
+        id: 10,
+        username: "van_a",
+        full_name: "Nguyễn Văn A",
+        role: UserRole.USER,
+      },
+    });
     const html = renderToString(
       <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
     );
     expect(html).toContain("Chuyền May A1");
     expect(html).toContain("Dầu loang dưới sàn máy may");
     expect(html).toContain("Nguyễn Văn A");
+    expect(html).toContain("Chỉnh sửa");
   });
-
   it("renders detail photo when photo_detail exists", () => {
     const issueWithDetail: IssueItem = {
       ...mockIssue,

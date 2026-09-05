@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiClient } from "../api/client.ts";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -6,6 +7,7 @@ import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
   IssueCategory,
+  type IssueItem,
   type LocationItem,
   resolveI18n,
   S_CATEGORIES,
@@ -13,13 +15,15 @@ import {
 } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
+import { resolvePhotoUrl } from "../utils/photo.ts";
 
 interface CreateIssueModalProps {
   isOpen: boolean;
   onClose: () => void;
   locations: LocationItem[];
   tags: TagItem[];
-  onSuccess: () => void;
+  onSuccess: (updatedIssue?: IssueItem) => void;
+  initialIssue?: IssueItem | null;
 }
 export function CreateIssueModal({
   isOpen,
@@ -27,18 +31,40 @@ export function CreateIssueModal({
   onSuccess,
   locations,
   tags,
+  initialIssue,
 }: CreateIssueModalProps) {
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
-  const [category, setCategory] = useState<IssueCategory | null>(null);
-  const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<IssueCategory | null>(initialIssue?.category || null);
+  const [locationCode, setLocationCode] = useState(
+    initialIssue?.location_code || locations[0]?.code || "",
+  );
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialIssue?.tags || []);
+  const [description, setDescription] = useState(initialIssue?.description || "");
   const [photoBefore, setPhotoBefore] = useState<Blob | null>(null);
   const [photoDetail, setPhotoDetail] = useState<Blob | null>(null);
-  const [previewBefore, setPreviewBefore] = useState<string | null>(null);
-  const [previewDetail, setPreviewDetail] = useState<string | null>(null);
+  const [previewBefore, setPreviewBefore] = useState<string | null>(
+    initialIssue ? resolvePhotoUrl(initialIssue.photo_before, "before") : null,
+  );
+  const [previewDetail, setPreviewDetail] = useState<string | null>(
+    initialIssue?.photo_detail ? resolvePhotoUrl(initialIssue.photo_detail, "detail") : null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialIssue) {
+      setCategory(initialIssue.category);
+      setLocationCode(initialIssue.location_code);
+      setSelectedTags(initialIssue.tags || []);
+      setDescription(initialIssue.description || "");
+      setPhotoBefore(null);
+      setPhotoDetail(null);
+      setPreviewBefore(resolvePhotoUrl(initialIssue.photo_before, "before"));
+      setPreviewDetail(
+        initialIssue.photo_detail ? resolvePhotoUrl(initialIssue.photo_detail, "detail") : null,
+      );
+    }
+  }, [initialIssue]);
 
   if (!isOpen) {
     return null;
@@ -113,43 +139,67 @@ export function CreateIssueModal({
       modalDialog.alert(t("issue.missing_location"));
       return;
     }
-    if (!photoBefore) {
+    if (!initialIssue && !photoBefore) {
       modalDialog.alert(t("issue.missing_photo"));
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const clientUuid = crypto.randomUUID();
-      const newDraft: DraftIssue = {
-        client_uuid: clientUuid,
-        category,
-        location_code: locationCode,
-        tags: selectedTags,
-        description: description.trim(),
-        photo_before_blob: photoBefore,
-        photo_detail_blob: photoDetail || undefined,
-        created_at: Date.now(),
-        sync_status: "PENDING",
-      };
+      if (initialIssue) {
+        // Edit flow
+        const formData = new FormData();
+        formData.append("category", category);
+        formData.append("location_code", locationCode);
+        formData.append("description", description.trim());
+        formData.append("tags", JSON.stringify(selectedTags));
+        if (photoBefore) {
+          formData.append("photo_before", photoBefore, "before.jpg");
+        }
+        if (photoDetail) {
+          formData.append("photo_detail", photoDetail, "detail.jpg");
+        }
+        const updated = await apiClient<IssueItem>(`/api/issues/${initialIssue.id}`, {
+          method: "PATCH",
+          body: formData,
+        });
 
-      // Save immediately to local IndexedDB (Zero loading screen block, SPEC.md Section 9.3)
-      await saveDraftIssue(newDraft);
-      haptics.success();
+        haptics.success();
+        onSuccess(updated);
+        onClose();
+      } else {
+        // Create flow
+        const clientUuid = crypto.randomUUID();
+        const newDraft: DraftIssue = {
+          client_uuid: clientUuid,
+          category,
+          location_code: locationCode,
+          tags: selectedTags,
+          description: description.trim(),
+          photo_before_blob: photoBefore as Blob,
+          photo_detail_blob: photoDetail || undefined,
+          created_at: Date.now(),
+          sync_status: "PENDING",
+        };
 
-      // Trigger background sync
-      syncEngine.triggerSync();
+        // Save immediately to local IndexedDB (Zero loading screen block, SPEC.md Section 9.3)
+        await saveDraftIssue(newDraft);
+        haptics.success();
 
-      onSuccess();
-      onClose();
+        // Trigger background sync
+        syncEngine.triggerSync();
+
+        onSuccess();
+        onClose();
+      }
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Không thể lưu bản nháp vào IndexedDB");
-    } finally {
+      modalDialog.alert(
+        initialIssue ? "Không thể cập nhật báo cáo" : "Không thể lưu bản nháp vào IndexedDB",
+      );
       setIsSubmitting(false);
     }
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
       <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col max-h-[92vh]">
@@ -158,7 +208,7 @@ export function CreateIssueModal({
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-full bg-rose-600 animate-pulse" />
             <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
-              {t("issue.create_title")}
+              {initialIssue ? t("issue.edit_title") : t("issue.create_title")}
             </h2>
           </div>
           <button
@@ -358,9 +408,11 @@ export function CreateIssueModal({
             <span>
               {isSubmitting
                 ? t("issue.saving")
-                : category === IssueCategory.S6
-                  ? t("issue.submit_safety")
-                  : t("issue.submit_standard")}
+                : initialIssue
+                  ? t("issue.save_changes")
+                  : category === IssueCategory.S6
+                    ? t("issue.submit_safety")
+                    : t("issue.submit_standard")}
             </span>
           </button>
         </div>
