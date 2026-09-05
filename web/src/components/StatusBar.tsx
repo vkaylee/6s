@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
+import { NavActions } from "./NavActions.tsx";
 
 interface StatusBarProps {
   onOpenDrawer: () => void;
-  isDark: boolean;
-  onToggleDark: () => void;
 }
 
-export function StatusBar({ onOpenDrawer, isDark, onToggleDark }: StatusBarProps) {
-  const { locale, setLocale, t } = useI18nStore();
+export function StatusBar({ onOpenDrawer }: StatusBarProps) {
+  const { t } = useI18nStore();
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
@@ -76,18 +75,6 @@ export function StatusBar({ onOpenDrawer, isDark, onToggleDark }: StatusBarProps
         </button>
 
         <div className="flex items-center space-x-2">
-          <button
-            type="button"
-            onClick={() => {
-              const nextLocale = locale === "vi" ? "en" : locale === "en" ? "zh" : "vi";
-              setLocale(nextLocale);
-            }}
-            className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-black min-h-[44px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700 uppercase"
-            title={t("nav.language")}
-          >
-            {locale}
-          </button>
-
           {progress.conflictCount > 0 && (
             <button
               type="button"
@@ -97,15 +84,7 @@ export function StatusBar({ onOpenDrawer, isDark, onToggleDark }: StatusBarProps
               ⚠️ {progress.conflictCount}
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={onToggleDark}
-            className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-sm font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="Chuyển chế độ sáng/tối"
-          >
-            {isDark ? "☀️" : "🌙"}
-          </button>
+          <NavActions />
         </div>
       </div>
 

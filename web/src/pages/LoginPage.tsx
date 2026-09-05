@@ -1,19 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
+import { NavActions } from "../components/NavActions.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import { type UserProfile, useAuthStore } from "../store/authStore.ts";
 import { haptics } from "../utils/haptics.ts";
-
 export function LoginPage() {
   const { t } = useI18nStore();
   const [, setLocation] = useLocation();
-  const { setAuth } = useAuthStore();
+  const { user, setAuth } = useAuthStore();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  useEffect(() => {
+    if (user) {
+      setLocation("/");
+    }
+  }, [user, setLocation]);
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
@@ -59,21 +64,30 @@ export function LoginPage() {
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
         <div className="max-w-md mx-auto flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
-            aria-label="Back"
-          >
-            ←
-          </button>
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            className="text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-1"
-          >
-            {t("common.cancel")}
-          </button>
+          <div className="flex items-center space-x-2">
+            {user ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/")}
+                  className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
+                  aria-label="Back"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/")}
+                  className="text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-1"
+                >
+                  {t("common.cancel")}
+                </button>
+              </>
+            ) : (
+              <div className="text-xs font-bold text-zinc-400">6S Workplace Security</div>
+            )}
+          </div>
+          <NavActions />
         </div>
       </header>
 

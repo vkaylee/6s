@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { NavActions } from "../components/NavActions.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -147,13 +148,16 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
               </h1>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleBack}
-            className="text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-1"
-          >
-            {t("common.cancel")}
-          </button>
+          <div className="flex items-center space-x-2">
+            <NavActions />
+            <button
+              type="button"
+              onClick={handleBack}
+              className="text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-1"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
         </div>
       </header>
 
