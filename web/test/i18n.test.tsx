@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import ts from "typescript";
+import { Router } from "wouter";
 import { GlobalDialog } from "../src/components/GlobalDialog.tsx";
 import { HealthGauge } from "../src/components/HealthGauge.tsx";
 import { IssueCard } from "../src/components/IssueCard.tsx";
@@ -9,6 +10,7 @@ import { useI18nStore } from "../src/i18n/index.ts";
 import en from "../src/i18n/locales/en.json";
 import vi from "../src/i18n/locales/vi.json";
 import zh from "../src/i18n/locales/zh.json";
+import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
 import type { DialogOptions } from "../src/store/dialogStore.ts";
 import {
   type I18nObject,
@@ -154,6 +156,46 @@ describe("UI Components i18n Integration", () => {
     expect(html).toContain("车间6S健康度");
     expect(html).toContain("待处理: 2");
     expect(html).toContain("超期48h: 1");
+  });
+
+  it("renders CreateIssuePage categories reflecting the selected locale", () => {
+    const { setLocale } = useI18nStore.getState();
+
+    // EN
+    setLocale("en");
+    let html = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={[]} tags={[]} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(html).toContain("Safety");
+    expect(html).toContain("Danger / Fire hazard");
+    expect(html).toContain("Sort");
+    expect(html).toContain("Clutter / Scrap");
+
+    // VI
+    setLocale("vi");
+    html = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={[]} tags={[]} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(html).toContain("An toàn");
+    expect(html).toContain("Nguy hiểm / Cháy nổ");
+    expect(html).toContain("Sàng lọc");
+    expect(html).toContain("Đồ thừa / Phế phẩm");
+
+    // ZH
+    setLocale("zh");
+    html = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={[]} tags={[]} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(html).toContain("安全");
+    expect(html).toContain("安全 / 紧急危险");
+    expect(html).toContain("整理");
+    expect(html).toContain("整理 / 废弃物");
   });
 });
 

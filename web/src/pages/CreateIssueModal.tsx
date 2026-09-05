@@ -4,7 +4,13 @@ import { saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
-import { IssueCategory, type LocationItem, S_CATEGORIES, type TagItem } from "../types/index.ts";
+import {
+  IssueCategory,
+  type LocationItem,
+  resolveI18n,
+  S_CATEGORIES,
+  type TagItem,
+} from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 
@@ -22,7 +28,8 @@ export function CreateIssueModal({
   locations,
   tags,
 }: CreateIssueModalProps) {
-  const { t, locale } = useI18nStore();
+  const { t, locale: storeLocale } = useI18nStore();
+  const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const [category, setCategory] = useState<IssueCategory>(IssueCategory.S6);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -170,10 +177,16 @@ export function CreateIssueModal({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-base font-black">{s.key}</span>
-                      <span className="text-xs font-bold opacity-80">{s.name}</span>
+                      <span className="text-xs font-bold opacity-80">
+                        {s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name}
+                      </span>
                     </div>
                     <div className="text-[11px] leading-tight font-medium opacity-90 mt-1">
-                      {locale === "zh" ? s.hint_zh : s.hint_vi}
+                      {s.hint_i18n
+                        ? resolveI18n(s.hint_i18n, locale)
+                        : locale === "zh"
+                          ? s.hint_zh
+                          : s.hint_vi}
                     </div>
                   </button>
                 );

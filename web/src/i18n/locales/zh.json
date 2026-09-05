@@ -61,6 +61,14 @@
     "MAINTENANCE": "保养",
     "QUALITY": "品质"
   },
+  "s_categories": {
+    "1S": { "name": "整理", "hint": "整理 / 废弃物" },
+    "2S": { "name": "整顿", "hint": "整顿 / 缺标线" },
+    "3S": { "name": "清扫", "hint": "清扫 / 漏油灰尘" },
+    "4S": { "name": "清洁", "hint": "清洁 / 标准失效" },
+    "5S": { "name": "素养", "hint": "素养 / 违规违纪" },
+    "6S": { "name": "安全", "hint": "安全 / 紧急危险" }
+  },
   "nav": {
     "title": "6S车间管理系统",
     "superadmin_setup": "需要初始化系统",
@@ -70,7 +78,9 @@
     "outbox": "发件箱",
     "language": "语言",
     "pending_records": "剩余 {count} 条待同步",
-    "tap_to_view": "点击查看发件箱"
+    "tap_to_view": "点击查看发件箱",
+    "theme_light": "切换到浅色模式",
+    "theme_dark": "切换到深色模式"
   },
   "health_gauge": {
     "score_unit": "分",

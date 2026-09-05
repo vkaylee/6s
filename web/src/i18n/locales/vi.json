@@ -61,6 +61,14 @@
     "MAINTENANCE": "Bảo trì",
     "QUALITY": "Chất lượng"
   },
+  "s_categories": {
+    "1S": { "name": "Sàng lọc", "hint": "Đồ thừa / Phế phẩm" },
+    "2S": { "name": "Sắp xếp", "hint": "Sai chỗ / Thiếu vạch" },
+    "3S": { "name": "Sạch sẽ", "hint": "Bẩn / Rò rỉ dầu" },
+    "4S": { "name": "Săn sóc", "hint": "Hỏng chuẩn / Bảng tin" },
+    "5S": { "name": "Sẵn sàng", "hint": "Sai tác phong / Nội quy" },
+    "6S": { "name": "An toàn", "hint": "Nguy hiểm / Cháy nổ" }
+  },
   "nav": {
     "title": "Hệ thống 6S",
     "superadmin_setup": "Cần khởi tạo hệ thống",
@@ -70,7 +78,9 @@
     "outbox": "Hộp thư gửi",
     "language": "Ngôn ngữ",
     "pending_records": "Còn {count} bản ghi chờ gửi",
-    "tap_to_view": "Chạm để xem hàng đợi"
+    "tap_to_view": "Chạm để xem hàng đợi",
+    "theme_light": "Chuyển chế độ sáng",
+    "theme_dark": "Chuyển chế độ tối"
   },
   "health_gauge": {
     "score_unit": "ĐIỂM",

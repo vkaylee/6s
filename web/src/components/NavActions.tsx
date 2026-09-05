@@ -25,7 +25,7 @@ export function NavActions() {
         data-testid="theme-toggle"
         onClick={toggleTheme}
         className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-sm font-bold min-w-[44px] min-h-[44px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700"
-        title={isDark ? "Chuyển chế độ sáng" : "Chuyển chế độ tối"}
+        title={isDark ? t("nav.theme_light") : t("nav.theme_dark")}
       >
         {isDark ? "☀️" : "🌙"}
       </button>

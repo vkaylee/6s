@@ -61,6 +61,14 @@
     "MAINTENANCE": "Maintenance",
     "QUALITY": "Quality"
   },
+  "s_categories": {
+    "1S": { "name": "Sort", "hint": "Clutter / Scrap" },
+    "2S": { "name": "Set in Order", "hint": "Wrong place / Missing line" },
+    "3S": { "name": "Shine", "hint": "Dirty / Oil leak" },
+    "4S": { "name": "Standardize", "hint": "Broken standard / Notice board" },
+    "5S": { "name": "Sustain", "hint": "Discipline / Rules" },
+    "6S": { "name": "Safety", "hint": "Danger / Fire hazard" }
+  },
   "nav": {
     "title": "6S Issue Tracker",
     "superadmin_setup": "System Setup Required",
@@ -70,7 +78,9 @@
     "outbox": "Outbox",
     "language": "Language",
     "pending_records": "{count} records pending sync",
-    "tap_to_view": "Tap to view outbox"
+    "tap_to_view": "Tap to view outbox",
+    "theme_light": "Switch to light mode",
+    "theme_dark": "Switch to dark mode"
   },
   "health_gauge": {
     "score_unit": "PTS",

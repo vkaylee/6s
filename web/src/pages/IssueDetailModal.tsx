@@ -10,6 +10,7 @@ import {
   IssueCategory,
   type IssueItem,
   IssueStatus,
+  resolveI18n,
   S_CATEGORIES,
   UserRole,
 } from "../types/index.ts";
@@ -24,7 +25,8 @@ interface IssueDetailModalProps {
 }
 
 export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDetailModalProps) {
-  const { t } = useI18nStore();
+  const { t, locale: storeLocale } = useI18nStore();
+  const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const { user } = useAuthStore();
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
@@ -223,7 +225,7 @@ export function IssueDetailModal({ issue, isOpen, onClose, onRefresh }: IssueDet
                     : "bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
                 }`}
               >
-                {s.key} ({s.name})
+                {s.key} ({s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name})
               </button>
             ))}
           </div>
