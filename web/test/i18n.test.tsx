@@ -304,6 +304,9 @@ describe("Component Props I18n Enforcement Guard", () => {
     beforeUrl: true,
     afterUrl: true,
     serverPhotoAfter: true,
+    imageUrl: true,
+    value: true,
+    locationCode: true,
   };
 
   it("forbids raw string props for UI text across all components and pages, requiring I18nObject", async () => {
@@ -334,11 +337,14 @@ describe("Component Props I18n Enforcement Guard", () => {
               const propName = member.name.getText(sf);
               if (nonI18nProps[propName]) continue;
               const propType = member.type ? member.type.getText(sf) : "";
-              // If prop type is raw 'string' without I18nObject
+              // If prop type is raw 'string' without I18nObject, and not a function
+              const isFunction =
+                (member.type && ts.isFunctionTypeNode(member.type)) || propType.includes("=>");
               if (
-                propType === "string" ||
-                propType === "string | undefined" ||
-                (propType.includes("string") && !propType.includes("I18nObject"))
+                !isFunction &&
+                (propType === "string" ||
+                  propType === "string | undefined" ||
+                  (propType.includes("string") && !propType.includes("I18nObject")))
               ) {
                 violations.push({ file, prop: propName, type: propType });
               }

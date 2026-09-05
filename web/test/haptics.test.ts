@@ -7,6 +7,7 @@ describe("haptics utils", () => {
     haptics.safetyAlert();
     haptics.errorOrConflict();
     haptics.disabledTouch();
+    haptics.selection();
     expect(true).toBe(true);
   });
 });

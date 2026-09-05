@@ -172,7 +172,21 @@
     "auto_classified": "Auto-selected {category} from tag",
     "tag_search_placeholder": "Quick search tags (leak, aisle, chemical...)",
     "no_tags_found": "No matching tags found",
-    "add_custom_tag": "+ Use custom tag: \"{query}\""
+    "add_custom_tag": "+ Use custom tag: \"{query}\"",
+    "annotator_title": "Annotate & Mark Defect",
+    "annotator_hint": "Circle or highlight the abnormal area on photo",
+    "annotator_save": "Save Annotation",
+    "tool_circle": "Circle",
+    "tool_rect": "Rectangle",
+    "tool_pen": "Draw",
+    "tool_move": "Move",
+    "tool_undo": "Undo",
+    "tool_clear": "Clear",
+    "photo_annotate_btn": "Annotate",
+    "photo_retake_btn": "Retake",
+    "photo_remove_btn": "Remove",
+    "search_location_placeholder": "Search by code, English, Chinese name...",
+    "no_locations_found": "No matching locations found"
   },
   "admin": {
     "title": "System Settings",

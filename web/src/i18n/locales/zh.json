@@ -172,7 +172,21 @@
     "auto_classified": "已根据标签自动选择 {category}",
     "tag_search_placeholder": "快速搜索标签 (漏油, 通道, 化学品...)",
     "no_tags_found": "未找到匹配标签",
-    "add_custom_tag": "+ 使用新标签: \"{query}\""
+    "add_custom_tag": "+ 使用新标签: \"{query}\"",
+    "annotator_title": "标注与圈选缺陷",
+    "annotator_hint": "用手指或触控笔圈出异常隐患区域",
+    "annotator_save": "保存标注",
+    "tool_circle": "圆形",
+    "tool_rect": "矩形",
+    "tool_pen": "画笔",
+    "tool_move": "移动",
+    "tool_undo": "撤销",
+    "tool_clear": "清空",
+    "photo_annotate_btn": "圈选标注",
+    "photo_retake_btn": "重拍",
+    "photo_remove_btn": "删除",
+    "search_location_placeholder": "按车间代码、中文名、越南文搜索...",
+    "no_locations_found": "未找到匹配位置"
   },
   "admin": {
     "title": "系统配置",

@@ -22,4 +22,9 @@ export const haptics = {
       navigator.vibrate(30);
     }
   },
+  selection: () => {
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate(15);
+    }
+  },
 };

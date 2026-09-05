@@ -172,7 +172,21 @@
     "auto_classified": "Đã tự động chọn {category} theo nhãn",
     "tag_search_placeholder": "Tìm nhanh nhãn (rò rỉ, lối đi, hóa chất...)",
     "no_tags_found": "Không tìm thấy nhãn phù hợp",
-    "add_custom_tag": "+ Dùng nhãn mới: \"{query}\""
+    "add_custom_tag": "+ Dùng nhãn mới: \"{query}\"",
+    "annotator_title": "Khoanh vùng & Chú thích lỗi",
+    "annotator_hint": "Dùng ngón tay hoặc bút khoanh tròn vị trí bất thường",
+    "annotator_save": "Lưu chú thích",
+    "tool_circle": "Khoanh tròn",
+    "tool_rect": "Khung chữ nhật",
+    "tool_pen": "Vẽ tự do",
+    "tool_move": "Di chuyển",
+    "tool_undo": "Hoàn tác",
+    "tool_clear": "Xóa nét",
+    "photo_annotate_btn": "Khoanh lỗi",
+    "photo_retake_btn": "Chụp lại",
+    "photo_remove_btn": "Xóa",
+    "search_location_placeholder": "Tìm theo mã, tên tiếng Việt, tiếng Trung...",
+    "no_locations_found": "Không tìm thấy vị trí phù hợp"
   },
   "admin": {
     "title": "Cấu hình hệ thống",
