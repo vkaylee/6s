@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"6s/internal/apperror"
 	"6s/internal/auth"
@@ -20,6 +23,8 @@ type BusinessService interface {
 	GetReporterLeaderboard(ctx context.Context) ([]ReporterItem, error)
 	GetRules(ctx context.Context) ([]db.ScoringRule, error)
 	UpdateRules(ctx context.Context, req UpdateRulesRequest, adminUserID int64) error
+	GetIssueScoreLogs(ctx context.Context, issueID int64) ([]ScoreLogItem, error)
+	GetTargetScoreLogsInCycle(ctx context.Context, targetType, targetID string) ([]ScoreLogItem, error)
 }
 
 // Handler handles scoring and leaderboard HTTP endpoints.
@@ -47,6 +52,44 @@ func (h *Handler) GetReporterLeaderboard(w http.ResponseWriter, r *http.Request)
 	items, err := h.service.GetReporterLeaderboard(r.Context())
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrLeaderboardFailed).WithCause(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, items)
+}
+
+// GetIssueScoreLogs handles GET /api/issues/{id}/score-logs.
+func (h *Handler) GetIssueScoreLogs(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+		return
+	}
+
+	items, err := h.service.GetIssueScoreLogs(r.Context(), id)
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrScoreLogsFailed).WithCause(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, items)
+}
+
+// GetTargetScoreLogs handles GET /api/leaderboard/score-logs?target_type=...&target_id=...
+func (h *Handler) GetTargetScoreLogs(w http.ResponseWriter, r *http.Request) {
+	targetType := r.URL.Query().Get("target_type")
+	targetID := r.URL.Query().Get("target_id")
+	if targetType != "LOCATION" && targetType != auth.RoleUser.String() {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	if targetID == "" {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+
+	items, err := h.service.GetTargetScoreLogsInCycle(r.Context(), targetType, targetID)
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrScoreLogsFailed).WithCause(err))
 		return
 	}
 	response.JSON(w, http.StatusOK, items)

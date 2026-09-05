@@ -7,17 +7,20 @@ import (
 	"time"
 
 	"6s/internal/db"
+	"6s/internal/issue"
 )
 
 type mockScoringStore struct {
-	locations []db.Location
-	sums      map[string]int64
-	openCount map[string]int64
-	overdue   map[string]int64
-	reporters []db.GetReporterLeaderboardInMonthRow
-	rules     map[string]int32
-	logs      []db.ScoreLog
-	auditLogs []db.InsertAuditLogParams
+	locations  []db.Location
+	sums       map[string]int64
+	openCount  map[string]int64
+	overdue    map[string]int64
+	reporters  []db.GetReporterLeaderboardInMonthRow
+	rules      map[string]int32
+	logs       []db.ScoreLog
+	auditLogs  []db.InsertAuditLogParams
+	issueLogs  []db.ListScoreLogsByIssueRow
+	targetLogs []db.ListScoreLogsByTargetSinceRow
 }
 
 func (m *mockScoringStore) ListLocations(_ context.Context) ([]db.Location, error) {
@@ -63,6 +66,14 @@ func (m *mockScoringStore) UpsertScoringRule(_ context.Context, arg db.UpsertSco
 
 func (m *mockScoringStore) ListScoreLogsSince(_ context.Context, _ time.Time) ([]db.ScoreLog, error) {
 	return m.logs, nil
+}
+
+func (m *mockScoringStore) ListScoreLogsByIssue(_ context.Context, _ int64) ([]db.ListScoreLogsByIssueRow, error) {
+	return m.issueLogs, nil
+}
+
+func (m *mockScoringStore) ListScoreLogsByTargetSince(_ context.Context, _ db.ListScoreLogsByTargetSinceParams) ([]db.ListScoreLogsByTargetSinceRow, error) {
+	return m.targetLogs, nil
 }
 
 func (m *mockScoringStore) InsertScoreLog(_ context.Context, arg db.InsertScoreLogParams) error {
@@ -211,5 +222,54 @@ func TestScoringService_ReporterLeaderboardAndRules(t *testing.T) {
 	start := StartOfMonth(now, time.UTC)
 	if start.Day() != 1 || start.Month() != 9 || start.Year() != 2026 {
 		t.Errorf("expected 2026-09-01 00:00:00, got %v", start)
+	}
+}
+
+func TestScoringService_ScoreLogs(t *testing.T) {
+	store := &mockScoringStore{
+		issueLogs: []db.ListScoreLogsByIssueRow{
+			{
+				ID:              1,
+				IssueID:         100,
+				TargetType:      "LOCATION",
+				TargetID:        "LINE_A1",
+				RuleKey:         "penalty_normal",
+				RuleDescription: "Normal penalty",
+				Points:          -2,
+				CreatedAt:       time.Now(),
+			},
+		},
+		targetLogs: []db.ListScoreLogsByTargetSinceRow{
+			{
+				ID:               2,
+				IssueID:          100,
+				TargetType:       "LOCATION",
+				TargetID:         "LINE_A1",
+				RuleKey:          "penalty_normal",
+				RuleDescription:  "Normal penalty",
+				Points:           -2,
+				CreatedAt:        time.Now(),
+				IssueCategory:    "1S",
+				IssueDescription: "Dust on machine",
+			},
+		},
+	}
+	svc := NewService(store, nil)
+	ctx := context.Background()
+
+	issueLogs, err := svc.GetIssueScoreLogs(ctx, 100)
+	if err != nil {
+		t.Fatalf("unexpected error GetIssueScoreLogs: %v", err)
+	}
+	if len(issueLogs) != 1 || issueLogs[0].Points != -2 {
+		t.Fatalf("expected 1 issue score log with -2 pts, got %+v", issueLogs)
+	}
+
+	targetLogs, err := svc.GetTargetScoreLogsInCycle(ctx, "LOCATION", "LINE_A1")
+	if err != nil {
+		t.Fatalf("unexpected error GetTargetScoreLogsInCycle: %v", err)
+	}
+	if len(targetLogs) != 1 || targetLogs[0].IssueCategory != issue.Category1S.String() {
+		t.Fatalf("expected 1 target score log with category 1S, got %+v", targetLogs)
 	}
 }

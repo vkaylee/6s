@@ -30,6 +30,8 @@ type Store interface {
 	GetScoringRuleByKey(ctx context.Context, ruleKey string) (db.ScoringRule, error)
 	UpsertScoringRule(ctx context.Context, arg db.UpsertScoringRuleParams) (db.ScoringRule, error)
 	ListScoreLogsSince(ctx context.Context, createdAt time.Time) ([]db.ScoreLog, error)
+	ListScoreLogsByIssue(ctx context.Context, issueID int64) ([]db.ListScoreLogsByIssueRow, error)
+	ListScoreLogsByTargetSince(ctx context.Context, arg db.ListScoreLogsByTargetSinceParams) ([]db.ListScoreLogsByTargetSinceRow, error)
 	InsertScoreLog(ctx context.Context, arg db.InsertScoreLogParams) error
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
 }
@@ -67,6 +69,22 @@ type ReporterItem struct {
 	Points      int64  `json:"points"`
 	ValidCount  int64  `json:"valid_count"`
 	SafetyCount int64  `json:"safety_count"`
+}
+
+// ScoreLogItem represents one score transaction log.
+type ScoreLogItem struct {
+	ID               int64   `json:"id"`
+	IssueID          int64   `json:"issue_id"`
+	TargetType       string  `json:"target_type"`
+	TargetID         string  `json:"target_id"`
+	RuleKey          string  `json:"rule_key"`
+	RuleDescription  string  `json:"rule_description"`
+	Points           int32   `json:"points"`
+	CreatedAt        string  `json:"created_at"`
+	PenaltyDate      *string `json:"penalty_date,omitempty"`
+	IssueCategory    string  `json:"issue_category,omitempty"`
+	IssueDescription string  `json:"issue_description,omitempty"`
+	IssueStatus      string  `json:"issue_status,omitempty"`
 }
 
 // StartOfWeek calculates Monday 00:00:00 of the current week in local timezone.
@@ -171,6 +189,78 @@ func (s *Service) GetReporterLeaderboard(ctx context.Context) ([]ReporterItem, e
 // GetRules returns current active scoring rules.
 func (s *Service) GetRules(ctx context.Context) ([]db.ScoringRule, error) {
 	return s.store.GetScoringRules(ctx)
+}
+
+// GetIssueScoreLogs retrieves score logs associated with a specific issue.
+func (s *Service) GetIssueScoreLogs(ctx context.Context, issueID int64) ([]ScoreLogItem, error) {
+	rows, err := s.store.ListScoreLogsByIssue(ctx, issueID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list score logs for issue: %w", err)
+	}
+
+	items := make([]ScoreLogItem, 0, len(rows))
+	for _, r := range rows {
+		var pDate *string
+		if r.PenaltyDate.Valid {
+			dStr := r.PenaltyDate.Time.Format("2006-01-02")
+			pDate = &dStr
+		}
+		items = append(items, ScoreLogItem{
+			ID:              r.ID,
+			IssueID:         r.IssueID,
+			TargetType:      r.TargetType,
+			TargetID:        r.TargetID,
+			RuleKey:         r.RuleKey,
+			RuleDescription: r.RuleDescription,
+			Points:          r.Points,
+			CreatedAt:       r.CreatedAt.Format(time.RFC3339),
+			PenaltyDate:     pDate,
+		})
+	}
+	return items, nil
+}
+
+// GetTargetScoreLogsInCycle retrieves score logs for a target (LOCATION or USER) in their current cycle (week or month).
+func (s *Service) GetTargetScoreLogsInCycle(ctx context.Context, targetType, targetID string) ([]ScoreLogItem, error) {
+	var since time.Time
+	if targetType == "LOCATION" {
+		since = StartOfWeek(time.Now(), s.loc)
+	} else {
+		since = StartOfMonth(time.Now(), s.loc)
+	}
+
+	rows, err := s.store.ListScoreLogsByTargetSince(ctx, db.ListScoreLogsByTargetSinceParams{
+		TargetType: targetType,
+		TargetID:   targetID,
+		CreatedAt:  since,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list target score logs: %w", err)
+	}
+
+	items := make([]ScoreLogItem, 0, len(rows))
+	for _, r := range rows {
+		var pDate *string
+		if r.PenaltyDate.Valid {
+			dStr := r.PenaltyDate.Time.Format("2006-01-02")
+			pDate = &dStr
+		}
+		items = append(items, ScoreLogItem{
+			ID:               r.ID,
+			IssueID:          r.IssueID,
+			TargetType:       r.TargetType,
+			TargetID:         r.TargetID,
+			RuleKey:          r.RuleKey,
+			RuleDescription:  r.RuleDescription,
+			Points:           r.Points,
+			CreatedAt:        r.CreatedAt.Format(time.RFC3339),
+			PenaltyDate:      pDate,
+			IssueCategory:    r.IssueCategory,
+			IssueDescription: r.IssueDescription,
+			IssueStatus:      r.IssueStatus,
+		})
+	}
+	return items, nil
 }
 
 // UpdateRulesRequest parameters for updating scoring rules.

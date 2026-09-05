@@ -16,6 +16,7 @@ import { AdminConfigPage } from "./pages/AdminConfigPage.tsx";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
 import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
+import { ScoreLedgerPage } from "./pages/ScoreLedgerPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 import { useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
@@ -35,7 +36,7 @@ export function App() {
   const { t } = useI18nStore();
   const { user, accessToken, restoreSession } = useAuthStore();
   const { initTheme } = useThemeStore();
-  const [, setLocation] = useLocation();
+  const [currentPath, setLocation] = useLocation();
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [tags, setTags] = useState<TagItem[]>([]);
@@ -44,6 +45,7 @@ export function App() {
   const [leaderboardTab, setLeaderboardTab] = useState<"LOCATIONS" | "REPORTERS">("LOCATIONS");
   const [activeFacet, setActiveFacet] = useState<FacetKey>("ALL");
 
+  const [showAllLeaderboard, setShowAllLeaderboard] = useState(false);
   // Modals state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueItem | null>(null);
@@ -56,7 +58,32 @@ export function App() {
     restoreSession();
     checkSetupStatus();
   }, [initTheme, restoreSession]);
+  // Function to open an issue by ID (either from local state or fetch from server)
+  const openIssueById = async (issueId: number) => {
+    const existing = issues.find((i) => i.id === issueId);
+    if (existing) {
+      setSelectedIssue(existing);
+      return;
+    }
+    try {
+      const fetched = await apiClient<IssueItem>(`/api/issues/${issueId}`);
+      if (fetched) {
+        setSelectedIssue(fetched);
+      }
+    } catch {
+      // ignore if not found
+    }
+  };
 
+  // Support deep linking to issue via query param ?issue_id=123
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const issueIdStr = params.get("issue_id");
+    if (issueIdStr) {
+      openIssueById(Number(issueIdStr));
+    }
+  }, [currentPath, issues]);
   useEffect(() => {
     if (!user) return;
     syncEngine.start();
@@ -576,6 +603,34 @@ export function App() {
             <AdminConfigPage />
           </ProtectedRoute>
         </Route>
+        <Route path="/leaderboard/locations/:code">
+          {(params) => (
+            <ProtectedRoute>
+              <ScoreLedgerPage
+                targetType="LOCATION"
+                id={params.code}
+                onSelectIssue={(issueId) => {
+                  openIssueById(issueId);
+                  setLocation(`/?issue_id=${issueId}`);
+                }}
+              />
+            </ProtectedRoute>
+          )}
+        </Route>
+        <Route path="/leaderboard/reporters/:id">
+          {(params) => (
+            <ProtectedRoute>
+              <ScoreLedgerPage
+                targetType="USER"
+                id={params.id}
+                onSelectIssue={(issueId) => {
+                  openIssueById(issueId);
+                  setLocation(`/?issue_id=${issueId}`);
+                }}
+              />
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/issues/new">
           <ProtectedRoute>
             <CreateIssuePage
@@ -610,31 +665,43 @@ export function App() {
 
                   {/* Leaderboards widget (Tabs) */}
                   <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                    <div className="flex space-x-2 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-                      <button
-                        type="button"
-                        onClick={() => setLeaderboardTab("LOCATIONS")}
-                        className={`text-xs font-black px-3 py-1.5 rounded-lg ${
-                          leaderboardTab === "LOCATIONS"
-                            ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                            : "text-zinc-500"
-                        }`}
-                      >
-                        {t("leaderboard.location_health")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLeaderboardTab("REPORTERS")}
-                        className={`text-xs font-black px-3 py-1.5 rounded-lg ${
-                          leaderboardTab === "REPORTERS"
-                            ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                            : "text-zinc-500"
-                        }`}
-                      >
-                        {t("leaderboard.top_reporters")}
-                      </button>
+                    <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
+                      <div className="flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLeaderboardTab("LOCATIONS");
+                            setShowAllLeaderboard(false);
+                          }}
+                          className={`text-xs font-black px-3 py-1.5 rounded-lg ${
+                            leaderboardTab === "LOCATIONS"
+                              ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                              : "text-zinc-500"
+                          }`}
+                        >
+                          {t("leaderboard.location_health")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLeaderboardTab("REPORTERS");
+                            setShowAllLeaderboard(false);
+                          }}
+                          className={`text-xs font-black px-3 py-1.5 rounded-lg ${
+                            leaderboardTab === "REPORTERS"
+                              ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                              : "text-zinc-500"
+                          }`}
+                        >
+                          {t("leaderboard.top_reporters")}
+                        </button>
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md">
+                        {leaderboardTab === "LOCATIONS"
+                          ? t("leaderboard.cycle_weekly")
+                          : t("leaderboard.cycle_monthly")}
+                      </span>
                     </div>
-
                     {leaderboardTab === "LOCATIONS" ? (
                       <div className="space-y-2">
                         {locationHealth.length === 0 ? (
@@ -642,19 +709,46 @@ export function App() {
                             {t("leaderboard.no_location_data")}
                           </div>
                         ) : (
-                          locationHealth.slice(0, 3).map((loc) => (
-                            <div
-                              key={loc.location_code}
-                              className="flex items-center justify-between text-xs p-2 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl"
-                            >
-                              <span className="font-bold">
-                                {loc.location_name || loc.location_code}
-                              </span>
-                              <span className="font-black text-blue-600 dark:text-blue-400">
-                                {loc.health_score} {t("leaderboard.points_unit")}
-                              </span>
-                            </div>
-                          ))
+                          (showAllLeaderboard ? locationHealth : locationHealth.slice(0, 3)).map(
+                            (loc) => (
+                              <button
+                                key={loc.location_code}
+                                type="button"
+                                onClick={() => {
+                                  setLocation(
+                                    `/leaderboard/locations/${encodeURIComponent(loc.location_code)}`,
+                                  );
+                                }}
+                                className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600">
+                                    {loc.location_name || loc.location_code}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 font-medium">
+                                    (🔍 {t("leaderboard.view_history")})
+                                  </span>
+                                </div>
+                                <span className="font-black text-blue-600 dark:text-blue-400">
+                                  {loc.health_score} {t("leaderboard.points_unit")}
+                                </span>
+                              </button>
+                            ),
+                          )
+                        )}
+                        {locationHealth.length > 3 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllLeaderboard((prev) => !prev)}
+                            className="w-full text-center py-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {showAllLeaderboard
+                              ? t("common.collapse")
+                              : t("leaderboard.view_all").replace(
+                                  "{count}",
+                                  String(locationHealth.length),
+                                )}
+                          </button>
                         )}
                       </div>
                     ) : (
@@ -664,20 +758,54 @@ export function App() {
                             {t("leaderboard.no_reporter_data")}
                           </div>
                         ) : (
-                          reporters.slice(0, 3).map((rep, idx) => (
-                            <div
-                              key={rep.user_id}
-                              className="flex items-center justify-between text-xs p-2 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl"
-                            >
-                              <span className="font-bold">
-                                {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"} {rep.full_name}
-                              </span>
-                              <span className="font-black text-amber-600">
-                                {rep.points} {t("leaderboard.points_unit")} ({rep.valid_count}{" "}
-                                {t("leaderboard.issues_unit")})
-                              </span>
-                            </div>
-                          ))
+                          (showAllLeaderboard ? reporters : reporters.slice(0, 3)).map(
+                            (rep, idx) => (
+                              <button
+                                key={rep.user_id}
+                                type="button"
+                                onClick={() => {
+                                  setLocation(
+                                    `/leaderboard/reporters/${encodeURIComponent(String(rep.user_id))}`,
+                                  );
+                                }}
+                                className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-amber-600">
+                                    {idx === 0
+                                      ? "🥇"
+                                      : idx === 1
+                                        ? "🥈"
+                                        : idx === 2
+                                          ? "🥉"
+                                          : `#${idx + 1}`}{" "}
+                                    {rep.full_name}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 font-medium">
+                                    (🔍 {t("leaderboard.view_history")})
+                                  </span>
+                                </div>
+                                <span className="font-black text-amber-600">
+                                  {rep.points} {t("leaderboard.points_unit")} ({rep.valid_count}{" "}
+                                  {t("leaderboard.issues_unit")})
+                                </span>
+                              </button>
+                            ),
+                          )
+                        )}
+                        {reporters.length > 3 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllLeaderboard((prev) => !prev)}
+                            className="w-full text-center py-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline"
+                          >
+                            {showAllLeaderboard
+                              ? t("common.collapse")
+                              : t("leaderboard.view_all").replace(
+                                  "{count}",
+                                  String(reporters.length),
+                                )}
+                          </button>
                         )}
                       </div>
                     )}
@@ -746,7 +874,15 @@ export function App() {
                 <IssueDetailModal
                   issue={selectedIssue}
                   isOpen={true}
-                  onClose={() => setSelectedIssue(null)}
+                  onClose={() => {
+                    setSelectedIssue(null);
+                    if (
+                      typeof window !== "undefined" &&
+                      window.location.search.includes("issue_id=")
+                    ) {
+                      setLocation("/");
+                    }
+                  }}
                   onRefresh={() => {
                     loadIssues();
                     loadLeaderboards();

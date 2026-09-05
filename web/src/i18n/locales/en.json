@@ -18,7 +18,8 @@
     "location": "Location",
     "reporter": "Reporter",
     "created_at": "Created At",
-    "actions": "Actions"
+    "actions": "Actions",
+    "collapse": "Collapse"
   },
   "auth": {
     "login": "Login",
@@ -82,6 +83,14 @@
     "theme_light": "Switch to light mode",
     "theme_dark": "Switch to dark mode"
   },
+  "pwa": {
+    "install_app": "Install App",
+    "install_tooltip": "Install app to home screen",
+    "ios_title": "Install on iPhone/iPad",
+    "ios_step1": "Tap the Share button (square with arrow) at the bottom of Safari.",
+    "ios_step2": "Scroll down and select 'Add to Home Screen'.",
+    "ios_step3": "Tap 'Add' in the top right corner."
+  },
   "health_gauge": {
     "score_unit": "PTS",
     "workshop_health": "Workshop 6S Health",
@@ -101,7 +110,16 @@
     "no_location_data": "No weekly score data",
     "no_reporter_data": "No monthly leaderboard data",
     "points_unit": "pts",
-    "issues_unit": "issues"
+    "issues_unit": "issues",
+    "cycle_weekly": "Weekly Cycle (Since Mon)",
+    "cycle_monthly": "Monthly Cycle (Since 1st)",
+    "view_all": "View All ({count})",
+    "view_history": "View Score History",
+    "score_history_title": "Score Change Ledger",
+    "score_history_empty": "No score changes recorded in this cycle",
+    "base_weekly_score": "Base weekly score: {points} pts",
+    "view_issue": "View Issue Details",
+    "back_to_home": "Back to Home"
   },
   "facets": {
     "all": "All",
@@ -355,8 +373,12 @@
     "reason_placeholder": "Enter required reason...",
     "need_safety_officer": "Safety Officer permission required",
     "only_assigned_line": "Only authorized for assigned line",
-    "need_line_leader": "Line Leader permission or higher required",
-    "locked": "Locked"
+    "need_line_leader": "Line Leader permission required",
+    "locked": "Locked",
+    "score_breakdown_title": "6S Score Impact of this Issue",
+    "score_breakdown_empty": "No score transactions recorded for this issue",
+    "target_location": "Area / Line",
+    "target_user": "Reporter"
   },
   "app": {
     "issues_list": "Issue List ({count})",

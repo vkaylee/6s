@@ -13,6 +13,7 @@ import {
   type LocationItem,
   resolveI18n,
   S_CATEGORIES,
+  type ScoreLogItem,
   type TagItem,
   UserRole,
 } from "../types/index.ts";
@@ -62,6 +63,36 @@ export function IssueDetailModal({
   const touchDistanceRef = useRef<number | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [issueScoreLogs, setIssueScoreLogs] = useState<ScoreLogItem[]>([]);
+  const [loadingScores, setLoadingScores] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !issue?.id) {
+      setIssueScoreLogs([]);
+      return;
+    }
+    let isMounted = true;
+    setLoadingScores(true);
+    apiClient<ScoreLogItem[]>(`/api/issues/${issue.id}/score-logs`)
+      .then((data) => {
+        if (isMounted) {
+          setIssueScoreLogs(data || []);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setIssueScoreLogs([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingScores(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, issue?.id]);
 
   // Reset pan & zoom when photo changes
   useEffect(() => {
@@ -460,6 +491,73 @@ export function IssueDetailModal({
               </div>
             </div>
           )}
+
+          {/* Score Impact Breakdown Card */}
+          <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                📊 {t("issue_detail.score_breakdown_title")}
+              </span>
+              {currentIssue.score_rating && currentIssue.score_rating > 0 && (
+                <span className="text-xs text-amber-500 font-bold">
+                  {"★".repeat(currentIssue.score_rating)}
+                </span>
+              )}
+            </div>
+
+            {loadingScores ? (
+              <div className="text-xs text-zinc-400 py-2 text-center">{t("common.loading")}</div>
+            ) : issueScoreLogs.length === 0 ? (
+              <div className="text-xs text-zinc-400 py-1">
+                {t("issue_detail.score_breakdown_empty")}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {issueScoreLogs.map((log) => {
+                  const isPositive = log.points > 0;
+                  const isLocation = log.target_type === "LOCATION";
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center space-x-1.5">
+                          <span
+                            className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                              isLocation
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                            }`}
+                          >
+                            {isLocation
+                              ? t("issue_detail.target_location")
+                              : t("issue_detail.target_user")}
+                          </span>
+                          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                            {log.target_id}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {log.rule_description || log.rule_key}
+                          {log.penalty_date && ` (${log.penalty_date})`}
+                        </div>
+                      </div>
+                      <span
+                        className={`font-mono font-black text-xs px-2 py-0.5 rounded-lg ${
+                          isPositive
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300"
+                            : "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300"
+                        }`}
+                      >
+                        {isPositive ? `+${log.points}` : log.points}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Bottom Actions Bar (Glove Friendly, Explainable Disabled) */}

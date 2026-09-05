@@ -8,15 +8,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+
 	"6s/internal/auth"
 	"6s/internal/db"
 )
 
 type mockHandlerService struct {
-	locItems []LocationHealthItem
-	repItems []ReporterItem
-	rules    []db.ScoringRule
-	err      error
+	locItems   []LocationHealthItem
+	repItems   []ReporterItem
+	rules      []db.ScoringRule
+	scoreLogs  []ScoreLogItem
+	targetLogs []ScoreLogItem
+	err        error
 }
 
 func (m *mockHandlerService) GetLocationLeaderboard(_ context.Context) ([]LocationHealthItem, error) {
@@ -42,6 +46,20 @@ func (m *mockHandlerService) GetRules(_ context.Context) ([]db.ScoringRule, erro
 
 func (m *mockHandlerService) UpdateRules(_ context.Context, _ UpdateRulesRequest, _ int64) error {
 	return m.err
+}
+
+func (m *mockHandlerService) GetIssueScoreLogs(_ context.Context, _ int64) ([]ScoreLogItem, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.scoreLogs, nil
+}
+
+func (m *mockHandlerService) GetTargetScoreLogsInCycle(_ context.Context, _, _ string) ([]ScoreLogItem, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.targetLogs, nil
 }
 
 func TestScoringHandler(t *testing.T) {
@@ -87,6 +105,44 @@ func TestScoringHandler(t *testing.T) {
 	body, _ := json.Marshal(UpdateRulesPayload{
 		Rules: map[string]int32{"penalty_normal": -3},
 	})
+
+	// 4. GET /api/leaderboard/score-logs
+	reqTargetLogs := httptest.NewRequest("GET", "/api/leaderboard/score-logs?target_type=LOCATION&target_id=LINE_A1", nil)
+	rrTargetLogs := httptest.NewRecorder()
+	handler.GetTargetScoreLogs(rrTargetLogs, reqTargetLogs)
+	if rrTargetLogs.Code != http.StatusOK {
+		t.Errorf("GetTargetScoreLogs failed with code %d", rrTargetLogs.Code)
+	}
+
+	// 5. GET /api/issues/{id}/score-logs
+	reqIssueLogs := httptest.NewRequest("GET", "/api/issues/123/score-logs", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "123")
+	reqIssueLogs = reqIssueLogs.WithContext(context.WithValue(reqIssueLogs.Context(), chi.RouteCtxKey, rctx))
+	rrIssueLogs := httptest.NewRecorder()
+	handler.GetIssueScoreLogs(rrIssueLogs, reqIssueLogs)
+	if rrIssueLogs.Code != http.StatusOK {
+		t.Errorf("GetIssueScoreLogs failed with code %d", rrIssueLogs.Code)
+	}
+
+	// Invalid issue id format for issue score logs -> 400 Bad Request
+	reqBadIssue := httptest.NewRequest("GET", "/api/issues/abc/score-logs", nil)
+	rctxBad := chi.NewRouteContext()
+	rctxBad.URLParams.Add("id", "abc")
+	reqBadIssue = reqBadIssue.WithContext(context.WithValue(reqBadIssue.Context(), chi.RouteCtxKey, rctxBad))
+	rrBadIssue := httptest.NewRecorder()
+	handler.GetIssueScoreLogs(rrBadIssue, reqBadIssue)
+	if rrBadIssue.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-numeric issue id, got %d", rrBadIssue.Code)
+	}
+
+	// Invalid target_type -> 400 Bad Request
+	reqBadTarget := httptest.NewRequest("GET", "/api/leaderboard/score-logs?target_type=UNKNOWN&target_id=1", nil)
+	rrBadTarget := httptest.NewRecorder()
+	handler.GetTargetScoreLogs(rrBadTarget, reqBadTarget)
+	if rrBadTarget.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid target_type, got %d", rrBadTarget.Code)
+	}
 	reqPut := httptest.NewRequest("PUT", "/api/config/scoring", bytes.NewReader(body))
 	ctxUser := context.WithValue(reqPut.Context(), auth.UserContextKey, adminUser)
 	rrPut := httptest.NewRecorder()

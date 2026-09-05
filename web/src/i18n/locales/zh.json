@@ -18,7 +18,8 @@
     "location": "位置",
     "reporter": "上报人",
     "created_at": "创建时间",
-    "actions": "操作"
+    "actions": "操作",
+    "collapse": "收起"
   },
   "auth": {
     "login": "登录",
@@ -82,6 +83,14 @@
     "theme_light": "切换到浅色模式",
     "theme_dark": "切换到深色模式"
   },
+  "pwa": {
+    "install_app": "安装应用",
+    "install_tooltip": "添加到主屏幕",
+    "ios_title": "在 iPhone/iPad 上安装",
+    "ios_step1": "点击 Safari 底部栏的“分享”按钮（带箭头的方框）。",
+    "ios_step2": "向下滚动并选择“添加到主屏幕”。",
+    "ios_step3": "点击右上角的“添加”即可完成。"
+  },
   "health_gauge": {
     "score_unit": "分",
     "workshop_health": "车间6S健康度",
@@ -101,7 +110,16 @@
     "no_location_data": "暂无周评分数据",
     "no_reporter_data": "暂无月度荣誉榜数据",
     "points_unit": "分",
-    "issues_unit": "条"
+    "issues_unit": "条",
+    "cycle_weekly": "周周期 (本周一开始)",
+    "cycle_monthly": "月周期 (本月1号开始)",
+    "view_all": "查看全部 ({count})",
+    "view_history": "查看积分变动记录",
+    "score_history_title": "积分变动明细账",
+    "score_history_empty": "本周期暂无积分变动",
+    "base_weekly_score": "每周初始基础分: {points}分",
+    "view_issue": "查看问题详情",
+    "back_to_home": "返回首页"
   },
   "facets": {
     "all": "全部",
@@ -355,8 +373,12 @@
     "reason_placeholder": "请输入必填原因...",
     "need_safety_officer": "需安全员权限",
     "only_assigned_line": "仅可审核所负责的产线",
-    "need_line_leader": "需线长及以上权限",
-    "locked": "已锁定"
+    "need_line_leader": "需产线组长权限",
+    "locked": "已锁定",
+    "score_breakdown_title": "该问题的6S积分变动记录",
+    "score_breakdown_empty": "该问题暂无积分变动",
+    "target_location": "产线 / 区域",
+    "target_user": "上报人"
   },
   "app": {
     "issues_list": "问题列表 ({count})",

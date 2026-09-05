@@ -1,12 +1,14 @@
 import { useI18nStore } from "../i18n/index.ts";
 import { useThemeStore } from "../store/themeStore.ts";
-
+import { InstallPrompt } from "./InstallPrompt.tsx";
 export function NavActions() {
   const { locale, setLocale, t } = useI18nStore();
   const { isDark, toggleTheme } = useThemeStore();
 
   return (
     <div className="flex items-center space-x-1.5" data-testid="nav-actions">
+      <InstallPrompt />
+
       <button
         type="button"
         data-testid="lang-toggle"

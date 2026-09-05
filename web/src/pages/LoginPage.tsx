@@ -60,7 +60,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans flex flex-col">
+    <div className="h-dvh bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans flex flex-col overflow-hidden overscroll-none">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
         <div className="max-w-md mx-auto flex items-center justify-between">
@@ -92,7 +92,7 @@ export function LoginPage() {
       </header>
 
       {/* Main Login Form Container */}
-      <main className="flex-1 flex items-center justify-center p-4">
+      <main className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
         <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
           <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 text-center">
             <div className="w-12 h-12 bg-rose-600 text-white rounded-2xl mx-auto flex items-center justify-center font-black text-xl mb-3 shadow-lg shadow-rose-600/30">

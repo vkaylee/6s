@@ -90,6 +90,21 @@ export interface ReporterLeaderboard {
   safety_count: number;
 }
 
+export interface ScoreLogItem {
+  id: number;
+  issue_id: number;
+  target_type: "LOCATION" | "USER";
+  target_id: string;
+  rule_key: string;
+  rule_description: string;
+  points: number;
+  created_at: string;
+  penalty_date?: string;
+  issue_category?: string;
+  issue_description?: string;
+  issue_status?: string;
+}
+
 export const S_CATEGORIES: {
   key: IssueCategory;
   name: string;

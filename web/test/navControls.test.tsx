@@ -64,7 +64,13 @@ describe("Page level Language & Theme Controls presence", () => {
   });
 
   it("All registered routes in App render language and theme toggle buttons", () => {
-    const routes = ["/", "/login", "/issues/new"];
+    const routes = [
+      "/",
+      "/login",
+      "/issues/new",
+      "/leaderboard/locations/LINE_A1",
+      "/leaderboard/reporters/1",
+    ];
 
     for (const route of routes) {
       const html = renderToString(

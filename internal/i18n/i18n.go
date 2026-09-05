@@ -82,6 +82,7 @@ const (
 	ErrRulesLoadFailed         Key = "scoring.rules_load_failed"
 	ErrMissingRulesReason      Key = "scoring.missing_rules_reason"
 	ErrInvalidRules            Key = "scoring.invalid_rules"
+	ErrScoreLogsFailed         Key = "scoring.score_logs_failed"
 )
 
 // ponytail: hardcoded in-memory dictionary; upgrade to embed.FS or external catalog if multi-file translators needed.
@@ -146,6 +147,7 @@ var catalog = map[string]map[Key]string{
 		ErrRulesLoadFailed:         "Không thể tải quy tắc chấm điểm",
 		ErrMissingRulesReason:      "Bắt buộc cung cấp lý do (reason) khi áp dụng hồi tố điểm (apply_from)",
 		ErrInvalidRules:            "Quy tắc điểm không hợp lệ",
+		ErrScoreLogsFailed:         "Không thể tải lịch sử cộng trừ điểm",
 	},
 	LocaleEN: {
 		ErrSessionsQueryFailed:     "Failed to query active sessions",
@@ -206,6 +208,7 @@ var catalog = map[string]map[Key]string{
 		ErrRulesLoadFailed:         "Failed to load scoring rules",
 		ErrMissingRulesReason:      "Reason is required when applying retroactive scoring (apply_from)",
 		ErrInvalidRules:            "Invalid scoring rules",
+		ErrScoreLogsFailed:         "Failed to load score history",
 	},
 	LocaleZH: {
 		ErrInternal:                "内部服务器错误",
@@ -266,6 +269,7 @@ var catalog = map[string]map[Key]string{
 		ErrNotificationSaveFailed:  "保存通知配置失败",
 		ErrNotificationTestMissing: "未配置用于测试的通知设置",
 		ErrLeaderboardFailed:       "加载排行榜失败",
+		ErrScoreLogsFailed:         "无法加载评分记录",
 		ErrRulesLoadFailed:         "加载评分规则失败",
 		ErrMissingRulesReason:      "追溯积分规则调整时必须提供原因 (reason)",
 		ErrInvalidRules:            "评分规则无效",

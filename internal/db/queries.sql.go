@@ -1313,6 +1313,128 @@ func (q *Queries) ListOpenOverdueIssues(ctx context.Context) ([]ListOpenOverdueI
 	return items, nil
 }
 
+const listScoreLogsByIssue = `-- name: ListScoreLogsByIssue :many
+SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points, sl.created_at, sl.penalty_date, COALESCE(sr.description, sl.rule_key) AS rule_description
+FROM score_logs sl
+LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
+WHERE sl.issue_id = $1
+ORDER BY sl.id ASC
+`
+
+type ListScoreLogsByIssueRow struct {
+	ID              int64
+	IssueID         int64
+	TargetType      string
+	TargetID        string
+	RuleKey         string
+	Points          int32
+	CreatedAt       time.Time
+	PenaltyDate     sql.NullTime
+	RuleDescription string
+}
+
+func (q *Queries) ListScoreLogsByIssue(ctx context.Context, issueID int64) ([]ListScoreLogsByIssueRow, error) {
+	rows, err := q.db.QueryContext(ctx, listScoreLogsByIssue, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListScoreLogsByIssueRow
+	for rows.Next() {
+		var i ListScoreLogsByIssueRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.RuleKey,
+			&i.Points,
+			&i.CreatedAt,
+			&i.PenaltyDate,
+			&i.RuleDescription,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listScoreLogsByTargetSince = `-- name: ListScoreLogsByTargetSince :many
+SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points, sl.created_at, sl.penalty_date, COALESCE(sr.description, sl.rule_key) AS rule_description,
+       COALESCE(i.category, '') AS issue_category,
+       COALESCE(i.description, '') AS issue_description,
+       COALESCE(i.status, '') AS issue_status
+FROM score_logs sl
+LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
+LEFT JOIN issues i ON sl.issue_id = i.id
+WHERE sl.target_type = $1 AND sl.target_id = $2 AND sl.created_at >= $3
+ORDER BY sl.created_at DESC, sl.id DESC
+`
+
+type ListScoreLogsByTargetSinceParams struct {
+	TargetType string
+	TargetID   string
+	CreatedAt  time.Time
+}
+
+type ListScoreLogsByTargetSinceRow struct {
+	ID               int64
+	IssueID          int64
+	TargetType       string
+	TargetID         string
+	RuleKey          string
+	Points           int32
+	CreatedAt        time.Time
+	PenaltyDate      sql.NullTime
+	RuleDescription  string
+	IssueCategory    string
+	IssueDescription string
+	IssueStatus      string
+}
+
+func (q *Queries) ListScoreLogsByTargetSince(ctx context.Context, arg ListScoreLogsByTargetSinceParams) ([]ListScoreLogsByTargetSinceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listScoreLogsByTargetSince, arg.TargetType, arg.TargetID, arg.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListScoreLogsByTargetSinceRow
+	for rows.Next() {
+		var i ListScoreLogsByTargetSinceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.RuleKey,
+			&i.Points,
+			&i.CreatedAt,
+			&i.PenaltyDate,
+			&i.RuleDescription,
+			&i.IssueCategory,
+			&i.IssueDescription,
+			&i.IssueStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listScoreLogsSince = `-- name: ListScoreLogsSince :many
 SELECT id, issue_id, target_type, target_id, rule_key, points, created_at, penalty_date FROM score_logs
 WHERE created_at >= $1

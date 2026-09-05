@@ -242,6 +242,12 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		lbr.Use(authMw.Authenticate)
 		lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
 		lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
+		lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
+	})
+
+	r.Route("/api/issues/{id}/score-logs", func(ilr chi.Router) {
+		ilr.Use(authMw.Authenticate)
+		ilr.Get("/", scoringHandler.GetIssueScoreLogs)
 	})
 
 	r.Route("/api/config/scoring", func(scr chi.Router) {

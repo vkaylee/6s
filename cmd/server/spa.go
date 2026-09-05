@@ -62,6 +62,12 @@ func serveExistingFile(w http.ResponseWriter, req *http.Request, embeddedFS fs.F
 	if cErr := f.Close(); cErr != nil {
 		log.Printf("close embedded file err: %v", cErr)
 	}
+	if path == "sw.js" {
+		w.Header().Set("Service-Worker-Allowed", "/")
+		w.Header().Set("Content-Type", "application/javascript")
+	} else if path == "manifest.webmanifest" {
+		w.Header().Set("Content-Type", "application/manifest+json")
+	}
 	fileServer.ServeHTTP(w, req)
 	return true
 }

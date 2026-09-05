@@ -1,0 +1,25 @@
+{
+  "name": "6S Issue Management System",
+  "short_name": "6S System",
+  "description": "6S Issue Management & Industrial Reporting System",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#18181b",
+  "theme_color": "#DC2626",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

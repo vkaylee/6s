@@ -18,7 +18,8 @@
     "location": "Vị trí",
     "reporter": "Người báo cáo",
     "created_at": "Thời gian tạo",
-    "actions": "Hành động"
+    "actions": "Hành động",
+    "collapse": "Thu gọn"
   },
   "auth": {
     "login": "Đăng nhập",
@@ -82,6 +83,14 @@
     "theme_light": "Chuyển chế độ sáng",
     "theme_dark": "Chuyển chế độ tối"
   },
+  "pwa": {
+    "install_app": "Cài đặt App",
+    "install_tooltip": "Cài đặt ứng dụng lên màn hình chính",
+    "ios_title": "Cài đặt trên iPhone/iPad",
+    "ios_step1": "Nhấn nút Chia sẻ (biểu tượng mũi tên hướng lên) ở thanh dưới Safari.",
+    "ios_step2": "Cuộn xuống và chọn 'Thêm vào màn hình chính' (Add to Home Screen).",
+    "ios_step3": "Nhấn 'Thêm' ở góc phải để hoàn tất."
+  },
   "health_gauge": {
     "score_unit": "ĐIỂM",
     "workshop_health": "Sức khỏe 6S Xưởng",
@@ -101,7 +110,16 @@
     "no_location_data": "Chưa có dữ liệu chấm điểm tuần",
     "no_reporter_data": "Chưa có dữ liệu vinh danh tháng",
     "points_unit": "điểm",
-    "issues_unit": "lỗi"
+    "issues_unit": "lỗi",
+    "cycle_weekly": "Chu kỳ tuần (từ Thứ Hai)",
+    "cycle_monthly": "Chu kỳ tháng (từ mùng 1)",
+    "view_all": "Xem tất cả ({count})",
+    "view_history": "Xem lịch sử điểm",
+    "score_history_title": "Sổ cái biến động điểm",
+    "score_history_empty": "Chưa có biến động điểm nào trong kỳ này",
+    "base_weekly_score": "Điểm khởi điểm tuần: {points} điểm",
+    "view_issue": "Xem chi tiết sự cố",
+    "back_to_home": "Quay về trang chủ"
   },
   "facets": {
     "all": "Tất cả",
@@ -356,7 +374,11 @@
     "need_safety_officer": "Cần quyền Safety Officer",
     "only_assigned_line": "Chỉ được duyệt chuyền phụ trách",
     "need_line_leader": "Cần quyền Line Leader trở lên",
-    "locked": "Khóa"
+    "locked": "Khóa",
+    "score_breakdown_title": "Biến động điểm 6S của sự cố",
+    "score_breakdown_empty": "Chưa có ghi nhận cộng trừ điểm cho sự cố này",
+    "target_location": "Chuyền / Khu vực",
+    "target_user": "Người báo cáo"
   },
   "app": {
     "issues_list": "Danh sách vấn đề ({count})",

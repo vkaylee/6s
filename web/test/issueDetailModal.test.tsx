@@ -44,6 +44,7 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("Dầu loang dưới sàn máy may");
     expect(html).toContain("Nguyễn Văn A");
     expect(html).toContain("Chỉnh sửa");
+    expect(html).toContain("Biến động điểm 6S của sự cố");
   });
   it("renders detail photo when photo_detail exists", () => {
     const issueWithDetail: IssueItem = {

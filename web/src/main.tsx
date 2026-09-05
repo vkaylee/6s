@@ -11,3 +11,11 @@ if (rootElement) {
     </React.StrictMode>,
   );
 }
+
+if ("serviceWorker" in navigator && window.location.protocol === "https:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("Service Worker registration failed:", err);
+    });
+  });
+}

@@ -386,6 +386,24 @@ SELECT * FROM score_logs
 WHERE created_at >= $1
 ORDER BY id ASC;
 
+-- name: ListScoreLogsByIssue :many
+SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description
+FROM score_logs sl
+LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
+WHERE sl.issue_id = $1
+ORDER BY sl.id ASC;
+
+-- name: ListScoreLogsByTargetSince :many
+SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description,
+       COALESCE(i.category, '') AS issue_category,
+       COALESCE(i.description, '') AS issue_description,
+       COALESCE(i.status, '') AS issue_status
+FROM score_logs sl
+LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
+LEFT JOIN issues i ON sl.issue_id = i.id
+WHERE sl.target_type = $1 AND sl.target_id = $2 AND sl.created_at >= $3
+ORDER BY sl.created_at DESC, sl.id DESC;
+
 -- name: GetNotificationConfig :one
 SELECT * FROM notification_configs
 WHERE id = 1 LIMIT 1;
