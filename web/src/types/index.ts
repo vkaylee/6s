@@ -1,3 +1,6 @@
+export type { I18nObject } from "./i18n.ts";
+export { resolveI18n } from "./i18n.ts";
+
 export const IssueCategory = {
   S1: "1S",
   S2: "2S",

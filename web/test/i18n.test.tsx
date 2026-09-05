@@ -6,7 +6,13 @@ import { useI18nStore } from "../src/i18n/index.ts";
 import en from "../src/i18n/locales/en.json";
 import vi from "../src/i18n/locales/vi.json";
 import zh from "../src/i18n/locales/zh.json";
-import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
+import {
+  type I18nObject,
+  IssueCategory,
+  type IssueItem,
+  IssueStatus,
+  resolveI18n,
+} from "../src/types/index.ts";
 
 function extractKeys(obj: Record<string, unknown>, prefix = ""): string[] {
   let keys: string[] = [];
@@ -175,6 +181,21 @@ describe("Frontend i18n usage guard", () => {
     }
 
     expect(missing).toEqual([]);
+  });
+});
+
+describe("I18nObject resolution", () => {
+  const sampleObj: I18nObject = { vi: "Lưu", en: "Save", zh: "保存" };
+
+  it("resolves exact locale", () => {
+    expect(resolveI18n(sampleObj, "en")).toBe("Save");
+    expect(resolveI18n(sampleObj, "zh")).toBe("保存");
+    expect(resolveI18n(sampleObj, "vi")).toBe("Lưu");
+  });
+
+  it("falls back to vi when locale missing", () => {
+    const partial = { vi: "Mặc định" } as unknown as I18nObject;
+    expect(resolveI18n(partial, "en")).toBe("Mặc định");
   });
 });
 
