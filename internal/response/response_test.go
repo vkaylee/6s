@@ -69,34 +69,32 @@ func TestRenderError(t *testing.T) {
 }
 
 func TestAppErrorResponse(t *testing.T) {
-	// Test English
-	reqEN := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	reqEN.Header.Set("X-Locale", "en")
-	recEN := httptest.NewRecorder()
+	reqDefault := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	recDefault := httptest.NewRecorder()
 
 	appErr := apperror.Unauthorized(i18n.ErrUnauthorized)
-	AppError(recEN, reqEN.WithContext(i18n.WithLocale(reqEN.Context(), "en")), appErr)
+	AppError(recDefault, reqDefault, appErr)
 
-	if recEN.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status 401, got %d", recEN.Code)
+	if recDefault.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", recDefault.Code)
 	}
 
-	var resEN Envelope
-	if err := json.NewDecoder(recEN.Body).Decode(&resEN); err != nil {
+	var resDefault Envelope
+	if err := json.NewDecoder(recDefault.Body).Decode(&resDefault); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
 
-	if resEN.Error == nil || resEN.Error.Message != "Authentication required" {
-		t.Errorf("expected English message, got %v", resEN.Error)
+	if resDefault.Error == nil || resDefault.Error.Message != "Authentication required" {
+		t.Errorf("expected default English message, got %v", resDefault.Error)
 	}
-	if resEN.Error.Key != string(i18n.ErrUnauthorized) {
-		t.Errorf("expected Key %s, got %s", i18n.ErrUnauthorized, resEN.Error.Key)
+	if resDefault.Error.Key != string(i18n.ErrUnauthorized) {
+		t.Errorf("expected Key %s, got %s", i18n.ErrUnauthorized, resDefault.Error.Key)
 	}
 
-	// Test Vietnamese default
+	// Test Vietnamese explicitly
 	reqVI := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	recVI := httptest.NewRecorder()
-	AppError(recVI, reqVI, appErr)
+	AppError(recVI, reqVI.WithContext(i18n.WithLocale(reqVI.Context(), "vi")), appErr)
 
 	var resVI Envelope
 	if err := json.NewDecoder(recVI.Body).Decode(&resVI); err != nil {

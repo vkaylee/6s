@@ -14,7 +14,8 @@ type Key string
 const (
 	LocaleVI      = "vi"
 	LocaleEN      = "en"
-	DefaultLocale = LocaleVI
+	LocaleZH      = "zh"
+	DefaultLocale = LocaleEN
 )
 
 // Common error keys.
@@ -198,20 +199,84 @@ var catalog = map[string]map[Key]string{
 		ErrMissingRulesReason:      "Reason is required when applying retroactive scoring (apply_from)",
 		ErrInvalidRules:            "Invalid scoring rules",
 	},
+	LocaleZH: {
+		ErrInternal:                "内部服务器错误",
+		ErrBadRequest:              "无效的请求",
+		ErrUnauthorized:            "请先登录",
+		ErrForbidden:               "无权执行此操作",
+		ErrNotFound:                "未找到资源",
+		ErrConflict:                "资源冲突或已被修改",
+		ErrInvalidInput:            "输入数据无效: %v",
+		ErrTokenExpired:            "会话已过期",
+		ErrInvalidToken:            "认证令牌无效或已过期",
+		ErrAccountLocked:           "账号已被锁定",
+		ErrInvalidCreds:            "账号或密码错误",
+		ErrMissingAuth:             "缺少 Authorization 头",
+		ErrInvalidAuthFmt:          "Authorization 格式无效（需要 Bearer <token>）",
+		ErrUserNotFound:            "用户不存在",
+		ErrUserQuery:               "查询用户信息失败",
+		ErrMissingLoginInput:       "请输入账号或工卡号",
+		ErrLoginRateLimit:          "登录尝试过于频繁（限制5次/分钟）",
+		ErrAccountLockedTemp:       "由于连续输错10次，账号已被临时锁定15分钟",
+		ErrMissingRefreshToken:     "缺少 refresh token",
+		ErrInvalidRefreshToken:     "refresh token 无效或已过期",
+		ErrADConfigNotFound:        "未找到用于测试的 Active Directory 配置",
+		ErrADTestFailed:            "Active Directory 连接测试失败: %v",
+		ErrSessionsQueryFailed:     "查询活动会话列表失败",
+		ErrAdminExists:             "系统已存在管理员，无法重新初始化",
+		ErrUsernameTooShort:        "账号长度至少需要3个字符",
+		ErrPasswordTooShort:        "密码长度至少需要8个字符",
+		ErrMissingFullName:         "请输入姓名",
+		ErrSetupFailed:             "创建初始管理员失败",
+		ErrInvalidID:               "无效的 ID",
+		ErrIssueNotFound:           "未找到该问题",
+		ErrIssueConflict:           "问题状态或版本冲突",
+		ErrIssueVersionChanged:     "该问题已被其他用户修改",
+		ErrInvalidMultipart:        "无效的 multipart 表单数据",
+		ErrMultipartTooLarge:       "上传文件大小超出限制",
+		ErrMissingIssueFields:      "缺少必填字段: client_uuid, category, location_code",
+		ErrMissingPhotoBefore:      "缺少必填照片: photo_before",
+		ErrMissingPhotoAfter:       "缺少必填照片: photo_after",
+		ErrMissingResolvedUUID:     "缺少 resolved_client_uuid",
+		ErrInvalidCategory:         "无效的 6S 类别（1S - 6S）",
+		ErrIssueSaveFailed:         "无法保存问题: %v",
+		ErrIssueCloseForbidden:     "您无权审核关闭此问题",
+		ErrIssueReopenForbidden:    "您无权重新打开此问题",
+		ErrIssueInvalidForbidden:   "仅管理员或安全员可作废此问题",
+		ErrIssuePatchForbidden:     "您无权编辑此问题",
+		ErrIssueListFailed:         "获取问题列表失败",
+		ErrIssueGetFailed:          "获取问题详情失败",
+		ErrLocationQueryFailed:     "查询位置列表失败",
+		ErrLocationMissingFields:   "位置代码、越南语名称和二维码为必填项",
+		ErrLocationCreateFailed:    "无法创建位置（代码或二维码可能已存在）",
+		ErrTagQueryFailed:          "查询标签列表失败",
+		ErrTagMissingFields:        "标签代码、越南语名称和 6S 类别为必填项",
+		ErrTagSaveFailed:           "保存标签信息失败",
+		ErrNotificationLoadFailed:  "加载通知配置失败",
+		ErrNotificationSaveFailed:  "保存通知配置失败",
+		ErrNotificationTestMissing: "未配置用于测试的通知设置",
+		ErrLeaderboardFailed:       "加载排行榜失败",
+		ErrRulesLoadFailed:         "加载评分规则失败",
+		ErrMissingRulesReason:      "追溯积分规则调整时必须提供原因 (reason)",
+		ErrInvalidRules:            "评分规则无效",
+	},
 }
 
 type ctxKey struct{}
 
 var localeKey = ctxKey{}
 
-// Normalize maps raw input to supported locale ("vi", "en"), default "vi".
+// Normalize maps raw input to supported locale ("vi", "en", "zh"), default "en".
 func Normalize(raw string) string {
 	raw = strings.TrimSpace(strings.ToLower(raw))
-	if strings.HasPrefix(raw, "en") {
-		return LocaleEN
-	}
 	if strings.HasPrefix(raw, "vi") {
 		return LocaleVI
+	}
+	if strings.HasPrefix(raw, "zh") {
+		return LocaleZH
+	}
+	if strings.HasPrefix(raw, "en") {
+		return LocaleEN
 	}
 	return DefaultLocale
 }
