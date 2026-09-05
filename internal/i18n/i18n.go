@@ -69,6 +69,8 @@ const (
 	ErrLocationQueryFailed     Key = "masterdata.location_query_failed"
 	ErrLocationMissingFields   Key = "masterdata.location_missing_fields"
 	ErrLocationCreateFailed    Key = "masterdata.location_create_failed"
+	ErrLocationNotFound        Key = "masterdata.location_not_found"
+	ErrLocationUpdateFailed    Key = "masterdata.location_update_failed"
 	ErrTagQueryFailed          Key = "masterdata.tag_query_failed"
 	ErrTagMissingFields        Key = "masterdata.tag_missing_fields"
 	ErrTagSaveFailed           Key = "masterdata.tag_save_failed"
@@ -130,6 +132,8 @@ var catalog = map[string]map[Key]string{
 		ErrLocationQueryFailed:     "Lỗi truy vấn danh mục vị trí",
 		ErrLocationMissingFields:   "Mã vị trí, tên tiếng Việt và QR code là bắt buộc",
 		ErrLocationCreateFailed:    "Không thể tạo vị trí (có thể trùng mã code hoặc qr_code)",
+		ErrLocationNotFound:        "Không tìm thấy vị trí nhà xưởng",
+		ErrLocationUpdateFailed:    "Lỗi cập nhật trạng thái vị trí",
 		ErrTagQueryFailed:          "Lỗi truy vấn danh mục tags",
 		ErrTagMissingFields:        "Mã tag, tên tiếng Việt và phân loại S là bắt buộc",
 		ErrTagSaveFailed:           "Lỗi lưu thông tin tag",
@@ -188,6 +192,8 @@ var catalog = map[string]map[Key]string{
 		ErrLocationQueryFailed:     "Failed to query locations",
 		ErrLocationMissingFields:   "Location code, Vietnamese name, and QR code are required",
 		ErrLocationCreateFailed:    "Failed to create location (code or qr_code may be duplicated)",
+		ErrLocationNotFound:        "Factory location not found",
+		ErrLocationUpdateFailed:    "Failed to update location status",
 		ErrTagQueryFailed:          "Failed to query tags",
 		ErrTagMissingFields:        "Tag code, Vietnamese name, and 6S category are required",
 		ErrTagSaveFailed:           "Failed to save tag",
@@ -249,6 +255,8 @@ var catalog = map[string]map[Key]string{
 		ErrLocationQueryFailed:     "查询位置列表失败",
 		ErrLocationMissingFields:   "位置代码、越南语名称和二维码为必填项",
 		ErrLocationCreateFailed:    "无法创建位置（代码或二维码可能已存在）",
+		ErrLocationNotFound:        "未找到车间位置",
+		ErrLocationUpdateFailed:    "更新位置状态失败",
 		ErrTagQueryFailed:          "查询标签列表失败",
 		ErrTagMissingFields:        "标签代码、越南语名称和 6S 类别为必填项",
 		ErrTagSaveFailed:           "保存标签信息失败",

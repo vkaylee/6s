@@ -1057,6 +1057,44 @@ func (q *Queries) ListAllActivePhotoBasenames(ctx context.Context) ([]string, er
 	return items, nil
 }
 
+const listAllLocations = `-- name: ListAllLocations :many
+SELECT id, code, name_vi, name_zh, name_en, qr_code, is_active, created_at FROM locations
+ORDER BY code ASC
+`
+
+// Returns all locations including inactive ones for admin management
+func (q *Queries) ListAllLocations(ctx context.Context) ([]Location, error) {
+	rows, err := q.db.QueryContext(ctx, listAllLocations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Location
+	for rows.Next() {
+		var i Location
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.QrCode,
+			&i.IsActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
 SELECT i.id, i.client_uuid, i.version, i.creator_id, i.resolver_id, i.category, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
        loc.name_vi AS location_name_vi,
@@ -1650,6 +1688,34 @@ WHERE user_id = $1 AND revoked_at IS NULL
 func (q *Queries) RevokeUserRefreshTokens(ctx context.Context, userID int64) error {
 	_, err := q.db.ExecContext(ctx, revokeUserRefreshTokens, userID)
 	return err
+}
+
+const updateLocationActiveStatus = `-- name: UpdateLocationActiveStatus :one
+UPDATE locations
+SET is_active = $2
+WHERE code = $1
+RETURNING id, code, name_vi, name_zh, name_en, qr_code, is_active, created_at
+`
+
+type UpdateLocationActiveStatusParams struct {
+	Code     string
+	IsActive bool
+}
+
+func (q *Queries) UpdateLocationActiveStatus(ctx context.Context, arg UpdateLocationActiveStatusParams) (Location, error) {
+	row := q.db.QueryRowContext(ctx, updateLocationActiveStatus, arg.Code, arg.IsActive)
+	var i Location
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.QrCode,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateUserADLogin = `-- name: UpdateUserADLogin :one

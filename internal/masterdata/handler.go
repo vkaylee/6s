@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"6s/internal/apperror"
 	"6s/internal/db"
 	"6s/internal/i18n"
@@ -14,7 +16,9 @@ import (
 // Store defines repository queries for locations and tags.
 type Store interface {
 	ListLocations(ctx context.Context) ([]db.Location, error)
+	ListAllLocations(ctx context.Context) ([]db.Location, error)
 	CreateLocation(ctx context.Context, arg db.CreateLocationParams) (db.Location, error)
+	UpdateLocationActiveStatus(ctx context.Context, arg db.UpdateLocationActiveStatusParams) (db.Location, error)
 	ListTags(ctx context.Context) ([]db.Tag, error)
 	UpsertTag(ctx context.Context, arg db.UpsertTagParams) (db.Tag, error)
 }
@@ -71,6 +75,69 @@ func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, items)
+}
+
+// ListAllLocations handles GET /api/locations/all (Admin only).
+func (h *Handler) ListAllLocations(w http.ResponseWriter, r *http.Request) {
+	locs, err := h.store.ListAllLocations(r.Context())
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
+		return
+	}
+
+	items := make([]LocationResponse, 0, len(locs))
+	for _, l := range locs {
+		items = append(items, LocationResponse{
+			Code:     l.Code,
+			NameVi:   l.NameVi,
+			NameZh:   l.NameZh,
+			NameEn:   l.NameEn,
+			QRCode:   l.QrCode,
+			IsActive: l.IsActive,
+		})
+	}
+
+	response.JSON(w, http.StatusOK, items)
+}
+
+// UpdateLocationStatusRequest defines payload to toggle location active status.
+type UpdateLocationStatusRequest struct {
+	IsActive bool `json:"is_active"`
+}
+
+// UpdateLocationStatus handles PATCH /api/locations/{code}/status (Admin only).
+func (h *Handler) UpdateLocationStatus(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if code == "" {
+		code = r.PathValue("code")
+	}
+	if code == "" {
+		code = r.URL.Query().Get("code")
+	}
+
+	var req UpdateLocationStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+
+	loc, err := h.store.UpdateLocationActiveStatus(r.Context(), db.UpdateLocationActiveStatusParams{
+		Code:     code,
+		IsActive: req.IsActive,
+	})
+	if err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))
+		return
+	}
+
+	response.JSON(w, http.StatusOK, LocationResponse{
+		Code:     loc.Code,
+		NameVi:   loc.NameVi,
+		NameZh:   loc.NameZh,
+		NameEn:   loc.NameEn,
+		QRCode:   loc.QrCode,
+		IsActive: loc.IsActive,
+	})
 }
 
 // CreateLocationRequest defines payload to create a new location.

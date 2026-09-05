@@ -1,0 +1,1136 @@
+import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
+import { apiClient } from "../api/client.ts";
+import { NavActions } from "../components/NavActions.tsx";
+import { PageContainer } from "../components/PageContainer.tsx";
+import { useI18nStore } from "../i18n/index.ts";
+import { modalDialog } from "../store/dialogStore.ts";
+import { IssueCategory, type LocationItem, resolveI18n, S_CATEGORIES } from "../types/index.ts";
+import { haptics } from "../utils/haptics.ts";
+
+interface ScoringRuleItem {
+  rule_key: string;
+  points: number;
+  description: string;
+}
+
+interface NotificationConfigData {
+  wxpusher_enabled: boolean;
+  has_app_token: boolean;
+  has_webhook_url: boolean;
+  public_base_url: string;
+  updated_at?: string;
+}
+
+interface TestNotifyResult {
+  channel: string;
+  success: boolean;
+  error?: string;
+}
+
+interface TagItemData {
+  code: string;
+  name_vi: string;
+  name_zh?: string;
+  name_en?: string;
+  category: string;
+  use_count: number;
+  is_preset?: boolean;
+}
+
+export function AdminConfigPage() {
+  const { t, locale } = useI18nStore();
+  const [, setLocation] = useLocation();
+  const [activeTab, setActiveTab] = useState<
+    "LOCATIONS" | "SCORING" | "AD" | "NOTIFICATIONS" | "TAGS"
+  >("LOCATIONS");
+
+  // Scoring config state
+  const [rules, setRules] = useState<Record<string, number>>({});
+  const [applyFrom, setApplyFrom] = useState("");
+  const [reason, setReason] = useState("");
+  const [isRetroactive, setIsRetroactive] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // AD config state
+  const [adEnabled, setAdEnabled] = useState(false);
+  const [adServer, setAdServer] = useState("ad.factory.lan");
+  const [adPort, setAdPort] = useState(636);
+  const [adUseTls, setAdUseTls] = useState(true);
+  const [adBaseDn, setAdBaseDn] = useState("DC=factory,DC=lan");
+  const [adBindDn, setAdBindDn] = useState("CN=svc_6s_auth,OU=Services,DC=factory,DC=lan");
+  const [adBindPassword, setAdBindPassword] = useState("");
+  const [adTestResult, setAdTestResult] = useState<string | null>(null);
+
+  // Locations management state
+  const [locations, setLocations] = useState<LocationItem[]>([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newNameVi, setNewNameVi] = useState("");
+  const [newNameZh, setNewNameZh] = useState("");
+  const [newNameEn, setNewNameEn] = useState("");
+  const [newQr, setNewQr] = useState("");
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+
+  // Notification config state
+  const [notifEnabled, setNotifEnabled] = useState(true);
+  const [notifHasToken, setNotifHasToken] = useState(false);
+  const [notifAppToken, setNotifAppToken] = useState("");
+  const [notifHasWebhook, setNotifHasWebhook] = useState(false);
+  const [notifWebhookUrl, setNotifWebhookUrl] = useState("");
+  const [notifBaseUrl, setNotifBaseUrl] = useState("https://6s.factory.lan");
+  const [isTestingNotif, setIsTestingNotif] = useState(false);
+  const [notifTestResults, setNotifTestResults] = useState<TestNotifyResult[] | null>(null);
+
+  // Tags management state
+  const [tags, setTags] = useState<TagItemData[]>([]);
+  const [isLoadingTags, setIsLoadingTags] = useState(false);
+  const [tagCode, setTagCode] = useState("");
+  const [tagCategory, setTagCategory] = useState<string>(IssueCategory.S1);
+  const [tagNameVi, setTagNameVi] = useState("");
+  const [tagNameZh, setTagNameZh] = useState("");
+  const [tagNameEn, setTagNameEn] = useState("");
+  const [isAddingTag, setIsAddingTag] = useState(false);
+
+  useEffect(() => {
+    loadLocations();
+    loadScoringRules();
+    loadADConfig();
+    loadNotificationConfig();
+    loadTags();
+  }, []);
+
+  const loadLocations = async () => {
+    setIsLoadingLocations(true);
+    try {
+      const data = await apiClient<LocationItem[]>("/api/locations/all");
+      setLocations(data || []);
+    } catch {
+      try {
+        const fallback = await apiClient<LocationItem[]>("/api/locations");
+        setLocations(fallback || []);
+      } catch {
+        // keep empty
+      }
+    } finally {
+      setIsLoadingLocations(false);
+    }
+  };
+
+  const handleAddLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCode.trim() || !newNameVi.trim()) {
+      return;
+    }
+    setIsAddingLocation(true);
+    const qrCodeVal = newQr.trim() || `LOC:${newCode.trim().toUpperCase()}`;
+    try {
+      const added = await apiClient<LocationItem>("/api/locations", {
+        method: "POST",
+        body: JSON.stringify({
+          code: newCode.trim().toUpperCase(),
+          name_vi: newNameVi.trim(),
+          name_zh: newNameZh.trim(),
+          name_en: newNameEn.trim(),
+          qr_code: qrCodeVal,
+        }),
+      });
+      haptics.success();
+      setLocations((prev) => [...prev.filter((l) => l.code !== added.code), added]);
+      setNewCode("");
+      setNewNameVi("");
+      setNewNameZh("");
+      setNewNameEn("");
+      setNewQr("");
+      await modalDialog.alert(t("admin.location_add_success"));
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.location_add_error"));
+    } finally {
+      setIsAddingLocation(false);
+    }
+  };
+
+  const handleToggleLocation = async (code: string, currentStatus: boolean) => {
+    try {
+      const updated = await apiClient<LocationItem>(
+        `/api/locations/${encodeURIComponent(code)}/status`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ is_active: !currentStatus }),
+        },
+      );
+      haptics.success();
+      setLocations((prev) =>
+        prev.map((l) => (l.code === code ? { ...l, is_active: updated.is_active } : l)),
+      );
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.location_status_error"));
+    }
+  };
+
+  const loadScoringRules = async () => {
+    try {
+      const data = await apiClient<ScoringRuleItem[]>("/api/config/scoring");
+      const map: Record<string, number> = {};
+      for (const item of data) {
+        map[item.rule_key] = item.points;
+      }
+      setRules(map);
+    } catch {
+      setRules({
+        penalty_normal: -3,
+        penalty_safety: -20,
+        penalty_overdue: -5,
+        bonus_kaizen: 10,
+        reward_reporter_normal: 2,
+        reward_reporter_safety: 5,
+        penalty_reporter_invalid: -5,
+      });
+    }
+  };
+
+  const loadADConfig = async () => {
+    try {
+      const data = await apiClient<{
+        is_enabled: boolean;
+        server: string;
+        port: number;
+        use_tls: boolean;
+        base_dn: string;
+        bind_dn: string;
+      }>("/api/config/ad");
+      if (data) {
+        setAdEnabled(data.is_enabled);
+        setAdServer(data.server);
+        setAdPort(data.port);
+        setAdUseTls(data.use_tls);
+        setAdBaseDn(data.base_dn);
+        setAdBindDn(data.bind_dn);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadNotificationConfig = async () => {
+    try {
+      const data = await apiClient<NotificationConfigData>("/api/config/notifications");
+      if (data) {
+        setNotifEnabled(data.wxpusher_enabled);
+        setNotifHasToken(data.has_app_token);
+        setNotifHasWebhook(data.has_webhook_url);
+        if (data.public_base_url) {
+          setNotifBaseUrl(data.public_base_url);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadTags = async () => {
+    setIsLoadingTags(true);
+    try {
+      const data = await apiClient<TagItemData[]>("/api/tags");
+      setTags(data || []);
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingTags(false);
+    }
+  };
+
+  const handleStepPoint = (ruleKey: string, delta: number) => {
+    haptics.success();
+    setRules((prev) => ({
+      ...prev,
+      [ruleKey]: (prev[ruleKey] ?? 0) + delta,
+    }));
+  };
+
+  const handleSaveScoring = async () => {
+    if (isRetroactive && (!applyFrom || !reason.trim())) {
+      modalDialog.alert(t("admin.retroactive_required"));
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await apiClient("/api/config/scoring", {
+        method: "PUT",
+        body: JSON.stringify({
+          rules,
+          is_retroactive: isRetroactive,
+          apply_from: isRetroactive ? applyFrom : undefined,
+          reason: isRetroactive ? reason : undefined,
+        }),
+      });
+      haptics.success();
+      await modalDialog.alert(t("admin.save_success"));
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.save_error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTestAD = async () => {
+    setAdTestResult(t("admin.testing_connection"));
+    try {
+      const res = await apiClient<{ success: boolean; message: string }>("/api/config/ad/test", {
+        method: "POST",
+        body: JSON.stringify({
+          server: adServer,
+          port: adPort,
+          use_tls: adUseTls,
+          base_dn: adBaseDn,
+          bind_dn: adBindDn,
+          bind_password: adBindPassword,
+        }),
+      });
+      setAdTestResult(res.message || "OK");
+      haptics.success();
+    } catch {
+      setAdTestResult(t("admin.connection_failed"));
+    }
+  };
+
+  const handleSaveAD = async () => {
+    setIsSaving(true);
+    try {
+      await apiClient("/api/config/ad", {
+        method: "PUT",
+        body: JSON.stringify({
+          is_enabled: adEnabled,
+          server: adServer,
+          port: adPort,
+          use_tls: adUseTls,
+          base_dn: adBaseDn,
+          bind_dn: adBindDn,
+          bind_password: adBindPassword || undefined,
+        }),
+      });
+      haptics.success();
+      modalDialog.alert(t("admin.save_ad_success"));
+    } catch {
+      modalDialog.alert(t("admin.save_ad_error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveNotification = async () => {
+    setIsSaving(true);
+    try {
+      await apiClient("/api/config/notifications", {
+        method: "PUT",
+        body: JSON.stringify({
+          wxpusher_enabled: notifEnabled,
+          wxpusher_app_token: notifAppToken.trim() || undefined,
+          lan_webhook_url: notifWebhookUrl.trim() || undefined,
+          public_base_url: notifBaseUrl.trim(),
+        }),
+      });
+      haptics.success();
+      if (notifAppToken.trim()) {
+        setNotifHasToken(true);
+        setNotifAppToken("");
+      }
+      if (notifWebhookUrl.trim()) {
+        setNotifHasWebhook(true);
+        setNotifWebhookUrl("");
+      }
+      await modalDialog.alert(t("admin.save_notify_success"));
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.save_notify_error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setIsTestingNotif(true);
+    setNotifTestResults(null);
+    try {
+      const results = await apiClient<TestNotifyResult[]>("/api/config/notifications/test", {
+        method: "POST",
+      });
+      setNotifTestResults(results || []);
+      haptics.success();
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.test_notify_no_channel"));
+    } finally {
+      setIsTestingNotif(false);
+    }
+  };
+
+  const handleAddTag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tagCode.trim() || !tagNameVi.trim()) {
+      return;
+    }
+    setIsAddingTag(true);
+    try {
+      const saved = await apiClient<TagItemData>("/api/tags", {
+        method: "POST",
+        body: JSON.stringify({
+          code: tagCode.trim().toLowerCase(),
+          category: tagCategory,
+          name_vi: tagNameVi.trim(),
+          name_zh: tagNameZh.trim(),
+          name_en: tagNameEn.trim(),
+          is_preset: false,
+        }),
+      });
+      haptics.success();
+      setTags((prev) => [saved, ...prev.filter((tItem) => tItem.code !== saved.code)]);
+      setTagCode("");
+      setTagNameVi("");
+      setTagNameZh("");
+      setTagNameEn("");
+      await modalDialog.alert(t("admin.tag_add_success"));
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.tag_add_error"));
+    } finally {
+      setIsAddingTag(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+        <PageContainer className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => setLocation("/")}
+              className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
+              aria-label={t("admin.back_to_dashboard")}
+            >
+              ←
+            </button>
+            <div className="flex items-center space-x-2">
+              <span className="text-xl">⚙️</span>
+              <h1 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
+                {t("admin.system_admin")}
+              </h1>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <NavActions />
+          </div>
+        </PageContainer>
+      </header>
+
+      {/* Main Content */}
+      <main className="py-4">
+        <PageContainer className="space-y-6">
+          {/* Tab Navigation */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-zinc-200 dark:bg-zinc-800 p-1.5 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setActiveTab("LOCATIONS")}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "LOCATIONS"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.locations_tab")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("TAGS")}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "TAGS"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.tags_tab")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("SCORING")}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "SCORING"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.score_6s_tab")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("AD")}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "AD"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.ad_tab")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("NOTIFICATIONS")}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "NOTIFICATIONS"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.notify_tab")}
+            </button>
+          </div>
+
+          {/* TAB 1: LOCATIONS MANAGEMENT */}
+          {activeTab === "LOCATIONS" && (
+            <div className="space-y-6">
+              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+                <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">
+                  {t("admin.add_location_btn")}
+                </h2>
+                <form onSubmit={handleAddLocation} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.location_code_label")}
+                      </label>
+                      <input
+                        type="text"
+                        value={newCode}
+                        onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                        placeholder={t("admin.location_code_placeholder")}
+                        required
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.location_name_vi")}
+                      </label>
+                      <input
+                        type="text"
+                        value={newNameVi}
+                        onChange={(e) => setNewNameVi(e.target.value)}
+                        placeholder={t("admin.location_name_vi_placeholder")}
+                        required
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.location_name_zh")}
+                      </label>
+                      <input
+                        type="text"
+                        value={newNameZh}
+                        onChange={(e) => setNewNameZh(e.target.value)}
+                        placeholder={t("admin.location_name_zh_placeholder")}
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.location_name_en")}
+                      </label>
+                      <input
+                        type="text"
+                        value={newNameEn}
+                        onChange={(e) => setNewNameEn(e.target.value)}
+                        placeholder={t("admin.location_name_en_placeholder")}
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 mb-1">
+                      {t("admin.location_qr_label")}
+                    </label>
+                    <input
+                      type="text"
+                      value={newQr}
+                      onChange={(e) => setNewQr(e.target.value)}
+                      placeholder={t("admin.location_qr_placeholder")}
+                      className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-mono min-h-[44px]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isAddingLocation}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl min-h-[48px] flex items-center justify-center transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {isAddingLocation
+                      ? t("admin.adding_location_btn")
+                      : t("admin.add_location_btn")}
+                  </button>
+                </form>
+              </section>
+
+              {/* List Locations */}
+              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">
+                    {t("admin.locations_tab")} ({locations.length})
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={loadLocations}
+                    className="text-xs font-bold text-blue-600 hover:underline p-1"
+                  >
+                    🔄
+                  </button>
+                </div>
+
+                {isLoadingLocations ? (
+                  <div className="text-sm text-zinc-400 py-6 text-center">
+                    {t("admin.loading_locations")}
+                  </div>
+                ) : locations.length === 0 ? (
+                  <div className="text-sm text-zinc-400 py-6 text-center">
+                    {t("admin.empty_locations")}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {locations.map((loc) => (
+                      <div key={loc.code} className="py-3 flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                              {loc.code}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                loc.is_active
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                              }`}
+                            >
+                              {loc.is_active
+                                ? t("admin.active_status")
+                                : t("admin.inactive_status")}
+                            </span>
+                          </div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-300 font-medium truncate mt-0.5">
+                            {loc.name_vi} {loc.name_zh && `• ${loc.name_zh}`}{" "}
+                            {loc.name_en && `• ${loc.name_en}`}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLocation(loc.code, loc.is_active)}
+                          className={`text-xs font-bold px-3 py-2 rounded-xl min-h-[44px] transition-colors border ${
+                            loc.is_active
+                              ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-100"
+                              : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {loc.is_active ? t("admin.inactive_status") : t("admin.active_status")}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {/* TAB 2: TAGS MANAGEMENT */}
+          {activeTab === "TAGS" && (
+            <div className="space-y-6">
+              {/* Form Add Tag */}
+              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+                <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">
+                  {t("admin.add_tag_btn")}
+                </h2>
+                <form onSubmit={handleAddTag} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.tag_code_label")}
+                      </label>
+                      <input
+                        type="text"
+                        value={tagCode}
+                        onChange={(e) =>
+                          setTagCode(e.target.value.toLowerCase().replace(/\s+/g, "_"))
+                        }
+                        placeholder={t("admin.tag_code_placeholder")}
+                        required
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-mono min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.tag_category_label")}
+                      </label>
+                      <select
+                        value={tagCategory}
+                        onChange={(e) => setTagCategory(e.target.value)}
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      >
+                        {S_CATEGORIES.map((cat) => (
+                          <option key={cat.key} value={cat.key}>
+                            {cat.key} -{" "}
+                            {cat.name_i18n ? resolveI18n(cat.name_i18n, locale) : cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.tag_name_vi")}
+                      </label>
+                      <input
+                        type="text"
+                        value={tagNameVi}
+                        onChange={(e) => setTagNameVi(e.target.value)}
+                        placeholder={t("admin.tag_name_vi_placeholder")}
+                        required
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.tag_name_zh")}
+                      </label>
+                      <input
+                        type="text"
+                        value={tagNameZh}
+                        onChange={(e) => setTagNameZh(e.target.value)}
+                        placeholder={t("admin.tag_name_zh_placeholder")}
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.tag_name_en")}
+                      </label>
+                      <input
+                        type="text"
+                        value={tagNameEn}
+                        onChange={(e) => setTagNameEn(e.target.value)}
+                        placeholder={t("admin.tag_name_en_placeholder")}
+                        className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isAddingTag}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl min-h-[48px] flex items-center justify-center transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {isAddingTag ? t("admin.adding_tag_btn") : t("admin.add_tag_btn")}
+                  </button>
+                </form>
+              </section>
+
+              {/* List Tags */}
+              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">
+                    {t("admin.tags_tab")} ({tags.length})
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={loadTags}
+                    className="text-xs font-bold text-blue-600 hover:underline p-1"
+                  >
+                    🔄
+                  </button>
+                </div>
+
+                {isLoadingTags ? (
+                  <div className="text-sm text-zinc-400 py-6 text-center">
+                    {t("admin.loading_tags")}
+                  </div>
+                ) : tags.length === 0 ? (
+                  <div className="text-sm text-zinc-400 py-6 text-center">
+                    {t("admin.empty_tags")}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {tags.map((tg) => (
+                      <div
+                        key={tg.code}
+                        className="p-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40 flex items-start justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                tg.category === IssueCategory.S6
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300"
+                                  : "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300"
+                              }`}
+                            >
+                              {tg.category}
+                            </span>
+                            <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                              {tg.code}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                            {tg.name_vi}
+                          </div>
+                          {(tg.name_zh || tg.name_en) && (
+                            <div className="text-xs text-zinc-400 font-medium">
+                              {tg.name_zh} {tg.name_en && `• ${tg.name_en}`}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-semibold text-zinc-400 bg-white dark:bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shrink-0">
+                          {t("admin.tag_use_count").replace("{count}", String(tg.use_count))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {/* TAB 3: SCORING RULES */}
+          {activeTab === "SCORING" && (
+            <div className="space-y-4">
+              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+                <p className="text-xs text-zinc-500">{t("admin.stepper_hint")}</p>
+
+                {Object.keys(rules).map((ruleKey) => (
+                  <div
+                    key={ruleKey}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 min-h-[56px]"
+                  >
+                    <div className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      {ruleKey}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => handleStepPoint(ruleKey, -1)}
+                        className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-black text-lg flex items-center justify-center hover:bg-zinc-300 dark:hover:bg-zinc-600 min-h-[44px] min-w-[44px]"
+                      >
+                        -
+                      </button>
+                      <span className="w-12 text-center font-black text-base font-mono">
+                        {rules[ruleKey] > 0 ? `+${rules[ruleKey]}` : rules[ruleKey]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleStepPoint(ruleKey, 1)}
+                        className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-black text-lg flex items-center justify-center hover:bg-zinc-300 dark:hover:bg-zinc-600 min-h-[44px] min-w-[44px]"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              {/* Retroactive option */}
+              <section className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-3xl p-5 space-y-3">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isRetroactive}
+                    onChange={(e) => setIsRetroactive(e.target.checked)}
+                    className="w-5 h-5 rounded border-zinc-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="font-bold text-sm text-amber-900 dark:text-amber-200">
+                    {t("admin.retroactive_label")}
+                  </span>
+                </label>
+
+                {isRetroactive && (
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.apply_from_label")}
+                      </label>
+                      <input
+                        type="date"
+                        value={applyFrom}
+                        onChange={(e) => setApplyFrom(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border bg-white dark:bg-zinc-800 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                        {t("admin.reason_label")}
+                      </label>
+                      <input
+                        type="text"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder={t("admin.reason_placeholder")}
+                        className="w-full p-2.5 rounded-xl border bg-white dark:bg-zinc-800 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <button
+                type="button"
+                onClick={handleSaveScoring}
+                disabled={isSaving}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-2xl min-h-[56px] shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.98]"
+              >
+                {isSaving ? t("admin.saving_btn") : t("admin.save_config_btn")}
+              </button>
+            </div>
+          )}
+
+          {/* TAB 4: AD/LDAP CONFIG */}
+          {activeTab === "AD" && (
+            <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              <label className="flex items-center space-x-2 cursor-pointer border-b pb-3 dark:border-zinc-800">
+                <input
+                  type="checkbox"
+                  checked={adEnabled}
+                  onChange={(e) => setAdEnabled(e.target.checked)}
+                  className="w-5 h-5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                  {t("admin.enable_ad_label")}
+                </span>
+              </label>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.server_host_label")}
+                </label>
+                <input
+                  type="text"
+                  value={adServer}
+                  onChange={(e) => setAdServer(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                    {t("admin.port_label")}
+                  </label>
+                  <input
+                    type="number"
+                    value={adPort}
+                    onChange={(e) => setAdPort(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                    {t("admin.tls_label")}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAdUseTls(!adUseTls)}
+                    className={`w-full p-2.5 rounded-xl border text-sm font-bold min-h-[44px] ${
+                      adUseTls
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                        : "bg-zinc-100 text-zinc-500"
+                    }`}
+                  >
+                    {adUseTls ? t("admin.on") : t("admin.off")}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.base_dn_label")}
+                </label>
+                <input
+                  type="text"
+                  value={adBaseDn}
+                  onChange={(e) => setAdBaseDn(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.bind_dn_label")}
+                </label>
+                <input
+                  type="text"
+                  value={adBindDn}
+                  onChange={(e) => setAdBindDn(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.bind_pw_label")}
+                </label>
+                <input
+                  type="password"
+                  value={adBindPassword}
+                  onChange={(e) => setAdBindPassword(e.target.value)}
+                  placeholder={t("admin.bind_pw_placeholder")}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestAD}
+                  className="w-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 text-zinc-800 dark:text-zinc-200 font-bold py-3 rounded-xl min-h-[44px] text-sm"
+                >
+                  {t("admin.test_ad_btn")}
+                </button>
+                {adTestResult && (
+                  <div className="text-xs p-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 font-mono text-center">
+                    {adTestResult}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveAD}
+                  disabled={isSaving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-2xl min-h-[56px] shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.98] mt-2"
+                >
+                  {isSaving ? t("admin.saving_btn") : t("admin.save_config_btn")}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* TAB 5: NOTIFICATIONS CONFIG */}
+          {activeTab === "NOTIFICATIONS" && (
+            <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              {/* WxPusher Toggle & Token */}
+              <label className="flex items-center space-x-2 cursor-pointer border-b pb-3 dark:border-zinc-800">
+                <input
+                  type="checkbox"
+                  checked={notifEnabled}
+                  onChange={(e) => setNotifEnabled(e.target.checked)}
+                  className="w-5 h-5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                  {t("admin.wxpusher_enable_label")}
+                </span>
+              </label>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-zinc-500">
+                    {t("admin.wxpusher_token_label")}
+                  </label>
+                  {notifHasToken && (
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      {t("admin.has_token_hint")}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={notifAppToken}
+                  onChange={(e) => setNotifAppToken(e.target.value)}
+                  placeholder={notifHasToken ? t("admin.wxpusher_token_placeholder") : "AT_..."}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono min-h-[44px]"
+                />
+              </div>
+
+              {/* LAN Webhook */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-zinc-500">
+                    {t("admin.webhook_url_label")}
+                  </label>
+                  {notifHasWebhook && (
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      {t("admin.has_webhook_hint")}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={notifWebhookUrl}
+                  onChange={(e) => setNotifWebhookUrl(e.target.value)}
+                  placeholder={t("admin.webhook_url_placeholder")}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono min-h-[44px]"
+                />
+              </div>
+
+              {/* Public Base URL */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.base_url_label")}
+                </label>
+                <input
+                  type="text"
+                  value={notifBaseUrl}
+                  onChange={(e) => setNotifBaseUrl(e.target.value)}
+                  placeholder={t("admin.base_url_placeholder")}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono min-h-[44px]"
+                />
+              </div>
+
+              {/* Test Ping action */}
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestNotification}
+                  disabled={isTestingNotif}
+                  className="w-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 text-zinc-800 dark:text-zinc-200 font-bold py-3 rounded-xl min-h-[44px] text-sm flex items-center justify-center transition-colors"
+                >
+                  {isTestingNotif ? t("admin.testing_notify") : t("admin.test_notify_btn")}
+                </button>
+
+                {notifTestResults && (
+                  <div className="space-y-1.5 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700">
+                    {notifTestResults.map((r) => (
+                      <div key={r.channel} className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-bold">{r.channel}</span>
+                        <span
+                          className={`font-bold ${
+                            r.success ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {r.success ? "✓ OK" : `✗ ${r.error || "Failed"}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Save button */}
+                <button
+                  type="button"
+                  onClick={handleSaveNotification}
+                  disabled={isSaving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-2xl min-h-[56px] shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.98] mt-2"
+                >
+                  {isSaving ? t("admin.saving_btn") : t("admin.save_config_btn")}
+                </button>
+              </div>
+            </section>
+          )}
+        </PageContainer>
+      </main>
+    </div>
+  );
+}

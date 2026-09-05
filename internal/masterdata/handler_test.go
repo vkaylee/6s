@@ -19,6 +19,19 @@ type mockMDStore struct {
 func (m *mockMDStore) ListLocations(_ context.Context) ([]db.Location, error) {
 	return m.locations, nil
 }
+func (m *mockMDStore) ListAllLocations(_ context.Context) ([]db.Location, error) {
+	return m.locations, nil
+}
+
+func (m *mockMDStore) UpdateLocationActiveStatus(_ context.Context, arg db.UpdateLocationActiveStatusParams) (db.Location, error) {
+	for i, l := range m.locations {
+		if l.Code == arg.Code {
+			m.locations[i].IsActive = arg.IsActive
+			return m.locations[i], nil
+		}
+	}
+	return db.Location{}, context.DeadlineExceeded
+}
 
 func (m *mockMDStore) CreateLocation(_ context.Context, arg db.CreateLocationParams) (db.Location, error) {
 	loc := db.Location{
@@ -77,6 +90,23 @@ func TestMasterDataHandler(t *testing.T) {
 	handler.ListLocations(rrList, reqList)
 	if rrList.Code != http.StatusOK {
 		t.Fatalf("expected 200 for list locations, got %d", rrList.Code)
+	}
+	// 2b. List All Locations (Admin)
+	reqListAll := httptest.NewRequest("GET", "/api/locations/all", nil)
+	rrListAll := httptest.NewRecorder()
+	handler.ListAllLocations(rrListAll, reqListAll)
+	if rrListAll.Code != http.StatusOK {
+		t.Fatalf("expected 200 for list all locations, got %d", rrListAll.Code)
+	}
+
+	// 2c. Update Location Status (Deactivate)
+	statusReq := UpdateLocationStatusRequest{IsActive: false}
+	bodyStatus, _ := json.Marshal(statusReq)
+	reqStatus := httptest.NewRequest("PATCH", "/api/locations/LINE_A1/status?code=LINE_A1", bytes.NewReader(bodyStatus))
+	rrStatus := httptest.NewRecorder()
+	handler.UpdateLocationStatus(rrStatus, reqStatus)
+	if rrStatus.Code != http.StatusOK {
+		t.Fatalf("expected 200 for update location status, got %d, body: %s", rrStatus.Code, rrStatus.Body.String())
 	}
 
 	// 3. Upsert Tag

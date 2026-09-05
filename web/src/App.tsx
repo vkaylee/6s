@@ -12,7 +12,7 @@ import { type FacetKey, QuickFacets } from "./components/QuickFacets.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
 import type { DraftResolve } from "./db/indexeddb.ts";
 import { useI18nStore } from "./i18n/index.ts";
-import { AdminConfigModal } from "./pages/AdminConfigModal.tsx";
+import { AdminConfigPage } from "./pages/AdminConfigPage.tsx";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
 import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
@@ -48,7 +48,7 @@ export function App() {
   // Modals state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueItem | null>(null);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
+
   const [conflictItem, setConflictItem] = useState<DraftResolve | null>(null);
   const [isSetupOpen, setIsSetupOpen] = useState(false);
 
@@ -192,6 +192,11 @@ export function App() {
         <Route path="/login">
           <LoginPage />
         </Route>
+        <Route path="/admin">
+          <ProtectedRoute>
+            <AdminConfigPage />
+          </ProtectedRoute>
+        </Route>
         <Route path="/issues/new">
           <ProtectedRoute>
             <CreateIssuePage
@@ -236,8 +241,9 @@ export function App() {
                           {user.role === UserRole.ADMIN && (
                             <button
                               type="button"
-                              onClick={() => setIsAdminOpen(true)}
+                              onClick={() => setLocation("/admin")}
                               className="p-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold min-h-[44px]"
+                              title={t("admin.title")}
                             >
                               ⚙️
                             </button>
@@ -430,8 +436,6 @@ export function App() {
                   onClose={() => setConflictItem(null)}
                 />
               )}
-
-              <AdminConfigModal isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} />
 
               <SetupSuperadminModal
                 isOpen={isSetupOpen}

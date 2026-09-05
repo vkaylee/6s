@@ -145,6 +145,17 @@ INSERT INTO locations (
 )
 RETURNING *;
 
+-- name: ListAllLocations :many
+-- Returns all locations including inactive ones for admin management
+SELECT * FROM locations
+ORDER BY code ASC;
+
+-- name: UpdateLocationActiveStatus :one
+UPDATE locations
+SET is_active = $2
+WHERE code = $1
+RETURNING *;
+
 -- name: ListTags :many
 SELECT * FROM tags
 ORDER BY use_count DESC, id ASC;

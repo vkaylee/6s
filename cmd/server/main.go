@@ -188,7 +188,9 @@ func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Midd
 	r.Route("/api/locations", func(lr chi.Router) {
 		lr.Use(authMw.Authenticate)
 		lr.Get("/", mdHandler.ListLocations)
+		lr.With(auth.RequireRole(auth.RoleAdmin)).Get("/all", mdHandler.ListAllLocations)
 		lr.With(auth.RequireRole(auth.RoleAdmin)).Post("/", mdHandler.CreateLocation)
+		lr.With(auth.RequireRole(auth.RoleAdmin)).Patch("/{code}/status", mdHandler.UpdateLocationStatus)
 	})
 	r.Route("/api/tags", func(tr chi.Router) {
 		tr.Use(authMw.Authenticate)
