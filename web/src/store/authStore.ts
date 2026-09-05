@@ -15,6 +15,32 @@ export interface UserProfile {
   assigned_location_code?: string;
 }
 
+export interface RememberedUser {
+  username: string;
+  full_name: string;
+}
+
+const REMEMBERED_USER_KEY = "6s_last_auth_user";
+
+export function getRememberedUser(): RememberedUser | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(REMEMBERED_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearRememberedUser(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(REMEMBERED_USER_KEY);
+  } catch {
+    // no-op
+  }
+}
+
 export interface AuthState {
   user: UserProfile | null;
   accessToken: string | null;
@@ -49,6 +75,16 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     };
     if (typeof indexedDB !== "undefined") {
       await saveAuthSession(session);
+    }
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(
+          REMEMBERED_USER_KEY,
+          JSON.stringify({ username: user.username, full_name: user.full_name }),
+        );
+      } catch {
+        // no-op
+      }
     }
     set({
       user,

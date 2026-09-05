@@ -3,13 +3,19 @@ import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { NavActions } from "../components/NavActions.tsx";
 import { useI18nStore } from "../i18n/index.ts";
-import { type UserProfile, useAuthStore } from "../store/authStore.ts";
+import {
+  clearRememberedUser,
+  getRememberedUser,
+  type UserProfile,
+  useAuthStore,
+} from "../store/authStore.ts";
 import { haptics } from "../utils/haptics.ts";
 export function LoginPage() {
   const { t } = useI18nStore();
   const [, setLocation] = useLocation();
   const { user, setAuth } = useAuthStore();
-  const [username, setUsername] = useState("");
+  const [rememberedUser, setRememberedUser] = useState(getRememberedUser);
+  const [username, setUsername] = useState(() => getRememberedUser()?.username ?? "");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -111,20 +117,47 @@ export function LoginPage() {
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                {t("auth.username")} *
-              </label>
-              <input
-                type="text"
-                autoCapitalize="none"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin, CN0012, worker01"
-                className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[52px]"
-              />
-            </div>
-
+            {rememberedUser ? (
+              <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-2xl">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center shrink-0 text-base uppercase">
+                    {rememberedUser.full_name?.[0] || rememberedUser.username[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                      {rememberedUser.full_name || rememberedUser.username}
+                    </div>
+                    <div className="text-xs text-zinc-500 truncate">@{rememberedUser.username}</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearRememberedUser();
+                    setRememberedUser(null);
+                    setUsername("");
+                    setPassword("");
+                  }}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 p-2 shrink-0"
+                >
+                  {t("auth.switch_account")}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                  {t("auth.username")} *
+                </label>
+                <input
+                  type="text"
+                  autoCapitalize="none"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin, CN0012, worker01"
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[52px]"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
                 {t("auth.password")} *

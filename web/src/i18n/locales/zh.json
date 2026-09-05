@@ -46,7 +46,9 @@
     "password_placeholder": "至少8位字符",
     "confirm_password_label": "确认密码 *",
     "confirm_password_placeholder": "再次输入密码",
-    "submit_setup": "初始化管理员并开始"
+    "submit_setup": "初始化超级管理员并开始",
+    "switch_account": "使用其他账号登录",
+    "welcome_back": "欢迎回来"
   },
   "status": {
     "OPEN": "待处理",

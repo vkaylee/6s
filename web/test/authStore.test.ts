@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { useAuthStore } from "../src/store/authStore.ts";
+import { clearRememberedUser, getRememberedUser, useAuthStore } from "../src/store/authStore.ts";
 import { UserRole } from "../src/types/index.ts";
 
 describe("authStore", () => {
@@ -69,5 +69,45 @@ describe("authStore", () => {
 
     const token = await store.getRefreshToken();
     expect(token === null || typeof token === "string").toBe(true);
+  });
+
+  it("saves and clears remembered user in localStorage", async () => {
+    const storage = new Map<string, string>();
+    const originalLocalStorage = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        storage.set(k, String(v));
+      },
+      removeItem: (k: string) => {
+        storage.delete(k);
+      },
+      clear: () => {
+        storage.clear();
+      },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage;
+
+    try {
+      const store = useAuthStore.getState();
+      const user = {
+        id: 3,
+        username: "saveduser",
+        full_name: "Saved User",
+        role: UserRole.USER,
+      };
+
+      await store.setAuth(user, "tok1", "tok2");
+      expect(getRememberedUser()).toEqual({
+        username: "saveduser",
+        full_name: "Saved User",
+      });
+
+      clearRememberedUser();
+      expect(getRememberedUser()).toBeNull();
+    } finally {
+      globalThis.localStorage = originalLocalStorage;
+    }
   });
 });

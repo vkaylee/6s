@@ -46,7 +46,9 @@
     "password_placeholder": "Tối thiểu 8 ký tự",
     "confirm_password_label": "Xác nhận mật khẩu *",
     "confirm_password_placeholder": "Nhập lại mật khẩu",
-    "submit_setup": "Khởi tạo Quản trị viên & Bắt đầu"
+    "submit_setup": "Khởi tạo Quản trị viên & Bắt đầu",
+    "switch_account": "Đăng nhập bằng tài khoản khác",
+    "welcome_back": "Chào mừng trở lại"
   },
   "status": {
     "OPEN": "Mới ghi nhận",
