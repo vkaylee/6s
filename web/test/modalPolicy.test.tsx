@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { renderToString } from "react-dom/server";
+import { Router } from "wouter";
 import { GlobalDialog } from "../src/components/GlobalDialog.tsx";
+import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
 import { modalDialog, useDialogStore } from "../src/store/dialogStore.ts";
 
 function getAllSourceFiles(dir: string): string[] {
@@ -135,5 +137,16 @@ describe("Frontend Modal Policy Enforcement", () => {
 
     const emptyHtml = renderToString(<GlobalDialog isOpen={false} />);
     expect(emptyHtml).toBe("");
+  });
+
+  it("renders dedicated CreateIssuePage component with form fields", () => {
+    const html = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={[]} tags={[]} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(html).toContain("1. Chọn phân loại S");
+    expect(html).toContain("2. Vị trí nhà xưởng");
+    expect(html).toContain("3. Chụp ảnh bằng chứng");
   });
 });

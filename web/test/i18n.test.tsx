@@ -141,6 +141,7 @@ describe("Frontend i18n usage guard", () => {
     "components/StatusBar.tsx",
     "pages/AdminConfigModal.tsx",
     "pages/CreateIssueModal.tsx",
+    "pages/CreateIssuePage.tsx",
     "pages/IssueDetailModal.tsx",
     "pages/LoginModal.tsx",
     "pages/SetupSuperadminModal.tsx",
