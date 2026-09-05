@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
 import { NavActions } from "./NavActions.tsx";
+import { PageContainer } from "./PageContainer.tsx";
 
 interface StatusBarProps {
   onOpenDrawer: () => void;
@@ -43,7 +44,7 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
 
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none shadow-sm">
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <PageContainer className="h-14 flex items-center justify-between">
         <button
           type="button"
           onClick={onOpenDrawer}
@@ -86,7 +87,7 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
           )}
           <NavActions />
         </div>
-      </div>
+      </PageContainer>
 
       {progress.isSyncing && (
         <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1 relative overflow-hidden">

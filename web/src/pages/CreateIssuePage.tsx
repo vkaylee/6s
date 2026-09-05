@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { NavActions } from "../components/NavActions.tsx";
+import { PageContainer } from "../components/PageContainer.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -138,7 +139,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
+        <PageContainer className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <button
               type="button"
@@ -165,185 +166,187 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
               {t("common.cancel")}
             </button>
           </div>
-        </div>
+        </PageContainer>
       </header>
 
       {/* Main Form Body */}
-      <main className="max-w-2xl mx-auto p-4 space-y-6">
-        {/* 1S - 6S Selection with Micro-hints (SPEC.md Section 4.5) */}
-        <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-            {t("issue.step_category")}
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {S_CATEGORIES.map((s) => {
-              const isSelected = category === s.key;
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => handleSelectCategory(s.key)}
-                  className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[72px] ${
-                    isSelected
-                      ? s.isSafety
-                        ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/30 ring-2 ring-rose-400"
-                        : "bg-zinc-900 dark:bg-zinc-100 border-zinc-900 dark:border-zinc-100 text-white dark:text-zinc-900 shadow-md"
-                      : s.isSafety
-                        ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-300"
-                        : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-base font-black">{s.key}</span>
-                    <span className="text-xs font-bold opacity-80">
-                      {s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name}
-                    </span>
-                  </div>
-                  <div className="text-[11px] leading-tight font-medium opacity-90 mt-1">
-                    {s.hint_i18n
-                      ? resolveI18n(s.hint_i18n, locale)
-                      : locale === "zh"
-                        ? s.hint_zh
-                        : s.hint_vi}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Location Selection */}
-        <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-            {t("issue.step_location")}
-          </label>
-          <select
-            value={locationCode}
-            onChange={(e) => setLocationCode(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base font-bold text-zinc-900 dark:text-zinc-100 min-h-[56px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {locations.map((loc) => (
-              <option key={loc.code} value={loc.code}>
-                {loc.name_vi} ({loc.code}) - {loc.name_zh}
-              </option>
-            ))}
-          </select>
-        </section>
-
-        {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}
-        <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-            {t("issue.step_photos")}
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            {/* Wide Shot (Mandatory) */}
-            <div className="flex flex-col">
-              <label className="cursor-pointer border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-2 text-center bg-zinc-50 dark:bg-zinc-800/40 relative overflow-hidden transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={(e) => handleCapturePhoto(e, true)}
-                  className="hidden"
-                />
-                {previewBefore ? (
-                  <img
-                    src={previewBefore}
-                    alt={t("issue.photo_wide_alt")}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                ) : (
-                  <>
-                    <span className="text-3xl mb-1">📷</span>
-                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      {t("issue.photo_wide_label")}
-                    </span>
-                    <span className="text-[10px] text-zinc-400">
-                      {t("issue.photo_wide_required")}
-                    </span>
-                  </>
-                )}
-              </label>
-            </div>
-
-            {/* Detail Shot (Optional) */}
-            <div className="flex flex-col">
-              <label className="cursor-pointer border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-2 text-center bg-zinc-50 dark:bg-zinc-800/40 relative overflow-hidden transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={(e) => handleCapturePhoto(e, false)}
-                  className="hidden"
-                />
-                {previewDetail ? (
-                  <img
-                    src={previewDetail}
-                    alt={t("issue.photo_detail_alt")}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                ) : (
-                  <>
-                    <span className="text-3xl mb-1">🔍</span>
-                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      {t("issue.photo_detail_label")}
-                    </span>
-                    <span className="text-[10px] text-zinc-400">
-                      {t("issue.photo_detail_optional")}
-                    </span>
-                  </>
-                )}
-              </label>
-            </div>
-          </div>
-        </section>
-
-        {/* Cascade Tags */}
-        {filteredTags.length > 0 && (
+      <main className="py-4">
+        <PageContainer className="space-y-6">
+          {/* 1S - 6S Selection with Micro-hints (SPEC.md Section 4.5) */}
           <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-              {t("issue.step_tags", { category })}
+              {t("issue.step_category")}
             </label>
-            <div className="flex flex-wrap gap-2">
-              {filteredTags.map((tag) => {
-                const isChecked = selectedTags.includes(tag.tag_code);
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {S_CATEGORIES.map((s) => {
+                const isSelected = category === s.key;
                 return (
                   <button
-                    key={tag.tag_code}
+                    key={s.key}
                     type="button"
-                    onClick={() => handleToggleTag(tag.tag_code)}
-                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all min-h-[44px] border ${
-                      isChecked
-                        ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20"
-                        : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                    onClick={() => handleSelectCategory(s.key)}
+                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[72px] ${
+                      isSelected
+                        ? s.isSafety
+                          ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/30 ring-2 ring-rose-400"
+                          : "bg-zinc-900 dark:bg-zinc-100 border-zinc-900 dark:border-zinc-100 text-white dark:text-zinc-900 shadow-md"
+                        : s.isSafety
+                          ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-300"
+                          : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200"
                     }`}
                   >
-                    {tag.label_vi} / {tag.label_zh}
+                    <div className="flex items-center justify-between">
+                      <span className="text-base font-black">{s.key}</span>
+                      <span className="text-xs font-bold opacity-80">
+                        {s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name}
+                      </span>
+                    </div>
+                    <div className="text-[11px] leading-tight font-medium opacity-90 mt-1">
+                      {s.hint_i18n
+                        ? resolveI18n(s.hint_i18n, locale)
+                        : locale === "zh"
+                          ? s.hint_zh
+                          : s.hint_vi}
+                    </div>
                   </button>
                 );
               })}
             </div>
           </section>
-        )}
 
-        {/* Description */}
-        <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-            {t("issue.step_description")}
-          </label>
-          <textarea
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={t("issue.description_placeholder")}
-            className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </section>
+          {/* Location Selection */}
+          <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+              {t("issue.step_location")}
+            </label>
+            <select
+              value={locationCode}
+              onChange={(e) => setLocationCode(e.target.value)}
+              className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base font-bold text-zinc-900 dark:text-zinc-100 min-h-[56px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {locations.map((loc) => (
+                <option key={loc.code} value={loc.code}>
+                  {loc.name_vi} ({loc.code}) - {loc.name_zh}
+                </option>
+              ))}
+            </select>
+          </section>
+
+          {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}
+          <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+              {t("issue.step_photos")}
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Wide Shot (Mandatory) */}
+              <div className="flex flex-col">
+                <label className="cursor-pointer border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-2 text-center bg-zinc-50 dark:bg-zinc-800/40 relative overflow-hidden transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => handleCapturePhoto(e, true)}
+                    className="hidden"
+                  />
+                  {previewBefore ? (
+                    <img
+                      src={previewBefore}
+                      alt={t("issue.photo_wide_alt")}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      <span className="text-3xl mb-1">📷</span>
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                        {t("issue.photo_wide_label")}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {t("issue.photo_wide_required")}
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {/* Detail Shot (Optional) */}
+              <div className="flex flex-col">
+                <label className="cursor-pointer border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-2 text-center bg-zinc-50 dark:bg-zinc-800/40 relative overflow-hidden transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => handleCapturePhoto(e, false)}
+                    className="hidden"
+                  />
+                  {previewDetail ? (
+                    <img
+                      src={previewDetail}
+                      alt={t("issue.photo_detail_alt")}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      <span className="text-3xl mb-1">🔍</span>
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                        {t("issue.photo_detail_label")}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {t("issue.photo_detail_optional")}
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
+            </div>
+          </section>
+
+          {/* Cascade Tags */}
+          {filteredTags.length > 0 && (
+            <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                {t("issue.step_tags", { category })}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {filteredTags.map((tag) => {
+                  const isChecked = selectedTags.includes(tag.tag_code);
+                  return (
+                    <button
+                      key={tag.tag_code}
+                      type="button"
+                      onClick={() => handleToggleTag(tag.tag_code)}
+                      className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all min-h-[44px] border ${
+                        isChecked
+                          ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20"
+                          : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                      }`}
+                    >
+                      {tag.label_vi} / {tag.label_zh}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Description */}
+          <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+              {t("issue.step_description")}
+            </label>
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={t("issue.description_placeholder")}
+              className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </section>
+        </PageContainer>
       </main>
 
       {/* Bottom Sticky Action Bar (Glove Friendly 64px, SPEC.md Section 9.1) */}
       <div className="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 p-4 z-30">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+        <PageContainer className="flex items-center justify-between gap-3">
           <button
             type="button"
             disabled={isSubmitting}
@@ -362,7 +365,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   : t("issue.submit_standard")}
             </span>
           </button>
-        </div>
+        </PageContainer>
       </div>
     </div>
   );
