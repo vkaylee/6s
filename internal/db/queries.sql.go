@@ -1095,6 +1095,44 @@ func (q *Queries) ListAllLocations(ctx context.Context) ([]Location, error) {
 	return items, nil
 }
 
+const listAllTags = `-- name: ListAllTags :many
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active FROM tags
+ORDER BY use_count DESC, id ASC
+`
+
+func (q *Queries) ListAllTags(ctx context.Context) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listAllTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.Category,
+			&i.UseCount,
+			&i.IsPreset,
+			&i.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
 SELECT i.id, i.client_uuid, i.version, i.creator_id, i.resolver_id, i.category, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
        loc.name_vi AS location_name_vi,
@@ -1314,7 +1352,8 @@ func (q *Queries) ListScoreLogsSince(ctx context.Context, createdAt time.Time) (
 }
 
 const listTags = `-- name: ListTags :many
-SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset FROM tags
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active FROM tags
+WHERE is_active = TRUE
 ORDER BY use_count DESC, id ASC
 `
 
@@ -1336,6 +1375,7 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 			&i.Category,
 			&i.UseCount,
 			&i.IsPreset,
+			&i.IsActive,
 		); err != nil {
 			return nil, err
 		}
@@ -1690,6 +1730,16 @@ func (q *Queries) RevokeUserRefreshTokens(ctx context.Context, userID int64) err
 	return err
 }
 
+const setAllTagsActiveStatus = `-- name: SetAllTagsActiveStatus :exec
+UPDATE tags
+SET is_active = $1
+`
+
+func (q *Queries) SetAllTagsActiveStatus(ctx context.Context, isActive bool) error {
+	_, err := q.db.ExecContext(ctx, setAllTagsActiveStatus, isActive)
+	return err
+}
+
 const updateLocationActiveStatus = `-- name: UpdateLocationActiveStatus :one
 UPDATE locations
 SET is_active = $2
@@ -1714,6 +1764,35 @@ func (q *Queries) UpdateLocationActiveStatus(ctx context.Context, arg UpdateLoca
 		&i.QrCode,
 		&i.IsActive,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateTagActiveStatus = `-- name: UpdateTagActiveStatus :one
+UPDATE tags
+SET is_active = $2
+WHERE code = $1
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active
+`
+
+type UpdateTagActiveStatusParams struct {
+	Code     string
+	IsActive bool
+}
+
+func (q *Queries) UpdateTagActiveStatus(ctx context.Context, arg UpdateTagActiveStatusParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, updateTagActiveStatus, arg.Code, arg.IsActive)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
+		&i.IsActive,
 	)
 	return i, err
 }
@@ -1984,7 +2063,7 @@ ON CONFLICT (code) DO UPDATE SET
     name_zh = EXCLUDED.name_zh,
     name_en = EXCLUDED.name_en,
     category = EXCLUDED.category
-RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active
 `
 
 type UpsertTagParams struct {
@@ -2015,6 +2094,7 @@ func (q *Queries) UpsertTag(ctx context.Context, arg UpsertTagParams) (Tag, erro
 		&i.Category,
 		&i.UseCount,
 		&i.IsPreset,
+		&i.IsActive,
 	)
 	return i, err
 }

@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_tags_active;
+ALTER TABLE tags DROP COLUMN IF EXISTS is_active;

@@ -20,7 +20,10 @@ type Store interface {
 	CreateLocation(ctx context.Context, arg db.CreateLocationParams) (db.Location, error)
 	UpdateLocationActiveStatus(ctx context.Context, arg db.UpdateLocationActiveStatusParams) (db.Location, error)
 	ListTags(ctx context.Context) ([]db.Tag, error)
+	ListAllTags(ctx context.Context) ([]db.Tag, error)
 	UpsertTag(ctx context.Context, arg db.UpsertTagParams) (db.Tag, error)
+	UpdateTagActiveStatus(ctx context.Context, arg db.UpdateTagActiveStatusParams) (db.Tag, error)
+	SetAllTagsActiveStatus(ctx context.Context, isActive bool) error
 }
 
 // Handler serves Master Data API endpoints.
@@ -43,7 +46,7 @@ type LocationResponse struct {
 	IsActive bool   `json:"is_active"`
 }
 
-// TagResponse formats tag for API.
+// TagResponse formats tag details for API responses.
 type TagResponse struct {
 	Code     string `json:"code"`
 	NameVi   string `json:"name_vi"`
@@ -52,6 +55,7 @@ type TagResponse struct {
 	Category string `json:"category"`
 	UseCount int32  `json:"use_count"`
 	IsPreset bool   `json:"is_preset"`
+	IsActive bool   `json:"is_active"`
 }
 
 // ListLocations handles GET /api/locations.
@@ -201,10 +205,116 @@ func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
 			Category: t.Category,
 			UseCount: t.UseCount,
 			IsPreset: t.IsPreset,
+			IsActive: t.IsActive,
 		})
 	}
 
 	response.JSON(w, http.StatusOK, items)
+}
+
+// ListAllTags handles GET /api/tags/all (Admin only).
+func (h *Handler) ListAllTags(w http.ResponseWriter, r *http.Request) {
+	tags, err := h.store.ListAllTags(r.Context())
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
+		return
+	}
+
+	items := make([]TagResponse, 0, len(tags))
+	for _, t := range tags {
+		items = append(items, TagResponse{
+			Code:     t.Code,
+			NameVi:   t.NameVi,
+			NameZh:   t.NameZh,
+			NameEn:   t.NameEn,
+			Category: t.Category,
+			UseCount: t.UseCount,
+			IsPreset: t.IsPreset,
+			IsActive: t.IsActive,
+		})
+	}
+
+	response.JSON(w, http.StatusOK, items)
+}
+
+// UpdateTagStatusRequest defines payload to update tag active status.
+type UpdateTagStatusRequest struct {
+	IsActive bool `json:"is_active"`
+}
+
+// UpdateTagStatus handles PATCH /api/tags/{code}/status (Admin only).
+func (h *Handler) UpdateTagStatus(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if code == "" {
+		code = r.PathValue("code")
+	}
+	if code == "" {
+		code = r.URL.Query().Get("code")
+	}
+
+	var req UpdateTagStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+
+	tag, err := h.store.UpdateTagActiveStatus(r.Context(), db.UpdateTagActiveStatusParams{
+		Code:     code,
+		IsActive: req.IsActive,
+	})
+	if err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrTagUpdateFailed).WithCause(err))
+		return
+	}
+
+	response.JSON(w, http.StatusOK, TagResponse{
+		Code:     tag.Code,
+		NameVi:   tag.NameVi,
+		NameZh:   tag.NameZh,
+		NameEn:   tag.NameEn,
+		Category: tag.Category,
+		UseCount: tag.UseCount,
+		IsPreset: tag.IsPreset,
+		IsActive: tag.IsActive,
+	})
+}
+
+// BatchUpdateTagsStatusRequest defines payload for batch activating/deactivating tags.
+type BatchUpdateTagsStatusRequest struct {
+	All      *bool    `json:"all"`
+	Codes    []string `json:"codes"`
+	IsActive bool     `json:"is_active"`
+}
+
+// BatchUpdateTagsStatus handles POST /api/tags/batch-status (Admin only).
+func (h *Handler) BatchUpdateTagsStatus(w http.ResponseWriter, r *http.Request) {
+	var req BatchUpdateTagsStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+
+	if req.All != nil && *req.All {
+		if err := h.store.SetAllTagsActiveStatus(r.Context(), req.IsActive); err != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed).WithCause(err))
+			return
+		}
+		response.JSON(w, http.StatusOK, map[string]any{"success": true})
+		return
+	}
+
+	// Update specific codes
+	for _, code := range req.Codes {
+		if _, err := h.store.UpdateTagActiveStatus(r.Context(), db.UpdateTagActiveStatusParams{
+			Code:     code,
+			IsActive: req.IsActive,
+		}); err != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed).WithCause(err))
+			return
+		}
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // UpsertTagRequest defines payload to create or update a tag.
@@ -250,5 +360,6 @@ func (h *Handler) UpsertTag(w http.ResponseWriter, r *http.Request) {
 		Category: tag.Category,
 		UseCount: tag.UseCount,
 		IsPreset: tag.IsPreset,
+		IsActive: tag.IsActive,
 	})
 }

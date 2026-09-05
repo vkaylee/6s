@@ -74,6 +74,7 @@ const (
 	ErrTagQueryFailed          Key = "masterdata.tag_query_failed"
 	ErrTagMissingFields        Key = "masterdata.tag_missing_fields"
 	ErrTagSaveFailed           Key = "masterdata.tag_save_failed"
+	ErrTagUpdateFailed         Key = "masterdata.tag_update_failed"
 	ErrNotificationLoadFailed  Key = "notification.load_failed"
 	ErrNotificationSaveFailed  Key = "notification.save_failed"
 	ErrNotificationTestMissing Key = "notification.test_missing_config"
@@ -137,6 +138,7 @@ var catalog = map[string]map[Key]string{
 		ErrTagQueryFailed:          "Lỗi truy vấn danh mục tags",
 		ErrTagMissingFields:        "Mã tag, tên tiếng Việt và phân loại S là bắt buộc",
 		ErrTagSaveFailed:           "Lỗi lưu thông tin tag",
+		ErrTagUpdateFailed:         "Lỗi cập nhật trạng thái tag",
 		ErrNotificationLoadFailed:  "Không thể tải cấu hình thông báo",
 		ErrNotificationSaveFailed:  "Lưu cấu hình thông báo thất bại",
 		ErrNotificationTestMissing: "Chưa thiết lập cấu hình thông báo để test",
@@ -197,7 +199,7 @@ var catalog = map[string]map[Key]string{
 		ErrTagQueryFailed:          "Failed to query tags",
 		ErrTagMissingFields:        "Tag code, Vietnamese name, and 6S category are required",
 		ErrTagSaveFailed:           "Failed to save tag",
-		ErrNotificationLoadFailed:  "Failed to load notification settings",
+		ErrTagUpdateFailed:         "Failed to update tag status",
 		ErrNotificationSaveFailed:  "Failed to save notification settings",
 		ErrNotificationTestMissing: "Notification configuration not configured for testing",
 		ErrLeaderboardFailed:       "Failed to load leaderboard",
@@ -260,7 +262,7 @@ var catalog = map[string]map[Key]string{
 		ErrTagQueryFailed:          "查询标签列表失败",
 		ErrTagMissingFields:        "标签代码、越南语名称和 6S 类别为必填项",
 		ErrTagSaveFailed:           "保存标签信息失败",
-		ErrNotificationLoadFailed:  "加载通知配置失败",
+		ErrTagUpdateFailed:         "更新标签状态失败",
 		ErrNotificationSaveFailed:  "保存通知配置失败",
 		ErrNotificationTestMissing: "未配置用于测试的通知设置",
 		ErrLeaderboardFailed:       "加载排行榜失败",

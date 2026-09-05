@@ -36,6 +36,7 @@ interface TagItemData {
   category: string;
   use_count: number;
   is_preset?: boolean;
+  is_active?: boolean;
 }
 
 export function AdminConfigPage() {
@@ -233,13 +234,155 @@ export function AdminConfigPage() {
   const loadTags = async () => {
     setIsLoadingTags(true);
     try {
-      const data = await apiClient<TagItemData[]>("/api/tags");
+      const data = await apiClient<TagItemData[]>("/api/tags/all");
       setTags(data || []);
     } catch {
-      // ignore
+      try {
+        const fallback = await apiClient<TagItemData[]>("/api/tags");
+        setTags(fallback || []);
+      } catch {
+        // ignore
+      }
     } finally {
       setIsLoadingTags(false);
     }
+  };
+
+  const handleToggleTagStatus = async (code: string, currentStatus: boolean) => {
+    try {
+      const updated = await apiClient<TagItemData>(`/api/tags/${encodeURIComponent(code)}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: !currentStatus }),
+      });
+      haptics.success();
+      setTags((prev) =>
+        prev.map((tItem) =>
+          tItem.code === code ? { ...tItem, is_active: updated.is_active } : tItem,
+        ),
+      );
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.tag_status_error"));
+    }
+  };
+
+  const handleApplyIndustryPack = async (
+    packKey: "ALL" | "GARMENT" | "MACHINERY" | "ELECTRONICS",
+  ) => {
+    const garmentCodes: Record<string, true> = {
+      scrap_material: true,
+      broken_equipment: true,
+      blocked_aisle: true,
+      missing_demarcation: true,
+      wrong_tool_place: true,
+      tangled_cables: true,
+      dust_accumulation: true,
+      scattered_trash: true,
+      oil_leak: true,
+      dirty_light_fixtures: true,
+      missing_label: true,
+      ppe_violation: true,
+      safety_gear: true,
+      fire_hazard: true,
+      exposed_wire: true,
+      slippery_floor: true,
+    };
+    const machineryCodes: Record<string, true> = {
+      scrap_material: true,
+      unneeded_tools: true,
+      expired_chemical: true,
+      broken_equipment: true,
+      blocked_aisle: true,
+      missing_demarcation: true,
+      wrong_tool_place: true,
+      tangled_cables: true,
+      stack_too_high: true,
+      oil_leak: true,
+      dust_accumulation: true,
+      dirty_workstation: true,
+      stained_floor: true,
+      dirty_electrical_panel: true,
+      missing_label: true,
+      broken_gauge: true,
+      missing_calibration: true,
+      sop_noncompliance: true,
+      safety_gear: true,
+      fire_hazard: true,
+      exposed_wire: true,
+      slippery_floor: true,
+      missing_machine_guard: true,
+      chemical_spill: true,
+      emergency_stop_fault: true,
+      gas_cylinder_unsecured: true,
+      forklift_speeding: true,
+    };
+    const electronicsCodes: Record<string, true> = {
+      scrap_material: true,
+      unneeded_tools: true,
+      stagnant_wip: true,
+      excess_inventory: true,
+      blocked_aisle: true,
+      missing_demarcation: true,
+      wrong_tool_place: true,
+      tangled_cables: true,
+      unlabeled_container: true,
+      dust_accumulation: true,
+      scattered_trash: true,
+      dirty_workstation: true,
+      dirty_light_fixtures: true,
+      missing_label: true,
+      broken_gauge: true,
+      missing_calibration: true,
+      faded_standard: true,
+      ppe_violation: true,
+      sop_noncompliance: true,
+      safety_gear: true,
+      fire_hazard: true,
+      exposed_wire: true,
+      missing_machine_guard: true,
+      chemical_spill: true,
+      emergency_stop_fault: true,
+      overloaded_socket: true,
+    };
+
+    try {
+      if (packKey === "ALL") {
+        await apiClient("/api/tags/batch-status", {
+          method: "POST",
+          body: JSON.stringify({ all: true, is_active: true }),
+        });
+      } else {
+        const activeCodes = tags
+          .filter((tg) => {
+            if (packKey === "GARMENT") return Boolean(garmentCodes[tg.code]);
+            if (packKey === "MACHINERY") return Boolean(machineryCodes[tg.code]);
+            if (packKey === "ELECTRONICS") return Boolean(electronicsCodes[tg.code]);
+            return false;
+          })
+          .map((tg) => tg.code);
+
+        const inactiveCodes = tags
+          .filter((tg) => !activeCodes.includes(tg.code))
+          .map((tg) => tg.code);
+
+        await Promise.all([
+          apiClient("/api/tags/batch-status", {
+            method: "POST",
+            body: JSON.stringify({ codes: activeCodes, is_active: true }),
+          }),
+          apiClient("/api/tags/batch-status", {
+            method: "POST",
+            body: JSON.stringify({ codes: inactiveCodes, is_active: false }),
+          }),
+        ]);
+      }
+    } catch {
+      // fallback or error handling
+    }
+
+    await loadTags();
+    haptics.success();
+    modalDialog.alert(t("admin.industry_activated"));
   };
 
   const handleStepPoint = (ruleKey: string, delta: number) => {
@@ -447,7 +590,10 @@ export function AdminConfigPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("TAGS")}
+              onClick={() => {
+                setActiveTab("TAGS");
+                loadTags();
+              }}
               className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
                 activeTab === "TAGS"
                   ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
@@ -743,8 +889,8 @@ export function AdminConfigPage() {
                 </form>
               </section>
 
-              {/* List Tags */}
-              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+              {/* List Tags with Quick Industry Presets & Status Toggles */}
+              <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">
                     {t("admin.tags_tab")} ({tags.length})
@@ -758,6 +904,43 @@ export function AdminConfigPage() {
                   </button>
                 </div>
 
+                {/* Industry Preset Buttons */}
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 space-y-2">
+                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                    {t("admin.industry_packs_title")}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleApplyIndustryPack("ALL")}
+                      className="px-3 py-1.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold shadow-sm hover:opacity-90 min-h-[36px]"
+                    >
+                      ✓ {t("admin.industry_all")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyIndustryPack("GARMENT")}
+                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold hover:border-blue-500 min-h-[36px]"
+                    >
+                      🧵 {t("admin.industry_garment")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyIndustryPack("MACHINERY")}
+                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold hover:border-blue-500 min-h-[36px]"
+                    >
+                      ⚙️ {t("admin.industry_machinery")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyIndustryPack("ELECTRONICS")}
+                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold hover:border-blue-500 min-h-[36px]"
+                    >
+                      🔌 {t("admin.industry_electronics")}
+                    </button>
+                  </div>
+                </div>
+
                 {isLoadingTags ? (
                   <div className="text-sm text-zinc-400 py-6 text-center">
                     {t("admin.loading_tags")}
@@ -768,40 +951,70 @@ export function AdminConfigPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {tags.map((tg) => (
-                      <div
-                        key={tg.code}
-                        className="p-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40 flex items-start justify-between gap-3"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <span
-                              className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                                tg.category === IssueCategory.S6
-                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300"
-                                  : "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300"
+                    {tags.map((tg) => {
+                      const isActive = tg.is_active ?? true;
+                      return (
+                        <div
+                          key={tg.code}
+                          className={`p-3.5 rounded-2xl border transition-colors flex items-start justify-between gap-3 ${
+                            isActive
+                              ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40"
+                              : "border-zinc-200/50 dark:border-zinc-800/40 bg-zinc-100/50 dark:bg-zinc-900/40 opacity-60"
+                          }`}
+                        >
+                          <div className="space-y-1 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span
+                                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                  tg.category === IssueCategory.S6
+                                    ? "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300"
+                                    : "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300"
+                                }`}
+                              >
+                                {tg.category}
+                              </span>
+                              <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                                {tg.code}
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  isActive
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                                }`}
+                              >
+                                {isActive ? t("admin.active_status") : t("admin.inactive_status")}
+                              </span>
+                            </div>
+                            <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                              {tg.name_vi}
+                            </div>
+                            {(tg.name_zh || tg.name_en) && (
+                              <div className="text-xs text-zinc-400 font-medium">
+                                {tg.name_zh} {tg.name_en && `• ${tg.name_en}`}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTagStatus(tg.code, isActive)}
+                              className={`text-xs font-bold px-3 py-1.5 rounded-xl min-h-[36px] transition-colors border ${
+                                isActive
+                                  ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-100"
+                                  : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100"
                               }`}
                             >
-                              {tg.category}
-                            </span>
-                            <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                              {tg.code}
+                              {isActive ? t("admin.tag_btn_disable") : t("admin.tag_btn_enable")}
+                            </button>
+                            <span className="text-[10px] font-semibold text-zinc-400">
+                              {t("admin.tag_use_count").replace("{count}", String(tg.use_count))}
                             </span>
                           </div>
-                          <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                            {tg.name_vi}
-                          </div>
-                          {(tg.name_zh || tg.name_en) && (
-                            <div className="text-xs text-zinc-400 font-medium">
-                              {tg.name_zh} {tg.name_en && `• ${tg.name_en}`}
-                            </div>
-                          )}
                         </div>
-                        <span className="text-[11px] font-semibold text-zinc-400 bg-white dark:bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shrink-0">
-                          {t("admin.tag_use_count").replace("{count}", String(tg.use_count))}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </section>

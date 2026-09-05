@@ -22,3 +22,28 @@ describe("S_CATEGORIES", () => {
     }
   });
 });
+describe("6S Tag Search Normalization", () => {
+  function normalizeSearchText(str: string): string {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "d")
+      .trim();
+  }
+
+  it("matches accented and non-accented queries correctly", () => {
+    const labelVi = "Phế liệu / Rác thừa";
+    const labelVi2 = "Thùng rác đầy tràn";
+    const labelVi3 = "Rò rỉ dầu mỡ";
+
+    expect(normalizeSearchText(labelVi).includes(normalizeSearchText("rac"))).toBe(true);
+    expect(normalizeSearchText(labelVi).includes(normalizeSearchText("rác"))).toBe(true);
+    expect(normalizeSearchText(labelVi2).includes(normalizeSearchText("rac"))).toBe(true);
+    expect(normalizeSearchText(labelVi2).includes(normalizeSearchText("rác"))).toBe(true);
+    expect(normalizeSearchText(labelVi3).includes(normalizeSearchText("dau"))).toBe(true);
+    expect(normalizeSearchText(labelVi3).includes(normalizeSearchText("dầu"))).toBe(true);
+    expect(normalizeSearchText(labelVi3).includes(normalizeSearchText("rac"))).toBe(false);
+  });
+});

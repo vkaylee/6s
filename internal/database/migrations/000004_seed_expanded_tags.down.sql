@@ -1,0 +1,27 @@
+-- Migration: 000004_seed_expanded_tags.down.sql
+DELETE FROM tags WHERE code IN (
+    'damaged_cartons', 'rusted_materials', 'expired_solder_paste', 'broken_fixtures',
+    'empty_drums_uncollected', 'obsolete_labels', 'unused_cables_wires', 'expired_tape_film',
+    'broken_plastic_bins', 'scrapped_printed_circuit', 'contaminated_rags', 'abandoned_projects',
+    'expired_ppe_stock', 'excess_packing_foam', 'scrap_injection_runner',
+    'missing_shadow_board', 'unmarked_first_aid', 'fire_extinguisher_unmarked', 'pallet_protruding_aisle',
+    'missing_fifo_order', 'unlabeled_pipeline_valves', 'tools_stacked_unstable', 'unorganized_molds',
+    'loose_reels_feeder', 'missing_lot_card', 'disorganized_test_leads', 'hanging_tools_no_retractor',
+    'no_sample_board', 'overcrowded_staging_area', 'cart_handle_obstructing',
+    'air_vent_filter_clogged', 'motor_cooling_fin_dirty', 'dirty_camera_sensors', 'chemical_scale_build_up',
+    'moldy_ceiling_walls', 'slippery_stair_treads', 'conveyor_belt_debris', 'dirty_antistatic_mat',
+    'exhaust_duct_leak', 'toilet_cleanliness_issue', 'dirty_forklift_wheels', 'rust_on_compressed_air_pipe',
+    'coolant_fluid_odor', 'screen_monitor_smudged', 'stained_curtain_strip',
+    'missing_rotation_arrow', 'missing_oil_level_gauge', 'outdated_lubrication_chart', 'unlabeled_circuit_breaker',
+    'peeling_floor_demarcation', 'missing_daily_checksheet', 'missing_esd_ground_tag', 'faded_safety_sign',
+    'unapproved_temporary_wiring', 'missing_air_pressure_range', 'damaged_torque_seal', 'missing_weight_capacity_label',
+    'improper_color_coding', 'missing_operator_matrix', 'unauthorized_modifications',
+    'unbuttoned_uniform', 'sitting_on_goods_pallets', 'leaving_machine_running', 'tailgating_cleanroom_door',
+    'unlogged_scrap_disposal', 'cluttered_personal_belongings', 'failing_to_report_defects', 'unauthorized_bystanders',
+    'leaving_lights_running', 'improper_handover_shift', 'touching_pcb_without_esd', 'smoking_in_unauthorized_zone',
+    'overriding_interlock_system', 'improper_hazardous_waste', 'failing_to_sweep_at_shift_end',
+    'broken_emergency_light', 'missing_anti_fall_lanyard', 'forklift_mast_obstruction', 'uninspected_overhead_crane',
+    'blocked_eyewash_station', 'open_pit_no_barricade', 'unlabeled_chemical_bottle', 'press_machine_curtain_muted',
+    'damaged_insulation_pliers', 'unsecured_stacker_charging', 'improper_flammable_storage', 'blocked_fire_hose_reel',
+    'loose_grinder_guard', 'dangling_objects_overhead', 'missing_grounding_rod'
+);

@@ -58,10 +58,26 @@ export function CreateIssueModal({
 
   const handleToggleTag = (tagCode: string) => {
     haptics.success();
+    const tagObj = tags.find((t) => t.tag_code === tagCode);
+
     if (selectedTags.includes(tagCode)) {
       setSelectedTags(selectedTags.filter((t) => t !== tagCode));
     } else {
       setSelectedTags([...selectedTags, tagCode]);
+      if (tagObj?.category) {
+        const catMap: Record<string, IssueCategory> = {
+          [IssueCategory.S1]: IssueCategory.S1,
+          [IssueCategory.S2]: IssueCategory.S2,
+          [IssueCategory.S3]: IssueCategory.S3,
+          [IssueCategory.S4]: IssueCategory.S4,
+          [IssueCategory.S5]: IssueCategory.S5,
+          [IssueCategory.S6]: IssueCategory.S6,
+        };
+        const mappedCategory = catMap[tagObj.category];
+        if (mappedCategory && (!category || category !== mappedCategory)) {
+          handleSelectCategory(mappedCategory);
+        }
+      }
     }
   };
 

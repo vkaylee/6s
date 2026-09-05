@@ -67,6 +67,11 @@ export interface TagItem {
   category: string;
   label_vi: string;
   label_zh: string;
+  label_en?: string;
+  code?: string;
+  name_vi?: string;
+  name_zh?: string;
+  name_en?: string;
 }
 
 export interface LocationHealthScore {

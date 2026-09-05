@@ -1,0 +1,2 @@
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+CREATE INDEX IF NOT EXISTS idx_tags_active ON tags(is_active) WHERE is_active = TRUE;

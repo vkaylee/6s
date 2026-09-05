@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS tags (
     name_en VARCHAR(255) NOT NULL,
     category VARCHAR(10) NOT NULL,
     use_count INT NOT NULL DEFAULT 1,
-    is_preset BOOLEAN NOT NULL DEFAULT FALSE
+    is_preset BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_code_lower ON tags (LOWER(code));
 

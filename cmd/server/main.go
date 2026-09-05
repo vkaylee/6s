@@ -204,7 +204,10 @@ func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Midd
 	r.Route("/api/tags", func(tr chi.Router) {
 		tr.Use(authMw.Authenticate)
 		tr.Get("/", mdHandler.ListTags)
+		tr.With(auth.RequireRole(auth.RoleAdmin)).Get("/all", mdHandler.ListAllTags)
 		tr.With(auth.RequireRole(auth.RoleAdmin)).Post("/", mdHandler.UpsertTag)
+		tr.With(auth.RequireRole(auth.RoleAdmin)).Patch("/{code}/status", mdHandler.UpdateTagStatus)
+		tr.With(auth.RequireRole(auth.RoleAdmin)).Post("/batch-status", mdHandler.BatchUpdateTagsStatus)
 	})
 }
 

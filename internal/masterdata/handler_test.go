@@ -47,9 +47,34 @@ func (m *mockMDStore) CreateLocation(_ context.Context, arg db.CreateLocationPar
 }
 
 func (m *mockMDStore) ListTags(_ context.Context) ([]db.Tag, error) {
+	var active []db.Tag
+	for _, t := range m.tags {
+		if t.IsActive {
+			active = append(active, t)
+		}
+	}
+	return active, nil
+}
+
+func (m *mockMDStore) ListAllTags(_ context.Context) ([]db.Tag, error) {
 	return m.tags, nil
 }
 
+func (m *mockMDStore) UpdateTagActiveStatus(_ context.Context, arg db.UpdateTagActiveStatusParams) (db.Tag, error) {
+	for i, t := range m.tags {
+		if t.Code == arg.Code {
+			m.tags[i].IsActive = arg.IsActive
+			return m.tags[i], nil
+		}
+	}
+	return db.Tag{}, context.DeadlineExceeded
+}
+func (m *mockMDStore) SetAllTagsActiveStatus(_ context.Context, isActive bool) error {
+	for i := range m.tags {
+		m.tags[i].IsActive = isActive
+	}
+	return nil
+}
 func (m *mockMDStore) UpsertTag(_ context.Context, arg db.UpsertTagParams) (db.Tag, error) {
 	t := db.Tag{
 		Code:     arg.Code,
@@ -59,6 +84,7 @@ func (m *mockMDStore) UpsertTag(_ context.Context, arg db.UpsertTagParams) (db.T
 		Category: arg.Category,
 		UseCount: 1,
 		IsPreset: arg.IsPreset,
+		IsActive: true,
 	}
 	m.tags = append(m.tags, t)
 	return t, nil
@@ -132,6 +158,68 @@ func TestMasterDataHandler(t *testing.T) {
 	handler.ListTags(rrTags, reqTags)
 	if rrTags.Code != http.StatusOK {
 		t.Fatalf("expected 200 for list tags, got %d", rrTags.Code)
+	}
+
+	// 4b. List All Tags (Admin)
+	reqAllTags := httptest.NewRequest("GET", "/api/tags/all", nil)
+	rrAllTags := httptest.NewRecorder()
+	handler.ListAllTags(rrAllTags, reqAllTags)
+	if rrAllTags.Code != http.StatusOK {
+		t.Fatalf("expected 200 for list all tags, got %d", rrAllTags.Code)
+	}
+
+	// 4c. Update Tag Active Status
+	tagStatusReq := UpdateTagStatusRequest{IsActive: false}
+	bodyTagStatus, _ := json.Marshal(tagStatusReq)
+	reqTagStatus := httptest.NewRequest("PATCH", "/api/tags/oil_leak/status?code=oil_leak", bytes.NewReader(bodyTagStatus))
+	rrTagStatus := httptest.NewRecorder()
+	handler.UpdateTagStatus(rrTagStatus, reqTagStatus)
+	if rrTagStatus.Code != http.StatusOK {
+		t.Fatalf("expected 200 for update tag status, got %d", rrTagStatus.Code)
+	}
+	var tagResp struct {
+		Data TagResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrTagStatus.Body).Decode(&tagResp)
+	if tagResp.Data.IsActive != false {
+		t.Errorf("expected tag is_active=false, got true")
+	}
+
+	// 4d. Verify ListTags now returns 0 active tags
+	reqTagsAfter := httptest.NewRequest("GET", "/api/tags", nil)
+	rrTagsAfter := httptest.NewRecorder()
+	handler.ListTags(rrTagsAfter, reqTagsAfter)
+	if rrTagsAfter.Code != http.StatusOK {
+		t.Fatalf("expected 200 for list tags after deactivation, got %d", rrTagsAfter.Code)
+	}
+	var activeResp struct {
+		Data []TagResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrTagsAfter.Body).Decode(&activeResp)
+	if len(activeResp.Data) != 0 {
+		t.Errorf("expected 0 active tags, got %d", len(activeResp.Data))
+	}
+	// 4c. Batch Update Tags Status (Enable All)
+	allTrue := true
+	batchReq := BatchUpdateTagsStatusRequest{All: &allTrue, IsActive: true}
+	batchBody, _ := json.Marshal(batchReq)
+	reqBatch := httptest.NewRequest("POST", "/api/tags/batch-status", bytes.NewReader(batchBody))
+	rrBatch := httptest.NewRecorder()
+	handler.BatchUpdateTagsStatus(rrBatch, reqBatch)
+	if rrBatch.Code != http.StatusOK {
+		t.Fatalf("expected 200 for batch update tags, got %d, body: %s", rrBatch.Code, rrBatch.Body.String())
+	}
+
+	// Verify all tags active again
+	reqTagsAllActive := httptest.NewRequest("GET", "/api/tags", nil)
+	rrTagsAllActive := httptest.NewRecorder()
+	handler.ListTags(rrTagsAllActive, reqTagsAllActive)
+	var reloadedResp struct {
+		Data []TagResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrTagsAllActive.Body).Decode(&reloadedResp)
+	if len(reloadedResp.Data) != 1 {
+		t.Errorf("expected 1 active tag after batch enable, got %d", len(reloadedResp.Data))
 	}
 
 	// 5. Create Location Missing Fields (Validation error)

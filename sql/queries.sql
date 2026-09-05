@@ -158,7 +158,22 @@ RETURNING *;
 
 -- name: ListTags :many
 SELECT * FROM tags
+WHERE is_active = TRUE
 ORDER BY use_count DESC, id ASC;
+
+-- name: ListAllTags :many
+SELECT * FROM tags
+ORDER BY use_count DESC, id ASC;
+
+-- name: UpdateTagActiveStatus :one
+UPDATE tags
+SET is_active = $2
+WHERE code = $1
+RETURNING *;
+
+-- name: SetAllTagsActiveStatus :exec
+UPDATE tags
+SET is_active = $1;
 
 -- name: UpsertTag :one
 INSERT INTO tags (

@@ -147,6 +147,7 @@ type Tag struct {
 	Category string
 	UseCount int32
 	IsPreset bool
+	IsActive bool
 }
 
 type User struct {
