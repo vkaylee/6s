@@ -59,11 +59,12 @@ export function IssueDetailModal({
   const [showConfirmAction, setShowConfirmAction] = useState<"CLOSE" | "REOPEN" | "INVALID" | null>(
     null,
   );
-  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; alt: string } | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [zoomScale, setZoomScale] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchDistanceRef = useRef<number | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const lastTapRef = useRef<number>(0);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const [issueScoreLogs, setIssueScoreLogs] = useState<ScoreLogItem[]>([]);
   const [loadingScores, setLoadingScores] = useState(false);
@@ -96,30 +97,64 @@ export function IssueDetailModal({
     };
   }, [isOpen, issue?.id]);
 
+  // List of all viewable photos for this issue
+  const photoList = [
+    currentIssue.photo_before
+      ? {
+          url: resolvePhotoUrl(currentIssue.photo_before, "before"),
+          alt: t("issue_detail.photo_before_alt"),
+          label: t("slider.before"),
+        }
+      : null,
+    currentIssue.photo_detail
+      ? {
+          url: resolvePhotoUrl(currentIssue.photo_detail, "detail"),
+          alt: t("issue_detail.photo_detail_alt"),
+          label: t("issue_detail.photo_detail_label"),
+        }
+      : null,
+    currentIssue.photo_after
+      ? {
+          url: resolvePhotoUrl(currentIssue.photo_after, "after"),
+          alt: t("slider.after_alt"),
+          label: t("slider.after"),
+        }
+      : null,
+  ].filter((p): p is { url: string; alt: string; label: string } => p !== null);
+
+  const previewPhoto =
+    previewIndex !== null && photoList[previewIndex] ? photoList[previewIndex] : null;
+
   // Reset pan & zoom when photo changes
   useEffect(() => {
-    if (previewPhoto) {
+    if (previewIndex !== null) {
       setZoomScale(1);
       setPanOffset({ x: 0, y: 0 });
     }
-  }, [previewPhoto]);
+  }, [previewIndex]);
 
-  // Escape key listener to close modal or full preview
+  // Escape & Arrow keys listener for gallery navigation & modal closing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (previewPhoto) {
-          setPreviewPhoto(null);
+        if (previewIndex !== null) {
+          setPreviewIndex(null);
         } else if (showConfirmAction) {
           setShowConfirmAction(null);
         } else {
           onClose();
         }
+      } else if (previewIndex !== null) {
+        if (e.key === "ArrowLeft") {
+          setPreviewIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : photoList.length - 1));
+        } else if (e.key === "ArrowRight") {
+          setPreviewIndex((prev) => (prev !== null && prev < photoList.length - 1 ? prev + 1 : 0));
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [previewPhoto, showConfirmAction, onClose]);
+  }, [previewIndex, showConfirmAction, onClose, photoList.length]);
 
   // Prevent background body scroll while modal is open
   useEffect(() => {
@@ -473,15 +508,15 @@ export function IssueDetailModal({
                   onPhotoClick={(type) => {
                     setZoomScale(1);
                     if (type === "before") {
-                      setPreviewPhoto({
-                        url: resolvePhotoUrl(currentIssue.photo_before, "before"),
-                        alt: t("issue_detail.photo_before_alt"),
-                      });
+                      const idx = photoList.findIndex(
+                        (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
+                      );
+                      setPreviewIndex(idx >= 0 ? idx : 0);
                     } else {
-                      setPreviewPhoto({
-                        url: resolvePhotoUrl(currentIssue.photo_after, "after"),
-                        alt: t("slider.after_alt"),
-                      });
+                      const idx = photoList.findIndex(
+                        (p) => p.url === resolvePhotoUrl(currentIssue.photo_after, "after"),
+                      );
+                      setPreviewIndex(idx >= 0 ? idx : photoList.length - 1);
                     }
                   }}
                 />
@@ -500,10 +535,10 @@ export function IssueDetailModal({
                   type="button"
                   onClick={() => {
                     setZoomScale(1);
-                    setPreviewPhoto({
-                      url: resolvePhotoUrl(currentIssue.photo_before, "before"),
-                      alt: t("issue_detail.photo_before_alt"),
-                    });
+                    const idx = photoList.findIndex(
+                      (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
+                    );
+                    setPreviewIndex(idx >= 0 ? idx : 0);
                   }}
                   className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
                 >
@@ -536,10 +571,10 @@ export function IssueDetailModal({
                   type="button"
                   onClick={() => {
                     setZoomScale(1);
-                    setPreviewPhoto({
-                      url: resolvePhotoUrl(currentIssue.photo_detail, "detail"),
-                      alt: t("issue_detail.photo_detail_alt"),
-                    });
+                    const idx = photoList.findIndex(
+                      (p) => p.url === resolvePhotoUrl(currentIssue.photo_detail, "detail"),
+                    );
+                    setPreviewIndex(idx >= 0 ? idx : 1);
                   }}
                   className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
                 >
@@ -605,35 +640,6 @@ export function IssueDetailModal({
                   </div>
                 )}
               </div>
-              {/* Kaizen Rating Stars (SPEC.md Section 9.8.B) */}
-              {currentIssue.status === IssueStatus.PENDING_REVIEW && canClose && (
-                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
-                  <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
-                    {t("issue_detail.kaizen_rating_label")}
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setScoreRating(star)}
-                        className={`w-12 h-12 rounded-xl font-black text-lg flex items-center justify-center transition-all ${
-                          scoreRating >= star
-                            ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
-                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
-                        }`}
-                      >
-                        ★
-                      </button>
-                    ))}
-                    {scoreRating === 5 && (
-                      <span className="text-xs font-bold text-amber-700 dark:text-amber-300 ml-2 animate-bounce">
-                        {t("issue_detail.kaizen_excellent")}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* Score Impact Breakdown Card */}
               <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 space-y-2.5">
@@ -800,6 +806,34 @@ export function IssueDetailModal({
                 ✕
               </button>
             </div>
+            {showConfirmAction === "CLOSE" && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
+                <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
+                  {t("issue_detail.kaizen_rating_label")}
+                </label>
+                <div className="flex items-center space-x-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setScoreRating(star)}
+                      className={`w-11 h-11 rounded-xl font-black text-lg flex items-center justify-center transition-all ${
+                        scoreRating >= star
+                          ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
+                          : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                  {scoreRating === 5 && (
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300 ml-2 animate-bounce">
+                      {t("issue_detail.kaizen_excellent")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {(showConfirmAction === IssueStatus.INVALID || showConfirmAction === "REOPEN") && (
               <textarea
@@ -846,22 +880,27 @@ export function IssueDetailModal({
               type="button"
               aria-label={t("common.close")}
               onClick={() => {
-                setPreviewPhoto(null);
+                setPreviewIndex(null);
                 setZoomScale(1);
                 setPanOffset({ x: 0, y: 0 });
               }}
               className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-hidden"
               tabIndex={-1}
             />
-            {/* Top Bar */}
+            {/* Top Bar with Badge & Gallery Indicator */}
             <div className="w-full flex items-center justify-between z-10 pointer-events-none">
-              <span className="text-xs font-bold text-zinc-300 max-w-[70%] truncate">
-                {previewPhoto.alt}
-              </span>
+              <div className="flex items-center gap-2 max-w-[75%] pointer-events-auto">
+                <span className="text-xs font-bold text-zinc-300 truncate">{previewPhoto.alt}</span>
+                {photoList.length > 1 && (
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-800/80 border border-zinc-700/60 text-[11px] font-bold text-zinc-400 shrink-0">
+                    {(previewIndex ?? 0) + 1} / {photoList.length}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  setPreviewPhoto(null);
+                  setPreviewIndex(null);
                   setZoomScale(1);
                   setPanOffset({ x: 0, y: 0 });
                 }}
@@ -908,12 +947,41 @@ export function IssueDetailModal({
                 }
               }}
               onTouchEnd={() => {
-                if (zoomScale <= 1 && panOffset.y > 100) {
-                  setPreviewPhoto(null);
-                  setZoomScale(1);
-                  setPanOffset({ x: 0, y: 0 });
-                } else if (zoomScale <= 1) {
-                  setPanOffset({ x: 0, y: 0 });
+                const now = Date.now();
+                if (now - lastTapRef.current < 300) {
+                  // Double tap detected for mobile
+                  if (zoomScale > 1) {
+                    setZoomScale(1);
+                    setPanOffset({ x: 0, y: 0 });
+                  } else {
+                    setZoomScale(2.5);
+                  }
+                  lastTapRef.current = 0;
+                } else {
+                  lastTapRef.current = now;
+                }
+
+                if (zoomScale <= 1) {
+                  if (panOffset.y > 100) {
+                    // Swipe down to dismiss
+                    setPreviewIndex(null);
+                    setZoomScale(1);
+                    setPanOffset({ x: 0, y: 0 });
+                  } else if (photoList.length > 1 && panOffset.x < -80) {
+                    // Swipe left -> Next photo
+                    setPreviewIndex((prev) =>
+                      prev !== null && prev < photoList.length - 1 ? prev + 1 : 0,
+                    );
+                    setPanOffset({ x: 0, y: 0 });
+                  } else if (photoList.length > 1 && panOffset.x > 80) {
+                    // Swipe right -> Prev photo
+                    setPreviewIndex((prev) =>
+                      prev !== null && prev > 0 ? prev - 1 : photoList.length - 1,
+                    );
+                    setPanOffset({ x: 0, y: 0 });
+                  } else {
+                    setPanOffset({ x: 0, y: 0 });
+                  }
                 }
                 touchDistanceRef.current = null;
                 dragStartRef.current = null;
@@ -939,22 +1007,36 @@ export function IssueDetailModal({
                 }
               }}
               onMouseUp={() => {
-                if (zoomScale <= 1 && panOffset.y > 100) {
-                  setPreviewPhoto(null);
-                  setZoomScale(1);
-                  setPanOffset({ x: 0, y: 0 });
-                } else if (zoomScale <= 1) {
-                  setPanOffset({ x: 0, y: 0 });
+                if (zoomScale <= 1) {
+                  if (panOffset.y > 100) {
+                    setPreviewIndex(null);
+                    setZoomScale(1);
+                    setPanOffset({ x: 0, y: 0 });
+                  } else if (photoList.length > 1 && panOffset.x < -80) {
+                    setPreviewIndex((prev) =>
+                      prev !== null && prev < photoList.length - 1 ? prev + 1 : 0,
+                    );
+                    setPanOffset({ x: 0, y: 0 });
+                  } else if (photoList.length > 1 && panOffset.x > 80) {
+                    setPreviewIndex((prev) =>
+                      prev !== null && prev > 0 ? prev - 1 : photoList.length - 1,
+                    );
+                    setPanOffset({ x: 0, y: 0 });
+                  } else {
+                    setPanOffset({ x: 0, y: 0 });
+                  }
                 }
                 dragStartRef.current = null;
               }}
               onMouseLeave={() => {
-                if (zoomScale <= 1 && panOffset.y > 100) {
-                  setPreviewPhoto(null);
-                  setZoomScale(1);
-                  setPanOffset({ x: 0, y: 0 });
-                } else if (zoomScale <= 1) {
-                  setPanOffset({ x: 0, y: 0 });
+                if (zoomScale <= 1) {
+                  if (panOffset.y > 100) {
+                    setPreviewIndex(null);
+                    setZoomScale(1);
+                    setPanOffset({ x: 0, y: 0 });
+                  } else {
+                    setPanOffset({ x: 0, y: 0 });
+                  }
                 }
                 dragStartRef.current = null;
               }}
@@ -968,16 +1050,47 @@ export function IssueDetailModal({
               }}
             >
               <img
+                key={previewPhoto.url}
                 src={previewPhoto.url}
                 alt={previewPhoto.alt}
                 style={{
                   transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoomScale})`,
                 }}
-                className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-75 select-none pointer-events-none"
+                className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-100 select-none pointer-events-none animate-zoom-in"
               />
             </div>
             {/* Bottom Controls */}
+            {/* Bottom Controls with Next/Prev & Close */}
             <div className="flex items-center gap-2 p-2 bg-zinc-900/90 border border-zinc-700/60 rounded-2xl backdrop-blur-md z-10 shadow-2xl">
+              {photoList.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewIndex((prev) =>
+                        prev !== null && prev > 0 ? prev - 1 : photoList.length - 1,
+                      );
+                    }}
+                    className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition-all cursor-pointer"
+                    aria-label="Previous photo"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewIndex((prev) =>
+                        prev !== null && prev < photoList.length - 1 ? prev + 1 : 0,
+                      );
+                    }}
+                    className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition-all cursor-pointer"
+                    aria-label="Next photo"
+                  >
+                    ▶
+                  </button>
+                  <div className="w-px h-5 bg-zinc-700 mx-0.5" />
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setZoomScale((s) => Math.max(0.5, Number((s - 0.25).toFixed(2))))}
@@ -1008,7 +1121,7 @@ export function IssueDetailModal({
               <button
                 type="button"
                 onClick={() => {
-                  setPreviewPhoto(null);
+                  setPreviewIndex(null);
                   setZoomScale(1);
                   setPanOffset({ x: 0, y: 0 });
                 }}
