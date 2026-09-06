@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
@@ -167,8 +168,8 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                   </div>
 
                   {/* Action 0: Reports (for all logged-in staff/leaders) */}
-                  <button
-                    type="button"
+                  <Link
+                    href="/reports"
                     onClick={() => {
                       setIsProfileOpen(false);
                       onNavigate?.("/reports");
@@ -177,12 +178,12 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                   >
                     <span>📊</span>
                     <span>{t("nav.reports")}</span>
-                  </button>
+                  </Link>
 
                   {/* Action 1: Admin Settings (if admin) */}
                   {user.role === UserRole.ADMIN && (
-                    <button
-                      type="button"
+                    <Link
+                      href="/admin"
                       onClick={() => {
                         setIsProfileOpen(false);
                         onNavigate?.("/admin");
@@ -191,7 +192,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                     >
                       <span>⚙️</span>
                       <span>{t("admin.title")}</span>
-                    </button>
+                    </Link>
                   )}
 
                   {/* Action 2: Logout */}

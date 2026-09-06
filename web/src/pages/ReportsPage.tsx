@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { IssueCard } from "../components/IssueCard.tsx";
 import { NavActions } from "../components/NavActions.tsx";
@@ -56,7 +56,6 @@ export type ReportMeetingTab = "LOCATIONS" | "PEOPLE" | "TRENDS";
 export function ReportsPage() {
   const { t, locale } = useI18nStore();
   const { isDark } = useThemeStore();
-  const [, setLocation] = useLocation();
 
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [locations, setLocations] = useState<LocationHealthScore[]>([]);
@@ -686,14 +685,13 @@ export function ReportsPage() {
                           </span>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setLocation(`/leaderboard/reporters/${rep.user_id}`)}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        <Link
+                          href={`/leaderboard/reporters/${rep.user_id}`}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors inline-flex items-center justify-center"
                           title={t("reports.view_history")}
                         >
                           <ChevronRight className="w-4 h-4" />
-                        </button>
+                        </Link>
                       </div>
                     </div>
                   ))}

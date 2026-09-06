@@ -479,5 +479,10 @@
     "top_tags_desc": "Most frequent issue tags recorded (click any tag to inspect evidence)",
     "occurrences": "{count} times",
     "drilldown_tag_title": "Issues tagged with {tag}"
+  },
+  "not_found": {
+    "title": "404 - Page Not Found",
+    "description": "The page you are looking for does not exist or has been moved.",
+    "back_home": "Back to Home"
   }
 }

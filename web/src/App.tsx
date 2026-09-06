@@ -1,6 +1,6 @@
 import { ArrowUpDown, RotateCw, Search, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Route, Switch, useLocation } from "wouter";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { apiClient } from "./api/client.ts";
 import { ConflictModal } from "./components/ConflictModal.tsx";
 import { GlobalDialog } from "./components/GlobalDialog.tsx";
@@ -14,13 +14,13 @@ import { type FacetKey, QuickFacets } from "./components/QuickFacets.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
 import type { DraftResolve } from "./db/indexeddb.ts";
 import { useI18nStore } from "./i18n/index.ts";
-import { AdminConfigPage } from "./pages/AdminConfigPage.tsx";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
 import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
-import { ReportsPage } from "./pages/ReportsPage.tsx";
+import { NotFoundPage } from "./pages/NotFoundPage.tsx";
 import { ScoreLedgerPage } from "./pages/ScoreLedgerPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
+
 import { useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
@@ -35,11 +35,19 @@ import {
   type TagItem,
 } from "./types/index.ts";
 
+const AdminConfigPage = lazy(() =>
+  import("./pages/AdminConfigPage.tsx").then((m) => ({ default: m.AdminConfigPage })),
+);
+const ReportsPage = lazy(() =>
+  import("./pages/ReportsPage.tsx").then((m) => ({ default: m.ReportsPage })),
+);
+
 export function App() {
   const { t } = useI18nStore();
   const { user, accessToken, restoreSession } = useAuthStore();
   const { initTheme } = useThemeStore();
   const [currentPath, setLocation] = useLocation();
+  const searchString = useSearch();
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [tags, setTags] = useState<TagItem[]>([]);
@@ -114,15 +122,14 @@ export function App() {
     }
   };
 
-  // Support deep linking to issue via query param ?issue_id=123
+  // Support deep linking to issue via query param ?issue_id=123 (wouter reactive search)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchString);
     const issueIdStr = params.get("issue_id");
     if (issueIdStr) {
       openIssueById(Number(issueIdStr));
     }
-  }, [currentPath, issues]);
+  }, [searchString, issues]);
   useEffect(() => {
     if (!user) return;
     syncEngine.start();
@@ -718,12 +725,28 @@ export function App() {
         </Route>
         <Route path="/admin">
           <ProtectedRoute>
-            <AdminConfigPage />
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <AdminConfigPage />
+            </Suspense>
           </ProtectedRoute>
         </Route>
         <Route path="/reports">
           <ProtectedRoute>
-            <ReportsPage />
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <ReportsPage />
+            </Suspense>
           </ProtectedRoute>
         </Route>
         <Route path="/leaderboard/locations/:code">
@@ -834,14 +857,9 @@ export function App() {
                         ) : (
                           (showAllLeaderboard ? locationHealth : locationHealth.slice(0, 3)).map(
                             (loc) => (
-                              <button
+                              <Link
                                 key={loc.location_code}
-                                type="button"
-                                onClick={() => {
-                                  setLocation(
-                                    `/leaderboard/locations/${encodeURIComponent(loc.location_code)}`,
-                                  );
-                                }}
+                                href={`/leaderboard/locations/${encodeURIComponent(loc.location_code)}`}
                                 className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
                               >
                                 <div className="flex items-center space-x-2 min-w-0">
@@ -868,7 +886,7 @@ export function App() {
                                     →
                                   </span>
                                 </div>
-                              </button>
+                              </Link>
                             ),
                           )
                         )}
@@ -896,14 +914,9 @@ export function App() {
                         ) : (
                           (showAllLeaderboard ? reporters : reporters.slice(0, 3)).map(
                             (rep, idx) => (
-                              <button
+                              <Link
                                 key={rep.user_id}
-                                type="button"
-                                onClick={() => {
-                                  setLocation(
-                                    `/leaderboard/reporters/${encodeURIComponent(String(rep.user_id))}`,
-                                  );
-                                }}
+                                href={`/leaderboard/reporters/${encodeURIComponent(String(rep.user_id))}`}
                                 className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
                               >
                                 <div className="flex items-center space-x-2">
@@ -925,7 +938,7 @@ export function App() {
                                   {rep.points} {t("leaderboard.points_unit")} ({rep.valid_count}{" "}
                                   {t("leaderboard.issues_unit")})
                                 </span>
-                              </button>
+                              </Link>
                             ),
                           )
                         )}
@@ -1048,14 +1061,13 @@ export function App() {
               {/* Bottom Sticky Action Bar (Glove Friendly 64px, SPEC.md Section 9.1) */}
               <div className="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 p-4 z-30">
                 <PageContainer className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setLocation("/issues/new")}
+                  <Link
+                    href="/issues/new"
                     className="flex-1 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-xl shadow-rose-600/30 transition-transform"
                   >
                     <span className="text-xl">📸</span>
                     <span>{t("issue.create").toUpperCase()}</span>
-                  </button>
+                  </Link>
                 </PageContainer>
               </div>
 
@@ -1072,11 +1084,13 @@ export function App() {
                   isOpen={true}
                   onClose={() => {
                     setSelectedIssue(null);
-                    if (
-                      typeof window !== "undefined" &&
-                      window.location.search.includes("issue_id=")
-                    ) {
-                      setLocation("/", { replace: true });
+                    const currentParams = new URLSearchParams(searchString);
+                    if (currentParams.has("issue_id")) {
+                      currentParams.delete("issue_id");
+                      const newSearch = currentParams.toString();
+                      setLocation(newSearch ? `${currentPath}?${newSearch}` : currentPath, {
+                        replace: true,
+                      });
                     }
                   }}
                   onRefresh={() => {
@@ -1112,6 +1126,9 @@ export function App() {
               />
             </div>
           </ProtectedRoute>
+        </Route>
+        <Route>
+          <NotFoundPage />
         </Route>
       </Switch>
       <GlobalDialog />

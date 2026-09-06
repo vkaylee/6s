@@ -479,5 +479,10 @@
     "top_tags_desc": "高频发生的具体隐患标签（点击标签可筛选查看现场证据）",
     "occurrences": "{count} 次",
     "drilldown_tag_title": "含有标签 {tag} 的问题列表"
+  },
+  "not_found": {
+    "title": "404 - 页面未找到",
+    "description": "您访问的页面不存在或已被移动。",
+    "back_home": "返回首页"
   }
 }

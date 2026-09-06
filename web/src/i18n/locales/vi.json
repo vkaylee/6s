@@ -479,5 +479,10 @@
     "top_tags_desc": "Tần suất xuất hiện của các mã lỗi cụ thể (nhấn vào tag để lọc bằng chứng)",
     "occurrences": "{count} lần",
     "drilldown_tag_title": "Danh sách sự cố lỗi {tag}"
+  },
+  "not_found": {
+    "title": "404 - Không tìm thấy trang",
+    "description": "Đường dẫn bạn truy cập không tồn tại hoặc đã bị thay đổi.",
+    "back_home": "Về trang chủ"
   }
 }
