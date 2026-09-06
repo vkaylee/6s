@@ -392,7 +392,22 @@
     "target_user": "Reporter"
   },
   "app": {
-    "issues_list": "Issue List ({count})",
-    "refresh": "Refresh ↻"
+    "issues_list": "Issues List ({count})",
+    "refresh": "Refresh",
+    "search_placeholder": "Search by location, description, reporter...",
+    "search_clear": "Clear search",
+    "sla_overdue": "Overdue {hours}h",
+    "sla_remaining": "{hours}h left",
+    "sla_normal": "{time}",
+    "time_just_now": "Just now",
+    "time_hours_ago": "{hours}h ago",
+    "time_days_ago": "{days}d ago",
+    "sort_by": "Sort by",
+    "sort_urgent": "Urgent (SLA/S6)",
+    "sort_newest": "Newest",
+    "sort_oldest": "Oldest",
+    "empty_search_desc": "No issues matched the active filters or search terms",
+    "empty_reset_btn": "Reset filters",
+    "empty_all_clear": "Great! No active 6S issues remaining in the plant."
   }
 }

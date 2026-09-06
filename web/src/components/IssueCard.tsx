@@ -1,3 +1,14 @@
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  Clock,
+  History,
+  Star,
+  User,
+  Wrench,
+  XCircle,
+} from "lucide-react";
 import { useI18nStore } from "../i18n/index.ts";
 import { IssueCategory, type IssueItem, IssueStatus } from "../types/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
@@ -14,24 +25,58 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
   const isPendingReview = issue.status === IssueStatus.PENDING_REVIEW;
   const isClosed = issue.status === IssueStatus.CLOSED;
 
+  // SLA Aging calculation (48 hours threshold)
+  const createdTime = new Date(issue.created_at).getTime();
+  const elapsedMs = Math.max(0, Date.now() - createdTime);
+  const elapsedHours = Math.floor(elapsedMs / (3600 * 1000));
+  const isOverdue = elapsedHours >= 48;
+  const remainingHours = Math.max(0, 48 - elapsedHours);
+
   const statusBadge = isOpen ? (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shrink-0">
-      ⚠️ {t("status.OPEN")}
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shrink-0">
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
+      {t("status.OPEN")}
     </span>
   ) : isPendingReview ? (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
-      ⏳ {t("status.PENDING_REVIEW")}
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+      <Clock className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      {t("status.PENDING_REVIEW")}
     </span>
   ) : isClosed ? (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-      ✓ {t("status.CLOSED")}
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+      <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      {t("status.CLOSED")}
     </span>
   ) : (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shrink-0">
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shrink-0">
+      <XCircle className="w-3.5 h-3.5 shrink-0 text-zinc-500" />
       {t("status.INVALIDATED")}
     </span>
   );
 
+  // SLA Aging Badge
+  const slaBadge =
+    isOpen &&
+    (isOverdue ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-600 text-white animate-pulse shrink-0 shadow-xs">
+        <Clock className="w-3 h-3 shrink-0" />
+        {t("app.sla_overdue", { hours: elapsedHours - 48 || 1 })}
+      </span>
+    ) : remainingHours <= 12 ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-white shrink-0 shadow-xs">
+        <Clock className="w-3 h-3 shrink-0" />
+        {t("app.sla_remaining", { hours: remainingHours })}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 shrink-0">
+        <History className="w-3 h-3 shrink-0" />
+        {elapsedHours < 1
+          ? t("app.time_just_now")
+          : elapsedHours < 24
+            ? t("app.time_hours_ago", { hours: elapsedHours })
+            : t("app.time_days_ago", { days: Math.floor(elapsedHours / 24) })}
+      </span>
+    ));
   return (
     <button
       type="button"
@@ -59,19 +104,42 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
             <div className="font-bold text-base text-zinc-900 dark:text-zinc-100 leading-tight truncate">
               {issue.location_name || issue.location_code}
             </div>
-            <div className="text-xs text-zinc-400 mt-0.5 truncate">
-              {t("issue.code_prefix")}: {issue.location_code}
-              {issue.creator_name ? ` • 👤 ${issue.creator_name}` : ""}
-              {issue.resolver_name ? ` • 🔧 ${issue.resolver_name}` : ""}
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-0.5 truncate">
+              <span>
+                {t("issue.code_prefix")}: {issue.location_code}
+              </span>
+              {issue.creator_name && (
+                <span className="flex items-center gap-0.5">
+                  • <User className="w-3 h-3 text-zinc-400 shrink-0 inline" />
+                  <span>{issue.creator_name}</span>
+                </span>
+              )}
+              {issue.resolver_name && (
+                <span className="flex items-center gap-0.5">
+                  • <Wrench className="w-3 h-3 text-zinc-400 shrink-0 inline" />
+                  <span>{issue.resolver_name}</span>
+                </span>
+              )}
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {statusBadge}
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5">
+            {slaBadge}
+            {statusBadge}
+          </div>
           {issue.score_rating && issue.score_rating > 0 && isClosed && (
-            <span className="text-xs text-amber-500 font-medium">
-              {"★".repeat(issue.score_rating)}
-            </span>
+            <div className="flex items-center gap-0.5 text-amber-500">
+              {Array.from(
+                { length: issue.score_rating },
+                (_, starIdx) => `star-${issue.id}-${starIdx + 1}`,
+              ).map((starKey) => (
+                <Star
+                  key={starKey}
+                  className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0"
+                />
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -94,8 +162,9 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
                   {t("slider.before")}
                 </span>
                 {issue.photo_detail && !issue.photo_after && (
-                  <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white">
-                    📷 +1
+                  <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white flex items-center gap-1">
+                    <Camera className="w-3 h-3 text-white" />
+                    <span>+1</span>
                   </span>
                 )}
               </div>

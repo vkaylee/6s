@@ -1,3 +1,4 @@
+import { ArrowUpDown, RotateCw, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { apiClient } from "./api/client.ts";
@@ -5,6 +6,7 @@ import { ConflictModal } from "./components/ConflictModal.tsx";
 import { GlobalDialog } from "./components/GlobalDialog.tsx";
 import { HealthGauge } from "./components/HealthGauge.tsx";
 import { IssueCard } from "./components/IssueCard.tsx";
+import { IssueCardSkeleton } from "./components/IssueCardSkeleton.tsx";
 import { OfflineOutboxDrawer } from "./components/OfflineOutboxDrawer.tsx";
 import { PageContainer } from "./components/PageContainer.tsx";
 import { ProtectedRoute } from "./components/ProtectedRoute.tsx";
@@ -43,7 +45,43 @@ export function App() {
   const [locationHealth, setLocationHealth] = useState<LocationHealthScore[]>([]);
   const [reporters, setReporters] = useState<ReporterLeaderboard[]>([]);
   const [leaderboardTab, setLeaderboardTab] = useState<"LOCATIONS" | "REPORTERS">("LOCATIONS");
-  const [activeFacet, setActiveFacet] = useState<FacetKey>("ALL");
+  const [activeFacet, setActiveFacetState] = useState<FacetKey>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("6s_active_facet");
+      if (
+        saved &&
+        ["ALL", "MY_ISSUES", "MY_LINE", "SAFETY_6S", "OVERDUE_48H", "WAITING_MY_REVIEW"].includes(
+          saved,
+        )
+      ) {
+        return saved as FacetKey;
+      }
+    }
+    return "ALL";
+  });
+  const setActiveFacet = (facet: FacetKey) => {
+    setActiveFacetState(facet);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("6s_active_facet", facet);
+    }
+  };
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrderState] = useState<"URGENT" | "NEWEST" | "OLDEST">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("6s_sort_order");
+      if (saved && ["URGENT", "NEWEST", "OLDEST"].includes(saved)) {
+        return saved as "URGENT" | "NEWEST" | "OLDEST";
+      }
+    }
+    return "URGENT";
+  });
+  const setSortOrder = (order: "URGENT" | "NEWEST" | "OLDEST") => {
+    setSortOrderState(order);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("6s_sort_order", order);
+    }
+  };
+  const [isLoadingIssues, setIsLoadingIssues] = useState(false);
 
   const [showAllLeaderboard, setShowAllLeaderboard] = useState(false);
   // Modals state
@@ -520,6 +558,7 @@ export function App() {
   };
 
   const loadIssues = async () => {
+    setIsLoadingIssues(true);
     try {
       const data = await apiClient<IssueItem[]>("/api/issues");
       const list = data || [];
@@ -527,6 +566,8 @@ export function App() {
       setSelectedIssue((prev) => (prev ? list.find((i) => i.id === prev.id) || prev : null));
     } catch {
       // ignore
+    } finally {
+      setIsLoadingIssues(false);
     }
   };
 
@@ -556,28 +597,105 @@ export function App() {
     }
   };
 
-  // Filter issues according to quick facets (SPEC.md Section 9.8.A)
+  // Filter issues according to quick facets and search query (SPEC.md Section 9.8.A)
   const filteredIssues = issues.filter((iss) => {
-    if (activeFacet === "MY_ISSUES") {
-      return iss.creator_id === user?.id;
+    if (activeFacet === "MY_ISSUES" && iss.creator_id !== user?.id) {
+      return false;
     }
-    if (activeFacet === "MY_LINE") {
-      return user?.assigned_location_code
-        ? iss.location_code === user.assigned_location_code
-        : true;
+    if (
+      activeFacet === "MY_LINE" &&
+      user?.assigned_location_code &&
+      iss.location_code !== user.assigned_location_code
+    ) {
+      return false;
     }
-    if (activeFacet === "SAFETY_6S") {
-      return iss.category === IssueCategory.S6;
+    if (activeFacet === "SAFETY_6S" && iss.category !== IssueCategory.S6) {
+      return false;
     }
     if (activeFacet === "OVERDUE_48H") {
       const isOverdue = Date.now() - new Date(iss.created_at).getTime() > 48 * 3600 * 1000;
-      return iss.status === IssueStatus.OPEN && isOverdue;
+      if (!(iss.status === IssueStatus.OPEN && isOverdue)) {
+        return false;
+      }
     }
-    if (activeFacet === "WAITING_MY_REVIEW") {
-      return iss.status === IssueStatus.PENDING_REVIEW;
+    if (activeFacet === "WAITING_MY_REVIEW" && iss.status !== IssueStatus.PENDING_REVIEW) {
+      return false;
     }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchLocCode = iss.location_code?.toLowerCase().includes(q);
+      const matchLocName = iss.location_name?.toLowerCase().includes(q);
+      const matchDesc = iss.description?.toLowerCase().includes(q);
+      const matchCreator = iss.creator_name?.toLowerCase().includes(q);
+      const matchResolver = iss.resolver_name?.toLowerCase().includes(q);
+      const matchTags = iss.tags?.some((t) => t.toLowerCase().includes(q));
+      const matchCategory = iss.category?.toLowerCase().includes(q);
+      if (
+        !matchLocCode &&
+        !matchLocName &&
+        !matchDesc &&
+        !matchCreator &&
+        !matchResolver &&
+        !matchTags &&
+        !matchCategory
+      ) {
+        return false;
+      }
+    }
+
     return true;
   });
+
+  // Sort issues according to selected order
+  const sortedIssues = [...filteredIssues].sort((a, b) => {
+    if (sortOrder === "NEWEST") {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+    if (sortOrder === "OLDEST") {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+    // Default URGENT: Safety 6S first, then Overdue 48h, then Pending Review, then oldest open
+    const aIsSafety = a.category === IssueCategory.S6 && a.status === IssueStatus.OPEN ? 1 : 0;
+    const bIsSafety = b.category === IssueCategory.S6 && b.status === IssueStatus.OPEN ? 1 : 0;
+    if (aIsSafety !== bIsSafety) return bIsSafety - aIsSafety;
+
+    const now = Date.now();
+    const aOverdue =
+      a.status === IssueStatus.OPEN && now - new Date(a.created_at).getTime() > 48 * 3600 * 1000
+        ? 1
+        : 0;
+    const bOverdue =
+      b.status === IssueStatus.OPEN && now - new Date(b.created_at).getTime() > 48 * 3600 * 1000
+        ? 1
+        : 0;
+    if (aOverdue !== bOverdue) return bOverdue - aOverdue;
+
+    const aPending = a.status === IssueStatus.PENDING_REVIEW ? 1 : 0;
+    const bPending = b.status === IssueStatus.PENDING_REVIEW ? 1 : 0;
+    if (aPending !== bPending) return bPending - aPending;
+
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  // Facet Counts
+  const nowTime = Date.now();
+  const facetCounts: Record<FacetKey, number> = {
+    ALL: issues.length,
+    MY_ISSUES: issues.filter((i) => i.creator_id === user?.id).length,
+    MY_LINE: user?.assigned_location_code
+      ? issues.filter((i) => i.location_code === user.assigned_location_code).length
+      : issues.length,
+    SAFETY_6S: issues.filter(
+      (i) => i.category === IssueCategory.S6 && i.status === IssueStatus.OPEN,
+    ).length,
+    OVERDUE_48H: issues.filter(
+      (i) =>
+        i.status === IssueStatus.OPEN &&
+        nowTime - new Date(i.created_at).getTime() > 48 * 3600 * 1000,
+    ).length,
+    WAITING_MY_REVIEW: issues.filter((i) => i.status === IssueStatus.PENDING_REVIEW).length,
+  };
 
   const overallScore =
     locationHealth.length > 0
@@ -591,7 +709,6 @@ export function App() {
     const isOverdue = Date.now() - new Date(i.created_at).getTime() > 48 * 3600 * 1000;
     return i.status === IssueStatus.OPEN && isOverdue;
   }).length;
-
   return (
     <>
       <Switch>
@@ -721,17 +838,30 @@ export function App() {
                                 }}
                                 className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
                               >
-                                <div className="flex items-center space-x-2">
-                                  <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600">
+                                <div className="flex items-center space-x-2 min-w-0">
+                                  <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 truncate">
                                     {loc.location_name || loc.location_code}
                                   </span>
-                                  <span className="text-[10px] text-zinc-400 font-medium">
-                                    (🔍 {t("leaderboard.view_history")})
+                                  {loc.overdue_count > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse shrink-0">
+                                      {loc.overdue_count}{" "}
+                                      {t("health_gauge.overdue_count").split(":")[0]}
+                                    </span>
+                                  )}
+                                  {loc.open_count > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
+                                      {loc.open_count} {t("status.OPEN")}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-black text-blue-600 dark:text-blue-400">
+                                    {loc.health_score} {t("leaderboard.points_unit")}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 font-medium group-hover:text-zinc-600">
+                                    →
                                   </span>
                                 </div>
-                                <span className="font-black text-blue-600 dark:text-blue-400">
-                                  {loc.health_score} {t("leaderboard.points_unit")}
-                                </span>
                               </button>
                             ),
                           )
@@ -815,33 +945,93 @@ export function App() {
                   <QuickFacets
                     activeFacet={activeFacet}
                     onSelectFacet={(f) => setActiveFacet(f)}
-                    pendingReviewCount={
-                      issues.filter((i) => i.status === IssueStatus.PENDING_REVIEW).length
-                    }
+                    counts={facetCounts}
                   />
+                  {/* Search Input Bar */}
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
+                      <Search className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={t("app.search_placeholder")}
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        aria-label={t("app.search_clear")}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
 
                   {/* Issue List */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase px-1">
-                      <span>{t("app.issues_list", { count: filteredIssues.length })}</span>
-                      <button
-                        type="button"
-                        onClick={loadIssues}
-                        className="text-blue-600 min-h-[44px] flex items-center"
-                      >
-                        {t("app.refresh")}
-                      </button>
+                    <div className="flex items-center justify-between gap-2 text-xs font-bold text-zinc-500 uppercase px-1">
+                      <span>{t("app.issues_list", { count: sortedIssues.length })}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg px-2 py-1 normal-case font-medium">
+                          <ArrowUpDown className="w-3 h-3 text-zinc-400" />
+                          <select
+                            value={sortOrder}
+                            onChange={(e) =>
+                              setSortOrder(e.target.value as "URGENT" | "NEWEST" | "OLDEST")
+                            }
+                            className="bg-transparent text-xs font-semibold focus:outline-none cursor-pointer"
+                          >
+                            <option value="URGENT">{t("app.sort_urgent")}</option>
+                            <option value="NEWEST">{t("app.sort_newest")}</option>
+                            <option value="OLDEST">{t("app.sort_oldest")}</option>
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={loadIssues}
+                          className="text-blue-600 dark:text-blue-400 min-h-[36px] flex items-center gap-1 hover:underline lowercase font-semibold"
+                        >
+                          <RotateCw className="w-3.5 h-3.5" />
+                          <span>{t("app.refresh")}</span>
+                        </button>
+                      </div>
                     </div>
-
-                    {filteredIssues.length === 0 ? (
-                      <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                        <span className="text-4xl mb-2 block">📋</span>
-                        <p className="font-bold text-sm text-zinc-700 dark:text-zinc-300">
-                          {t("issue.no_issues")}
+                    {isLoadingIssues ? (
+                      <div className="space-y-3">
+                        <IssueCardSkeleton />
+                        <IssueCardSkeleton />
+                        <IssueCardSkeleton />
+                      </div>
+                    ) : sortedIssues.length === 0 ? (
+                      <div className="text-center py-12 px-4 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col items-center">
+                        <span className="text-4xl mb-3 block">
+                          {issues.length === 0 ? "🎉" : "🔍"}
+                        </span>
+                        <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">
+                          {issues.length === 0 ? t("app.empty_all_clear") : t("issue.no_issues")}
                         </p>
+                        <p className="text-xs text-zinc-400 mt-1 max-w-xs">
+                          {issues.length === 0 ? "" : t("app.empty_search_desc")}
+                        </p>
+                        {(searchQuery || activeFacet !== "ALL") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchQuery("");
+                              setActiveFacet("ALL");
+                            }}
+                            className="mt-4 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold rounded-xl transition"
+                          >
+                            {t("app.empty_reset_btn")}
+                          </button>
+                        )}
                       </div>
                     ) : (
-                      filteredIssues.map((iss) => (
+                      sortedIssues.map((iss) => (
                         <IssueCard key={iss.id} issue={iss} onClick={() => setSelectedIssue(iss)} />
                       ))
                     )}

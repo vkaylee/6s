@@ -393,6 +393,21 @@
   },
   "app": {
     "issues_list": "Danh sách vấn đề ({count})",
-    "refresh": "Làm mới ↻"
+    "refresh": "Làm mới",
+    "search_placeholder": "Tìm theo vị trí, mô tả, người tạo...",
+    "search_clear": "Xóa tìm kiếm",
+    "sla_overdue": "Quá hạn {hours}h",
+    "sla_remaining": "Còn {hours}h",
+    "sla_normal": "{time}",
+    "time_just_now": "Vừa xong",
+    "time_hours_ago": "{hours}h trước",
+    "time_days_ago": "{days} ngày trước",
+    "sort_by": "Sắp xếp",
+    "sort_urgent": "Gấp nhất (SLA/S6)",
+    "sort_newest": "Mới nhất",
+    "sort_oldest": "Cũ nhất",
+    "empty_search_desc": "Không tìm thấy kết quả nào phù hợp với bộ lọc hoặc từ khóa hiện tại",
+    "empty_reset_btn": "Đặt lại bộ lọc",
+    "empty_all_clear": "Hiện tại xưởng không có vấn đề 6S nào tồn đọng!"
   }
 }

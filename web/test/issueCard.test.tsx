@@ -57,6 +57,18 @@ describe("IssueCard Component", () => {
       photo_detail: "detail.jpg",
     };
     const html = renderToString(<IssueCard issue={issueWithDetail} onClick={() => {}} />);
-    expect(html).toContain("📷 +1");
+    expect(html).toContain("+1");
+    expect(html).toContain("lucide-camera");
+  });
+
+  it("renders SLA overdue badge when open issue is older than 48 hours", () => {
+    const overdueIssue: IssueItem = {
+      ...mockIssue,
+      status: IssueStatus.OPEN,
+      created_at: new Date(Date.now() - 50 * 3600 * 1000).toISOString(),
+    };
+    const html = renderToString(<IssueCard issue={overdueIssue} onClick={() => {}} />);
+    expect(html).toContain("animate-pulse");
+    expect(html).toContain("bg-rose-600");
   });
 });
