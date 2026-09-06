@@ -165,4 +165,31 @@ describe("apiClient authentication", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("returns pagination metadata when includeMeta is true", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: 1, description: "Test" }],
+          pagination: { page: 1, limit: 20, total: 42 },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const res = await apiClient<{
+        data: { id: number; description: string }[];
+        pagination: { total: number };
+      }>("/api/issues?page=1&limit=20", { includeMeta: true, skipAuth: true });
+      expect(res.data).toEqual([{ id: 1, description: "Test" }]);
+      expect(res.pagination?.total).toBe(42);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

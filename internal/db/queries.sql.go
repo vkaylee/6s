@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const claimOutboxTasks = `-- name: ClaimOutboxTasks :many
@@ -130,19 +132,19 @@ func (q *Queries) CountAdmins(ctx context.Context) (int64, error) {
 
 const countIssuesFiltered = `-- name: CountIssuesFiltered :one
 SELECT COUNT(*) FROM issues
-WHERE ($1::varchar IS NULL OR status = $1)
-  AND ($2::varchar IS NULL OR category = $2)
-  AND ($3::varchar IS NULL OR location_code = $3)
+WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR status = ANY($1::varchar[]))
+  AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR category = ANY($2::varchar[]))
+  AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR location_code = ANY($3::varchar[]))
 `
 
 type CountIssuesFilteredParams struct {
-	Status       sql.NullString
-	Category     sql.NullString
-	LocationCode sql.NullString
+	Statuses      []string
+	Categories    []string
+	LocationCodes []string
 }
 
 func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilteredParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countIssuesFiltered, arg.Status, arg.Category, arg.LocationCode)
+	row := q.db.QueryRowContext(ctx, countIssuesFiltered, pq.Array(arg.Statuses), pq.Array(arg.Categories), pq.Array(arg.LocationCodes))
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -515,6 +517,43 @@ func (q *Queries) GetADConfig(ctx context.Context) (AdConfig, error) {
 	return i, err
 }
 
+const getCategoryBreakdown = `-- name: GetCategoryBreakdown :many
+SELECT 
+    category,
+    COUNT(*)::bigint AS count
+FROM issues
+GROUP BY category
+ORDER BY category ASC
+`
+
+type GetCategoryBreakdownRow struct {
+	Category string
+	Count    int64
+}
+
+func (q *Queries) GetCategoryBreakdown(ctx context.Context) ([]GetCategoryBreakdownRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCategoryBreakdown)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCategoryBreakdownRow
+	for rows.Next() {
+		var i GetCategoryBreakdownRow
+		if err := rows.Scan(&i.Category, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIssueByID = `-- name: GetIssueByID :one
 SELECT id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE id = $1 LIMIT 1
@@ -573,6 +612,54 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 		&i.ClosedAt,
 	)
 	return i, err
+}
+
+const getIssueTrends = `-- name: GetIssueTrends :many
+SELECT 
+    d.day::date AS date_key,
+    COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
+    COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
+FROM generate_series(
+    CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day',
+    CURRENT_DATE,
+    INTERVAL '1 day'
+) AS d(day)
+LEFT JOIN issues i ON (
+    i.created_at::date = d.day::date 
+    OR i.closed_at::date = d.day::date 
+    OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)
+)
+GROUP BY d.day
+ORDER BY d.day ASC
+`
+
+type GetIssueTrendsRow struct {
+	DateKey       time.Time
+	CreatedCount  int64
+	ResolvedCount int64
+}
+
+func (q *Queries) GetIssueTrends(ctx context.Context, dollar_1 int32) ([]GetIssueTrendsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getIssueTrends, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetIssueTrendsRow
+	for rows.Next() {
+		var i GetIssueTrendsRow
+		if err := rows.Scan(&i.DateKey, &i.CreatedCount, &i.ResolvedCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getLastCronTaskLog = `-- name: GetLastCronTaskLog :one
@@ -679,6 +766,43 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 	return i, err
 }
 
+const getReportKPISummary = `-- name: GetReportKPISummary :one
+SELECT 
+    COUNT(*)::bigint AS total_issues,
+    COUNT(CASE WHEN status = 'OPEN' THEN 1 END)::bigint AS open_issues,
+    COUNT(CASE WHEN status = 'PENDING_REVIEW' THEN 1 END)::bigint AS pending_review_issues,
+    COUNT(CASE WHEN status = 'CLOSED' THEN 1 END)::bigint AS closed_issues,
+    COUNT(CASE WHEN status = 'INVALID' THEN 1 END)::bigint AS invalid_issues,
+    COUNT(CASE WHEN category = '6S' AND status != 'CLOSED' THEN 1 END)::bigint AS safety_issues,
+    COUNT(CASE WHEN status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours' THEN 1 END)::bigint AS overdue_issues
+FROM issues
+`
+
+type GetReportKPISummaryRow struct {
+	TotalIssues         int64
+	OpenIssues          int64
+	PendingReviewIssues int64
+	ClosedIssues        int64
+	InvalidIssues       int64
+	SafetyIssues        int64
+	OverdueIssues       int64
+}
+
+func (q *Queries) GetReportKPISummary(ctx context.Context) (GetReportKPISummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getReportKPISummary)
+	var i GetReportKPISummaryRow
+	err := row.Scan(
+		&i.TotalIssues,
+		&i.OpenIssues,
+		&i.PendingReviewIssues,
+		&i.ClosedIssues,
+		&i.InvalidIssues,
+		&i.SafetyIssues,
+		&i.OverdueIssues,
+	)
+	return i, err
+}
+
 const getReporterLeaderboardInMonth = `-- name: GetReporterLeaderboardInMonth :many
 SELECT u.id AS user_id,
        u.full_name,
@@ -767,6 +891,60 @@ func (q *Queries) GetScoringRules(ctx context.Context) ([]ScoringRule, error) {
 			&i.RuleKey,
 			&i.Points,
 			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTopViolatedTags = `-- name: GetTopViolatedTags :many
+SELECT 
+    t.code AS tag_code,
+    t.category,
+    t.name_vi,
+    t.name_zh,
+    t.name_en,
+    COUNT(it.issue_id)::bigint AS violation_count
+FROM issue_tags it
+JOIN tags t ON it.tag_code = t.code
+GROUP BY t.code, t.category, t.name_vi, t.name_zh, t.name_en
+ORDER BY violation_count DESC, t.code ASC
+LIMIT $1
+`
+
+type GetTopViolatedTagsRow struct {
+	TagCode        string
+	Category       string
+	NameVi         string
+	NameZh         string
+	NameEn         string
+	ViolationCount int64
+}
+
+func (q *Queries) GetTopViolatedTags(ctx context.Context, limit int32) ([]GetTopViolatedTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTopViolatedTags, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTopViolatedTagsRow
+	for rows.Next() {
+		var i GetTopViolatedTagsRow
+		if err := rows.Scan(
+			&i.TagCode,
+			&i.Category,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.ViolationCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1144,9 +1322,9 @@ FROM issues i
 JOIN locations loc ON i.location_code = loc.code
 JOIN users u ON i.creator_id = u.id
 LEFT JOIN users res ON i.resolver_id = res.id
-WHERE ($1::varchar IS NULL OR i.status = $1)
-  AND ($2::varchar IS NULL OR i.category = $2)
-  AND ($3::varchar IS NULL OR i.location_code = $3)
+WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar[]))
+  AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR i.category = ANY($2::varchar[]))
+  AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
 ORDER BY 
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
@@ -1154,11 +1332,11 @@ LIMIT $5 OFFSET $4
 `
 
 type ListIssuesFilteredParams struct {
-	Status       sql.NullString
-	Category     sql.NullString
-	LocationCode sql.NullString
-	Offset       int32
-	Limit        int32
+	Statuses      []string
+	Categories    []string
+	LocationCodes []string
+	Offset        int32
+	Limit         int32
 }
 
 type ListIssuesFilteredRow struct {
@@ -1188,9 +1366,9 @@ type ListIssuesFilteredRow struct {
 
 func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFilteredParams) ([]ListIssuesFilteredRow, error) {
 	rows, err := q.db.QueryContext(ctx, listIssuesFiltered,
-		arg.Status,
-		arg.Category,
-		arg.LocationCode,
+		pq.Array(arg.Statuses),
+		pq.Array(arg.Categories),
+		pq.Array(arg.LocationCodes),
 		arg.Offset,
 		arg.Limit,
 	)
@@ -1224,6 +1402,110 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 			&i.CreatorFullName,
 			&i.ResolverUsername,
 			&i.ResolverFullName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssuesForExport = `-- name: ListIssuesForExport :many
+SELECT 
+    i.id,
+    i.client_uuid,
+    i.category,
+    i.location_code,
+    loc.name_vi AS location_name_vi,
+    loc.name_zh AS location_name_zh,
+    loc.name_en AS location_name_en,
+    i.status,
+    i.description,
+    i.reject_reason,
+    u.username AS creator_username,
+    u.full_name AS creator_full_name,
+    res.username AS resolver_username,
+    res.full_name AS resolver_full_name,
+    i.score_rating,
+    i.created_at,
+    i.resolved_at,
+    i.closed_at,
+    COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
+FROM issues i
+JOIN locations loc ON i.location_code = loc.code
+JOIN users u ON i.creator_id = u.id
+LEFT JOIN users res ON i.resolver_id = res.id
+LEFT JOIN issue_tags it ON it.issue_id = i.id
+WHERE ($1::varchar IS NULL OR i.status = $1)
+  AND ($2::varchar IS NULL OR i.category = $2)
+  AND ($3::varchar IS NULL OR i.location_code = $3)
+GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id
+ORDER BY i.created_at DESC
+`
+
+type ListIssuesForExportParams struct {
+	Status       sql.NullString
+	Category     sql.NullString
+	LocationCode sql.NullString
+}
+
+type ListIssuesForExportRow struct {
+	ID               int64
+	ClientUuid       string
+	Category         string
+	LocationCode     string
+	LocationNameVi   string
+	LocationNameZh   string
+	LocationNameEn   string
+	Status           string
+	Description      sql.NullString
+	RejectReason     sql.NullString
+	CreatorUsername  string
+	CreatorFullName  string
+	ResolverUsername sql.NullString
+	ResolverFullName sql.NullString
+	ScoreRating      sql.NullInt16
+	CreatedAt        time.Time
+	ResolvedAt       sql.NullTime
+	ClosedAt         sql.NullTime
+	TagsString       string
+}
+
+func (q *Queries) ListIssuesForExport(ctx context.Context, arg ListIssuesForExportParams) ([]ListIssuesForExportRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIssuesForExport, arg.Status, arg.Category, arg.LocationCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIssuesForExportRow
+	for rows.Next() {
+		var i ListIssuesForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientUuid,
+			&i.Category,
+			&i.LocationCode,
+			&i.LocationNameVi,
+			&i.LocationNameZh,
+			&i.LocationNameEn,
+			&i.Status,
+			&i.Description,
+			&i.RejectReason,
+			&i.CreatorUsername,
+			&i.CreatorFullName,
+			&i.ResolverUsername,
+			&i.ResolverFullName,
+			&i.ScoreRating,
+			&i.CreatedAt,
+			&i.ResolvedAt,
+			&i.ClosedAt,
+			&i.TagsString,
 		); err != nil {
 			return nil, err
 		}

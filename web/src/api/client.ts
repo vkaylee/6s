@@ -101,6 +101,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 
 export interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
+  includeMeta?: boolean;
 }
 
 /**
@@ -145,6 +146,12 @@ export async function apiClient<T>(url: string, options: RequestOptions = {}): P
       const errMsg = body.error?.message || `Yêu cầu thất bại với mã ${response.status}`;
       const errCode = body.error?.code || "API_ERROR";
       throw new ApiError(response.status, errMsg, errCode, body.error?.details);
+    }
+    if (options.includeMeta) {
+      return {
+        data: body.data,
+        pagination: body.pagination,
+      } as unknown as T;
     }
     return (body.data !== undefined ? body.data : (body as unknown as T)) as T;
   }

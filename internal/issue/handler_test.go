@@ -71,7 +71,7 @@ func (m *mockIssueService) GetIssueByID(_ context.Context, _ int64) (*Response, 
 	return m.issueResp, nil
 }
 
-func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _, _, _ string, _, _ int) ([]Response, int64, error) {
+func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _, _, _ []string, _, _ int) ([]Response, int64, error) {
 	if m.err != nil {
 		return nil, 0, m.err
 	}

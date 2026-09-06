@@ -30,7 +30,7 @@ type Service interface {
 	InvalidateIssue(ctx context.Context, req InvalidateIssueRequest, currentUser db.User) (*Response, error)
 	PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error)
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
-	ListIssuesFiltered(ctx context.Context, status, category, locationCode string, page, limit int) ([]Response, int64, error)
+	ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, page, limit int) ([]Response, int64, error)
 	SubscribeEvents() (<-chan Event, func())
 }
 
@@ -44,27 +44,43 @@ func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
+func parseQueryValues(q map[string][]string, singularKey, pluralKey string) []string {
+	var results []string
+	for _, key := range []string{pluralKey, singularKey} {
+		for _, val := range q[key] {
+			for _, part := range strings.Split(val, ",") {
+				if s := strings.TrimSpace(part); s != "" {
+					results = append(results, s)
+				}
+			}
+		}
+	}
+	return results
+}
+
 // List handles GET /api/issues.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	status := r.URL.Query().Get("status")
-	category := r.URL.Query().Get("category")
-	locationCode := r.URL.Query().Get("location_code")
+	q := r.URL.Query()
+
+	statuses := parseQueryValues(q, "status", "statuses")
+	categories := parseQueryValues(q, "category", "categories")
+	locationCodes := parseQueryValues(q, "location_code", "location_codes")
 
 	page := 1
-	if pStr := r.URL.Query().Get("page"); pStr != "" {
+	if pStr := q.Get("page"); pStr != "" {
 		if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
 			page = p
 		}
 	}
 
 	limit := 20
-	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+	if lStr := q.Get("limit"); lStr != "" {
 		if l, err := strconv.Atoi(lStr); err == nil && l > 0 && l <= 100 {
 			limit = l
 		}
 	}
 
-	items, total, err := h.service.ListIssuesFiltered(r.Context(), status, category, locationCode, page, limit)
+	items, total, err := h.service.ListIssuesFiltered(r.Context(), statuses, categories, locationCodes, page, limit)
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrIssueListFailed).WithCause(err))
 		return

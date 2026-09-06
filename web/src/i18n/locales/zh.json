@@ -19,7 +19,11 @@
     "reporter": "上报人",
     "created_at": "创建时间",
     "actions": "操作",
-    "collapse": "收起"
+    "collapse": "收起",
+    "load_more": "加载更多问题",
+    "loading_more": "加载中...",
+    "showing_count": "已显示 {current} / {total} 个问题",
+    "all_loaded": "已加载全部 {total} 个问题"
   },
   "auth": {
     "login": "登录",
@@ -56,7 +60,14 @@
     "PENDING_REVIEW": "待审核",
     "CLOSED": "已关闭",
     "REOPENED": "已重新打开",
+    "INVALID": "已作废",
     "INVALIDATED": "已作废"
+  },
+  "status_hints": {
+    "OPEN": "新上报问题，待整改处理",
+    "PENDING_REVIEW": "已上传改善后照片，待审核结案",
+    "CLOSED": "已验收合格并奖励Kaizen积分",
+    "INVALID": "因虚假/不符事实被管理员作废"
   },
   "category": {
     "SAFETY": "安全",
@@ -134,6 +145,16 @@
     "open": "待处理",
     "pending_review": "待审核",
     "closed": "已关闭"
+  },
+  "filters": {
+    "title": "高级筛选",
+    "reset": "重置",
+    "apply": "应用",
+    "all_locations": "-- 全部区域 --",
+    "all_categories": "-- 全部分类 --",
+    "all_statuses": "-- 全部状态 --",
+    "filter_active": "筛选中",
+    "clear_all": "清除筛选"
   },
   "issue": {
     "create": "上报新问题",
@@ -388,6 +409,9 @@
     "confirm_reopen_title": "确认重新打开此问题？",
     "confirm_invalid_title": "确认作废此问题？",
     "reason_placeholder": "请输入必填原因...",
+    "invalid_warning": "此操作将把问题标记为虚假/无效报告，并扣除上报人奖励积分 (-10分)。",
+    "invalid_guidance": "仅在以下情况作废：报告与事实不符、重复拍照、或非真实6S问题。若仅为整改不彻底，请点击“重新打开”。",
+    "invalidate_btn_label": "作废报告 (仅管理员/安全员)",
     "need_safety_officer": "需安全员权限",
     "only_assigned_line": "仅可审核所负责的产线",
     "need_line_leader": "需产线组长权限",
@@ -478,7 +502,9 @@
     "top_tags_title": "最常见违规行为与问题标签 Top",
     "top_tags_desc": "高频发生的具体隐患标签（点击标签可筛选查看现场证据）",
     "occurrences": "{count} 次",
-    "drilldown_tag_title": "含有标签 {tag} 的问题列表"
+    "drilldown_tag_title": "含有标签 {tag} 的问题列表",
+    "export_csv": "导出 CSV",
+    "exporting": "导出中..."
   },
   "not_found": {
     "title": "404 - 页面未找到",

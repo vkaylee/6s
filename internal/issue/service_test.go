@@ -521,7 +521,7 @@ func TestIssueService_ListIssuesFiltered(t *testing.T) {
 	storageMgr, _ := storage.NewManager(t.TempDir())
 	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
 
-	items, total, err := svc.ListIssuesFiltered(context.Background(), StatusOpen.String(), Category1S.String(), "LINE_A1", 1, 10)
+	items, total, err := svc.ListIssuesFiltered(context.Background(), []string{StatusOpen.String()}, []string{Category1S.String()}, []string{"LINE_A1"}, 1, 10)
 	if err != nil {
 		t.Fatalf("ListIssuesFiltered err: %v", err)
 	}

@@ -53,6 +53,17 @@ export interface IssueItem {
   tags: string[];
 }
 
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface PaginatedResult<T> {
+  data: T;
+  pagination?: PaginationMeta;
+}
+
 export interface LocationItem {
   code: string;
   name_vi: string;
@@ -195,3 +206,42 @@ export const S_CATEGORIES: {
     isSafety: true,
   },
 ];
+
+export interface ReportKPISummary {
+  totalIssues: number;
+  openIssues: number;
+  pendingReviewIssues: number;
+  closedIssues: number;
+  invalidIssues: number;
+  safetyIssues: number;
+  overdueIssues: number;
+  resolutionRate: number;
+}
+
+export interface ReportCategoryBreakdownItem {
+  category: IssueCategory;
+  count: number;
+  percentage: number;
+}
+
+export interface ReportTrendPoint {
+  date: string;
+  created: number;
+  resolved: number;
+}
+
+export interface ReportTagItem {
+  tag_code: string;
+  category: string;
+  name_vi: string;
+  name_zh: string;
+  name_en: string;
+  count: number;
+}
+
+export interface ReportSummaryResponse {
+  kpi: ReportKPISummary;
+  categories: ReportCategoryBreakdownItem[];
+  trends: ReportTrendPoint[];
+  topTags: ReportTagItem[];
+}

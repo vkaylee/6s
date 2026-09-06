@@ -1,4 +1,15 @@
-import { ArrowLeft, ChevronRight, Maximize2, Medal, Minimize2, RefreshCw, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  Maximize2,
+  Medal,
+  Minimize2,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Area,
@@ -28,17 +39,12 @@ import {
   IssueStatus,
   type LocationHealthScore,
   type LocationItem,
+  type PaginatedResult,
   type ReporterLeaderboard,
+  type ReportSummaryResponse,
   type TagItem,
 } from "../types/index.ts";
-import {
-  calculateCategoryBreakdown,
-  calculateIssueTrends,
-  calculateKPISummary,
-  calculateLocationReports,
-  calculateTopTags,
-  type LocationReportItem,
-} from "../utils/analytics.ts";
+import type { LocationReportItem } from "../utils/analytics.ts";
 import { goBack } from "../utils/navigation.ts";
 import { IssueDetailModal } from "./IssueDetailModal.tsx";
 
@@ -57,12 +63,13 @@ export function ReportsPage() {
   const { t, locale } = useI18nStore();
   const { isDark } = useThemeStore();
 
-  const [issues, setIssues] = useState<IssueItem[]>([]);
+  const [summaryData, setSummaryData] = useState<ReportSummaryResponse | null>(null);
   const [locations, setLocations] = useState<LocationHealthScore[]>([]);
   const [reporters, setReporters] = useState<ReporterLeaderboard[]>([]);
   const [masterLocations, setMasterLocations] = useState<LocationItem[]>([]);
   const [masterTags, setMasterTags] = useState<TagItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [daysRange, setDaysRange] = useState<7 | 14 | 30>(14);
 
   // Top Meeting View Mode (Progressive Disclosure Navigation)
@@ -82,18 +89,25 @@ export function ReportsPage() {
   const [selectedCategoryDrill, setSelectedCategoryDrill] = useState<IssueCategory | null>(null);
   const [selectedTagDrill, setSelectedTagDrill] = useState<string | null>(null);
   const [inspectingIssue, setInspectingIssue] = useState<IssueItem | null>(null);
-
+  const [drilldownIssues, setDrilldownIssues] = useState<IssueItem[]>([]);
+  const [drilldownTotal, setDrilldownTotal] = useState(0);
+  const [drilldownPage, setDrilldownPage] = useState(1);
+  const [isLoadingDrilldown, setIsLoadingDrilldown] = useState(false);
+  const DRILLDOWN_PAGE_SIZE = 15;
+  useEffect(() => {
+    setDrilldownPage(1);
+  }, [drilldownType, selectedLocationDrill, selectedCategoryDrill, selectedTagDrill]);
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [issuesRes, locationsRes, repRes, mLocRes, mTagRes] = await Promise.all([
-        apiClient<IssueItem[]>("/api/issues?limit=500"),
+      const [summaryRes, locationsRes, repRes, mLocRes, mTagRes] = await Promise.all([
+        apiClient<ReportSummaryResponse>(`/api/reports/summary?days=${daysRange}`),
         apiClient<LocationHealthScore[]>("/api/leaderboard/locations"),
         apiClient<ReporterLeaderboard[]>("/api/leaderboard/reporters").catch(() => []),
         apiClient<LocationItem[]>("/api/locations").catch(() => []),
         apiClient<TagItem[]>("/api/tags").catch(() => []),
       ]);
-      setIssues(issuesRes || []);
+      setSummaryData(summaryRes || null);
       setLocations(locationsRes || []);
       setReporters(repRes || []);
       setMasterLocations(mLocRes || []);
@@ -107,8 +121,88 @@ export function ReportsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [daysRange]);
 
+  // Fetch drilldown issues from backend whenever drilldown filter or page changes
+  useEffect(() => {
+    if (!drilldownType) {
+      setDrilldownIssues([]);
+      setDrilldownTotal(0);
+      return;
+    }
+
+    let isCancelled = false;
+    const fetchDrilldown = async () => {
+      setIsLoadingDrilldown(true);
+      try {
+        const params = new URLSearchParams({
+          page: String(drilldownPage),
+          limit: String(DRILLDOWN_PAGE_SIZE),
+        });
+        if (drilldownType === "LOCATION" && selectedLocationDrill) {
+          params.set("location_code", selectedLocationDrill);
+        } else if (drilldownType === "CATEGORY" && selectedCategoryDrill) {
+          params.set("category", selectedCategoryDrill);
+        } else if (drilldownType === "SAFETY") {
+          params.set("category", IssueCategory.S6);
+        } else if (drilldownType === "OVERDUE") {
+          params.set("status", IssueStatus.OPEN);
+        }
+
+        const res = await apiClient<PaginatedResult<IssueItem[]>>(
+          `/api/issues?${params.toString()}`,
+          { includeMeta: true },
+        );
+        if (isCancelled) return;
+        const list = res?.data || [];
+        const metaTotal = res?.pagination?.total ?? list.length;
+        setDrilldownTotal(metaTotal);
+        setDrilldownIssues((prev) => (drilldownPage === 1 ? list : [...prev, ...list]));
+      } catch (err) {
+        console.error("Failed to load drilldown issues", err);
+      } finally {
+        if (!isCancelled) setIsLoadingDrilldown(false);
+      }
+    };
+
+    fetchDrilldown();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    drilldownType,
+    selectedLocationDrill,
+    selectedCategoryDrill,
+    selectedTagDrill,
+    drilldownPage,
+  ]);
+
+  const handleExportCSV = async () => {
+    try {
+      setIsExporting(true);
+      const res = await fetch("/api/issues/export", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("6s_access_token") || ""}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`Export failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `6S_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export CSV", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.().catch(() => {});
@@ -127,13 +221,48 @@ export function ReportsPage() {
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
 
-  const kpi = useMemo(() => calculateKPISummary(issues, locations), [issues, locations]);
-  const categoryData = useMemo(() => calculateCategoryBreakdown(issues), [issues]);
+  // Compute metrics from backend summary API if available, fallback safely
+  const kpi = useMemo(() => {
+    const totalHealth =
+      locations.length > 0
+        ? Math.round(locations.reduce((acc, loc) => acc + loc.health_score, 0) / locations.length)
+        : 100;
 
-  const rawLocationReports = useMemo(
-    () => calculateLocationReports(locations, issues),
-    [locations, issues],
-  );
+    if (summaryData?.kpi) {
+      return {
+        ...summaryData.kpi,
+        averageHealthScore: totalHealth,
+      };
+    }
+    return {
+      totalIssues: 0,
+      openIssues: 0,
+      pendingReviewIssues: 0,
+      closedIssues: 0,
+      invalidIssues: 0,
+      safetyIssues: 0,
+      overdueIssues: 0,
+      resolutionRate: 0,
+      averageHealthScore: totalHealth,
+    };
+  }, [summaryData, locations]);
+
+  const categoryData = useMemo(() => {
+    return summaryData?.categories || [];
+  }, [summaryData]);
+
+  const rawLocationReports = useMemo(() => {
+    return locations
+      .map((loc) => ({
+        location_code: loc.location_code,
+        location_name: loc.location_name || loc.location_code,
+        health_score: loc.health_score,
+        open_count: loc.open_count,
+        overdue_count: loc.overdue_count,
+        total_issues: loc.open_count + loc.overdue_count,
+      }))
+      .sort((a, b) => a.health_score - b.health_score);
+  }, [locations]);
 
   const filteredLocationData = useMemo(() => {
     let list = [...rawLocationReports];
@@ -155,36 +284,11 @@ export function ReportsPage() {
     return list;
   }, [rawLocationReports, selectedLocationFilter, locationSort, locationLimit]);
 
-  const trendData = useMemo(() => calculateIssueTrends(issues, daysRange), [issues, daysRange]);
-  const topTagsData = useMemo(() => calculateTopTags(issues, masterTags, 8), [issues, masterTags]);
+  const trendData = useMemo(() => summaryData?.trends || [], [summaryData]);
+  const topTagsData = useMemo(() => summaryData?.topTags || [], [summaryData]);
 
   // Drilldown issues filtered by active drilldown target
-  const drilldownIssues = useMemo(() => {
-    if (drilldownType === "LOCATION" && selectedLocationDrill) {
-      return issues.filter((i) => i.location_code === selectedLocationDrill);
-    }
-    if (drilldownType === "CATEGORY" && selectedCategoryDrill) {
-      return issues.filter((i) => i.category === selectedCategoryDrill);
-    }
-    if (drilldownType === "SAFETY") {
-      return issues.filter(
-        (i) => i.category === IssueCategory.S6 && i.status !== IssueStatus.CLOSED,
-      );
-    }
-    if (drilldownType === "OVERDUE") {
-      const threshold = 48 * 3600 * 1000;
-      const now = Date.now();
-      return issues.filter((i) => {
-        const elapsed = now - new Date(i.created_at).getTime();
-        return i.status === IssueStatus.OPEN && elapsed > threshold;
-      });
-    }
-    if (drilldownType === "TAG" && selectedTagDrill) {
-      return issues.filter((i) => i.tags?.includes(selectedTagDrill));
-    }
-    return [];
-  }, [issues, drilldownType, selectedLocationDrill, selectedCategoryDrill, selectedTagDrill]);
-
+  // allDrilldownIssues replaced by server-side paginated drilldownIssues & drilldownTotal
   const gridColor = isDark ? "#27272a" : "#f4f4f5";
   const textColor = isDark ? "#a1a1aa" : "#71717a";
   const tooltipBg = isDark ? "#18181b" : "#ffffff";
@@ -243,6 +347,23 @@ export function ReportsPage() {
                 title={t("reports.refresh")}
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                type="button"
+                data-testid="btn-export-csv"
+                onClick={handleExportCSV}
+                disabled={isExporting}
+                className="h-8 px-2.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                title={t("reports.export_csv")}
+              >
+                {isExporting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span className="hidden md:inline">
+                  {isExporting ? t("reports.exporting") : t("reports.export_csv")}
+                </span>
               </button>
               <NavActions />
             </div>
@@ -716,7 +837,7 @@ export function ReportsPage() {
                   </div>
 
                   <div className="w-full h-72 flex flex-col sm:flex-row items-center justify-center">
-                    {issues.length === 0 ? (
+                    {kpi.totalIssues === 0 ? (
                       <div className="h-full flex items-center justify-center text-xs text-zinc-400">
                         {t("reports.empty_data")}
                       </div>
@@ -960,7 +1081,7 @@ export function ReportsPage() {
                             : t("reports.drilldown_overdue_title")}
                   </span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold">
-                    {drilldownIssues.length}
+                    {drilldownTotal}
                   </span>
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">{t("reports.drilldown_subtitle")}</p>
@@ -982,18 +1103,45 @@ export function ReportsPage() {
 
             {/* Drawer Body: Cards with Before/After preview */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {drilldownIssues.length === 0 ? (
+              {isLoadingDrilldown && drilldownIssues.length === 0 ? (
+                <div className="h-40 flex items-center justify-center text-xs text-zinc-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+                </div>
+              ) : drilldownIssues.length === 0 ? (
                 <div className="h-40 flex items-center justify-center text-xs text-zinc-400">
                   {t("reports.drilldown_empty")}
                 </div>
               ) : (
-                drilldownIssues.map((issue) => (
-                  <IssueCard
-                    key={issue.id}
-                    issue={issue}
-                    onClick={() => setInspectingIssue(issue)}
-                  />
-                ))
+                <>
+                  {drilldownIssues.map((issue) => (
+                    <IssueCard
+                      key={issue.id}
+                      issue={issue}
+                      onClick={() => setInspectingIssue(issue)}
+                    />
+                  ))}
+                  {drilldownTotal > 0 && (
+                    <div className="pt-2 pb-4 space-y-2">
+                      <p className="text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                        {drilldownIssues.length < drilldownTotal
+                          ? t("common.showing_count")
+                              .replace("{current}", String(drilldownIssues.length))
+                              .replace("{total}", String(drilldownTotal))
+                          : t("common.all_loaded").replace("{total}", String(drilldownTotal))}
+                      </p>
+                      {drilldownIssues.length < drilldownTotal && (
+                        <button
+                          type="button"
+                          onClick={() => setDrilldownPage((p) => p + 1)}
+                          className="w-full min-h-[44px] py-2.5 px-4 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 border border-zinc-200 dark:border-zinc-700 active:scale-[0.99] transition"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                          <span>{t("common.load_more")}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

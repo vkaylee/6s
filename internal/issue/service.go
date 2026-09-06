@@ -681,7 +681,7 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 }
 
 // ListIssuesFiltered lists issues with filter criteria.
-func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, status, category, locationCode string, page, limit int) ([]Response, int64, error) {
+func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, page, limit int) ([]Response, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -690,32 +690,31 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, status, category, 
 	}
 	offset := (page - 1) * limit
 
-	var statusParam, catParam, locParam sql.NullString
-	if status != "" {
-		statusParam = sql.NullString{String: status, Valid: true}
+	if statuses == nil {
+		statuses = []string{}
 	}
-	if category != "" {
-		catParam = sql.NullString{String: category, Valid: true}
+	if categories == nil {
+		categories = []string{}
 	}
-	if locationCode != "" {
-		locParam = sql.NullString{String: locationCode, Valid: true}
+	if locationCodes == nil {
+		locationCodes = []string{}
 	}
 
 	rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
-		Status:       statusParam,
-		Category:     catParam,
-		LocationCode: locParam,
-		Limit:        int32(limit),  //nolint:gosec
-		Offset:       int32(offset), //nolint:gosec
+		Statuses:      statuses,
+		Categories:    categories,
+		LocationCodes: locationCodes,
+		Limit:         int32(limit),  //nolint:gosec
+		Offset:        int32(offset), //nolint:gosec
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list issues failed: %w", err)
 	}
 
 	total, err := s.store.CountIssuesFiltered(ctx, db.CountIssuesFilteredParams{
-		Status:       statusParam,
-		Category:     catParam,
-		LocationCode: locParam,
+		Statuses:      statuses,
+		Categories:    categories,
+		LocationCodes: locationCodes,
 	})
 	if err != nil {
 		total = int64(len(rows))

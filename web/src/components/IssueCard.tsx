@@ -50,7 +50,7 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
   ) : (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shrink-0">
       <XCircle className="w-3.5 h-3.5 shrink-0 text-zinc-500" />
-      {t("status.INVALIDATED")}
+      {t("status.INVALID")}
     </span>
   );
 

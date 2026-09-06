@@ -23,6 +23,7 @@ import (
 	"6s/internal/issue"
 	"6s/internal/masterdata"
 	"6s/internal/notification"
+	"6s/internal/report"
 	"6s/internal/response"
 	"6s/internal/scoring"
 	"6s/internal/storage"
@@ -233,6 +234,17 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 		ir.Post("/{id}/invalidate", issueHandler.Invalid)
 		ir.Patch("/{id}", issueHandler.Patch)
 	})
+
+	reportSvc := report.NewService(queries)
+	reportHandler := report.NewHandler(reportSvc)
+
+	r.Route("/api/reports", func(rr chi.Router) {
+		rr.Use(authMw.Authenticate)
+		rr.Get("/summary", reportHandler.GetSummary)
+	})
+
+	// Allow CSV export under /api/issues/export
+	r.With(authMw.Authenticate).Get("/api/issues/export", reportHandler.ExportCSV)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {

@@ -1,8 +1,17 @@
-import { ArrowUpDown, RotateCw, Search, X } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  Loader2,
+  RotateCw,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { apiClient } from "./api/client.ts";
 import { ConflictModal } from "./components/ConflictModal.tsx";
+import { FilterDrawer, type FilterState } from "./components/FilterDrawer.tsx";
 import { GlobalDialog } from "./components/GlobalDialog.tsx";
 import { HealthGauge } from "./components/HealthGauge.tsx";
 import { IssueCard } from "./components/IssueCard.tsx";
@@ -31,6 +40,8 @@ import {
   IssueStatus,
   type LocationHealthScore,
   type LocationItem,
+  type PaginatedResult,
+  type PaginationMeta,
   type ReporterLeaderboard,
   type TagItem,
 } from "./types/index.ts";
@@ -101,8 +112,16 @@ export function App() {
     }
   };
   const [isLoadingIssues, setIsLoadingIssues] = useState(false);
-
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [issuePage, setIssuePage] = useState(1);
+  const [paginationMeta, setPaginationMeta] = useState<PaginationMeta | null>(null);
   const [showAllLeaderboard, setShowAllLeaderboard] = useState(false);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({
+    statuses: [],
+    categories: [],
+    locationCodes: [],
+  });
   // Modals state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueItem | null>(null);
@@ -144,13 +163,12 @@ export function App() {
     if (!user) return;
     syncEngine.start();
     loadMasterData();
-    loadIssues();
+    loadIssues(true);
     loadLeaderboards();
-
     let wasSyncing = false;
     const unsub = syncEngine.subscribe((p) => {
       if (wasSyncing && !p.isSyncing) {
-        loadIssues();
+        loadIssues(true);
         loadLeaderboards();
       }
       wasSyncing = p.isSyncing;
@@ -163,7 +181,7 @@ export function App() {
           if (!active) return;
           es = new EventSource(`/api/issues/events?ticket=${encodeURIComponent(ticket)}`);
           es.addEventListener("issue", () => {
-            loadIssues();
+            loadIssues(true);
             loadLeaderboards();
           });
         })
@@ -172,7 +190,7 @@ export function App() {
           if (!active) return;
           es = new EventSource(`/api/issues/events?token=${encodeURIComponent(accessToken)}`);
           es.addEventListener("issue", () => {
-            loadIssues();
+            loadIssues(true);
             loadLeaderboards();
           });
         });
@@ -575,18 +593,102 @@ export function App() {
     }
   };
 
-  const loadIssues = async () => {
-    setIsLoadingIssues(true);
+  const loadIssues = async (reset = false, customFilters?: FilterState) => {
+    const targetPage = reset ? 1 : issuePage;
+    if (reset) {
+      setIsLoadingIssues(true);
+      setIssuePage(1);
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    const f = customFilters || advancedFilters;
+    const queryParams = new URLSearchParams({
+      page: String(targetPage),
+      limit: "20",
+    });
+    if (f.statuses.length > 0) queryParams.set("statuses", f.statuses.join(","));
+    if (f.categories.length > 0) queryParams.set("categories", f.categories.join(","));
+    if (f.locationCodes.length > 0) queryParams.set("location_codes", f.locationCodes.join(","));
     try {
-      const data = await apiClient<IssueItem[]>("/api/issues");
-      const list = data || [];
-      setIssues(list);
-      setSelectedIssue((prev) => (prev ? list.find((i) => i.id === prev.id) || prev : null));
+      const res = await apiClient<PaginatedResult<IssueItem[]>>(
+        `/api/issues?${queryParams.toString()}`,
+        {
+          includeMeta: true,
+        },
+      );
+      const list = res?.data || [];
+      const meta = res?.pagination || { page: targetPage, limit: 20, total: list.length };
+
+      setPaginationMeta(meta);
+      if (reset) {
+        setIssues(list);
+        setSelectedIssue((prev) => (prev ? list.find((i) => i.id === prev.id) || prev : null));
+      } else {
+        setIssues((prev) => {
+          const existingIds = new Set(prev.map((i) => i.id));
+          const newItems = list.filter((i) => !existingIds.has(i.id));
+          return [...prev, ...newItems];
+        });
+      }
     } catch {
       // ignore
     } finally {
-      setIsLoadingIssues(false);
+      if (reset) {
+        setIsLoadingIssues(false);
+      } else {
+        setIsLoadingMore(false);
+      }
     }
+  };
+
+  const loadMoreIssues = () => {
+    if (isLoadingMore || isLoadingIssues) return;
+    const nextPage = issuePage + 1;
+    setIssuePage(nextPage);
+
+    const queryParams = new URLSearchParams({
+      page: String(nextPage),
+      limit: "20",
+    });
+    if (advancedFilters.statuses.length > 0)
+      queryParams.set("statuses", advancedFilters.statuses.join(","));
+    if (advancedFilters.categories.length > 0)
+      queryParams.set("categories", advancedFilters.categories.join(","));
+    if (advancedFilters.locationCodes.length > 0)
+      queryParams.set("location_codes", advancedFilters.locationCodes.join(","));
+    setIsLoadingMore(true);
+    apiClient<PaginatedResult<IssueItem[]>>(`/api/issues?${queryParams.toString()}`, {
+      includeMeta: true,
+    })
+      .then((res) => {
+        const list = res?.data || [];
+        if (res?.pagination) {
+          setPaginationMeta(res.pagination);
+        }
+        setIssues((prev) => {
+          const existingIds = new Set(prev.map((i) => i.id));
+          const newItems = list.filter((i) => !existingIds.has(i.id));
+          return [...prev, ...newItems];
+        });
+      })
+      .catch(() => {
+        setIssuePage((prev) => Math.max(1, prev - 1));
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  };
+
+  const applyAdvancedFilters = (newFilters: FilterState) => {
+    setAdvancedFilters(newFilters);
+    loadIssues(true, newFilters);
+  };
+
+  const resetAdvancedFilters = () => {
+    const emptyFilters: FilterState = { statuses: [], categories: [], locationCodes: [] };
+    setAdvancedFilters(emptyFilters);
+    loadIssues(true, emptyFilters);
   };
 
   const loadLeaderboards = async () => {
@@ -977,29 +1079,130 @@ export function App() {
                     onSelectFacet={(f) => setActiveFacet(f)}
                     counts={facetCounts}
                   />
-                  {/* Search Input Bar */}
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                      <Search className="w-4 h-4" />
+                  {/* Search and Advanced Filter Row */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
+                        <Search className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t("app.search_placeholder")}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery("")}
+                          aria-label={t("app.search_clear")}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder={t("app.search_placeholder")}
-                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
-                    />
-                    {searchQuery && (
+                    {/* Filter Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsFilterDrawerOpen(true)}
+                      aria-label={t("filters.title")}
+                      className={`p-2.5 rounded-xl border flex items-center justify-center gap-1.5 min-h-[40px] px-3 text-xs font-bold transition-all shadow-xs ${
+                        advancedFilters.statuses.length > 0 ||
+                        advancedFilters.categories.length > 0 ||
+                        advancedFilters.locationCodes.length > 0
+                          ? "bg-rose-600 border-rose-600 text-white shadow-rose-200 dark:shadow-none"
+                          : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-4 h-4" />
+                      {(advancedFilters.statuses.length > 0 ||
+                        advancedFilters.categories.length > 0 ||
+                        advancedFilters.locationCodes.length > 0) && (
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                      )}
+                    </button>
+                  </div>
+                  {/* Active Filter Chips */}
+                  {(advancedFilters.statuses.length > 0 ||
+                    advancedFilters.categories.length > 0 ||
+                    advancedFilters.locationCodes.length > 0) && (
+                    <div className="flex items-center gap-1.5 flex-wrap px-1 text-xs">
+                      <span className="text-zinc-400 text-[11px] font-medium">
+                        {t("filters.filter_active")}:
+                      </span>
+                      {advancedFilters.locationCodes.map((code) => (
+                        <span
+                          key={code}
+                          className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+                        >
+                          {code}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              applyAdvancedFilters({
+                                ...advancedFilters,
+                                locationCodes: advancedFilters.locationCodes.filter(
+                                  (c) => c !== code,
+                                ),
+                              })
+                            }
+                            className="hover:text-rose-500"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                      {advancedFilters.categories.map((cat) => (
+                        <span
+                          key={cat}
+                          className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+                        >
+                          {cat}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              applyAdvancedFilters({
+                                ...advancedFilters,
+                                categories: advancedFilters.categories.filter((c) => c !== cat),
+                              })
+                            }
+                            className="hover:text-rose-500"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                      {advancedFilters.statuses.map((st) => (
+                        <span
+                          key={st}
+                          className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+                        >
+                          {t(`status.${st}`)}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              applyAdvancedFilters({
+                                ...advancedFilters,
+                                statuses: advancedFilters.statuses.filter((s) => s !== st),
+                              })
+                            }
+                            className="hover:text-rose-500"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
                       <button
                         type="button"
-                        onClick={() => setSearchQuery("")}
-                        aria-label={t("app.search_clear")}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                        onClick={resetAdvancedFilters}
+                        className="text-[11px] text-rose-600 dark:text-rose-400 font-bold hover:underline ml-1"
                       >
-                        <X className="w-4 h-4" />
+                        {t("filters.clear_all")}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Issue List */}
                   <div className="space-y-3">
@@ -1022,7 +1225,7 @@ export function App() {
                         </div>
                         <button
                           type="button"
-                          onClick={loadIssues}
+                          onClick={() => loadIssues(true)}
                           className="text-blue-600 dark:text-blue-400 min-h-[36px] flex items-center gap-1 hover:underline lowercase font-semibold"
                         >
                           <RotateCw className="w-3.5 h-3.5" />
@@ -1061,9 +1264,50 @@ export function App() {
                         )}
                       </div>
                     ) : (
-                      sortedIssues.map((iss) => (
-                        <IssueCard key={iss.id} issue={iss} onClick={() => setSelectedIssue(iss)} />
-                      ))
+                      <>
+                        {sortedIssues.map((iss) => (
+                          <IssueCard
+                            key={iss.id}
+                            issue={iss}
+                            onClick={() => setSelectedIssue(iss)}
+                          />
+                        ))}
+                        {/* Load more controls & progress */}
+                        <div className="pt-2 pb-4 space-y-2">
+                          {paginationMeta && paginationMeta.total > 0 && (
+                            <p className="text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                              {issues.length < paginationMeta.total
+                                ? t("common.showing_count")
+                                    .replace("{current}", String(issues.length))
+                                    .replace("{total}", String(paginationMeta.total))
+                                : t("common.all_loaded").replace(
+                                    "{total}",
+                                    String(paginationMeta.total),
+                                  )}
+                            </p>
+                          )}
+                          {paginationMeta && issues.length < paginationMeta.total && (
+                            <button
+                              type="button"
+                              onClick={loadMoreIssues}
+                              disabled={isLoadingMore}
+                              className="w-full min-h-[48px] py-3 px-4 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-sm rounded-2xl flex items-center justify-center gap-2 border border-zinc-200 dark:border-zinc-700 active:scale-[0.99] transition disabled:opacity-50"
+                            >
+                              {isLoadingMore ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                                  <span>{t("common.loading_more")}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-4 h-4 text-zinc-500" />
+                                  <span>{t("common.load_more")}</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 </PageContainer>
@@ -1083,6 +1327,14 @@ export function App() {
               </div>
 
               {/* Modals & Drawers */}
+              <FilterDrawer
+                isOpen={isFilterDrawerOpen}
+                onClose={() => setIsFilterDrawerOpen(false)}
+                locations={locations}
+                filters={advancedFilters}
+                onApply={applyAdvancedFilters}
+                onReset={resetAdvancedFilters}
+              />
               <OfflineOutboxDrawer
                 isOpen={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
@@ -1105,7 +1357,7 @@ export function App() {
                     }
                   }}
                   onRefresh={() => {
-                    loadIssues();
+                    loadIssues(true);
                     loadLeaderboards();
                   }}
                   locations={locations}

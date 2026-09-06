@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -373,7 +374,7 @@ export function IssueDetailModal({
     </span>
   ) : (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shrink-0">
-      {t("status.INVALIDATED")}
+      {t("status.INVALID")}
     </span>
   );
 
@@ -780,10 +781,11 @@ export function IssueDetailModal({
                 (role === UserRole.ADMIN || role === UserRole.SAFETY_OFFICER) && (
                   <button
                     type="button"
-                    onClick={() => setShowConfirmAction("INVALID")}
-                    className="w-full text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold py-3 px-4 rounded-xl min-h-[44px] flex items-center justify-center border border-rose-200 dark:border-rose-900/60 transition"
+                    onClick={() => setShowConfirmAction(IssueStatus.INVALID)}
+                    className="w-full text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold py-3 px-4 rounded-xl min-h-[44px] flex items-center justify-center border border-rose-200 dark:border-rose-900/60 transition gap-1.5"
                   >
-                    {t("issue.invalidate")}
+                    <span>⛔</span>
+                    <span>{t("issue_detail.invalidate_btn_label")}</span>
                   </button>
                 )}
             </div>
@@ -838,7 +840,28 @@ export function IssueDetailModal({
               </div>
             )}
 
-            {(showConfirmAction === IssueStatus.INVALID || showConfirmAction === "REOPEN") && (
+            {showConfirmAction === IssueStatus.INVALID && (
+              <div className="space-y-2">
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-800 dark:text-rose-200">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">{t("issue_detail.invalid_warning")}</p>
+                    <p className="text-[11px] text-rose-700/80 dark:text-rose-300/80">
+                      {t("issue_detail.invalid_guidance")}
+                    </p>
+                  </div>
+                </div>
+                <textarea
+                  rows={2}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder={t("issue_detail.reason_placeholder")}
+                  className="w-full bg-white dark:bg-zinc-900 border border-rose-300 dark:border-rose-700 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+            )}
+
+            {showConfirmAction === "REOPEN" && (
               <textarea
                 rows={2}
                 value={rejectReason}

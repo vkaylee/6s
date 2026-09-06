@@ -19,7 +19,11 @@
     "reporter": "Người báo cáo",
     "created_at": "Thời gian tạo",
     "actions": "Hành động",
-    "collapse": "Thu gọn"
+    "collapse": "Thu gọn",
+    "load_more": "Tải thêm vấn đề",
+    "loading_more": "Đang tải thêm...",
+    "showing_count": "Đang hiển thị {current} / {total} vấn đề",
+    "all_loaded": "Đã hiển thị tất cả {total} vấn đề"
   },
   "auth": {
     "login": "Đăng nhập",
@@ -56,7 +60,14 @@
     "PENDING_REVIEW": "Chờ duyệt",
     "CLOSED": "Đã hoàn thành",
     "REOPENED": "Đã mở lại",
+    "INVALID": "Đã bác bỏ",
     "INVALIDATED": "Đã bác bỏ"
+  },
+  "status_hints": {
+    "OPEN": "Sự cố mới phát hiện, chưa có người giải quyết",
+    "PENDING_REVIEW": "Đã tải ảnh khắc phục (After), chờ đánh giá đạt",
+    "CLOSED": "Đã nghiệm thu đạt chuẩn và cộng điểm Kaizen",
+    "INVALID": "Bị bác bỏ do báo cáo sai sự thật / không hợp lệ"
   },
   "category": {
     "SAFETY": "An toàn",
@@ -134,6 +145,16 @@
     "open": "Chưa xử lý",
     "pending_review": "Chờ duyệt",
     "closed": "Đã xong"
+  },
+  "filters": {
+    "title": "Bộ lọc nâng cao",
+    "reset": "Đặt lại",
+    "apply": "Áp dụng",
+    "all_locations": "-- Tất cả khu vực --",
+    "all_categories": "-- Tất cả phân loại --",
+    "all_statuses": "-- Tất cả trạng thái --",
+    "filter_active": "Đang lọc",
+    "clear_all": "Xóa bộ lọc"
   },
   "issue": {
     "create": "Báo cáo lỗi mới",
@@ -388,6 +409,9 @@
     "confirm_reopen_title": "Xác nhận mở lại issue?",
     "confirm_invalid_title": "Xác nhận bác bỏ issue?",
     "reason_placeholder": "Nhập lý do bắt buộc...",
+    "invalid_warning": "Thao tác này sẽ đánh dấu báo cáo là sai thực tế và trừ điểm thưởng của người báo cáo (-10 điểm).",
+    "invalid_guidance": "Chỉ bác bỏ khi: Báo cáo sai sự thật, chụp ảnh trùng lặp, hoặc không phải lỗi 6S thực tế. Nếu chỉ là khắc phục chưa sạch, vui lòng bấm \"Mở lại\".",
+    "invalidate_btn_label": "Bác bỏ báo cáo (Admin / An toàn)",
     "need_safety_officer": "Cần quyền Safety Officer",
     "only_assigned_line": "Chỉ được duyệt chuyền phụ trách",
     "need_line_leader": "Cần quyền Line Leader trở lên",
@@ -478,7 +502,9 @@
     "top_tags_title": "Top Hành Vi / Lỗi Vi Phạm Phổ Biến Nhất",
     "top_tags_desc": "Tần suất xuất hiện của các mã lỗi cụ thể (nhấn vào tag để lọc bằng chứng)",
     "occurrences": "{count} lần",
-    "drilldown_tag_title": "Danh sách sự cố lỗi {tag}"
+    "drilldown_tag_title": "Danh sách sự cố lỗi {tag}",
+    "export_csv": "Xuất CSV",
+    "exporting": "Đang xuất..."
   },
   "not_found": {
     "title": "404 - Không tìm thấy trang",
