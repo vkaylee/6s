@@ -1,3 +1,4 @@
+import { Check, ChevronDown, MapPin, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type I18nObject, type LocationItem, resolveI18n } from "../types/index.ts";
@@ -78,7 +79,9 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
         }`}
       >
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <span className="text-lg">📍</span>
+          <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <MapPin className="w-4 h-4" />
+          </div>
           {selectedLoc ? (
             <div className="truncate">
               <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
@@ -96,7 +99,9 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
             <span className="text-sm font-medium text-zinc-400">{t("issue.location_select")}</span>
           )}
         </div>
-        <span className="text-xs text-zinc-400 font-bold ml-2">{isOpen ? "▲" : "▼"}</span>
+        <ChevronDown
+          className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
 
       {error && (
@@ -109,22 +114,23 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
       {isOpen && (
         <div className="absolute top-full left-0 right-0 z-40 mt-1 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-fade-in">
           <div className="p-2.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50">
-            <div className="relative">
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-3 text-zinc-400 pointer-events-none" />
               <input
                 ref={inputRef}
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={t("issue.search_location_placeholder")}
-                className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-8 pr-8 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 hover:text-zinc-600 p-1"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5"
                 >
-                  ✕
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -158,7 +164,7 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
                       </div>
                       <div className="text-[10px] font-mono text-zinc-400">{loc.code}</div>
                     </div>
-                    {isSelected && <span className="text-blue-600 font-black">✓</span>}
+                    {isSelected && <Check className="w-4 h-4 text-blue-600 font-black shrink-0" />}
                   </button>
                 );
               })

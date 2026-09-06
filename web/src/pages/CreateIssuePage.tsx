@@ -1,4 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  Clock,
+  Info,
+  MapPin,
+  Pen,
+  RotateCcw,
+  ShieldAlert,
+  Tag,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -55,12 +70,25 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [previewBefore, setPreviewBefore] = useState<string | null>(null);
   const [previewDetail, setPreviewDetail] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastDraftTime, setLastDraftTime] = useState<string | null>(null);
+  const [dragOverWide, setDragOverWide] = useState(false);
+  const [dragOverDetail, setDragOverDetail] = useState(false);
+
+  // Recent locations from localStorage
+  const [recentLocations, setRecentLocations] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem("6s_recent_locations");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Validation errors
   const [touched, setTouched] = useState(false);
   const [categoryError, setCategoryError] = useState(false);
   const [photoError, setPhotoError] = useState(false);
-
   // Annotation Modal state
   const [annotatorTarget, setAnnotatorTarget] = useState<"wide" | "detail" | null>(null);
 
@@ -126,33 +154,97 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const handleAddCustomTag = (newTag: TagItem) => {
     setLocalTags((prev) => [newTag, ...prev]);
   };
+  const processImageFile = useCallback(
+    async (file: File | Blob, isWide: boolean) => {
+      try {
+        const compressed = await compressImage(file, {
+          maxDimension: 1280,
+          quality: 0.7,
+        });
+        const previewUrl = URL.createObjectURL(compressed);
+        if (isWide) {
+          setPhotoBefore(compressed);
+          setPreviewBefore(previewUrl);
+          setPhotoError(false);
+          setAnnotatorTarget("wide");
+        } else {
+          setPhotoDetail(compressed);
+          setPreviewDetail(previewUrl);
+          setAnnotatorTarget("detail");
+        }
+        haptics.success();
+      } catch {
+        haptics.errorOrConflict();
+        modalDialog.alert(t("issue.compress_error"));
+      }
+    },
+    [t],
+  );
+
   const handleCapturePhoto = async (e: React.ChangeEvent<HTMLInputElement>, isWide: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    await processImageFile(file, isWide);
+  };
 
-    try {
-      const compressed = await compressImage(file, {
-        maxDimension: 1280,
-        quality: 0.7,
-      });
-      const previewUrl = URL.createObjectURL(compressed);
-      if (isWide) {
-        setPhotoBefore(compressed);
-        setPreviewBefore(previewUrl);
-        setPhotoError(false);
-        setAnnotatorTarget("wide");
-      } else {
-        setPhotoDetail(compressed);
-        setPreviewDetail(previewUrl);
-        setAnnotatorTarget("detail");
+  // Drag and drop handlers
+  const handleDrop = async (e: React.DragEvent<HTMLElement>, isWide: boolean) => {
+    e.preventDefault();
+    if (isWide) setDragOverWide(false);
+    else setDragOverDetail(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith("image/")) {
+        await processImageFile(file, isWide);
       }
-      haptics.success();
-    } catch {
-      haptics.errorOrConflict();
-      modalDialog.alert(t("issue.compress_error"));
     }
   };
 
+  // Global clipboard paste support (Ctrl+V)
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            if (!photoBefore) {
+              await processImageFile(file, true);
+            } else if (!photoDetail) {
+              await processImageFile(file, false);
+            }
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [photoBefore, photoDetail, processImageFile]);
+
+  // Auto-save draft timestamp indicator
+  useEffect(() => {
+    if (category || photoBefore || description.trim() || selectedTags.length > 0) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setLastDraftTime(timeStr);
+    }
+  }, [category, photoBefore, description, selectedTags]);
+
+  // Save recent location to localStorage
+  const updateRecentLocations = (code: string) => {
+    if (!code) return;
+    const next = [code, ...recentLocations.filter((c) => c !== code)].slice(0, 3);
+    setRecentLocations(next);
+    try {
+      localStorage.setItem("6s_recent_locations", JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
   const handleRemovePhoto = (isWide: boolean) => {
     if (isWide) {
       setPhotoBefore(null);
@@ -230,6 +322,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         sync_status: "PENDING",
       };
       await saveDraftIssue(newDraft);
+      updateRecentLocations(locationCode);
       haptics.success();
       syncEngine.triggerSync();
       onSuccess();
@@ -241,6 +334,45 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       setIsSubmitting(false);
     }
   };
+  // Keyboard shortcuts: 1-6 for categories, Ctrl+Enter / Cmd+Enter to submit, Esc to back
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If inside an input or textarea, only check for Cmd/Ctrl+Enter
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        handleSubmit();
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleBack();
+        return;
+      }
+
+      const keyMap: Record<string, IssueCategory> = {
+        "1": IssueCategory.S1,
+        "2": IssueCategory.S2,
+        "3": IssueCategory.S3,
+        "4": IssueCategory.S4,
+        "5": IssueCategory.S5,
+        "6": IssueCategory.S6,
+      };
+
+      if (keyMap[e.key]) {
+        e.preventDefault();
+        handleSelectCategory(keyMap[e.key]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSubmit, handleBack, handleSelectCategory]);
 
   const annotatorTitle: I18nObject = {
     vi: t("issue.annotator_title"),
@@ -279,10 +411,10 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
             <button
               type="button"
               onClick={handleBack}
-              className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
+              className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label={t("issue.back_aria")}
             >
-              ←
+              <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center space-x-2">
               <span className="w-3 h-3 rounded-full bg-rose-600 animate-pulse" />
@@ -291,7 +423,14 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
               </h1>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+
+          <div className="flex items-center space-x-3">
+            {lastDraftTime && (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[11px] font-medium text-zinc-500">
+                <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                <span>{t("issue.draft_saved_at", { time: lastDraftTime })}</span>
+              </div>
+            )}
             <NavActions />
             <button
               type="button"
@@ -353,26 +492,26 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                           <button
                             type="button"
                             onClick={() => setAnnotatorTarget("wide")}
-                            className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold shadow-lg hover:bg-rose-700 flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold shadow-lg hover:bg-rose-700 flex items-center gap-1.5"
                           >
-                            <span>✏️</span>
+                            <Pen className="w-3.5 h-3.5" />
                             <span>{t("issue.photo_annotate_btn")}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => wideInputRef.current?.click()}
-                            className="px-3 py-1.5 rounded-xl bg-white text-zinc-900 text-xs font-bold shadow-lg hover:bg-zinc-100 flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-white text-zinc-900 text-xs font-bold shadow-lg hover:bg-zinc-100 flex items-center gap-1.5"
                           >
-                            <span>🔄</span>
+                            <RotateCcw className="w-3.5 h-3.5" />
                             <span>{t("issue.photo_retake_btn")}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleRemovePhoto(true)}
-                            className="p-1.5 rounded-xl bg-zinc-900/80 text-rose-400 hover:text-rose-300 font-bold"
+                            className="p-2 rounded-xl bg-zinc-900/80 text-rose-400 hover:text-rose-300 font-bold"
                             title={t("issue.photo_remove_btn")}
                           >
-                            🗑
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                         {/* Always visible mobile action bar */}
@@ -380,40 +519,54 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                           <button
                             type="button"
                             onClick={() => setAnnotatorTarget("wide")}
-                            className="flex-1 py-1 text-center font-bold text-rose-400 hover:text-rose-300"
+                            className="flex-1 py-1 text-center font-bold text-rose-400 hover:text-rose-300 flex items-center justify-center gap-1"
                           >
-                            ✏️ {t("issue.photo_annotate_btn")}
+                            <Pen className="w-3 h-3" />
+                            <span>{t("issue.photo_annotate_btn")}</span>
                           </button>
                           <span className="text-zinc-600">|</span>
                           <button
                             type="button"
                             onClick={() => wideInputRef.current?.click()}
-                            className="flex-1 py-1 text-center font-bold"
+                            className="flex-1 py-1 text-center font-bold flex items-center justify-center gap-1"
                           >
-                            🔄 {t("issue.photo_retake_btn")}
+                            <RotateCcw className="w-3 h-3" />
+                            <span>{t("issue.photo_retake_btn")}</span>
                           </button>
                           <span className="text-zinc-600">|</span>
                           <button
                             type="button"
                             onClick={() => handleRemovePhoto(true)}
-                            className="px-2 py-1 text-rose-400"
+                            className="px-2.5 py-1 text-rose-400"
                           >
-                            🗑
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
                     ) : (
                       <button
                         type="button"
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOverWide(true);
+                        }}
+                        onDragLeave={() => setDragOverWide(false)}
+                        onDrop={(e) => handleDrop(e, true)}
                         onClick={() => wideInputRef.current?.click()}
-                        className="cursor-pointer border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-3 text-center bg-zinc-50 dark:bg-zinc-800/40 transition-colors"
+                        className={`w-full cursor-pointer border-2 border-dashed rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-4 text-center transition-all ${
+                          dragOverWide
+                            ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 scale-[1.01]"
+                            : "border-zinc-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-400 bg-zinc-50 dark:bg-zinc-800/40"
+                        }`}
                       >
-                        <span className="text-3xl mb-1">📷</span>
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-2 shadow-xs">
+                          <Camera className="w-6 h-6" />
+                        </div>
                         <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                           {t("issue.photo_wide_label")}
                         </span>
-                        <span className="text-[10px] text-zinc-400 mt-0.5">
-                          {t("issue.select_photo")}
+                        <span className="text-[11px] text-zinc-400 mt-1">
+                          {dragOverWide ? t("issue.drop_photo_active") : t("issue.drag_drop_photo")}
                         </span>
                       </button>
                     )}
@@ -442,26 +595,26 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                           <button
                             type="button"
                             onClick={() => setAnnotatorTarget("detail")}
-                            className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold shadow-lg hover:bg-rose-700 flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold shadow-lg hover:bg-rose-700 flex items-center gap-1.5"
                           >
-                            <span>✏️</span>
+                            <Pen className="w-3.5 h-3.5" />
                             <span>{t("issue.photo_annotate_btn")}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => detailInputRef.current?.click()}
-                            className="px-3 py-1.5 rounded-xl bg-white text-zinc-900 text-xs font-bold shadow-lg hover:bg-zinc-100 flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-white text-zinc-900 text-xs font-bold shadow-lg hover:bg-zinc-100 flex items-center gap-1.5"
                           >
-                            <span>🔄</span>
+                            <RotateCcw className="w-3.5 h-3.5" />
                             <span>{t("issue.photo_retake_btn")}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleRemovePhoto(false)}
-                            className="p-1.5 rounded-xl bg-zinc-900/80 text-rose-400 hover:text-rose-300 font-bold"
+                            className="p-2 rounded-xl bg-zinc-900/80 text-rose-400 hover:text-rose-300 font-bold"
                             title={t("issue.photo_remove_btn")}
                           >
-                            🗑
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                         {/* Always visible mobile action bar */}
@@ -469,40 +622,56 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                           <button
                             type="button"
                             onClick={() => setAnnotatorTarget("detail")}
-                            className="flex-1 py-1 text-center font-bold text-rose-400 hover:text-rose-300"
+                            className="flex-1 py-1 text-center font-bold text-rose-400 hover:text-rose-300 flex items-center justify-center gap-1"
                           >
-                            ✏️ {t("issue.photo_annotate_btn")}
+                            <Pen className="w-3 h-3" />
+                            <span>{t("issue.photo_annotate_btn")}</span>
                           </button>
                           <span className="text-zinc-600">|</span>
                           <button
                             type="button"
                             onClick={() => detailInputRef.current?.click()}
-                            className="flex-1 py-1 text-center font-bold"
+                            className="flex-1 py-1 text-center font-bold flex items-center justify-center gap-1"
                           >
-                            🔄 {t("issue.photo_retake_btn")}
+                            <RotateCcw className="w-3 h-3" />
+                            <span>{t("issue.photo_retake_btn")}</span>
                           </button>
                           <span className="text-zinc-600">|</span>
                           <button
                             type="button"
                             onClick={() => handleRemovePhoto(false)}
-                            className="px-2 py-1 text-rose-400"
+                            className="px-2.5 py-1 text-rose-400"
                           >
-                            🗑
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
                     ) : (
                       <button
                         type="button"
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOverDetail(true);
+                        }}
+                        onDragLeave={() => setDragOverDetail(false)}
+                        onDrop={(e) => handleDrop(e, false)}
                         onClick={() => detailInputRef.current?.click()}
-                        className="cursor-pointer border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-3 text-center bg-zinc-50 dark:bg-zinc-800/40 transition-colors"
+                        className={`w-full cursor-pointer border-2 border-dashed rounded-2xl aspect-[4/3] flex flex-col items-center justify-center p-4 text-center transition-all ${
+                          dragOverDetail
+                            ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 scale-[1.01]"
+                            : "border-zinc-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-400 bg-zinc-50 dark:bg-zinc-800/40"
+                        }`}
                       >
-                        <span className="text-3xl mb-1">🔍</span>
+                        <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 flex items-center justify-center mb-2 shadow-xs">
+                          <Upload className="w-6 h-6" />
+                        </div>
                         <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                           {t("issue.photo_detail_label")}
                         </span>
-                        <span className="text-[10px] text-zinc-400 mt-0.5">
-                          {t("issue.select_photo")}
+                        <span className="text-[11px] text-zinc-400 mt-1">
+                          {dragOverDetail
+                            ? t("issue.drop_photo_active")
+                            : t("issue.drag_drop_photo")}
                         </span>
                       </button>
                     )}
@@ -520,6 +689,36 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   value={locationCode}
                   onChange={(val) => setLocationCode(val)}
                 />
+                {recentLocations.length > 0 && (
+                  <div className="pt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-zinc-400 mr-1 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      <span>{t("issue.recent_locations")}</span>
+                    </span>
+                    {recentLocations.map((code) => {
+                      const loc = locations.find((l) => l.code === code);
+                      const isSelected = locationCode === code;
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => {
+                            setLocationCode(code);
+                            haptics.selection();
+                          }}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all border flex items-center gap-1 ${
+                            isSelected
+                              ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-blue-400"
+                          }`}
+                        >
+                          <span>{loc ? loc.name_vi : code}</span>
+                          <span className="text-[10px] opacity-70 font-mono">({code})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
 
               {/* Desktop Sticky Submit Action */}
@@ -528,12 +727,17 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   type="button"
                   disabled={isSubmitting}
                   onClick={handleSubmit}
-                  className={`w-full font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-xl active:scale-[0.98] transition-all ${
+                  className={`w-full font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2.5 shadow-xl active:scale-[0.98] transition-all ${
                     category === IssueCategory.S6
                       ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30 ring-4 ring-rose-500/20 animate-pulse"
                       : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 shadow-zinc-900/20"
                   }`}
                 >
+                  {category === IssueCategory.S6 ? (
+                    <ShieldAlert className="w-5 h-5" />
+                  ) : (
+                    <Check className="w-5 h-5" />
+                  )}
                   <span>
                     {isSubmitting
                       ? t("issue.saving")
@@ -542,6 +746,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                         : t("issue.submit_standard")}
                   </span>
                 </button>
+                <p className="text-[11px] text-center text-zinc-400 font-medium pt-1.5">
+                  {t("issue.shortcuts_hint")}
+                </p>
               </div>
             </div>
 
@@ -606,8 +813,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 </div>
 
                 {/* Dynamic Contextual Micro-hint Banner */}
-                <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800 flex items-start gap-2.5 text-xs">
-                  <span className="text-sm">ℹ️</span>
+                <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800 flex items-start gap-2.5 text-xs">
+                  <Info className="w-4 h-4 text-zinc-500 dark:text-zinc-400 shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     {category ? (
                       (() => {
@@ -642,7 +849,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 {/* Auto feedback if triggered */}
                 {autoFeedback && (
                   <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-fade-in">
-                    <span>✓</span>
+                    <Check className="w-3.5 h-3.5" />
                     <span>{t("issue.auto_classified", { category: autoFeedback })}</span>
                   </div>
                 )}
@@ -664,7 +871,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                       onClick={() => setIsTaxonomyOpen(true)}
                       className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/80 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center gap-1.5 min-h-[36px]"
                     >
-                      <span>🏷️</span>
+                      <Tag className="w-3.5 h-3.5" />
                       <span>{t("issue.add_tags_button") || "Thêm thẻ sự cố"}</span>
                     </button>
                   </div>
@@ -705,7 +912,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                               aria-label="Remove tag"
                               className="ml-0.5 text-zinc-400 hover:text-rose-500 font-bold text-xs"
                             >
-                              ✕
+                              <X className="w-3 h-3" />
                             </button>
                           </span>
                         );
@@ -740,12 +947,17 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit}
-            className={`flex-1 font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-xl active:scale-[0.98] transition-transform ${
+            className={`flex-1 font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2.5 shadow-xl active:scale-[0.98] transition-transform ${
               category === IssueCategory.S6
                 ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30 ring-4 ring-rose-500/20 animate-pulse"
                 : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 shadow-zinc-900/20"
             }`}
           >
+            {category === IssueCategory.S6 ? (
+              <ShieldAlert className="w-5 h-5" />
+            ) : (
+              <Check className="w-5 h-5" />
+            )}
             <span>
               {isSubmitting
                 ? t("issue.saving")

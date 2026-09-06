@@ -216,7 +216,12 @@
     "photo_retake_btn": "Retake",
     "photo_remove_btn": "Remove",
     "search_location_placeholder": "Search by code, English, Chinese name...",
-    "no_locations_found": "No matching locations found"
+    "no_locations_found": "No matching locations found",
+    "recent_locations": "Recent locations:",
+    "drag_drop_photo": "Drag & drop image here or paste (Ctrl+V)",
+    "drop_photo_active": "Drop image here now",
+    "draft_saved_at": "Draft auto-saved at {time}",
+    "shortcuts_hint": "Shortcuts: 1-6 choose S category • Ctrl+Enter to submit • Esc to cancel"
   },
   "admin": {
     "title": "System Settings",

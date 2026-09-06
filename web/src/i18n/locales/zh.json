@@ -216,7 +216,12 @@
     "photo_retake_btn": "重拍",
     "photo_remove_btn": "删除",
     "search_location_placeholder": "按车间代码、中文名、越南文搜索...",
-    "no_locations_found": "未找到匹配位置"
+    "no_locations_found": "未找到匹配位置",
+    "recent_locations": "最近使用位置:",
+    "drag_drop_photo": "拖放图片至此或粘贴 (Ctrl+V)",
+    "drop_photo_active": "立即释放以上传图片",
+    "draft_saved_at": "草稿已于 {time} 自动保存",
+    "shortcuts_hint": "快捷键: 1-6 选择6S分类 • Ctrl+Enter 提交报告 • Esc 取消"
   },
   "admin": {
     "title": "系统配置",

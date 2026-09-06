@@ -216,7 +216,12 @@
     "photo_retake_btn": "Chụp lại",
     "photo_remove_btn": "Xóa",
     "search_location_placeholder": "Tìm theo mã, tên tiếng Việt, tiếng Trung...",
-    "no_locations_found": "Không tìm thấy vị trí phù hợp"
+    "no_locations_found": "Không tìm thấy vị trí phù hợp",
+    "recent_locations": "Vị trí gần đây:",
+    "drag_drop_photo": "Kéo thả ảnh vào đây hoặc dán (Ctrl+V)",
+    "drop_photo_active": "Thả ảnh vào đây ngay",
+    "draft_saved_at": "Đã lưu nháp tự động lúc {time}",
+    "shortcuts_hint": "Phím tắt: 1-6 chọn loại S • Ctrl+Enter gửi báo cáo • Esc hủy"
   },
   "admin": {
     "title": "Cấu hình hệ thống",

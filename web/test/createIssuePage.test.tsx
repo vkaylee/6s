@@ -143,5 +143,23 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     // Both mobile and desktop action buttons
     expect(pageHtml).toContain("GỬI BÁO CÁO 6S");
     expect(pageHtml).toContain("min-h-[64px]");
+    expect(pageHtml).toContain("Phím tắt: 1-6 chọn loại S");
+  });
+
+  it("renders drag and drop photo dropzones with enterprise hints", () => {
+    const pageHtml = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(pageHtml).toContain("Kéo thả ảnh vào đây hoặc dán (Ctrl+V)");
+  });
+
+  it("renders LocationCombobox with SVG MapPin and ChevronDown icons", () => {
+    const html = renderToString(
+      <LocationCombobox locations={mockLocations} value="LINE_A1" onChange={() => {}} />,
+    );
+    expect(html).toContain("lucide-map-pin");
+    expect(html).toContain("lucide-chevron-down");
   });
 });

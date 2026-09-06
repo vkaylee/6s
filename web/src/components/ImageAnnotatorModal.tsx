@@ -1,3 +1,4 @@
+import { Check, Circle, Edit, Pen, RotateCcw, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type I18nObject, resolveI18n } from "../types/index.ts";
@@ -435,8 +436,10 @@ export function ImageAnnotatorModal({
       <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl w-full max-w-4xl max-h-[96vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">✏️</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+              <Edit className="w-4 h-4" />
+            </div>
             <div>
               <h2 className="text-sm sm:text-base font-black text-zinc-900 dark:text-zinc-100">
                 {resolveI18n(title)}
@@ -447,9 +450,9 @@ export function ImageAnnotatorModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 bg-zinc-200/60 dark:bg-zinc-700/60 font-bold"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 bg-zinc-200/60 dark:bg-zinc-700/60"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -460,35 +463,38 @@ export function ImageAnnotatorModal({
             <button
               type="button"
               onClick={() => setTool("circle")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5 ${
                 tool === "circle"
                   ? "bg-rose-600 text-white shadow-sm"
                   : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900"
               }`}
             >
-              ⭕ {t("issue.tool_circle")}
+              <Circle className="w-3.5 h-3.5" />
+              <span>{t("issue.tool_circle")}</span>
             </button>
             <button
               type="button"
               onClick={() => setTool("rect")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5 ${
                 tool === "rect"
                   ? "bg-rose-600 text-white shadow-sm"
                   : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900"
               }`}
             >
-              ▢ {t("issue.tool_rect")}
+              <Square className="w-3.5 h-3.5" />
+              <span>{t("issue.tool_rect")}</span>
             </button>
             <button
               type="button"
               onClick={() => setTool("pen")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5 ${
                 tool === "pen"
                   ? "bg-rose-600 text-white shadow-sm"
                   : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900"
               }`}
             >
-              ✎ {t("issue.tool_pen")}
+              <Pen className="w-3.5 h-3.5" />
+              <span>{t("issue.tool_pen")}</span>
             </button>
           </div>
 
@@ -530,17 +536,19 @@ export function ImageAnnotatorModal({
               type="button"
               disabled={shapes.length === 0}
               onClick={handleUndo}
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 disabled:opacity-40 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              className="px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 disabled:opacity-40 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1"
             >
-              ↩ {t("issue.tool_undo")}
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{t("issue.tool_undo")}</span>
             </button>
             <button
               type="button"
               disabled={shapes.length === 0}
               onClick={handleClear}
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 disabled:opacity-40 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              className="px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 disabled:opacity-40 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1"
             >
-              🗑 {t("issue.tool_clear")}
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{t("issue.tool_clear")}</span>
             </button>
           </div>
         </div>
@@ -586,7 +594,7 @@ export function ImageAnnotatorModal({
             onClick={handleSave}
             className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/30 min-h-[44px] flex items-center gap-1.5"
           >
-            <span>✓</span>
+            <Check className="w-4 h-4 font-black" />
             <span>{t("issue.annotator_save")}</span>
           </button>
         </div>

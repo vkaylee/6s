@@ -1,8 +1,8 @@
+import { Camera, Check, ShieldAlert, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
-import type { DraftIssue } from "../db/indexeddb.ts";
-import { saveDraftIssue } from "../db/indexeddb.ts";
+import { type DraftIssue, saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
@@ -217,7 +217,7 @@ export function CreateIssueModal({
             onClick={onClose}
             className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -301,7 +301,7 @@ export function CreateIssueModal({
                     />
                   ) : (
                     <>
-                      <span className="text-2xl mb-1">📷</span>
+                      <Camera className="w-6 h-6 mb-1 text-blue-600 dark:text-blue-400" />
                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                         {t("issue.photo_wide_label")}
                       </span>
@@ -331,7 +331,7 @@ export function CreateIssueModal({
                     />
                   ) : (
                     <>
-                      <span className="text-2xl mb-1">🔍</span>
+                      <Upload className="w-6 h-6 mb-1 text-zinc-400" />
                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                         {t("issue.photo_detail_label")}
                       </span>
@@ -394,12 +394,17 @@ export function CreateIssueModal({
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit}
-            className={`w-full font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-xl active:scale-[0.98] transition-transform ${
+            className={`w-full font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2.5 shadow-xl active:scale-[0.98] transition-transform ${
               category === IssueCategory.S6
                 ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30 ring-4 ring-rose-500/20 animate-pulse"
                 : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 shadow-zinc-900/20"
             }`}
           >
+            {category === IssueCategory.S6 ? (
+              <ShieldAlert className="w-5 h-5" />
+            ) : (
+              <Check className="w-5 h-5" />
+            )}
             <span>
               {isSubmitting
                 ? t("issue.saving")
