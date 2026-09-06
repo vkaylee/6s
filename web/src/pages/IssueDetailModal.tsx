@@ -97,20 +97,22 @@ export function IssueDetailModal({
     };
   }, [isOpen, issue?.id]);
 
-  // List of all viewable photos for this issue
+  // List of all viewable photos for this issue with category color badges
   const photoList = [
     currentIssue.photo_before
       ? {
           url: resolvePhotoUrl(currentIssue.photo_before, "before"),
           alt: t("issue_detail.photo_before_alt"),
           label: t("slider.before"),
+          badgeClass: "bg-amber-500 text-zinc-950 font-black shadow-amber-500/20",
         }
       : null,
     currentIssue.photo_detail
       ? {
           url: resolvePhotoUrl(currentIssue.photo_detail, "detail"),
           alt: t("issue_detail.photo_detail_alt"),
-          label: t("issue_detail.photo_detail_label"),
+          label: t("issue.photo_detail_label"),
+          badgeClass: "bg-blue-500 text-white font-black shadow-blue-500/20",
         }
       : null,
     currentIssue.photo_after
@@ -118,9 +120,10 @@ export function IssueDetailModal({
           url: resolvePhotoUrl(currentIssue.photo_after, "after"),
           alt: t("slider.after_alt"),
           label: t("slider.after"),
+          badgeClass: "bg-emerald-500 text-zinc-950 font-black shadow-emerald-500/20",
         }
       : null,
-  ].filter((p): p is { url: string; alt: string; label: string } => p !== null);
+  ].filter((p): p is { url: string; alt: string; label: string; badgeClass: string } => p !== null);
 
   const previewPhoto =
     previewIndex !== null && photoList[previewIndex] ? photoList[previewIndex] : null;
@@ -887,12 +890,16 @@ export function IssueDetailModal({
               className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-hidden"
               tabIndex={-1}
             />
-            {/* Top Bar with Badge & Gallery Indicator */}
+            {/* Top Bar with High-Contrast Pill Badge & Gallery Indicator */}
             <div className="w-full flex items-center justify-between z-10 pointer-events-none">
-              <div className="flex items-center gap-2 max-w-[75%] pointer-events-auto">
-                <span className="text-xs font-bold text-zinc-300 truncate">{previewPhoto.alt}</span>
+              <div className="flex items-center gap-2.5 max-w-[75%] pointer-events-auto">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs uppercase tracking-wider shadow-md ${previewPhoto.badgeClass}`}
+                >
+                  {previewPhoto.label}
+                </span>
                 {photoList.length > 1 && (
-                  <span className="px-2 py-0.5 rounded-full bg-zinc-800/80 border border-zinc-700/60 text-[11px] font-bold text-zinc-400 shrink-0">
+                  <span className="px-2.5 py-1 rounded-full bg-zinc-850 border border-zinc-700/80 text-xs font-bold text-zinc-300 shadow-sm shrink-0">
                     {(previewIndex ?? 0) + 1} / {photoList.length}
                   </span>
                 )}
