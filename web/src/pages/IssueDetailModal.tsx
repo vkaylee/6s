@@ -391,38 +391,27 @@ export function IssueDetailModal({
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                   {t("issue_detail.compare_slider_label")}
                 </label>
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setZoomScale(1);
-                      setPreviewPhoto({
-                        url: resolvePhotoUrl(currentIssue.photo_before, "before"),
-                        alt: t("issue_detail.photo_before_alt"),
-                      });
-                    }}
-                    className="hover:underline px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900"
-                  >
-                    🔍 {t("slider.before")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setZoomScale(1);
-                      setPreviewPhoto({
-                        url: resolvePhotoUrl(currentIssue.photo_after, "after"),
-                        alt: t("slider.after_alt"),
-                      });
-                    }}
-                    className="hover:underline px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400"
-                  >
-                    🔍 {t("slider.after")}
-                  </button>
-                </div>
+                <span className="text-[11px] text-zinc-400">
+                  🔍 {t("issue_detail.tap_to_zoom")}
+                </span>
               </div>
               <SplitSlider
                 beforeUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
                 afterUrl={resolvePhotoUrl(currentIssue.photo_after, "after")}
+                onPhotoClick={(type) => {
+                  setZoomScale(1);
+                  if (type === "before") {
+                    setPreviewPhoto({
+                      url: resolvePhotoUrl(currentIssue.photo_before, "before"),
+                      alt: t("issue_detail.photo_before_alt"),
+                    });
+                  } else {
+                    setPreviewPhoto({
+                      url: resolvePhotoUrl(currentIssue.photo_after, "after"),
+                      alt: t("slider.after_alt"),
+                    });
+                  }
+                }}
               />
             </div>
           ) : (
