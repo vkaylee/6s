@@ -48,6 +48,34 @@ interface TagItemData {
   is_active?: boolean;
 }
 
+interface AIResultBoxProps {
+  result: AITestResponse;
+  t: (key: string, params?: Record<string, string>) => string;
+}
+
+function AIResultBox({ result, t }: AIResultBoxProps) {
+  return (
+    <div
+      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
+        result.success
+          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+      }`}
+    >
+      {result.success
+        ? t("admin.ai_test_success", {
+            ms: String(result.latency_ms || 0),
+            model: result.model_used || "",
+          })
+        : `✗ ${result.error}`}
+      {result.check && <span className="block opacity-70">{result.check}</span>}
+      {result.reply && (
+        <span className="block mt-1 font-mono break-words opacity-90">→ {result.reply}</span>
+      )}
+    </div>
+  );
+}
+
 export function AdminConfigPage() {
   const { t, locale } = useI18nStore();
   const isHeaderVisible = useHeaderVisibility();
@@ -1740,19 +1768,8 @@ export function AdminConfigPage() {
                   </button>
                 </div>
                 {testResults.api_key && (
-                  <div
-                    className={`mt-2 p-2.5 rounded-xl text-xs font-medium border ${
-                      testResults.api_key.success
-                        ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                        : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                    }`}
-                  >
-                    {testResults.api_key.success
-                      ? t("admin.ai_test_success", {
-                          ms: String(testResults.api_key.latency_ms || 0),
-                          model: testResults.api_key.model_used || "",
-                        })
-                      : `✗ ${testResults.api_key.error}`}
+                  <div className="mt-2">
+                    <AIResultBox result={testResults.api_key} t={t} />
                   </div>
                 )}
               </div>
@@ -1779,22 +1796,7 @@ export function AdminConfigPage() {
                   placeholder={t("admin.ai_default_model_placeholder")}
                   className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
-                {testResults.default && (
-                  <div
-                    className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
-                      testResults.default.success
-                        ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                        : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                    }`}
-                  >
-                    {testResults.default.success
-                      ? t("admin.ai_test_success", {
-                          ms: String(testResults.default.latency_ms || 0),
-                          model: testResults.default.model_used || "",
-                        })
-                      : `✗ ${testResults.default.error}`}
-                  </div>
-                )}
+                {testResults.default && <AIResultBox result={testResults.default} t={t} />}
               </div>
 
               {/* Purpose-specific models */}
@@ -1827,22 +1829,7 @@ export function AdminConfigPage() {
                     placeholder={t("admin.ai_model_translate_placeholder")}
                     className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
-                  {testResults.translate && (
-                    <div
-                      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
-                        testResults.translate.success
-                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                      }`}
-                    >
-                      {testResults.translate.success
-                        ? t("admin.ai_test_success", {
-                            ms: String(testResults.translate.latency_ms || 0),
-                            model: testResults.translate.model_used || "",
-                          })
-                        : `✗ ${testResults.translate.error}`}
-                    </div>
-                  )}
+                  {testResults.translate && <AIResultBox result={testResults.translate} t={t} />}
                 </div>
 
                 {/* Vision Model */}
@@ -1867,22 +1854,7 @@ export function AdminConfigPage() {
                     placeholder={t("admin.ai_model_vision_placeholder")}
                     className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
-                  {testResults.vision && (
-                    <div
-                      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
-                        testResults.vision.success
-                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                      }`}
-                    >
-                      {testResults.vision.success
-                        ? t("admin.ai_test_success", {
-                            ms: String(testResults.vision.latency_ms || 0),
-                            model: testResults.vision.model_used || "",
-                          })
-                        : `✗ ${testResults.vision.error}`}
-                    </div>
-                  )}
+                  {testResults.vision && <AIResultBox result={testResults.vision} t={t} />}
                 </div>
 
                 {/* Summary Model */}
@@ -1907,22 +1879,7 @@ export function AdminConfigPage() {
                     placeholder={t("admin.ai_model_summary_placeholder")}
                     className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
-                  {testResults.summary && (
-                    <div
-                      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
-                        testResults.summary.success
-                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                      }`}
-                    >
-                      {testResults.summary.success
-                        ? t("admin.ai_test_success", {
-                            ms: String(testResults.summary.latency_ms || 0),
-                            model: testResults.summary.model_used || "",
-                          })
-                        : `✗ ${testResults.summary.error}`}
-                    </div>
-                  )}
+                  {testResults.summary && <AIResultBox result={testResults.summary} t={t} />}
                 </div>
               </div>
 

@@ -357,6 +357,8 @@ export interface AITestResponse {
   success: boolean;
   latency_ms?: number;
   model_used?: string;
+  purpose?: string;
+  check?: string;
   reply?: string;
   error?: string;
 }

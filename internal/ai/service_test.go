@@ -7,16 +7,24 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/openai/openai-go"
 
+	"6s/internal/apperror"
 	"6s/internal/crypto"
 	"6s/internal/db"
 )
+
+// testCategory1S mirrors issue.Category1S; importing the issue package here
+// would create an import cycle in tests.
+const testCategory1S = "1S"
 
 type mockStore struct {
 	cfg       db.AiConfig
@@ -24,6 +32,10 @@ type mockStore struct {
 	upsertErr error
 	auditLogs []db.InsertAuditLogParams
 	cache     map[string]db.TranslationCache
+	issue     *db.Issue
+	issueErr  error
+	issueTags []db.ListTagsForIssueRow
+	tags      []db.Tag
 }
 
 func (m *mockStore) GetAIConfig(_ context.Context) (db.AiConfig, error) {
@@ -84,6 +96,24 @@ func (m *mockStore) UpsertTranslationCache(_ context.Context, arg db.UpsertTrans
 	return res, nil
 }
 
+func (m *mockStore) GetIssueByID(_ context.Context, id int64) (db.Issue, error) {
+	if m.issueErr != nil {
+		return db.Issue{}, m.issueErr
+	}
+	if m.issue == nil || m.issue.ID != id {
+		return db.Issue{}, sql.ErrNoRows
+	}
+	return *m.issue, nil
+}
+
+func (m *mockStore) ListTagsForIssue(_ context.Context, _ int64) ([]db.ListTagsForIssueRow, error) {
+	return m.issueTags, nil
+}
+
+func (m *mockStore) ListTags(_ context.Context) ([]db.Tag, error) {
+	return m.tags, nil
+}
+
 func TestTranslate_FallbackToDefaultModel(t *testing.T) {
 	var requestedModel string
 	var authHeader string
@@ -121,7 +151,7 @@ func TestTranslate_FallbackToDefaultModel(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockServer.Client())
+	svc := NewService(store, nil, mockServer.Client(), "")
 
 	translated, err := svc.Translate(context.Background(), "生产现场杂乱", "vi")
 	if err != nil {
@@ -175,7 +205,7 @@ func TestTranslate_UsePurposeModelWhenConfigured(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockServer.Client())
+	svc := NewService(store, nil, mockServer.Client(), "")
 
 	translated, err := svc.Translate(context.Background(), "Máy số 3 rò rỉ dầu", "en")
 	if err != nil {
@@ -199,7 +229,7 @@ func TestTranslate_DisabledAI(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, nil)
+	svc := NewService(store, nil, nil, "")
 	_, err := svc.Translate(context.Background(), "hello", "vi")
 	if err == nil {
 		t.Fatal("expected error when AI is disabled, got nil")
@@ -217,7 +247,7 @@ func TestTranslate_MissingModel(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, nil)
+	svc := NewService(store, nil, nil, "")
 	_, err := svc.Translate(context.Background(), "hello", "vi")
 	if err == nil {
 		t.Fatal("expected error when model is empty, got nil")
@@ -235,7 +265,7 @@ func TestConfig_UpdateAndGetMasked(t *testing.T) {
 		cfgErr: sql.ErrNoRows,
 	}
 
-	svc := NewService(store, cph, nil)
+	svc := NewService(store, cph, nil, "")
 
 	// Get initial when not configured
 	getResp, err := svc.GetConfig(context.Background())
@@ -315,7 +345,7 @@ func TestTestConnection_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockServer.Client())
+	svc := NewService(store, nil, mockServer.Client(), "")
 
 	// Test with specific model
 	res, err := svc.TestConnection(context.Background(), TestRequest{
@@ -343,6 +373,139 @@ func TestTestConnection_Success(t *testing.T) {
 	}
 }
 
+func TestTestConnection_FunctionalProbes(t *testing.T) {
+	var lastSystem, lastUserText string
+	var lastHasImage bool
+	var reply string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		lastSystem, lastUserText, lastHasImage = "", "", false
+		for _, m := range body.Messages {
+			switch m.Role {
+			case "system":
+				_ = json.Unmarshal(m.Content, &lastSystem)
+			case "user":
+				var s string
+				if err := json.Unmarshal(m.Content, &s); err == nil {
+					lastUserText = s
+					continue
+				}
+				var parts []struct {
+					Type     string `json:"type"`
+					Text     string `json:"text"`
+					ImageURL *struct {
+						URL string `json:"url"`
+					} `json:"image_url"`
+				}
+				if err := json.Unmarshal(m.Content, &parts); err == nil {
+					for _, p := range parts {
+						if p.ImageURL != nil {
+							lastHasImage = true
+						}
+						if p.Text != "" {
+							lastUserText = p.Text
+						}
+					}
+				}
+			}
+		}
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": reply}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := &mockStore{cfg: db.AiConfig{
+		ID: 1, IsEnabled: true,
+		BaseUrl:        mockServer.URL,
+		DefaultModel:   "test-model",
+		ModelTranslate: "test-model",
+		ModelSummary:   "test-model",
+		ModelVision:    "test-model",
+	}}
+	svc := NewService(store, nil, mockServer.Client(), "")
+	ctx := context.Background()
+
+	t.Run("translate success with Chinese output", func(t *testing.T) {
+		reply = "室内站工作台上布满灰尘，文件散落一地"
+		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "translate"})
+		if err != nil || !res.Success {
+			t.Fatalf("expected success, got err=%v res=%+v", err, res)
+		}
+		if lastUserText == "ping" || !strings.Contains(lastSystem, "ranslator") {
+			t.Errorf("expected functional translate prompt, got system=%q user=%q", lastSystem, lastUserText)
+		}
+		if res.Check != "vi→zh translation" {
+			t.Errorf("expected check label, got %q", res.Check)
+		}
+	})
+
+	t.Run("translate fails on non-Chinese echo", func(t *testing.T) {
+		reply = "Tram noi that bi bui ban tren ban lam viec, tep tai lieu roi lon xon duoi san"
+		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "translate"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Success {
+			t.Errorf("expected failure for non-Chinese reply, got %+v", res)
+		}
+	})
+
+	t.Run("summary success with concise output", func(t *testing.T) {
+		reply = "Khu sản xuất có bụi, dụng cụ misplaced, bình chữa cháy hết hạn và lối thoát hiểm bị chắn."
+		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "summary"})
+		if err != nil || !res.Success {
+			t.Fatalf("expected success, got err=%v res=%+v", err, res)
+		}
+		if lastHasImage {
+			t.Errorf("summary probe should not send an image")
+		}
+	})
+
+	t.Run("summary fails when echoing the source", func(t *testing.T) {
+		reply = "Hôm nay khối sản xuất A phát hiện 4 vấn đề: sàn tổ khu vực hàn nhiều bụi và kim loại rời; ba hộp dụng cụ chưa trả về đúng vị trí sau ca; một bình chữa cháy hết hạn cần thay mới; lối đi thoát hiểm bị pallet hàng chắn một phần. Trưởng ca đã nhắc nhở tổ trực và hẹn kiểm tra lại vào cuối tuần."
+		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "summary"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Success {
+			t.Errorf("expected failure for non-condensing summary, got %+v", res)
+		}
+	})
+
+	t.Run("vision success with red image", func(t *testing.T) {
+		reply = "Red"
+		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "vision"})
+		if err != nil || !res.Success {
+			t.Fatalf("expected success, got err=%v res=%+v", err, res)
+		}
+		if !lastHasImage {
+			t.Errorf("vision probe must include an image part")
+		}
+	})
+
+	t.Run("vision fails when color wrong", func(t *testing.T) {
+		reply = "Blue"
+		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "vision"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Success {
+			t.Errorf("expected failure for wrong color answer, got %+v", res)
+		}
+	})
+}
+
 func TestService_TestDNS(t *testing.T) {
 	cipher, _ := crypto.NewCipher("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
 	store := &mockStore{
@@ -350,7 +513,7 @@ func TestService_TestDNS(t *testing.T) {
 			BaseUrl: "http://localhost:8080/v1",
 		},
 	}
-	svc := NewService(store, cipher, nil)
+	svc := NewService(store, cipher, nil, "")
 
 	// 1. Explicit baseURL localhost
 	res, err := svc.TestDNS(context.Background(), DNSTestRequest{BaseURL: "https://localhost/v1"})
@@ -475,7 +638,7 @@ func TestExtractHost(t *testing.T) {
 }
 
 func TestTranslate_EmptyText(t *testing.T) {
-	svc := NewService(&mockStore{}, nil, nil)
+	svc := NewService(&mockStore{}, nil, nil, "")
 	res, err := svc.Translate(context.Background(), "   ", "vi")
 	if err != nil || res != "" {
 		t.Errorf("expected empty result and nil error, got %q, %v", res, err)
@@ -507,7 +670,7 @@ func TestExtractMessageContent_EdgeCases(t *testing.T) {
 }
 
 func TestWaitRateLimit_Spacing(t *testing.T) {
-	svc := NewService(&mockStore{}, nil, nil)
+	svc := NewService(&mockStore{}, nil, nil, "")
 	interval := 50 * time.Millisecond
 	svc.SetMinInterval(interval)
 
@@ -531,7 +694,7 @@ func TestWaitRateLimit_Spacing(t *testing.T) {
 }
 
 func TestWaitRateLimit_ContextCanceled(t *testing.T) {
-	svc := NewService(&mockStore{}, nil, nil)
+	svc := NewService(&mockStore{}, nil, nil, "")
 	svc.SetMinInterval(200 * time.Millisecond)
 
 	// Consume first slot
@@ -581,7 +744,7 @@ func TestTranslate_RateLimitQueueConcurrent(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockServer.Client())
+	svc := NewService(store, nil, mockServer.Client(), "")
 	interval := 80 * time.Millisecond
 	svc.SetMinInterval(interval)
 
@@ -657,7 +820,7 @@ func TestTranslate_CacheHit_NoGatewayCall(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockServer.Client())
+	svc := NewService(store, nil, mockServer.Client(), "")
 	result, err := svc.Translate(context.Background(), sourceText, "en")
 	if err != nil {
 		t.Fatalf("expected cache hit with nil error, got %v", err)
@@ -699,7 +862,7 @@ func TestTranslate_CacheMiss_SavesToCache(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockServer.Client())
+	svc := NewService(store, nil, mockServer.Client(), "")
 	// First call: cache miss, calls gateway
 	res1, err := svc.Translate(context.Background(), sourceText, "en")
 	if err != nil || res1 != "Clean area" {
@@ -735,7 +898,7 @@ func TestGetCachedTranslation(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, nil)
+	svc := NewService(store, nil, nil, "")
 
 	// 1. Empty text -> false
 	res, found, err := svc.GetCachedTranslation(context.Background(), "   ", "en")
@@ -753,5 +916,164 @@ func TestGetCachedTranslation(t *testing.T) {
 	res, found, err = svc.GetCachedTranslation(context.Background(), sourceText, "en")
 	if err != nil || !found || res != cachedText {
 		t.Errorf("expected (%q, true, nil), got (%q, %v, %v)", cachedText, res, found, err)
+	}
+}
+
+func reviewTestFixture(gatewayURL, storageDir string) *mockStore {
+	if storageDir != "" {
+		// Fake evidence photos so collectReviewImages picks them up.
+		if err := os.MkdirAll(filepath.Join(storageDir, "before"), 0o755); err == nil {
+			_ = os.WriteFile(filepath.Join(storageDir, "before", "11111111-1111-1111-1111-111111111111_wide.jpg"), []byte{0xFF, 0xD8, 0xFF, 0xE0}, 0o600)
+		}
+		if err := os.MkdirAll(filepath.Join(storageDir, "detail"), 0o755); err == nil {
+			_ = os.WriteFile(filepath.Join(storageDir, "detail", "11111111-1111-1111-1111-111111111111_detail.jpg"), []byte{0xFF, 0xD8, 0xFF, 0xE0}, 0o600)
+		}
+	}
+	return &mockStore{
+		cfg: db.AiConfig{
+			ID:           1,
+			IsEnabled:    true,
+			BaseUrl:      gatewayURL,
+			ApiKey:       "test-secret-key",
+			DefaultModel: "gpt-4o-mini",
+		},
+		issue: &db.Issue{
+			ID:          7,
+			Category:    "3S",
+			Description: sql.NullString{String: "Floor covered in dust and metal chips", Valid: true},
+			PhotoDetail: sql.NullString{String: "11111111-1111-1111-1111-111111111111_detail.jpg", Valid: true},
+			PhotoBefore: "11111111-1111-1111-1111-111111111111_wide.jpg",
+		},
+		issueTags: []db.ListTagsForIssueRow{
+			{Code: "DIRT", NameVi: "Bụi bẩn", Category: "3S"},
+			{Code: "SCRAP", NameVi: "Vật tư thừa", Category: "1S"},
+		},
+		tags: []db.Tag{
+			{Code: "DIRT", NameVi: "Bụi bẩn", Category: "3S"},
+			{Code: "OIL_LEAK", NameVi: "Rò rỉ dầu", Category: "3S"},
+			{Code: "SCRAP", NameVi: "Vật tư thừa", Category: "1S"},
+		},
+	}
+}
+
+func TestReview_HappyPath(t *testing.T) {
+	// Minimal JPEG header suffices: readReviewPhoto only checks size and extension.
+	storageDir := t.TempDir()
+	for _, rel := range []string{"before/11111111-1111-1111-1111-111111111111_wide.jpg", "detail/11111111-1111-1111-1111-111111111111_detail.jpg"} {
+		p := filepath.Join(storageDir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var seenImageParts int
+	var requestedModel string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Model    string `json:"model"`
+			Messages []struct {
+				Content []struct {
+					Type     string `json:"type"`
+					ImageURL *struct {
+						URL string `json:"url"`
+					} `json:"image_url"`
+				} `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		requestedModel = body.Model
+		for _, m := range body.Messages {
+			for _, p := range m.Content {
+				if p.Type == "image_url" && p.ImageURL != nil && strings.HasPrefix(p.ImageURL.URL, "data:image/jpeg;base64,") {
+					seenImageParts++
+				}
+			}
+		}
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{
+					"content": `{"verdict":"MISMATCH","feedback":"Sản phẩm thừa chưa phân loại.","suggested_category":"1S","suggested_tags":["SCRAP","OIL_LEAK","SCRAP","UNKNOWN"]}`,
+				}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := reviewTestFixture(mockServer.URL, storageDir)
+	svc := NewService(store, nil, mockServer.Client(), storageDir)
+	svc.SetMinInterval(0)
+
+	res, err := svc.Review(context.Background(), ReviewRequest{IssueID: 7, Lang: "vi"})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Verdict != ReviewVerdictMismatch {
+		t.Errorf("verdict = %q, want MISMATCH", res.Verdict)
+	}
+	if res.Suggestion.Category != testCategory1S {
+		t.Errorf("suggested category = %q, want 1S (different from current 3S)", res.Suggestion.Category)
+	}
+	// Both evidence photos (overview + close-up) must be attached as data URLs.
+	if !res.UsedVision || seenImageParts != 2 {
+		t.Errorf("used_vision=%v image parts=%d, want true/2", res.UsedVision, seenImageParts)
+	}
+	// SCRAP filtered (already selected), UNKNOWN not in catalog, OIL_LEAK kept.
+	if len(res.Suggestion.Tags) != 1 || res.Suggestion.Tags[0] != "OIL_LEAK" {
+		t.Errorf("suggested tags = %v, want [OIL_LEAK]", res.Suggestion.Tags)
+	}
+	if requestedModel == "" {
+		t.Errorf("model not forwarded, got %q", requestedModel)
+	}
+}
+
+func TestReview_DisabledAI(t *testing.T) {
+	store := reviewTestFixture("http://unused", "")
+	store.cfg.IsEnabled = false
+	svc := NewService(store, nil, nil, "")
+	svc.SetMinInterval(0)
+	_, err := svc.Review(context.Background(), ReviewRequest{IssueID: 7, Lang: "vi"})
+	if err == nil {
+		t.Fatal("expected not-enabled error, got nil")
+	}
+	appErr, ok := err.(*apperror.AppError)
+	if !ok || appErr.HTTPStatus != http.StatusBadRequest {
+		t.Fatalf("expected 400 AppError, got %v", err)
+	}
+}
+
+func TestReview_IssueNotFound(t *testing.T) {
+	store := reviewTestFixture("http://unused", "")
+	svc := NewService(store, nil, nil, "")
+	svc.SetMinInterval(0)
+	_, err := svc.Review(context.Background(), ReviewRequest{IssueID: 999, Lang: "vi"})
+	appErr, ok := err.(*apperror.AppError)
+	if !ok || appErr.HTTPStatus != http.StatusNotFound {
+		t.Fatalf("expected 404 AppError, got %v", err)
+	}
+}
+
+func TestReview_InvalidGatewayJSON(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": "not json at all"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := reviewTestFixture(mockServer.URL, "")
+	svc := NewService(store, nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+	_, err := svc.Review(context.Background(), ReviewRequest{IssueID: 7, Lang: "en"})
+	appErr, ok := err.(*apperror.AppError)
+	if !ok || appErr.HTTPStatus != http.StatusBadGateway {
+		t.Fatalf("expected 502 AppError, got %v", err)
 	}
 }

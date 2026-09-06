@@ -49,7 +49,7 @@ func TestAIHandler(t *testing.T) {
 	// Update store baseUrl to mockGateway
 	store.cfg.BaseUrl = mockGateway.URL
 
-	svc := NewService(store, cipher, mockGateway.Client())
+	svc := NewService(store, cipher, mockGateway.Client(), "")
 	handler := NewHandler(svc)
 	adminUser := db.User{ID: 1, Role: "ADMIN"}
 
@@ -220,7 +220,7 @@ func TestAIHandler_TranslateRateLimitQueue(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, mockGateway.Client())
+	svc := NewService(store, nil, mockGateway.Client(), "")
 	interval := 80 * time.Millisecond
 	svc.SetMinInterval(interval)
 	handler := NewHandler(svc)
@@ -270,7 +270,7 @@ func TestAIHandler_GetCached(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, nil, nil)
+	svc := NewService(store, nil, nil, "")
 	handler := NewHandler(svc)
 
 	// 1. Cache hit -> { "cached": true, "translated_text": "Wet floor" }

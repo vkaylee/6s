@@ -90,6 +90,7 @@ const (
 	ErrAITranslateFailed       Key = "ai.translate_failed"
 	ErrAITestFailed            Key = "ai.test_failed"
 	ErrAIBaseURLMissing        Key = "ai.base_url_missing"
+	ErrAIReviewFailed          Key = "ai.review_failed"
 )
 
 // ponytail: hardcoded in-memory dictionary; upgrade to embed.FS or external catalog if multi-file translators needed.
@@ -162,6 +163,7 @@ var catalog = map[string]map[Key]string{
 		ErrAITranslateFailed:       "Dịch thuật qua AI thất bại: %v",
 		ErrAITestFailed:            "Kiểm tra kết nối AI thất bại: %v",
 		ErrAIBaseURLMissing:        "Chưa cấu hình AI Base URL",
+		ErrAIReviewFailed:          "AI đánh giá issue thất bại: %v",
 	},
 	LocaleEN: {
 		ErrSessionsQueryFailed:     "Failed to query active sessions",
@@ -230,6 +232,7 @@ var catalog = map[string]map[Key]string{
 		ErrAITranslateFailed:       "AI translation failed: %v",
 		ErrAITestFailed:            "AI connection test failed: %v",
 		ErrAIBaseURLMissing:        "AI Base URL is not configured",
+		ErrAIReviewFailed:          "AI issue review failed: %v",
 	},
 	LocaleZH: {
 		ErrInternal:                "内部服务器错误",
@@ -301,6 +304,7 @@ var catalog = map[string]map[Key]string{
 		ErrAITranslateFailed:       "AI翻译失败: %v",
 		ErrAITestFailed:            "AI连接测试失败: %v",
 		ErrAIBaseURLMissing:        "未配置AI Base URL",
+		ErrAIReviewFailed:          "AI问题评审失败: %v",
 	},
 }
 

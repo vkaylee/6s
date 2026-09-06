@@ -316,6 +316,9 @@ describe("IssueDetailModal Component", () => {
           { x: 0, y: 0 }, // panOffset
           [], // issueScoreLogs
           false, // loadingScores
+          false, // aiEnabled
+          null, // aiReview
+          false, // isReviewing
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -347,6 +350,9 @@ describe("IssueDetailModal Component", () => {
           { x: 0, y: 0 },
           [],
           false,
+          false,
+          null,
+          false,
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -377,6 +383,9 @@ describe("IssueDetailModal Component", () => {
           { x: 0, y: 0 },
           [],
           false,
+          false,
+          null,
+          false,
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -406,6 +415,9 @@ describe("IssueDetailModal Component", () => {
           { x: 0, y: 0 },
           [],
           false,
+          false,
+          null,
+          false,
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -434,6 +446,9 @@ describe("IssueDetailModal Component", () => {
           1,
           { x: 0, y: 0 },
           [],
+          false,
+          false,
+          null,
           false,
         ]}
       >
@@ -485,6 +500,9 @@ describe("IssueDetailModal Component", () => {
           { x: 10, y: 20 },
           [],
           false,
+          false,
+          null,
+          false,
         ]}
       >
         <IssueDetailModal
@@ -521,6 +539,9 @@ describe("IssueDetailModal Component", () => {
           { x: 0, y: 0 },
           [],
           false,
+          false,
+          null,
+          false,
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -528,5 +549,70 @@ describe("IssueDetailModal Component", () => {
     );
 
     expect(html).toContain("Dầu loang dưới sàn máy may");
+  });
+
+  it("hides the AI review button when AI is disabled", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null, // translatedDesc
+          false, // isTranslating
+          false, // showOriginal
+          false, // isEditingFull
+          false, // isEditingCategory
+          false, // isEditingLocation
+          3, // scoreRating
+          "", // rejectReason
+          false, // isSubmitting
+          null, // showConfirmAction
+          null, // previewIndex
+          1, // zoomScale
+          { x: 0, y: 0 }, // panOffset
+          [], // issueScoreLogs
+          false, // loadingScores
+          false, // aiEnabled (AI disabled)
+          null, // aiReview
+          false, // isReviewing
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).not.toContain("Hỏi AI");
+    expect(html).toContain("Dịch AI");
+  });
+
+  it("shows the AI review button when AI is enabled", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null, // translatedDesc
+          false, // isTranslating
+          false, // showOriginal
+          false, // isEditingFull
+          false, // isEditingCategory
+          false, // isEditingLocation
+          3, // scoreRating
+          "", // rejectReason
+          false, // isSubmitting
+          null, // showConfirmAction
+          null, // previewIndex
+          1, // zoomScale
+          { x: 0, y: 0 }, // panOffset
+          [], // issueScoreLogs
+          false, // loadingScores
+          true, // aiEnabled (AI enabled)
+          null, // aiReview
+          false, // isReviewing
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Hỏi AI");
   });
 });

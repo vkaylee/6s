@@ -280,7 +280,7 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		nr.Post("/test", notifHandler.TestConfig)
 	})
 
-	aiSvc := ai.NewService(queries, cipher, nil)
+	aiSvc := ai.NewService(queries, cipher, nil, storageDir)
 	aiHandler := ai.NewHandler(aiSvc)
 	r.Route("/api/config/ai", func(air chi.Router) {
 		air.Use(authMw.Authenticate)
@@ -293,8 +293,10 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 
 	r.Route("/api/ai", func(air chi.Router) {
 		air.Use(authMw.Authenticate)
+		air.Get("/status", aiHandler.Status)
 		air.Post("/translate", aiHandler.Translate)
 		air.Post("/cached", aiHandler.GetCached)
+		air.Post("/review", aiHandler.Review)
 	})
 
 	// Launch background workers

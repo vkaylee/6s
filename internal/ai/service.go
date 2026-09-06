@@ -4,13 +4,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +42,9 @@ type Store interface {
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
 	GetTranslationCache(ctx context.Context, arg db.GetTranslationCacheParams) (db.TranslationCache, error)
 	UpsertTranslationCache(ctx context.Context, arg db.UpsertTranslationCacheParams) (db.TranslationCache, error)
+	GetIssueByID(ctx context.Context, id int64) (db.Issue, error)
+	ListTagsForIssue(ctx context.Context, issueID int64) ([]db.ListTagsForIssueRow, error)
+	ListTags(ctx context.Context) ([]db.Tag, error)
 }
 
 // ConfigResponse represents masked AI config for frontend.
@@ -71,11 +78,13 @@ type TestRequest struct {
 	Purpose string `json:"purpose"`
 }
 
-// TestResponse represents ping result for connection or model.
+// TestResponse represents the result of a connectivity or functional model test.
 type TestResponse struct {
 	Success   bool   `json:"success"`
 	LatencyMs int64  `json:"latency_ms"`
 	ModelUsed string `json:"model_used"`
+	Purpose   string `json:"purpose,omitempty"`
+	Check     string `json:"check,omitempty"`
 	Reply     string `json:"reply,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
@@ -99,13 +108,14 @@ type Service struct {
 	store       Store
 	cipher      *crypto.Cipher
 	httpClient  *http.Client
+	storageDir  string
 	minInterval time.Duration
 	rateMu      sync.Mutex
 	lastCall    time.Time
 }
 
 // NewService creates a new Service instance.
-func NewService(store Store, cipher *crypto.Cipher, httpClient *http.Client) *Service {
+func NewService(store Store, cipher *crypto.Cipher, httpClient *http.Client, storageDir string) *Service {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
 	}
@@ -113,6 +123,7 @@ func NewService(store Store, cipher *crypto.Cipher, httpClient *http.Client) *Se
 		store:       store,
 		cipher:      cipher,
 		httpClient:  httpClient,
+		storageDir:  storageDir,
 		minInterval: defaultMinRequestInterval,
 	}
 }
@@ -519,46 +530,217 @@ func (s *Service) resolveTestParams(ctx context.Context, req TestRequest) (strin
 	return baseURL, apiKey, model, nil
 }
 
-// TestConnection tests API connection and specific model response.
-func (s *Service) TestConnection(ctx context.Context, req TestRequest) (TestResponse, error) {
-	baseURL, apiKey, model, err := s.resolveTestParams(ctx, req)
-	if err != nil {
-		return TestResponse{Success: false, Error: err.Error()}, err
-	}
+// functionalTestPrompts holds a per-purpose probe that exercises the exact task
+// the model is configured for, so a Test "pass" means the model can do the job.
+var functionalTestPrompts = map[string]functionalProbe{
+	"translate": {
+		system: "You are a professional translator. Translate the user's text. Return ONLY the translated text with no explanations, notes, or quotes.",
+		user:   "Trạm nội thất bị bụi bẩn trên bàn làm việc, tệp tài liệu rơi lộn xộn dưới sàn",
+	},
+	"summary": {
+		system: "You summarize text concisely. Return ONLY one single-sentence summary in Vietnamese with no preamble or quotes.",
+		user:   "Hôm nay khối sản xuất A phát hiện 4 vấn đề: sàn tổ khu vực hàn nhiều bụi và kim loại rời; ba hộp dụng cụ chưa trả về đúng vị trí sau ca; một bình chữa cháy hết hạn cần thay mới; lối đi thoát hiểm bị pallet hàng chắn một phần. Trưởng ca đã nhắc nhở tổ trực và hẹn kiểm tra lại vào cuối tuần.",
+	},
+	"vision": {
+		system: "You describe images accurately and concisely. Answer the user's question directly.",
+		user:   "What is the dominant color of this image? Answer with one word.",
+	},
+}
 
+type functionalProbe struct {
+	system string
+	user   string
+}
+
+// testImageRedPNG is a 64x64 solid red PNG for the vision probe (data URI).
+const testImageRedPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACahnXAAAAAOElEQVR4nO3PQQ0AMAgEQXCf7l1QN2ZgIKDzb0YzAwCQmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZkBJ04C4AF+dwEAAAAASUVORK5CYII="
+
+func isRefusalLike(reply string) bool {
+	r := strings.ToLower(strings.TrimSpace(reply))
+	if len(r) > 400 {
+		return false
+	}
+	for _, p := range []string{
+		"i'm sorry", "i am sorry", "i can't", "i cannot", "i can not",
+		"as an ai", "sorry, but", "对不起", "抱歉", "无法", "我不能",
+	} {
+		if strings.Contains(r, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCJK(s string) bool {
+	for _, rn := range s {
+		if (rn >= 0x4E00 && rn <= 0x9FFF) || (rn >= 0x3400 && rn <= 0x4DBF) {
+			return true
+		}
+	}
+	return false
+}
+
+func countWords(s string) int {
+	return len(strings.Fields(s))
+}
+
+// runFunctionalTest executes a purpose-specific probe against the model.
+func (s *Service) runFunctionalTest(ctx context.Context, baseURL, apiKey, model, purpose string) (TestResponse, error) {
+	probe, ok := functionalTestPrompts[purpose]
+	if !ok {
+		return s.pingConnection(ctx, baseURL, apiKey, model)
+	}
 	if waitErr := s.waitRateLimit(ctx); waitErr != nil {
-		return TestResponse{
-			Success: false,
-			Error:   waitErr.Error(),
-		}, waitErr
+		return TestResponse{Success: false, Purpose: purpose, Error: waitErr.Error()}, waitErr
 	}
+	client := s.newOpenAIClient(baseURL, apiKey)
 
+	switch purpose {
+	case "translate":
+		return s.probeTranslate(ctx, client, model, purpose, probe)
+	case "summary":
+		return s.probeSummary(ctx, client, model, purpose, probe)
+	case "vision":
+		return s.probeVision(ctx, client, model, purpose, probe)
+	}
+	return s.pingConnection(ctx, baseURL, apiKey, model)
+}
+
+// probeTranslate checks the model can produce Chinese text from a Vietnamese source.
+func (s *Service) probeTranslate(ctx context.Context, client openai.Client, model, purpose string, probe functionalProbe) (TestResponse, error) {
+	start := time.Now()
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(probe.system),
+			openai.UserMessage(probe.user),
+		},
+		Model:       model,
+		Temperature: openai.Float(0.1),
+	})
+	latencyMs := time.Since(start).Milliseconds()
+	if err != nil {
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: err.Error()}, nil
+	}
+	reply := extractMessageContent(completion)
+	switch {
+	case strings.TrimSpace(reply) == "":
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: "empty response"}, nil
+	case isRefusalLike(reply):
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: "model refused the task"}, nil
+	case hasCJK(reply):
+		return TestResponse{Success: true, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Reply: reply}, nil
+	case countWords(reply) >= 6:
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: "reply is not Chinese text", Reply: reply}, nil
+	default:
+		// ponytail: accept short non-CJK replies (romanized/edge output); upgrade path: language-detect library.
+		return TestResponse{Success: true, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Reply: reply}, nil
+	}
+}
+
+// probeSummary checks the model can shorten a text without refusing.
+func (s *Service) probeSummary(ctx context.Context, client openai.Client, model, purpose string, probe functionalProbe) (TestResponse, error) {
+	start := time.Now()
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(probe.system),
+			openai.UserMessage(probe.user),
+		},
+		Model:       model,
+		Temperature: openai.Float(0.2),
+	})
+	latencyMs := time.Since(start).Milliseconds()
+	if err != nil {
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "summarization", Error: err.Error()}, nil
+	}
+	reply := extractMessageContent(completion)
+	switch {
+	case strings.TrimSpace(reply) == "":
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "summarization", Error: "empty response"}, nil
+	case isRefusalLike(reply):
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "summarization", Error: "model refused the task"}, nil
+	case countWords(reply) >= countWords(probe.user)-15 || countWords(reply) < 3 || countWords(reply) > 40:
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "summarization", Error: "summary is not significantly shorter than the source", Reply: reply}, nil
+	default:
+		return TestResponse{Success: true, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "summarization", Reply: reply}, nil
+	}
+}
+
+// probeVision checks the model can identify the color of an attached test image.
+func (s *Service) probeVision(ctx context.Context, client openai.Client, model, purpose string, probe functionalProbe) (TestResponse, error) {
+	start := time.Now()
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(probe.system),
+			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+				openai.TextContentPart(probe.user),
+				openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+					URL:    testImageRedPNG,
+					Detail: "low",
+				}),
+			}),
+		},
+		Model: model,
+	})
+	latencyMs := time.Since(start).Milliseconds()
+	if err != nil {
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "image understanding", Error: err.Error()}, nil
+	}
+	reply := extractMessageContent(completion)
+	r := strings.ToLower(strings.TrimSpace(reply))
+	switch {
+	case r == "":
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "image understanding", Error: "empty response"}, nil
+	case isRefusalLike(reply):
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "image understanding", Error: "model refused the task"}, nil
+	case strings.Contains(r, "red"):
+		return TestResponse{Success: true, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "image understanding", Reply: reply}, nil
+	default:
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "image understanding", Error: "model did not identify the red test image", Reply: reply}, nil
+	}
+}
+
+// pingConnection sends a minimal chat completion to verify reachability and auth.
+func (s *Service) pingConnection(ctx context.Context, baseURL, apiKey, model string) (TestResponse, error) {
+	if waitErr := s.waitRateLimit(ctx); waitErr != nil {
+		return TestResponse{Success: false, Error: waitErr.Error()}, waitErr
+	}
 	client := s.newOpenAIClient(baseURL, apiKey)
 	start := time.Now()
 	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("ping"),
 		},
-		Model:     model,
-		MaxTokens: openai.Int(16),
+		Model: model,
 	})
 	latencyMs := time.Since(start).Milliseconds()
 	if err != nil {
-		return TestResponse{
-			Success:   false,
-			LatencyMs: latencyMs,
-			ModelUsed: model,
-			Error:     err.Error(),
-		}, nil
+		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Error: err.Error()}, nil
 	}
-
-	reply := extractMessageContent(completion)
 	return TestResponse{
 		Success:   true,
 		LatencyMs: latencyMs,
 		ModelUsed: model,
-		Reply:     reply,
+		Reply:     extractMessageContent(completion),
 	}, nil
+}
+
+// TestConnection verifies the AI gateway and, for purpose-specific requests,
+// runs a functional probe proving the model can perform that exact task.
+func (s *Service) TestConnection(ctx context.Context, req TestRequest) (TestResponse, error) {
+	baseURL, apiKey, model, err := s.resolveTestParams(ctx, req)
+	if err != nil {
+		return TestResponse{Success: false, Error: err.Error()}, err
+	}
+	purpose := strings.ToLower(strings.TrimSpace(req.Purpose))
+	resp, err := s.runFunctionalTest(ctx, baseURL, apiKey, model, purpose)
+	if err != nil {
+		if resp.Error == "" {
+			resp.Error = err.Error()
+		}
+		return resp, err
+	}
+	resp.Purpose = purpose
+	return resp, nil
 }
 
 func extractHost(raw string) string {
@@ -623,4 +805,301 @@ func (s *Service) TestDNS(ctx context.Context, req DNSTestRequest) (DNSTestRespo
 		IPs:       ips,
 		LatencyMs: latencyMs,
 	}, nil
+}
+
+// Review verdict values.
+const (
+	ReviewVerdictOK       = "OK"
+	ReviewVerdictReview   = "REVIEW"
+	ReviewVerdictMismatch = "MISMATCH"
+)
+
+const (
+	reviewMaxFeedbackRunes    = 1200
+	reviewMaxSuggestedTags    = 5
+	reviewTagCatalogLimit     = 200
+	reviewPhotoMaxBytes       = 2*1024*1024 + 1024 // storage cap is 2MB per photo
+	reviewDescriptionMaxRunes = 4000
+)
+
+// ReviewRequest defines input for POST /api/ai/review.
+type ReviewRequest struct {
+	IssueID int64  `json:"issue_id"`
+	Lang    string `json:"lang"`
+}
+
+// ReviewSuggestion holds AI-proposed corrections; empty fields mean "keep as is".
+type ReviewSuggestion struct {
+	Category  string   `json:"category,omitempty"`
+	CauseType string   `json:"cause_type,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+}
+
+// ReviewResponse is the structured AI verdict for an issue report.
+type ReviewResponse struct {
+	Verdict    string           `json:"verdict"`
+	Feedback   string           `json:"feedback"`
+	Suggestion ReviewSuggestion `json:"suggestion"`
+	Model      string           `json:"model"`
+	UsedVision bool             `json:"used_vision"`
+}
+
+// IsEnabled reports whether the AI gateway is active (false on any lookup error).
+func (s *Service) IsEnabled(ctx context.Context) bool {
+	cfg, err := s.store.GetAIConfig(ctx)
+	return err == nil && cfg.IsEnabled
+}
+
+// Review asks the configured vision model to audit an issue report
+// (evidence photos + description + classification) and return structured feedback.
+func (s *Service) Review(ctx context.Context, req ReviewRequest) (ReviewResponse, error) {
+	cfg, err := s.store.GetAIConfig(ctx)
+	if err != nil || !cfg.IsEnabled {
+		return ReviewResponse{}, apperror.BadRequest(i18n.ErrAINotEnabled)
+	}
+	baseURL := strings.TrimSpace(cfg.BaseUrl)
+	if baseURL == "" {
+		return ReviewResponse{}, apperror.BadRequest(i18n.ErrAIBaseURLMissing)
+	}
+	model := strings.TrimSpace(resolvePurposeModel("vision", cfg))
+	if model == "" {
+		return ReviewResponse{}, apperror.BadRequest(i18n.ErrAIModelMissing)
+	}
+
+	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ReviewResponse{}, apperror.NotFound(i18n.ErrIssueNotFound)
+		}
+		return ReviewResponse{}, reviewStoreError(err)
+	}
+	selected, err := s.store.ListTagsForIssue(ctx, req.IssueID)
+	if err != nil {
+		return ReviewResponse{}, reviewStoreError(err)
+	}
+	catalog, err := s.store.ListTags(ctx)
+	if err != nil {
+		return ReviewResponse{}, reviewStoreError(err)
+	}
+
+	images := s.collectReviewImages(issue)
+	prompt := buildReviewPrompt(issue, selected, catalog, resolveTargetLang(req.Lang), len(images) > 0)
+	raw, err := s.completeReview(ctx, baseURL, cfg.ApiKey, model, prompt, images)
+	if err != nil {
+		return ReviewResponse{}, err
+	}
+	return parseReviewResult(raw, model, issue, selected, catalog, len(images) > 0)
+}
+
+// completeReview performs the rate-limited vision chat completion for a review.
+func (s *Service) completeReview(ctx context.Context, baseURL, apiKey, model, prompt string, images []openai.ChatCompletionContentPartUnionParam) (string, error) {
+	client := s.newOpenAIClient(baseURL, s.getDecryptedAPIKey(apiKey))
+	if waitErr := s.waitRateLimit(ctx); waitErr != nil {
+		if errors.Is(waitErr, context.DeadlineExceeded) {
+			return "", apperror.New(http.StatusGatewayTimeout, "GATEWAY_TIMEOUT", i18n.ErrInternal, "timeout waiting for AI gateway rate limit slot").WithCause(waitErr)
+		}
+		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, waitErr.Error()).WithCause(waitErr)
+	}
+
+	userMsg := openai.UserMessage("Review the submission described in the system instructions.")
+	if len(images) > 0 {
+		parts := append([]openai.ChatCompletionContentPartUnionParam{
+			openai.TextContentPart("Review this submission against the attached evidence photos (overview first, then close-up)."),
+		}, images...)
+		userMsg = openai.UserMessage(parts)
+	}
+
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(prompt),
+			userMsg,
+		},
+		Model:          model,
+		Temperature:    openai.Float(0.2),
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &openai.ResponseFormatJSONObjectParam{}},
+	})
+	if err != nil {
+		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
+	}
+	return extractMessageContent(completion), nil
+}
+
+// parseReviewResult validates the model's JSON verdict and clamps it to known codes.
+func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, usedVision bool) (ReviewResponse, error) {
+	var out struct {
+		Verdict           string   `json:"verdict"`
+		Feedback          string   `json:"feedback"`
+		SuggestedCategory string   `json:"suggested_category"`
+		SuggestedCause    string   `json:"suggested_cause_type"`
+		SuggestedTags     []string `json:"suggested_tags"`
+	}
+	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &out); err != nil {
+		return ReviewResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, "model returned invalid review JSON")
+	}
+
+	verdict := strings.ToUpper(strings.TrimSpace(out.Verdict))
+	switch verdict {
+	case ReviewVerdictOK, ReviewVerdictReview, ReviewVerdictMismatch:
+	default:
+		verdict = ReviewVerdictReview
+	}
+	feedback := strings.TrimSpace(out.Feedback)
+	if r := []rune(feedback); len(r) > reviewMaxFeedbackRunes {
+		feedback = string(r[:reviewMaxFeedbackRunes])
+	}
+
+	resp := ReviewResponse{Verdict: verdict, Feedback: feedback, Model: model, UsedVision: usedVision}
+	if cat := strings.ToUpper(strings.TrimSpace(out.SuggestedCategory)); cat != issue.Category && validReviewCategory(cat) {
+		resp.Suggestion.Category = cat
+	}
+	if ct := strings.ToUpper(strings.TrimSpace(out.SuggestedCause)); ct != issue.CauseType && (ct == "CONDITION" || ct == "BEHAVIOR") {
+		resp.Suggestion.CauseType = ct
+	}
+	resp.Suggestion.Tags = filterReviewTags(out.SuggestedTags, selected, catalog)
+	return resp, nil
+}
+
+func reviewStoreError(err error) *apperror.AppError {
+	return apperror.New(http.StatusBadGateway, "AI_REVIEW_FAILED", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
+}
+
+func validReviewCategory(c string) bool {
+	switch c {
+	case "1S", "2S", "3S", "4S", "5S", "6S":
+		return true
+	default:
+		return false
+	}
+}
+
+// filterReviewTags keeps only catalog codes the report does not already have.
+func filterReviewTags(suggested []string, selected []db.ListTagsForIssueRow, catalog []db.Tag) []string {
+	have := make(map[string]bool, len(selected))
+	for _, t := range selected {
+		have[t.Code] = true
+	}
+	known := make(map[string]bool, len(catalog))
+	for _, t := range catalog {
+		known[t.Code] = true
+	}
+	out := make([]string, 0, reviewMaxSuggestedTags)
+	seen := make(map[string]bool, len(suggested))
+	for _, code := range suggested {
+		code = strings.TrimSpace(code)
+		if code == "" || !known[code] || have[code] || seen[code] {
+			continue
+		}
+		seen[code] = true
+		out = append(out, code)
+		if len(out) == reviewMaxSuggestedTags {
+			break
+		}
+	}
+	return out
+}
+
+// extractJSONObject returns the outermost {...} slice of a model reply, tolerating markdown fences.
+func extractJSONObject(s string) string {
+	start := strings.Index(s, "{")
+	end := strings.LastIndex(s, "}")
+	if start < 0 || end <= start {
+		return s
+	}
+	return s[start : end+1]
+}
+
+// collectReviewImages encodes the report evidence photos as base64 data URLs.
+// Missing or oversized files are skipped so the review still runs on text alone.
+func (s *Service) collectReviewImages(issue db.Issue) []openai.ChatCompletionContentPartUnionParam {
+	// ponytail: at most 2 photos (before + detail); prealloc keeps linter quiet without complexity.
+	parts := make([]openai.ChatCompletionContentPartUnionParam, 0, 2)
+	for _, p := range []struct{ folder, name string }{
+		{"before", issue.PhotoBefore},
+		{"detail", issue.PhotoDetail.String},
+	} {
+		data, mime, ok := readReviewPhoto(s.storageDir, p.folder, p.name)
+		if !ok {
+			continue
+		}
+		parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+			URL:    "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data),
+			Detail: "low",
+		}))
+	}
+	return parts
+}
+
+func readReviewPhoto(baseDir, folder, name string) ([]byte, string, bool) {
+	if baseDir == "" || name == "" {
+		return nil, "", false
+	}
+	// Stored names are server-generated "<uuid>[_wide|_detail].<ext>"; Base guards against traversal.
+	clean := filepath.Base(name)
+	// ponytail: name is server-generated (not user-controlled), Base() strips any path; safe to read.
+	data, err := os.ReadFile(filepath.Join(baseDir, folder, clean)) // #nosec G304 -- server-controlled filename
+	if err != nil || len(data) == 0 || len(data) > reviewPhotoMaxBytes {
+		return nil, "", false
+	}
+	mime := "image/jpeg"
+	if strings.HasSuffix(strings.ToLower(clean), ".png") {
+		mime = "image/png"
+	}
+	return data, mime, true
+}
+
+const reviewCategoryGuide = `6S category definitions:
+- 1S Sort: unnecessary items, scrap, obsolete materials mixed with what is needed
+- 2S Set in Order: items out of place, missing labels/demarcation, blocked flow
+- 3S Shine: dirt, dust, spills, leaks, corrosion, unclean equipment or surroundings
+- 4S Standardize: missing/faded/broken visual standards, gauges, checklists, signage
+- 5S Sustain: people-behavior issues: dress code, SOP violations, discipline lapses
+- 6S Safety: physical hazards, fire/electrical risk, missing machine guards, PPE failures`
+
+// buildReviewPrompt assembles the audit instructions, including the tag vocabulary
+// so the model can only suggest codes that exist in the system.
+func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, langName string, hasPhotos bool) string {
+	var b strings.Builder
+	b.WriteString("You are a strict 6S (Sort, Set in Order, Shine, Standardize, Sustain, Safety) factory audit assistant. ")
+	b.WriteString("A worker submitted the issue report below. Judge whether category, cause type, tags and description are accurate and consistent with the evidence, and propose corrections.\n\n")
+	b.WriteString("REPORT UNDER REVIEW\n")
+	fmt.Fprintf(&b, "- Category: %s\n", issue.Category)
+	desc := []rune(strings.TrimSpace(issue.Description.String))
+	if len(desc) > reviewDescriptionMaxRunes {
+		desc = desc[:reviewDescriptionMaxRunes]
+	}
+	fmt.Fprintf(&b, "- Description: %q\n", string(desc))
+	if len(selected) == 0 {
+		b.WriteString("- Selected tags: (none)\n")
+	} else {
+		b.WriteString("- Selected tags: ")
+		for i, t := range selected {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%s(%s)", t.Code, t.NameVi)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n" + reviewCategoryGuide + "\n\n")
+	b.WriteString("TAG CATALOG (use ONLY these codes in suggestions):\n")
+	for i, t := range catalog {
+		if i >= reviewTagCatalogLimit {
+			break
+		}
+		fmt.Fprintf(&b, "- %s | %s | %s | %s | %s\n", t.Code, t.NameVi, t.NameZh, t.NameEn, t.Category)
+	}
+	b.WriteString("\nEVIDENCE: ")
+	if hasPhotos {
+		b.WriteString("the user message attaches the report's evidence photos (overview first, then close-up). Inspect them.")
+	} else {
+		b.WriteString("no photos could be loaded; judge text and classification consistency only, and set verdict REVIEW unless the text alone is clearly correct.")
+	}
+	b.WriteString("\n\nReturn ONLY a JSON object:\n")
+	b.WriteString(`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...]}`)
+	b.WriteString("\nRules:\n")
+	b.WriteString("- OK: everything matches the evidence. REVIEW: plausible but uncertain or incomplete. MISMATCH: classification or report clearly contradicts the evidence.\n")
+	b.WriteString("- suggested_* fields: fill ONLY when the correction clearly improves the report; leave empty or [] otherwise.\n")
+	b.WriteString("- suggested_tags: at most 3 codes from the TAG CATALOG, not already selected.\n")
+	b.WriteString("- feedback: at most 3 sentences addressed to the reporter; state what matches or what is wrong and why; write entirely in " + langName + ".")
+	return b.String()
 }

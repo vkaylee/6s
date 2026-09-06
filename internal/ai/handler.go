@@ -201,3 +201,36 @@ func (h *Handler) GetCached(w http.ResponseWriter, r *http.Request) {
 		TranslatedText: translated,
 	})
 }
+
+// Status handles GET /api/ai/status (Authenticated users).
+// Exposes only the enabled flag so the UI can hide AI affordances.
+func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
+	response.JSON(w, http.StatusOK, map[string]bool{"enabled": h.svc.IsEnabled(r.Context())})
+}
+
+// Review handles POST /api/ai/review (Authenticated users).
+func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
+	var req ReviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+	if req.IssueID <= 0 {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "issue_id is required"))
+		return
+	}
+	if strings.TrimSpace(req.Lang) == "" {
+		req.Lang = i18n.FromContext(r.Context())
+	}
+
+	res, err := h.svc.Review(r.Context(), req)
+	if err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			response.AppError(w, r, appErr)
+			return
+		}
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, res)
+}
