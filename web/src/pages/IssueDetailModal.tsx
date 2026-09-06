@@ -556,56 +556,55 @@ export function IssueDetailModal({
                 </button>
               </div>
             )}
-
-            {/* Description & Tags */}
-            <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2.5">
-              <div className="flex items-center justify-between text-xs text-zinc-500">
-                <span>
-                  {t("issue_detail.reporter_label")} <strong>{currentIssue.creator_name}</strong>
-                </span>
-                <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
-              </div>
-              <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">
-                {currentIssue.description || "Không có mô tả chi tiết."}
-              </p>
-              {/* Tags display */}
-              {currentIssue.tags && currentIssue.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {currentIssue.tags.map((tagCode) => {
-                    const matchedTag = tags.find((tg) => (tg.tag_code || tg.code) === tagCode);
-                    const tagName = matchedTag
-                      ? resolveI18n(
-                          {
-                            vi: matchedTag.label_vi || matchedTag.name_vi || tagCode,
-                            zh: matchedTag.label_zh || matchedTag.name_zh || tagCode,
-                            en: matchedTag.label_en || matchedTag.name_en || tagCode,
-                          },
-                          locale,
-                        )
-                      : tagCode;
-                    return (
-                      <span
-                        key={tagCode}
-                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300"
-                      >
-                        {`#${tagName}`}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              {currentIssue.reject_reason && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
-                  <strong>{t("issue_detail.reject_reason_label")}</strong>{" "}
-                  {currentIssue.reject_reason}
-                </div>
-              )}
-            </div>
           </div>
 
-          {/* Right Column: Actions, Rating & Score Breakdown (40% on 2K) */}
+          {/* Right Column: Information, Actions, Rating & Score Breakdown (40% on 2K) */}
           <div className="lg:col-span-5 xl:col-span-5 2xl:col-span-4 p-4 lg:p-6 space-y-4 lg:overflow-y-auto bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col justify-between">
             <div className="space-y-4">
+              {/* Description & Tags */}
+              <div className="p-4 bg-white dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between text-xs text-zinc-500">
+                  <span>
+                    {t("issue_detail.reporter_label")} <strong>{currentIssue.creator_name}</strong>
+                  </span>
+                  <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
+                </div>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
+                  {currentIssue.description || "Không có mô tả chi tiết."}
+                </p>
+                {/* Tags display */}
+                {currentIssue.tags && currentIssue.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {currentIssue.tags.map((tagCode) => {
+                      const matchedTag = tags.find((tg) => (tg.tag_code || tg.code) === tagCode);
+                      const tagName = matchedTag
+                        ? resolveI18n(
+                            {
+                              vi: matchedTag.label_vi || matchedTag.name_vi || tagCode,
+                              zh: matchedTag.label_zh || matchedTag.name_zh || tagCode,
+                              en: matchedTag.label_en || matchedTag.name_en || tagCode,
+                            },
+                            locale,
+                          )
+                        : tagCode;
+                      return (
+                        <span
+                          key={tagCode}
+                          className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300"
+                        >
+                          {`#${tagName}`}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {currentIssue.reject_reason && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
+                    <strong>{t("issue_detail.reject_reason_label")}</strong>{" "}
+                    {currentIssue.reject_reason}
+                  </div>
+                )}
+              </div>
               {/* Kaizen Rating Stars (SPEC.md Section 9.8.B) */}
               {currentIssue.status === IssueStatus.PENDING_REVIEW && canClose && (
                 <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
