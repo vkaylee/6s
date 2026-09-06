@@ -176,4 +176,14 @@ describe("IssueDetailModal Component", () => {
     expect(wheelListener).toBeDefined();
     expect(wheelListener?.options).toEqual({ passive: false });
   });
+
+  it("renders with 2-column desktop responsive classes up to 2xl breakpoint", () => {
+    const html = renderToString(
+      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+    expect(html).toContain("2xl:max-w-7xl");
+    expect(html).toContain("lg:grid-cols-12");
+    expect(html).toContain("2xl:col-span-8");
+    expect(html).toContain("2xl:col-span-4");
+  });
 });
