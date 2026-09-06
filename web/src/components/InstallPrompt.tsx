@@ -38,7 +38,7 @@ export function InstallPrompt() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 animate-fade-in">
             <div className="flex justify-between items-start">
               <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
                 {t("pwa.ios_title")}

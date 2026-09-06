@@ -421,7 +421,7 @@ export function ReportsPage() {
 
           {/* Tab 1: Plant & Hotspots (Horizontal Bar + Dropdown Filter) */}
           {activeTab === "LOCATIONS" && (
-            <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="space-y-4 animate-fade-in">
               <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                   <div>
@@ -620,7 +620,7 @@ export function ReportsPage() {
 
           {/* Tab 2: People & Honor Roll (Khen thưởng & Trách nhiệm cá nhân) */}
           {activeTab === "PEOPLE" && (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -702,7 +702,7 @@ export function ReportsPage() {
 
           {/* Tab 3: Trends & Strategic Category Breakdown */}
           {activeTab === "TRENDS" && (
-            <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="space-y-4 animate-fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* 1S - 6S Category Breakdown */}
                 <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col">
