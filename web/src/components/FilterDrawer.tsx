@@ -153,7 +153,7 @@ export function FilterDrawer({
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {statuses.map((st) => {
                 const isSelected = filters.statuses.includes(st);
                 return (
@@ -161,7 +161,7 @@ export function FilterDrawer({
                     key={st}
                     type="button"
                     onClick={() => toggleStatus(st)}
-                    className={`py-2 px-3 rounded-xl border transition text-left min-h-[48px] flex flex-col justify-center ${
+                    className={`py-2.5 px-3 rounded-xl border transition text-left min-h-[52px] flex flex-col justify-center ${
                       isSelected
                         ? "bg-rose-600 text-white border-rose-600 shadow-xs"
                         : "bg-zinc-50 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -169,8 +169,8 @@ export function FilterDrawer({
                   >
                     <span className="font-bold text-xs">{t(`status.${st}`)}</span>
                     <span
-                      className={`text-[10px] leading-tight line-clamp-1 mt-0.5 ${
-                        isSelected ? "text-rose-100" : "text-zinc-400 dark:text-zinc-500"
+                      className={`text-[11px] leading-snug mt-0.5 ${
+                        isSelected ? "text-rose-100" : "text-zinc-500 dark:text-zinc-400"
                       }`}
                     >
                       {t(`status_hints.${st}`)}
