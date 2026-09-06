@@ -3,6 +3,7 @@ import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 export interface DraftIssue {
   client_uuid: string;
   category: string;
+  cause_type?: string;
   location_code: string;
   tags: string[];
   description: string;

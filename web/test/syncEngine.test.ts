@@ -31,7 +31,6 @@ describe("syncEngine", () => {
       globalThis.fetch = originalFetch;
     }
   });
-
   it("starts and stops polling timer without crashing", () => {
     syncEngine.stop();
     expect(true).toBe(true);

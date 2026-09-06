@@ -162,4 +162,30 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("lucide-map-pin");
     expect(html).toContain("lucide-chevron-down");
   });
+
+  it("renders 6S root cause Condition vs Behavior 1-touch selector", () => {
+    const pageHtml = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(pageHtml).toContain("Đồ đạc / Thiết bị");
+    expect(pageHtml).toContain("Con người / Thao tác");
+    expect(pageHtml).toContain("📦");
+    expect(pageHtml).toContain("👤");
+  });
+
+  it("renders all 6S category selection options with hints", () => {
+    const pageHtml = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(pageHtml).toContain("1S");
+    expect(pageHtml).toContain("2S");
+    expect(pageHtml).toContain("3S");
+    expect(pageHtml).toContain("4S");
+    expect(pageHtml).toContain("5S");
+    expect(pageHtml).toContain("6S");
+  });
 });

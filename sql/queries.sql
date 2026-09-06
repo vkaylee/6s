@@ -212,9 +212,9 @@ WHERE id = $1 LIMIT 1;
 
 -- name: CreateIssue :one
 INSERT INTO issues (
-    client_uuid, version, creator_id, category, location_code, description, photo_before, photo_detail, status
+    client_uuid, version, creator_id, category, cause_type, location_code, description, photo_before, photo_detail, status
 ) VALUES (
-    $1, 1, $2, $3, $4, $5, $6, $7, 'OPEN'
+    $1, 1, $2, $3, $4, $5, $6, $7, $8, 'OPEN'
 )
 RETURNING *;
 
@@ -314,6 +314,7 @@ RETURNING *;
 -- name: PatchIssue :one
 UPDATE issues
 SET category = COALESCE(sqlc.narg('category'), category),
+    cause_type = COALESCE(sqlc.narg('cause_type'), cause_type),
     location_code = COALESCE(sqlc.narg('location_code'), location_code),
     description = COALESCE(sqlc.narg('description'), description),
     photo_before = COALESCE(sqlc.narg('photo_before'), photo_before),

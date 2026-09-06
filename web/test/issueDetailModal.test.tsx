@@ -186,4 +186,88 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("2xl:col-span-8");
     expect(html).toContain("2xl:col-span-4");
   });
+
+  it("renders review and approve action buttons for line leaders when status is PENDING_REVIEW", () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "leader",
+        full_name: "Chuyền Trưởng",
+        role: UserRole.LINE_LEADER,
+        assigned_location_code: "LINE_A1",
+      },
+    });
+    const pendingIssue: IssueItem = {
+      ...mockIssue,
+      status: IssueStatus.PENDING_REVIEW,
+      photo_after: "/uploads/after/after.jpg",
+    };
+    const html = renderToString(
+      <IssueDetailModal
+        issue={pendingIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(html).toContain("DUYỆT ĐẠT");
+    expect(html).toContain("Mở lại");
+  });
+
+  it("renders invalidate action button for admins when status is OPEN", () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "admin",
+        full_name: "Quản trị viên",
+        role: UserRole.ADMIN,
+      },
+    });
+    const html = renderToString(
+      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+    expect(html).toContain("Bác bỏ báo cáo (Admin / An toàn)");
+  });
+
+  it("renders closed status badge when status is CLOSED", () => {
+    const closedIssue: IssueItem = {
+      ...mockIssue,
+      status: IssueStatus.CLOSED,
+      photo_after: "/uploads/after/after.jpg",
+      score_rating: 5,
+    };
+    const html = renderToString(
+      <IssueDetailModal
+        issue={closedIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(html).toContain("Đã hoàn thành");
+  });
+
+  it("renders 6S root cause badge correctly for condition and behavior issues", () => {
+    const conditionHtml = renderToString(
+      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+    expect(conditionHtml).toContain("📦");
+    expect(conditionHtml).toContain("Đồ đạc / Vật chất");
+
+    const behaviorIssue: IssueItem = {
+      ...mockIssue,
+      category: IssueCategory.S5,
+      tags: ["ppe_violation"],
+    };
+    const behaviorHtml = renderToString(
+      <IssueDetailModal
+        issue={behaviorIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(behaviorHtml).toContain("👤");
+    expect(behaviorHtml).toContain("Hành vi con người");
+  });
 });

@@ -247,7 +247,19 @@
     "drag_drop_photo": "Drag & drop image here or paste (Ctrl+V)",
     "drop_photo_active": "Drop image here now",
     "draft_saved_at": "Draft auto-saved at {time}",
-    "shortcuts_hint": "Shortcuts: 1-6 choose S category • Ctrl+Enter to submit • Esc to cancel"
+    "shortcuts_hint": "Shortcuts: 1-6 choose S category • Ctrl+Enter to submit • Esc to cancel",
+    "root_cause_title": "Root Cause Nature",
+    "root_cause_hint": "6S standard: People vs Material classification",
+    "cause_condition": "Material / Equipment",
+    "cause_condition_desc": "Broken, cluttered, leaking, missing tools",
+    "cause_behavior": "People / Operation",
+    "cause_behavior_desc": "Non-compliance, missing PPE, procedural violation",
+    "badge_condition": "Material / Object",
+    "badge_behavior": "Human Behavior",
+    "photo_before_hint_condition": "Capture clear shot of excess scrap, defect or cluttered area",
+    "photo_before_hint_behavior": "Capture clear shot of unsafe act or incorrect worker operation",
+    "photo_after_hint_condition": "Resolution photo requirement: Capture cleared scrap, repaired machine or replaced parts.",
+    "photo_after_hint_behavior": "Resolution photo requirement: Capture worker corrected (proper PPE worn, safe stance)."
   },
   "admin": {
     "title": "System Settings",
@@ -423,7 +435,11 @@
     "score_breakdown_title": "6S Score Impact of this Issue",
     "score_breakdown_empty": "No score transactions recorded for this issue",
     "target_location": "Area / Line",
-    "target_user": "Reporter"
+    "target_user": "Reporter",
+    "close_checklist_title": "6S Acceptance Checklist",
+    "check_condition_resolved": "Defective item / clutter thoroughly resolved",
+    "check_behavior_corrected": "Worker was cautioned / retrained on safety standards",
+    "check_recurrence_prevented": "Recurrence risk eliminated at location"
   },
   "app": {
     "issues_list": "Issues List ({count})",

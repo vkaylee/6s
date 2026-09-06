@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { IssueCategory, S_CATEGORIES } from "../src/types/index.ts";
+import { detectCauseType, IssueCategory, isBehaviorTag, S_CATEGORIES } from "../src/types/index.ts";
 
 describe("S_CATEGORIES", () => {
   it("defines all 6S categories with multilingual names and hints (vi, en, zh)", () => {
@@ -45,5 +45,23 @@ describe("6S Tag Search Normalization", () => {
     expect(normalizeSearchText(labelVi3).includes(normalizeSearchText("dau"))).toBe(true);
     expect(normalizeSearchText(labelVi3).includes(normalizeSearchText("dầu"))).toBe(true);
     expect(normalizeSearchText(labelVi3).includes(normalizeSearchText("rac"))).toBe(false);
+  });
+});
+
+describe("6S Cause Classification (Người vs Vật)", () => {
+  it("identifies behavior vs condition tags correctly", () => {
+    expect(isBehaviorTag("ppe_violation", "5S")).toBe(true);
+    expect(isBehaviorTag("forklift_speeding", "6S")).toBe(true);
+    expect(isBehaviorTag("safety_gear", "6S")).toBe(true);
+    expect(isBehaviorTag("oil_leak", "3S")).toBe(false);
+    expect(isBehaviorTag("scrap_material", "1S")).toBe(false);
+  });
+
+  it("detects cause type accurately from category and tags", () => {
+    expect(detectCauseType("1S", ["scrap_material"])).toBe("CONDITION");
+    expect(detectCauseType("3S", ["oil_leak"])).toBe("CONDITION");
+    expect(detectCauseType("5S", [])).toBe("BEHAVIOR");
+    expect(detectCauseType("6S", ["forklift_speeding"])).toBe("BEHAVIOR");
+    expect(detectCauseType("6S", ["exposed_wire"])).toBe("CONDITION");
   });
 });

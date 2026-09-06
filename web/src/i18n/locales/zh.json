@@ -247,7 +247,19 @@
     "drag_drop_photo": "拖放图片至此或粘贴 (Ctrl+V)",
     "drop_photo_active": "立即释放以上传图片",
     "draft_saved_at": "草稿已于 {time} 自动保存",
-    "shortcuts_hint": "快捷键: 1-6 选择6S分类 • Ctrl+Enter 提交报告 • Esc 取消"
+    "shortcuts_hint": "快捷键: 1-6 选择6S分类 • Ctrl+Enter 提交报告 • Esc 取消",
+    "root_cause_title": "问题归因分类",
+    "root_cause_hint": "6S标准：人 vs 物分类",
+    "cause_condition": "物品 / 设备",
+    "cause_condition_desc": "设备损坏、凌乱、跑冒滴漏、物料缺失",
+    "cause_behavior": "人员 / 操作",
+    "cause_behavior_desc": "违章操作、未戴劳保、违规违纪",
+    "badge_condition": "物态 / 设备",
+    "badge_behavior": "人员行为",
+    "photo_before_hint_condition": "清晰拍摄多余杂物、故障点或凌乱现场",
+    "photo_before_hint_behavior": "清晰拍摄违章行为或人员不规范作业状态",
+    "photo_after_hint_condition": "整改后照片要求：拍摄已清理物品、修复设备或新配件。",
+    "photo_after_hint_behavior": "整改后照片要求：拍摄已规范整改的人员（规范佩戴劳保/正确姿势）。"
   },
   "admin": {
     "title": "系统配置",
@@ -423,7 +435,11 @@
     "score_breakdown_title": "该问题的6S积分变动记录",
     "score_breakdown_empty": "该问题暂无积分变动",
     "target_location": "产线 / 区域",
-    "target_user": "上报人"
+    "target_user": "上报人",
+    "close_checklist_title": "6S 验收复核清单",
+    "check_condition_resolved": "不符合物品/故障设备已彻底整改",
+    "check_behavior_corrected": "相关责任人已现场纠正并接受再培训",
+    "check_recurrence_prevented": "现场再发生隐患已完全消除"
   },
   "app": {
     "issues_list": "问题列表 ({count})",

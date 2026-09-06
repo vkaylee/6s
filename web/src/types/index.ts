@@ -21,6 +21,32 @@ export const IssueStatus = {
 } as const;
 export type IssueStatus = (typeof IssueStatus)[keyof typeof IssueStatus];
 
+export type CauseType = "CONDITION" | "BEHAVIOR";
+
+export const BEHAVIOR_TAG_MAP: Record<string, true> = {
+  ppe_violation: true,
+  improper_storage: true,
+  sop_noncompliance: true,
+  eating_at_workstation: true,
+  sleeping_on_shift: true,
+  phone_use_operating: true,
+  running_in_workshop: true,
+  safety_gear: true,
+  forklift_speeding: true,
+};
+
+export function isBehaviorTag(tagCode: string, category?: string): boolean {
+  return category === "5S" || Boolean(BEHAVIOR_TAG_MAP[tagCode]);
+}
+
+export function detectCauseType(category?: string | null, tags: string[] = []): CauseType {
+  if (category === "5S") return "BEHAVIOR";
+  if (tags.some((tag) => isBehaviorTag(tag, category || undefined))) {
+    return "BEHAVIOR";
+  }
+  return "CONDITION";
+}
+
 export const UserRole = {
   USER: "USER",
   LINE_LEADER: "LINE_LEADER",
@@ -38,6 +64,7 @@ export interface IssueItem {
   resolver_id?: number | null;
   resolver_name?: string | null;
   category: IssueCategory;
+  cause_type?: CauseType;
   location_code: string;
   location_name: string;
   description: string;
@@ -84,6 +111,7 @@ export interface TagItem {
   name_vi?: string;
   name_zh?: string;
   name_en?: string;
+  target_kind?: "OBJECT" | "BEHAVIOR";
 }
 
 export interface LocationHealthScore {

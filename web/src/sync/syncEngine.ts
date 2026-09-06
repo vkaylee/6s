@@ -200,6 +200,9 @@ class SyncEngine {
       const formData = new FormData();
       formData.append("client_uuid", issue.client_uuid);
       formData.append("category", issue.category);
+      if (issue.cause_type) {
+        formData.append("cause_type", issue.cause_type);
+      }
       formData.append("location_code", issue.location_code);
       formData.append("description", issue.description);
       formData.append("tags", JSON.stringify(issue.tags));

@@ -53,3 +53,34 @@ func (c Category) IsValid() bool {
 		return false
 	}
 }
+
+// CauseType represents the 6S root cause nature (person vs object).
+type CauseType string
+
+const (
+	// CauseTypeCondition represents physical condition, equipment or materials.
+	CauseTypeCondition CauseType = "CONDITION"
+	// CauseTypeBehavior represents human behavior, operation or SOP compliance.
+	CauseTypeBehavior CauseType = "BEHAVIOR"
+)
+
+// String returns string value of CauseType.
+func (c CauseType) String() string {
+	return string(c)
+}
+
+// IsValid checks if cause type is valid.
+func (c CauseType) IsValid() bool {
+	return c == CauseTypeCondition || c == CauseTypeBehavior
+}
+
+// NormalizeCauseType resolves cause type from category/tag if not explicitly specified.
+func NormalizeCauseType(causeType string, category string) string {
+	if causeType == string(CauseTypeBehavior) || causeType == string(CauseTypeCondition) {
+		return causeType
+	}
+	if category == string(Category5S) {
+		return string(CauseTypeBehavior)
+	}
+	return string(CauseTypeCondition)
+}

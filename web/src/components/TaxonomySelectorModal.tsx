@@ -1,7 +1,13 @@
 import { Check, Search, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
-import { IssueCategory, resolveTagLabel, S_CATEGORIES, type TagItem } from "../types/index.ts";
+import {
+  IssueCategory,
+  isBehaviorTag,
+  resolveTagLabel,
+  S_CATEGORIES,
+  type TagItem,
+} from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 
 interface TaxonomySelectorModalProps {
@@ -265,6 +271,7 @@ export function TaxonomySelectorModal({
             <div className="flex flex-wrap gap-2">
               {visibleTags.map((tag) => {
                 const isChecked = selectedTags.includes(tag.tag_code);
+                const isBehavior = isBehaviorTag(tag.tag_code, tag.category);
                 const badgeColor =
                   categoryBadgeColors[tag.category] || "bg-zinc-100 text-zinc-700 border-zinc-200";
 
@@ -279,6 +286,12 @@ export function TaxonomySelectorModal({
                         : "bg-white dark:bg-zinc-800/90 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:border-blue-400 active:scale-95"
                     }`}
                   >
+                    <span
+                      className="text-xs shrink-0"
+                      title={isBehavior ? t("issue.badge_behavior") : t("issue.badge_condition")}
+                    >
+                      {isBehavior ? "👤" : "📦"}
+                    </span>
                     <span>{resolveTagLabel(tag, locale)}</span>
                     {tag.category && (
                       <span

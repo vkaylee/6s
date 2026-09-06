@@ -126,6 +126,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	clientUUID := strings.TrimSpace(r.FormValue("client_uuid"))
 	category := strings.TrimSpace(r.FormValue("category"))
+	causeType := strings.TrimSpace(r.FormValue("cause_type"))
 	locationCode := strings.TrimSpace(r.FormValue("location_code"))
 	description := strings.TrimSpace(r.FormValue("description"))
 	tagsStr := strings.TrimSpace(r.FormValue("tags"))
@@ -162,6 +163,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	syncReq := SyncIssueRequest{
 		ClientUUID:   clientUUID,
 		Category:     category,
+		CauseType:    causeType,
 		LocationCode: locationCode,
 		Tags:         tags,
 		Description:  description,
@@ -426,6 +428,7 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 // PatchRequest defines payload for in-place quick editing of an issue.
 type PatchRequest struct {
 	Category     *string  `json:"category"`
+	CauseType    *string  `json:"cause_type"`
 	LocationCode *string  `json:"location_code"`
 	Description  *string  `json:"description"`
 	Tags         []string `json:"tags"`
@@ -438,6 +441,9 @@ func (h *Handler) parseMultipartPatch(r *http.Request) (PatchIssueRequest, error
 	}
 	if cat := strings.TrimSpace(r.FormValue("category")); cat != "" {
 		patchReq.Category = &cat
+	}
+	if cause := strings.TrimSpace(r.FormValue("cause_type")); cause != "" {
+		patchReq.CauseType = &cause
 	}
 	if loc := strings.TrimSpace(r.FormValue("location_code")); loc != "" {
 		patchReq.LocationCode = &loc
@@ -467,6 +473,7 @@ func (h *Handler) parseJSONPatch(r *http.Request) (PatchIssueRequest, error) {
 	}
 	return PatchIssueRequest{
 		Category:     req.Category,
+		CauseType:    req.CauseType,
 		LocationCode: req.LocationCode,
 		Description:  req.Description,
 		Tags:         req.Tags,

@@ -27,8 +27,10 @@ import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
+  type CauseType,
   type I18nObject,
   IssueCategory,
+  isBehaviorTag,
   type LocationItem,
   resolveI18n,
   resolveTagLabel,
@@ -52,6 +54,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const isHeaderVisible = useHeaderVisibility();
   // Form states
   const [category, setCategory] = useState<IssueCategory | null>(null);
+  const [causeType, setCauseType] = useState<CauseType>("CONDITION");
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [localTags, setLocalTags] = useState<TagItem[]>(tags);
 
@@ -120,6 +123,11 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const handleSelectCategory = (cat: IssueCategory) => {
     setCategory(cat);
     setCategoryError(false);
+    if (cat === IssueCategory.S5) {
+      setCauseType("BEHAVIOR");
+    } else if (cat !== IssueCategory.S6) {
+      setCauseType("CONDITION");
+    }
     if (cat === IssueCategory.S6) {
       haptics.safetyAlert();
     } else {
@@ -130,24 +138,20 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const handleToggleTag = (tagCode: string) => {
     haptics.success();
     const tagObj = localTags.find((t) => t.tag_code === tagCode);
+    if (tagObj && isBehaviorTag(tagCode, tagObj.category)) {
+      setCauseType("BEHAVIOR");
+    }
 
     if (selectedTags.includes(tagCode)) {
-      setSelectedTags(selectedTags.filter((tg) => tg !== tagCode));
+      setSelectedTags((prev) => prev.filter((c) => c !== tagCode));
     } else {
-      setSelectedTags([...selectedTags, tagCode]);
+      setSelectedTags((prev) => [...prev, tagCode]);
       if (tagObj?.category) {
-        const catMap: Record<string, IssueCategory> = {
-          [IssueCategory.S1]: IssueCategory.S1,
-          [IssueCategory.S2]: IssueCategory.S2,
-          [IssueCategory.S3]: IssueCategory.S3,
-          [IssueCategory.S4]: IssueCategory.S4,
-          [IssueCategory.S5]: IssueCategory.S5,
-          [IssueCategory.S6]: IssueCategory.S6,
-        };
-        const mappedCategory = catMap[tagObj.category];
-        if (mappedCategory) {
-          handleSelectCategory(mappedCategory);
-          setAutoFeedback(mappedCategory);
+        const mappedCat = tagObj.category as IssueCategory;
+        if (Object.values(IssueCategory).includes(mappedCat)) {
+          setCategory(mappedCat);
+          setCategoryError(false);
+          setAutoFeedback(mappedCat);
           setTimeout(() => setAutoFeedback(null), 2500);
         }
       }
@@ -315,6 +319,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       const newDraft: DraftIssue = {
         client_uuid: clientUuid,
         category,
+        cause_type: causeType,
         location_code: locationCode,
         tags: selectedTags,
         description: description.trim(),
@@ -568,7 +573,11 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                           {t("issue.photo_wide_label")}
                         </span>
                         <span className="text-[11px] text-zinc-400 mt-1">
-                          {dragOverWide ? t("issue.drop_photo_active") : t("issue.drag_drop_photo")}
+                          {dragOverWide
+                            ? t("issue.drop_photo_active")
+                            : causeType === "BEHAVIOR"
+                              ? t("issue.photo_before_hint_behavior")
+                              : t("issue.photo_before_hint_condition")}
                         </span>
                       </button>
                     )}
@@ -812,6 +821,61 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                       </button>
                     );
                   })}
+                </div>
+
+                {/* 6S Root Cause 1-Touch Selector: Condition vs Behavior */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                      {t("issue.root_cause_title")}
+                    </label>
+                    <span className="text-[10px] text-zinc-400 font-medium">
+                      {t("issue.root_cause_hint")}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCauseType("CONDITION");
+                        haptics.selection();
+                      }}
+                      className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[58px] ${
+                        causeType === "CONDITION"
+                          ? "bg-blue-50 dark:bg-blue-950/40 border-blue-500 text-blue-900 dark:text-blue-100 ring-2 ring-blue-500/30 shadow-xs"
+                          : "bg-zinc-50/70 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">📦</span>
+                        <span className="font-bold text-xs">{t("issue.cause_condition")}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-400 leading-tight mt-1">
+                        {t("issue.cause_condition_desc")}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCauseType("BEHAVIOR");
+                        haptics.selection();
+                      }}
+                      className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[58px] ${
+                        causeType === "BEHAVIOR"
+                          ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-100 ring-2 ring-amber-500/30 shadow-xs"
+                          : "bg-zinc-50/70 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">👤</span>
+                        <span className="font-bold text-xs">{t("issue.cause_behavior")}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-400 leading-tight mt-1">
+                        {t("issue.cause_behavior_desc")}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Dynamic Contextual Guidance Card */}

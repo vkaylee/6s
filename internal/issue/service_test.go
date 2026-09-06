@@ -57,6 +57,7 @@ func (m *mockIssueStore) CreateIssue(_ context.Context, arg db.CreateIssueParams
 		Version:      1,
 		CreatorID:    arg.CreatorID,
 		Category:     arg.Category,
+		CauseType:    arg.CauseType,
 		LocationCode: arg.LocationCode,
 		Description:  arg.Description,
 		PhotoBefore:  arg.PhotoBefore,
@@ -202,6 +203,9 @@ func (m *mockIssueStore) PatchIssue(_ context.Context, arg db.PatchIssueParams) 
 	}
 	if arg.Category.Valid {
 		iss.Category = arg.Category.String
+	}
+	if arg.CauseType.Valid {
+		iss.CauseType = arg.CauseType.String
 	}
 	if arg.LocationCode.Valid {
 		iss.LocationCode = arg.LocationCode.String
@@ -586,5 +590,64 @@ func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
 	}
 	if closed.Status != StatusClosed.String() {
 		t.Errorf("expected status CLOSED, got %s", closed.Status)
+	}
+}
+
+func TestIssueService_CauseTypeClassification(t *testing.T) {
+	mockStore := newMockIssueStore()
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
+
+	worker := db.User{
+		ID:       1,
+		Username: "worker1",
+		FullName: "Worker One",
+		Role:     "USER",
+	}
+
+	jpegBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
+	// 1. Explicit BEHAVIOR
+	resp1, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000000091",
+		Category:     Category6S.String(),
+		CauseType:    string(CauseTypeBehavior),
+		LocationCode: "LINE_A1",
+		PhotoBefore:  fhBefore,
+	}, worker)
+	if err != nil {
+		t.Fatalf("Sync issue 1 failed: %v", err)
+	}
+	if resp1.CauseType != string(CauseTypeBehavior) {
+		t.Errorf("expected CauseType BEHAVIOR, got %s", resp1.CauseType)
+	}
+
+	// 2. Default 5S -> BEHAVIOR
+	resp2, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000000092",
+		Category:     Category5S.String(),
+		LocationCode: "LINE_A1",
+		PhotoBefore:  fhBefore,
+	}, worker)
+	if err != nil {
+		t.Fatalf("Sync issue 2 failed: %v", err)
+	}
+	if resp2.CauseType != string(CauseTypeBehavior) {
+		t.Errorf("expected CauseType BEHAVIOR for 5S, got %s", resp2.CauseType)
+	}
+
+	// 3. Default 1S -> CONDITION
+	resp3, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000000093",
+		Category:     Category1S.String(),
+		LocationCode: "LINE_A1",
+		PhotoBefore:  fhBefore,
+	}, worker)
+	if err != nil {
+		t.Fatalf("Sync issue 3 failed: %v", err)
+	}
+	if resp3.CauseType != string(CauseTypeCondition) {
+		t.Errorf("expected CauseType CONDITION for 1S, got %s", resp3.CauseType)
 	}
 }

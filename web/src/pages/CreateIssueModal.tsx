@@ -7,8 +7,11 @@ import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
+  type CauseType,
+  detectCauseType,
   IssueCategory,
   type IssueItem,
+  isBehaviorTag,
   type LocationItem,
   resolveI18n,
   resolveTagLabel,
@@ -38,6 +41,9 @@ export function CreateIssueModal({
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const [category, setCategory] = useState<IssueCategory | null>(initialIssue?.category || null);
+  const [causeType, setCauseType] = useState<CauseType>(() =>
+    detectCauseType(initialIssue?.category, initialIssue?.tags),
+  );
   const [locationCode, setLocationCode] = useState(
     initialIssue?.location_code || locations[0]?.code || "",
   );
@@ -56,6 +62,7 @@ export function CreateIssueModal({
   useEffect(() => {
     if (initialIssue) {
       setCategory(initialIssue.category);
+      setCauseType(detectCauseType(initialIssue.category, initialIssue.tags));
       setLocationCode(initialIssue.location_code);
       setSelectedTags(initialIssue.tags || []);
       setDescription(initialIssue.description || "");
@@ -77,6 +84,11 @@ export function CreateIssueModal({
 
   const handleSelectCategory = (cat: IssueCategory) => {
     setCategory(cat);
+    if (cat === IssueCategory.S5) {
+      setCauseType("BEHAVIOR");
+    } else if (cat !== IssueCategory.S6) {
+      setCauseType("CONDITION");
+    }
     if (cat === IssueCategory.S6) {
       haptics.safetyAlert();
     } else {
@@ -87,6 +99,9 @@ export function CreateIssueModal({
   const handleToggleTag = (tagCode: string) => {
     haptics.success();
     const tagObj = tags.find((t) => t.tag_code === tagCode);
+    if (tagObj && isBehaviorTag(tagCode, tagObj.category)) {
+      setCauseType("BEHAVIOR");
+    }
 
     if (selectedTags.includes(tagCode)) {
       setSelectedTags(selectedTags.filter((t) => t !== tagCode));
@@ -152,6 +167,7 @@ export function CreateIssueModal({
         // Edit flow
         const formData = new FormData();
         formData.append("category", category);
+        formData.append("cause_type", causeType);
         formData.append("location_code", locationCode);
         formData.append("description", description.trim());
         formData.append("tags", JSON.stringify(selectedTags));
@@ -175,6 +191,7 @@ export function CreateIssueModal({
         const newDraft: DraftIssue = {
           client_uuid: clientUuid,
           category,
+          cause_type: causeType,
           location_code: locationCode,
           tags: selectedTags,
           description: description.trim(),
@@ -264,6 +281,61 @@ export function CreateIssueModal({
                 );
               })}
             </div>
+
+            {/* 6S Root Cause 1-Touch Selector: Condition vs Behavior */}
+            <div className="space-y-1.5 mt-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  {t("issue.root_cause_title")}
+                </label>
+                <span className="text-[10px] text-zinc-400 font-medium">
+                  {t("issue.root_cause_hint")}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCauseType("CONDITION");
+                    haptics.selection();
+                  }}
+                  className={`p-2.5 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[52px] ${
+                    causeType === "CONDITION"
+                      ? "bg-blue-50 dark:bg-blue-950/40 border-blue-500 text-blue-900 dark:text-blue-100 ring-2 ring-blue-500/30 shadow-xs"
+                      : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">📦</span>
+                    <span className="font-bold text-xs">{t("issue.cause_condition")}</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 leading-tight mt-1 truncate">
+                    {t("issue.cause_condition_desc")}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCauseType("BEHAVIOR");
+                    haptics.selection();
+                  }}
+                  className={`p-2.5 rounded-2xl border text-left flex flex-col justify-between transition-all min-h-[52px] ${
+                    causeType === "BEHAVIOR"
+                      ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-100 ring-2 ring-amber-500/30 shadow-xs"
+                      : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">👤</span>
+                    <span className="font-bold text-xs">{t("issue.cause_behavior")}</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 leading-tight mt-1 truncate">
+                    {t("issue.cause_behavior_desc")}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Location Selection */}
@@ -306,8 +378,10 @@ export function CreateIssueModal({
                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                         {t("issue.photo_wide_label")}
                       </span>
-                      <span className="text-[10px] text-zinc-400">
-                        {t("issue.photo_wide_required")}
+                      <span className="text-[10px] text-zinc-400 mt-1 line-clamp-1">
+                        {causeType === "BEHAVIOR"
+                          ? t("issue.photo_before_hint_behavior")
+                          : t("issue.photo_before_hint_condition")}
                       </span>
                     </>
                   )}

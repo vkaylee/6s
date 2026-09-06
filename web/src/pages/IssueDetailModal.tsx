@@ -9,6 +9,7 @@ import { useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
+  detectCauseType,
   IssueCategory,
   type IssueItem,
   IssueStatus,
@@ -46,6 +47,7 @@ export function IssueDetailModal({
   const storeUser = useAuthStore((s) => s.user);
   const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
+  const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
 
   useEffect(() => {
     setCurrentIssue(issue);
@@ -435,6 +437,21 @@ export function IssueDetailModal({
                 <span>{currentIssue.location_code}</span>
                 <span>•</span>
                 <span>v{currentIssue.version}</span>
+                <span>•</span>
+                <span
+                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-bold text-[10px] border ${
+                    causeType === "BEHAVIOR"
+                      ? "bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                      : "bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                  }`}
+                >
+                  <span>{causeType === "BEHAVIOR" ? "👤" : "📦"}</span>
+                  <span>
+                    {causeType === "BEHAVIOR"
+                      ? t("issue.badge_behavior")
+                      : t("issue.badge_condition")}
+                  </span>
+                </span>
               </div>
             </div>
           </div>
@@ -719,22 +736,29 @@ export function IssueDetailModal({
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-2 shrink-0">
               {/* Action: Resolve (Upload after photo) */}
               {currentIssue.status === IssueStatus.OPEN && (
-                <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    disabled={isSubmitting}
-                    onChange={handleResolveOfflineOrOnline}
-                    className="hidden"
-                  />
-                  <span>
-                    📸{" "}
-                    {isSubmitting
-                      ? t("issue_detail.processing_image")
-                      : t("issue_detail.capture_after")}
-                  </span>
-                </label>
+                <div className="space-y-1.5">
+                  <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      disabled={isSubmitting}
+                      onChange={handleResolveOfflineOrOnline}
+                      className="hidden"
+                    />
+                    <span>
+                      📸{" "}
+                      {isSubmitting
+                        ? t("issue_detail.processing_image")
+                        : t("issue_detail.capture_after")}
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 px-1 text-center font-medium">
+                    {causeType === "BEHAVIOR"
+                      ? t("issue.photo_after_hint_behavior")
+                      : t("issue.photo_after_hint_condition")}
+                  </p>
+                </div>
               )}
 
               {/* Action: Close (Duyệt đạt) */}
@@ -812,30 +836,59 @@ export function IssueDetailModal({
               </button>
             </div>
             {showConfirmAction === "CLOSE" && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
-                <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
-                  {t("issue_detail.kaizen_rating_label")}
-                </label>
-                <div className="flex items-center space-x-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setScoreRating(star)}
-                      className={`w-11 h-11 rounded-xl font-black text-lg flex items-center justify-center transition-all ${
-                        scoreRating >= star
-                          ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
-                          : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                  {scoreRating === 5 && (
-                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300 ml-2 animate-bounce">
-                      {t("issue_detail.kaizen_excellent")}
+              <div className="space-y-3">
+                <div className="p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-2xl border border-zinc-200 dark:border-zinc-700 text-xs space-y-2">
+                  <div className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <span>📋</span>
+                    <span>{t("issue_detail.close_checklist_title")}</span>
+                  </div>
+                  <label className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300 text-[11px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                    />
+                    <span>
+                      {causeType === "BEHAVIOR"
+                        ? t("issue_detail.check_behavior_corrected")
+                        : t("issue_detail.check_condition_resolved")}
                     </span>
-                  )}
+                  </label>
+                  <label className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300 text-[11px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                    />
+                    <span>{t("issue_detail.check_recurrence_prevented")}</span>
+                  </label>
+                </div>
+
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
+                  <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
+                    {t("issue_detail.kaizen_rating_label")}
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setScoreRating(star)}
+                        className={`w-11 h-11 rounded-xl font-black text-lg flex items-center justify-center transition-all ${
+                          scoreRating >= star
+                            ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
+                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                        }`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                    {scoreRating === 5 && (
+                      <span className="text-xs font-bold text-amber-700 dark:text-amber-300 ml-2 animate-bounce">
+                        {t("issue_detail.kaizen_excellent")}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

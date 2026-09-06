@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import { IssueCard } from "../src/components/IssueCard.tsx";
+import { IssueCardSkeleton } from "../src/components/IssueCardSkeleton.tsx";
 import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
 
 describe("IssueCard Component", () => {
@@ -70,5 +71,11 @@ describe("IssueCard Component", () => {
     const html = renderToString(<IssueCard issue={overdueIssue} onClick={() => {}} />);
     expect(html).toContain("animate-pulse");
     expect(html).toContain("bg-rose-600");
+  });
+
+  it("renders IssueCardSkeleton placeholder with pulse animation", () => {
+    const html = renderToString(<IssueCardSkeleton />);
+    expect(html).toContain("animate-pulse");
+    expect(html).toContain('data-testid="issue-card-skeleton"');
   });
 });

@@ -30,6 +30,7 @@ type Response struct {
 	ClientUUID   string    `json:"client_uuid"`
 	Version      int32     `json:"version"`
 	Category     string    `json:"category"`
+	CauseType    string    `json:"cause_type"`
 	LocationCode string    `json:"location_code"`
 	LocationName string    `json:"location_name"`
 	Tags         []string  `json:"tags"`
@@ -112,6 +113,7 @@ func (s *ServiceImpl) broadcast(evt Event) {
 type SyncIssueRequest struct {
 	ClientUUID   string
 	Category     string
+	CauseType    string
 	LocationCode string
 	Tags         []string
 	Description  string
@@ -141,6 +143,7 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 		ClientUuid:   req.ClientUUID,
 		CreatorID:    currentUser.ID,
 		Category:     req.Category,
+		CauseType:    NormalizeCauseType(req.CauseType, req.Category),
 		LocationCode: req.LocationCode,
 		Description:  descVal,
 		PhotoBefore:  beforeBasename,
@@ -530,6 +533,7 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 type PatchIssueRequest struct {
 	IssueID      int64
 	Category     *string
+	CauseType    *string
 	LocationCode *string
 	Description  *string
 	Tags         []string
@@ -545,12 +549,13 @@ func (s *ServiceImpl) canPatchIssue(currentUser db.User, issue db.Issue) bool {
 }
 
 // PatchIssue handles quick or full edit of an issue.
-func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullString, bool, error) {
+func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullString, bool, error) {
 	var catVal sql.NullString
+	var causeVal sql.NullString
 	escalatedToSafety := false
 	if req.Category != nil && *req.Category != "" {
 		if !isValidCategory(*req.Category) {
-			return catVal, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, false, ErrInvalidCategory
+			return catVal, causeVal, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, false, ErrInvalidCategory
 		}
 		catVal = sql.NullString{String: *req.Category, Valid: true}
 		if *req.Category == Category6S.String() && issue.Category != Category6S.String() {
@@ -558,6 +563,9 @@ func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (s
 		}
 	}
 
+	if req.CauseType != nil && *req.CauseType != "" {
+		causeVal = sql.NullString{String: *req.CauseType, Valid: true}
+	}
 	var locVal sql.NullString
 	if req.LocationCode != nil && *req.LocationCode != "" {
 		locVal = sql.NullString{String: *req.LocationCode, Valid: true}
@@ -572,7 +580,7 @@ func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (s
 	if req.PhotoBefore != nil {
 		bName, bErr := s.storageManager.SaveBeforePhoto(req.PhotoBefore, issue.ClientUuid)
 		if bErr != nil {
-			return catVal, locVal, descVal, beforeVal, sql.NullString{}, false, bErr
+			return catVal, causeVal, locVal, descVal, beforeVal, sql.NullString{}, false, bErr
 		}
 		beforeVal = sql.NullString{String: bName, Valid: true}
 	}
@@ -581,12 +589,12 @@ func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (s
 	if req.PhotoDetail != nil {
 		dName, dErr := s.storageManager.SaveDetailPhoto(req.PhotoDetail, issue.ClientUuid)
 		if dErr != nil {
-			return catVal, locVal, descVal, beforeVal, detailVal, false, dErr
+			return catVal, causeVal, locVal, descVal, beforeVal, detailVal, false, dErr
 		}
 		detailVal = sql.NullString{String: dName, Valid: true}
 	}
 
-	return catVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, nil
+	return catVal, causeVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, nil
 }
 
 // PatchIssue handles edit of issue properties.
@@ -599,7 +607,7 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 		return nil, ErrPermissionDenied
 	}
 
-	catVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, parseErr := s.parsePatchParams(req, issue)
+	catVal, causeVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, parseErr := s.parsePatchParams(req, issue)
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -607,6 +615,7 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 	updated, patchErr := s.store.PatchIssue(ctx, db.PatchIssueParams{
 		ID:           issue.ID,
 		Category:     catVal,
+		CauseType:    causeVal,
 		LocationCode: locVal,
 		Description:  descVal,
 		PhotoBefore:  beforeVal,
@@ -729,6 +738,7 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 			CreatorID:    r.CreatorID,
 			ResolverID:   r.ResolverID,
 			Category:     r.Category,
+			CauseType:    r.CauseType,
 			LocationCode: r.LocationCode,
 			Description:  r.Description,
 			RejectReason: r.RejectReason,
@@ -776,6 +786,7 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 		ClientUUID:   issue.ClientUuid,
 		Version:      issue.Version,
 		Category:     issue.Category,
+		CauseType:    issue.CauseType,
 		LocationCode: issue.LocationCode,
 		LocationName: locName,
 		Tags:         tags,

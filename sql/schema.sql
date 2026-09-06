@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS issues (
     creator_id BIGINT NOT NULL REFERENCES users(id),
     resolver_id BIGINT REFERENCES users(id),
     category VARCHAR(10) NOT NULL,
+    cause_type VARCHAR(20) NOT NULL DEFAULT 'CONDITION',
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code),
     description TEXT,
     reject_reason TEXT,
@@ -166,6 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_issues_client_uuid ON issues(client_uuid);
 CREATE INDEX IF NOT EXISTS idx_issues_location_code ON issues(location_code);
 CREATE INDEX IF NOT EXISTS idx_issues_category ON issues(category);
 CREATE INDEX IF NOT EXISTS idx_issues_created_at ON issues(created_at);
+CREATE INDEX IF NOT EXISTS idx_issues_cause_type ON issues(cause_type);
 CREATE INDEX IF NOT EXISTS idx_issues_composite ON issues(location_code, status, category);
 CREATE INDEX IF NOT EXISTS idx_issue_tags_tag ON issue_tags(tag_code);
 CREATE INDEX IF NOT EXISTS idx_tags_use_count ON tags(use_count DESC);

@@ -43,6 +43,7 @@ type Issue struct {
 	CreatorID    int64
 	ResolverID   sql.NullInt64
 	Category     string
+	CauseType    string
 	LocationCode string
 	Description  sql.NullString
 	RejectReason sql.NullString

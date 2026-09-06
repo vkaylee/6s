@@ -247,7 +247,19 @@
     "drag_drop_photo": "Kéo thả ảnh vào đây hoặc dán (Ctrl+V)",
     "drop_photo_active": "Thả ảnh vào đây ngay",
     "draft_saved_at": "Đã lưu nháp tự động lúc {time}",
-    "shortcuts_hint": "Phím tắt: 1-6 chọn loại S • Ctrl+Enter gửi báo cáo • Esc hủy"
+    "shortcuts_hint": "Phím tắt: 1-6 chọn loại S • Ctrl+Enter gửi báo cáo • Esc hủy",
+    "root_cause_title": "Nguồn gốc phát sinh",
+    "root_cause_hint": "Phân loại Người vs Vật theo chuẩn 6S",
+    "cause_condition": "Đồ đạc / Thiết bị",
+    "cause_condition_desc": "Hỏng hóc, bừa bộn, rò rỉ, thiếu vật tư",
+    "cause_behavior": "Con người / Thao tác",
+    "cause_behavior_desc": "Sai thao tác, không đeo PPE, vi phạm nội quy",
+    "badge_condition": "Đồ đạc / Vật chất",
+    "badge_behavior": "Hành vi con người",
+    "photo_before_hint_condition": "Chụp rõ vật tư thừa, điểm hư hỏng hoặc khu vực lộn xộn",
+    "photo_before_hint_behavior": "Chụp rõ hành vi vi phạm hoặc vị trí thao tác sai",
+    "photo_after_hint_condition": "Yêu cầu ảnh khắc phục: Chụp vật tư đã dọn sạch, thiết bị đã sửa hoặc phụ tùng đã thay mới.",
+    "photo_after_hint_behavior": "Yêu cầu ảnh khắc phục: Chụp công nhân đã chấn chỉnh (đã đeo đủ PPE, đứng đúng vị trí an toàn)."
   },
   "admin": {
     "title": "Cấu hình hệ thống",
@@ -423,7 +435,11 @@
     "score_breakdown_title": "Biến động điểm 6S của sự cố",
     "score_breakdown_empty": "Chưa có ghi nhận cộng trừ điểm cho sự cố này",
     "target_location": "Chuyền / Khu vực",
-    "target_user": "Người báo cáo"
+    "target_user": "Người báo cáo",
+    "close_checklist_title": "Tiêu chí nghiệm thu 6S",
+    "check_condition_resolved": "Vật tư thừa / thiết bị hỏng đã được xử lý triệt để",
+    "check_behavior_corrected": "Công nhân vi phạm đã được nhắc nhở / đào tạo lại",
+    "check_recurrence_prevented": "Đã loại bỏ nguy cơ tái diễn tại khu vực"
   },
   "app": {
     "issues_list": "Danh sách vấn đề ({count})",

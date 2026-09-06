@@ -84,7 +84,7 @@ SET status = 'CLOSED',
 WHERE id = $1 
   AND status = 'PENDING_REVIEW' 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type CloseIssueParams struct {
@@ -103,6 +103,7 @@ func (q *Queries) CloseIssue(ctx context.Context, arg CloseIssueParams) (Issue, 
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -181,17 +182,18 @@ func (q *Queries) CountOverdueIssuesByLocation(ctx context.Context, locationCode
 
 const createIssue = `-- name: CreateIssue :one
 INSERT INTO issues (
-    client_uuid, version, creator_id, category, location_code, description, photo_before, photo_detail, status
+    client_uuid, version, creator_id, category, cause_type, location_code, description, photo_before, photo_detail, status
 ) VALUES (
-    $1, 1, $2, $3, $4, $5, $6, $7, 'OPEN'
+    $1, 1, $2, $3, $4, $5, $6, $7, $8, 'OPEN'
 )
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type CreateIssueParams struct {
 	ClientUuid   string
 	CreatorID    int64
 	Category     string
+	CauseType    string
 	LocationCode string
 	Description  sql.NullString
 	PhotoBefore  string
@@ -203,6 +205,7 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		arg.ClientUuid,
 		arg.CreatorID,
 		arg.Category,
+		arg.CauseType,
 		arg.LocationCode,
 		arg.Description,
 		arg.PhotoBefore,
@@ -216,6 +219,7 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -455,7 +459,7 @@ SET status = 'PENDING_REVIEW',
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
 WHERE id = $1
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ForceResolveIssueParams struct {
@@ -474,6 +478,7 @@ func (q *Queries) ForceResolveIssue(ctx context.Context, arg ForceResolveIssuePa
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -555,7 +560,7 @@ func (q *Queries) GetCategoryBreakdown(ctx context.Context) ([]GetCategoryBreakd
 }
 
 const getIssueByID = `-- name: GetIssueByID :one
-SELECT id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+SELECT id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE id = $1 LIMIT 1
 `
 
@@ -569,6 +574,7 @@ func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -585,7 +591,7 @@ func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
 }
 
 const getIssueByUUID = `-- name: GetIssueByUUID :one
-SELECT id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+SELECT id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE client_uuid = $1 LIMIT 1
 `
 
@@ -599,6 +605,7 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -1170,7 +1177,7 @@ SET status = 'INVALID',
 WHERE id = $1 
   AND status IN ('OPEN', 'PENDING_REVIEW') 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type InvalidateIssueParams struct {
@@ -1189,6 +1196,7 @@ func (q *Queries) InvalidateIssue(ctx context.Context, arg InvalidateIssueParams
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -1312,7 +1320,7 @@ func (q *Queries) ListAllTags(ctx context.Context) ([]Tag, error) {
 }
 
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
-SELECT i.id, i.client_uuid, i.version, i.creator_id, i.resolver_id, i.category, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
+SELECT i.id, i.client_uuid, i.version, i.creator_id, i.resolver_id, i.category, i.cause_type, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
        loc.name_vi AS location_name_vi,
        u.username AS creator_username,
        u.full_name AS creator_full_name,
@@ -1346,6 +1354,7 @@ type ListIssuesFilteredRow struct {
 	CreatorID        int64
 	ResolverID       sql.NullInt64
 	Category         string
+	CauseType        string
 	LocationCode     string
 	Description      sql.NullString
 	RejectReason     sql.NullString
@@ -1386,6 +1395,7 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 			&i.CreatorID,
 			&i.ResolverID,
 			&i.Category,
+			&i.CauseType,
 			&i.LocationCode,
 			&i.Description,
 			&i.RejectReason,
@@ -1965,18 +1975,20 @@ func (q *Queries) MarkOutboxSent(ctx context.Context, id int64) error {
 const patchIssue = `-- name: PatchIssue :one
 UPDATE issues
 SET category = COALESCE($2, category),
-    location_code = COALESCE($3, location_code),
-    description = COALESCE($4, description),
-    photo_before = COALESCE($5, photo_before),
-    photo_detail = COALESCE($6, photo_detail),
+    cause_type = COALESCE($3, cause_type),
+    location_code = COALESCE($4, location_code),
+    description = COALESCE($5, description),
+    photo_before = COALESCE($6, photo_before),
+    photo_detail = COALESCE($7, photo_detail),
     version = version + 1
 WHERE id = $1
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type PatchIssueParams struct {
 	ID           int64
 	Category     sql.NullString
+	CauseType    sql.NullString
 	LocationCode sql.NullString
 	Description  sql.NullString
 	PhotoBefore  sql.NullString
@@ -1987,6 +1999,7 @@ func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, 
 	row := q.db.QueryRowContext(ctx, patchIssue,
 		arg.ID,
 		arg.Category,
+		arg.CauseType,
 		arg.LocationCode,
 		arg.Description,
 		arg.PhotoBefore,
@@ -2000,6 +2013,7 @@ func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, 
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -2023,7 +2037,7 @@ SET status = 'OPEN',
 WHERE id = $1 
   AND status = 'PENDING_REVIEW' 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ReopenIssueParams struct {
@@ -2042,6 +2056,7 @@ func (q *Queries) ReopenIssue(ctx context.Context, arg ReopenIssueParams) (Issue
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
@@ -2065,7 +2080,7 @@ SET status = 'PENDING_REVIEW',
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
 WHERE id = $1 AND status = 'OPEN' AND version = $4
-RETURNING id, client_uuid, version, creator_id, resolver_id, category, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, creator_id, resolver_id, category, cause_type, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ResolveIssueParams struct {
@@ -2090,6 +2105,7 @@ func (q *Queries) ResolveIssue(ctx context.Context, arg ResolveIssueParams) (Iss
 		&i.CreatorID,
 		&i.ResolverID,
 		&i.Category,
+		&i.CauseType,
 		&i.LocationCode,
 		&i.Description,
 		&i.RejectReason,
