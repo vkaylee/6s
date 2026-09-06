@@ -1056,7 +1056,7 @@ export function IssueDetailModal({
                 style={{
                   transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoomScale})`,
                 }}
-                className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-100 select-none pointer-events-none animate-zoom-in"
+                className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-75 select-none pointer-events-none"
               />
             </div>
             {/* Bottom Controls */}
