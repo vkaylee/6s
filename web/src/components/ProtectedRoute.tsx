@@ -12,13 +12,15 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const user = storeState.user ?? useAuthStore.getState().user;
   const isLoading =
     typeof window === "undefined" ? useAuthStore.getState().isLoading : storeState.isLoading;
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (!isLoading && !user) {
-      setLocation("/login", { replace: true });
+      const target =
+        location && location !== "/login" ? `?return_to=${encodeURIComponent(location)}` : "";
+      setLocation(`/login${target}`, { replace: true });
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading, location, setLocation]);
 
   if (isLoading) {
     return (

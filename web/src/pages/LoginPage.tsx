@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { NavActions } from "../components/NavActions.tsx";
 import { useI18nStore } from "../i18n/index.ts";
@@ -14,6 +14,8 @@ import { goBack } from "../utils/navigation.ts";
 export function LoginPage() {
   const { t } = useI18nStore();
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  const returnTo = new URLSearchParams(searchString).get("return_to") || "/";
   const { user, setAuth } = useAuthStore();
   const [rememberedUser, setRememberedUser] = useState(getRememberedUser);
   const [username, setUsername] = useState(() => getRememberedUser()?.username ?? "");
@@ -23,9 +25,9 @@ export function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      setLocation("/", { replace: true });
+      setLocation(returnTo, { replace: true });
     }
-  }, [user, setLocation]);
+  }, [user, returnTo, setLocation]);
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
@@ -53,7 +55,7 @@ export function LoginPage() {
 
       haptics.success();
       await setAuth(res.user, res.access_token, res.refresh_token);
-      setLocation("/", { replace: true });
+      setLocation(returnTo, { replace: true });
     } catch (err: unknown) {
       haptics.errorOrConflict();
       if (typeof err === "object" && err !== null && "message" in err) {

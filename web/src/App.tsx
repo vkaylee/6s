@@ -42,6 +42,16 @@ const ReportsPage = lazy(() =>
   import("./pages/ReportsPage.tsx").then((m) => ({ default: m.ReportsPage })),
 );
 
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo(0, 0);
+    }
+  }, [location]);
+  return null;
+}
+
 export function App() {
   const { t } = useI18nStore();
   const { user, accessToken, restoreSession } = useAuthStore();
@@ -719,6 +729,7 @@ export function App() {
   }).length;
   return (
     <>
+      <ScrollToTop />
       <Switch>
         <Route path="/login">
           <LoginPage />

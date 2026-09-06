@@ -55,4 +55,17 @@ describe("Wouter UX & Routing Verification", () => {
     // Bottom action bar create issue link
     expect(html).toContain('href="/issues/new"');
   });
+
+  it("renders LoginPage with return_to target when provided via search param", () => {
+    useAuthStore.setState({ user: null, accessToken: null });
+    const html = renderToString(
+      <Router ssrPath="/login" ssrSearch="return_to=%2Freports">
+        <App />
+      </Router>,
+    );
+
+    // LoginPage rendered with credentials input
+    expect(html).toContain('type="password"');
+    expect(html).toContain("6S Workplace Security");
+  });
 });
