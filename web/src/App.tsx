@@ -734,7 +734,7 @@ export function App() {
                 id={params.code}
                 onSelectIssue={(issueId) => {
                   openIssueById(issueId);
-                  setLocation(`/?issue_id=${issueId}`);
+                  setLocation(`/?issue_id=${issueId}`, { replace: true });
                 }}
               />
             </ProtectedRoute>
@@ -748,7 +748,7 @@ export function App() {
                 id={params.id}
                 onSelectIssue={(issueId) => {
                   openIssueById(issueId);
-                  setLocation(`/?issue_id=${issueId}`);
+                  setLocation(`/?issue_id=${issueId}`, { replace: true });
                 }}
               />
             </ProtectedRoute>
@@ -1076,7 +1076,7 @@ export function App() {
                       typeof window !== "undefined" &&
                       window.location.search.includes("issue_id=")
                     ) {
-                      setLocation("/");
+                      setLocation("/", { replace: true });
                     }
                   }}
                   onRefresh={() => {

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
@@ -8,6 +7,7 @@ import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { IssueCategory, type LocationItem, resolveI18n, S_CATEGORIES } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
+import { goBack } from "../utils/navigation.ts";
 
 interface ScoringRuleItem {
   rule_key: string;
@@ -42,7 +42,6 @@ interface TagItemData {
 
 export function AdminConfigPage() {
   const { t, locale } = useI18nStore();
-  const [, setLocation] = useLocation();
   const isHeaderVisible = useHeaderVisibility();
   const [activeTab, setActiveTab] = useState<
     "LOCATIONS" | "SCORING" | "AD" | "NOTIFICATIONS" | "TAGS"
@@ -606,7 +605,7 @@ export function AdminConfigPage() {
           <div className="flex items-center space-x-3">
             <button
               type="button"
-              onClick={() => setLocation("/")}
+              onClick={() => goBack("/")}
               className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
               aria-label={t("admin.back_to_dashboard")}
             >

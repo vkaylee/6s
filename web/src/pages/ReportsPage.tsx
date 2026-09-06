@@ -39,6 +39,7 @@ import {
   calculateTopTags,
   type LocationReportItem,
 } from "../utils/analytics.ts";
+import { goBack } from "../utils/navigation.ts";
 import { IssueDetailModal } from "./IssueDetailModal.tsx";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -203,7 +204,7 @@ export function ReportsPage() {
             <div className="flex items-center space-x-2 min-w-0">
               <button
                 type="button"
-                onClick={() => setLocation("/")}
+                onClick={() => goBack("/")}
                 className="p-1.5 -ml-1 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0"
                 aria-label={t("reports.back")}
               >

@@ -36,6 +36,7 @@ import {
 } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
+import { goBack } from "../utils/navigation.ts";
 
 interface CreateIssuePageProps {
   locations: LocationItem[];
@@ -277,7 +278,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       );
       if (!confirmed) return;
     }
-    setLocation("/");
+    goBack("/");
   };
 
   const handleSubmit = async () => {
@@ -326,7 +327,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       haptics.success();
       syncEngine.triggerSync();
       onSuccess();
-      setLocation("/");
+      setLocation("/", { replace: true });
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert("Không thể lưu bản nháp vào IndexedDB");

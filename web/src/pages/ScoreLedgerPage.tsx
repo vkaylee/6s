@@ -5,6 +5,7 @@ import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import type { ScoreLogItem } from "../types/index.ts";
+import { goBack } from "../utils/navigation.ts";
 
 interface ScoreLedgerPageProps {
   targetType: "LOCATION" | "USER";
@@ -74,7 +75,7 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
           <div className="flex items-center space-x-3">
             <button
               type="button"
-              onClick={() => setLocation("/")}
+              onClick={() => goBack("/")}
               className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
               aria-label={t("leaderboard.back_to_home")}
             >

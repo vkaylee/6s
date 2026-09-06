@@ -10,6 +10,7 @@ import {
   useAuthStore,
 } from "../store/authStore.ts";
 import { haptics } from "../utils/haptics.ts";
+import { goBack } from "../utils/navigation.ts";
 export function LoginPage() {
   const { t } = useI18nStore();
   const [, setLocation] = useLocation();
@@ -22,7 +23,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      setLocation("/");
+      setLocation("/", { replace: true });
     }
   }, [user, setLocation]);
   const handleLogin = async (e: React.FormEvent) => {
@@ -52,7 +53,7 @@ export function LoginPage() {
 
       haptics.success();
       await setAuth(res.user, res.access_token, res.refresh_token);
-      setLocation("/");
+      setLocation("/", { replace: true });
     } catch (err: unknown) {
       haptics.errorOrConflict();
       if (typeof err === "object" && err !== null && "message" in err) {
@@ -75,7 +76,7 @@ export function LoginPage() {
               <>
                 <button
                   type="button"
-                  onClick={() => setLocation("/")}
+                  onClick={() => goBack("/")}
                   className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
                   aria-label="Back"
                 >
@@ -83,7 +84,7 @@ export function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLocation("/")}
+                  onClick={() => goBack("/")}
                   className="text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-1"
                 >
                   {t("common.cancel")}

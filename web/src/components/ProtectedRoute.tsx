@@ -16,7 +16,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      setLocation("/login");
+      setLocation("/login", { replace: true });
     }
   }, [user, isLoading, setLocation]);
 
