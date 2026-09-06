@@ -183,6 +183,7 @@
     "photo_before_alt": "Overview photo of issue",
     "code_prefix": "Code",
     "no_description": "No detailed description",
+    "translated_by_ai": "Translated by AI",
     "step_category": "1. Select S Category (Micro-hints) *",
     "step_location": "2. Factory Location *",
     "step_photos": "3. Capture Evidence (Dual-Shot) *",

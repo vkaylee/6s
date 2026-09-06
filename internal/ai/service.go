@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -23,8 +26,9 @@ import (
 )
 
 const (
-	timeFormatRFC3339  = "2006-01-02T15:04:05Z07:00"
-	defaultHTTPTimeout = 30 * time.Second
+	timeFormatRFC3339         = "2006-01-02T15:04:05Z07:00"
+	defaultHTTPTimeout        = 30 * time.Second
+	defaultMinRequestInterval = 1 * time.Second
 )
 
 // Store defines persistence operations required for AI management.
@@ -32,6 +36,8 @@ type Store interface {
 	GetAIConfig(ctx context.Context) (db.AiConfig, error)
 	UpsertAIConfig(ctx context.Context, arg db.UpsertAIConfigParams) (db.AiConfig, error)
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
+	GetTranslationCache(ctx context.Context, arg db.GetTranslationCacheParams) (db.TranslationCache, error)
+	UpsertTranslationCache(ctx context.Context, arg db.UpsertTranslationCacheParams) (db.TranslationCache, error)
 }
 
 // ConfigResponse represents masked AI config for frontend.
@@ -90,9 +96,12 @@ type DNSTestResponse struct {
 
 // Service provides AI operations including configuration and OpenAI-compatible translation.
 type Service struct {
-	store      Store
-	cipher     *crypto.Cipher
-	httpClient *http.Client
+	store       Store
+	cipher      *crypto.Cipher
+	httpClient  *http.Client
+	minInterval time.Duration
+	rateMu      sync.Mutex
+	lastCall    time.Time
 }
 
 // NewService creates a new Service instance.
@@ -101,9 +110,52 @@ func NewService(store Store, cipher *crypto.Cipher, httpClient *http.Client) *Se
 		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
 	}
 	return &Service{
-		store:      store,
-		cipher:     cipher,
-		httpClient: httpClient,
+		store:       store,
+		cipher:      cipher,
+		httpClient:  httpClient,
+		minInterval: defaultMinRequestInterval,
+	}
+}
+
+// SetMinInterval updates the minimum interval between outbound requests.
+func (s *Service) SetMinInterval(d time.Duration) {
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+	s.minInterval = d
+}
+
+// waitRateLimit delays execution to guarantee at least minInterval between outbound AI gateway calls.
+func (s *Service) waitRateLimit(ctx context.Context) error {
+	s.rateMu.Lock()
+	interval := s.minInterval
+	if interval <= 0 {
+		s.rateMu.Unlock()
+		return nil
+	}
+
+	now := time.Now()
+	scheduled := now
+	if s.lastCall.After(now) {
+		scheduled = s.lastCall.Add(interval)
+	} else if wait := interval - now.Sub(s.lastCall); wait > 0 {
+		scheduled = now.Add(wait)
+	}
+	s.lastCall = scheduled
+	s.rateMu.Unlock()
+
+	delay := time.Until(scheduled)
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
@@ -255,6 +307,27 @@ func resolveTargetLang(lang string) string {
 	}
 }
 
+// ComputeContentHash returns SHA256 hex digest of the trimmed text.
+func ComputeContentHash(text string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(text)))
+	return hex.EncodeToString(sum[:])
+}
+
+// NormalizeLangCode converts varied language codes into standard 'vi', 'zh', or 'en'.
+func NormalizeLangCode(lang string) string {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "zh", "zh-cn", "zh-tw":
+		return "zh"
+	case "en":
+		return "en"
+	default:
+		return "vi"
+	}
+}
+
+func computeContentHash(text string) string { return ComputeContentHash(text) }
+func normalizeLangCode(lang string) string  { return NormalizeLangCode(lang) }
+
 func (s *Service) newOpenAIClient(baseURL, apiKey string) openai.Client {
 	opts := []option.RequestOption{
 		option.WithBaseURL(normalizeBaseURL(baseURL)),
@@ -309,6 +382,16 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 		return "", apperror.BadRequest(i18n.ErrAINotEnabled)
 	}
 
+	contentHash := computeContentHash(text)
+	langCode := normalizeLangCode(targetLang)
+
+	if cached, cacheErr := s.store.GetTranslationCache(ctx, db.GetTranslationCacheParams{
+		ContentHash: contentHash,
+		TargetLang:  langCode,
+	}); cacheErr == nil && cached.TranslatedText != "" {
+		return cached.TranslatedText, nil
+	}
+
 	baseURL := strings.TrimSpace(cfg.BaseUrl)
 	if baseURL == "" {
 		return "", apperror.BadRequest(i18n.ErrAIBaseURLMissing)
@@ -322,6 +405,13 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 	apiKey := s.getDecryptedAPIKey(cfg.ApiKey)
 	client := s.newOpenAIClient(baseURL, apiKey)
 	langName := resolveTargetLang(targetLang)
+
+	if waitErr := s.waitRateLimit(ctx); waitErr != nil {
+		if errors.Is(waitErr, context.DeadlineExceeded) {
+			return "", apperror.New(http.StatusGatewayTimeout, "GATEWAY_TIMEOUT", i18n.ErrInternal, "timeout waiting for AI gateway rate limit slot").WithCause(waitErr)
+		}
+		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, waitErr.Error()).WithCause(waitErr)
+	}
 
 	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
@@ -340,7 +430,43 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, "empty response content from AI gateway")
 	}
 
+	if _, saveErr := s.store.UpsertTranslationCache(ctx, db.UpsertTranslationCacheParams{
+		ContentHash:    contentHash,
+		TargetLang:     langCode,
+		SourceText:     text,
+		TranslatedText: content,
+	}); saveErr != nil {
+		log.Printf("failed to save translation cache: %v", saveErr)
+	}
+
 	return content, nil
+}
+
+// GetCachedTranslation checks if a translation already exists in the cache.
+func (s *Service) GetCachedTranslation(ctx context.Context, text, targetLang string) (string, bool, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", false, nil
+	}
+
+	contentHash := computeContentHash(text)
+	langCode := normalizeLangCode(targetLang)
+
+	cached, err := s.store.GetTranslationCache(ctx, db.GetTranslationCacheParams{
+		ContentHash: contentHash,
+		TargetLang:  langCode,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+
+	if cached.TranslatedText != "" {
+		return cached.TranslatedText, true, nil
+	}
+	return "", false, nil
 }
 
 func resolvePurposeModel(purpose string, cfg db.AiConfig) string {
@@ -398,6 +524,13 @@ func (s *Service) TestConnection(ctx context.Context, req TestRequest) (TestResp
 	baseURL, apiKey, model, err := s.resolveTestParams(ctx, req)
 	if err != nil {
 		return TestResponse{Success: false, Error: err.Error()}, err
+	}
+
+	if waitErr := s.waitRateLimit(ctx); waitErr != nil {
+		return TestResponse{
+			Success: false,
+			Error:   waitErr.Error(),
+		}, waitErr
 	}
 
 	client := s.newOpenAIClient(baseURL, apiKey)

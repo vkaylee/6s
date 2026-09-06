@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,5 +191,127 @@ func TestAIHandler(t *testing.T) {
 	handler.TestDNS(rrBadDNS, reqBadDNS)
 	if rrBadDNS.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for bad dns JSON, got %d", rrBadDNS.Code)
+	}
+}
+
+func TestAIHandler_TranslateRateLimitQueue(t *testing.T) {
+	mockGateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]string{
+						"content": "Bụi bẩn",
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockGateway.Close()
+
+	store := &mockStore{
+		cfg: db.AiConfig{
+			ID:           1,
+			IsEnabled:    true,
+			BaseUrl:      mockGateway.URL,
+			ApiKey:       "token",
+			DefaultModel: "gpt-4o-mini",
+		},
+	}
+
+	svc := NewService(store, nil, mockGateway.Client())
+	interval := 80 * time.Millisecond
+	svc.SetMinInterval(interval)
+	handler := NewHandler(svc)
+
+	const n = 2
+	var wg sync.WaitGroup
+	recorders := make([]*httptest.ResponseRecorder, n)
+	start := time.Now()
+
+	for i := range n {
+		recorders[i] = httptest.NewRecorder()
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			body, _ := json.Marshal(TranslateRequest{Text: "Test text", TargetLang: "vi"})
+			req := httptest.NewRequest(http.MethodPost, "/api/ai/translate", bytes.NewReader(body))
+			handler.Translate(recorders[idx], req)
+		}(i)
+	}
+	wg.Wait()
+	elapsed := time.Since(start)
+
+	for i := range n {
+		if recorders[i].Code != http.StatusOK {
+			t.Fatalf("request %d failed with code %d: %s", i, recorders[i].Code, recorders[i].Body.String())
+		}
+	}
+
+	if elapsed < interval-15*time.Millisecond {
+		t.Errorf("total elapsed time was %v, expected at least %v", elapsed, interval)
+	}
+}
+
+func TestAIHandler_GetCached(t *testing.T) {
+	sourceText := "Sàn nhà ướt"
+	cachedText := "Wet floor"
+	hash := computeContentHash(sourceText)
+
+	store := &mockStore{
+		cache: map[string]db.TranslationCache{
+			hash + ":en": {
+				ContentHash:    hash,
+				TargetLang:     "en",
+				SourceText:     sourceText,
+				TranslatedText: cachedText,
+			},
+		},
+	}
+
+	svc := NewService(store, nil, nil)
+	handler := NewHandler(svc)
+
+	// 1. Cache hit -> { "cached": true, "translated_text": "Wet floor" }
+	hitBody, _ := json.Marshal(CachedTranslationRequest{Text: sourceText, TargetLang: "en"})
+	reqHit := httptest.NewRequest(http.MethodPost, "/api/ai/cached", bytes.NewReader(hitBody))
+	rrHit := httptest.NewRecorder()
+	handler.GetCached(rrHit, reqHit)
+	if rrHit.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrHit.Code)
+	}
+	var envHit response.Envelope
+	_ = json.Unmarshal(rrHit.Body.Bytes(), &envHit)
+	dataBytes, _ := json.Marshal(envHit.Data)
+	var resHit CachedTranslationResponse
+	_ = json.Unmarshal(dataBytes, &resHit)
+	if !resHit.Cached || resHit.TranslatedText != cachedText {
+		t.Errorf("expected cached=true, text=%q, got %+v", cachedText, resHit)
+	}
+
+	// 2. Cache miss -> { "cached": false }
+	missBody, _ := json.Marshal(CachedTranslationRequest{Text: "Khác", TargetLang: "en"})
+	reqMiss := httptest.NewRequest(http.MethodPost, "/api/ai/cached", bytes.NewReader(missBody))
+	rrMiss := httptest.NewRecorder()
+	handler.GetCached(rrMiss, reqMiss)
+	if rrMiss.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrMiss.Code)
+	}
+	var envMiss response.Envelope
+	_ = json.Unmarshal(rrMiss.Body.Bytes(), &envMiss)
+	dataMissBytes, _ := json.Marshal(envMiss.Data)
+	var resMiss CachedTranslationResponse
+	_ = json.Unmarshal(dataMissBytes, &resMiss)
+	if resMiss.Cached || resMiss.TranslatedText != "" {
+		t.Errorf("expected cached=false, got %+v", resMiss)
+	}
+
+	// 3. Bad JSON -> 400
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/ai/cached", bytes.NewReader([]byte("{bad")))
+	rrBad := httptest.NewRecorder()
+	handler.GetCached(rrBad, reqBad)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rrBad.Code)
 	}
 }

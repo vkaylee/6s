@@ -7,7 +7,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { apiClient } from "./api/client.ts";
 import { ConflictModal } from "./components/ConflictModal.tsx";
@@ -64,7 +64,7 @@ function ScrollToTop() {
 }
 
 export function App() {
-  const { t } = useI18nStore();
+  const { t, locale } = useI18nStore();
   const { user, accessToken, restoreSession } = useAuthStore();
   const { initTheme } = useThemeStore();
   const [currentPath, setLocation] = useLocation();
@@ -758,6 +758,22 @@ export function App() {
       // ignore
     }
   };
+  const prevLocaleRef = useRef(locale);
+  useEffect(() => {
+    if (prevLocaleRef.current !== locale) {
+      prevLocaleRef.current = locale;
+      if (user) {
+        loadIssues(true);
+        if (selectedIssue) {
+          apiClient<IssueItem>(`/api/issues/${selectedIssue.id}`)
+            .then((updated) => {
+              if (updated) setSelectedIssue(updated);
+            })
+            .catch(() => {});
+        }
+      }
+    }
+  }, [locale, user, selectedIssue]);
 
   const checkSetupStatus = async () => {
     try {

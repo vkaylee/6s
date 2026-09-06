@@ -10,26 +10,30 @@ import (
 	"testing"
 	"time"
 
+	"6s/internal/ai"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/storage"
 )
 
 type mockIssueStore struct {
-	issues    map[int64]db.Issue
-	locations map[string]db.Location
-	tags      map[int64][]string
-	users     map[int64]db.User
-	outbox    []db.CreateOutboxEntryParams
-	scoreLogs []db.InsertScoreLogParams
-	auditLogs []db.InsertAuditLogParams
+	issues       map[int64]db.Issue
+	locations    map[string]db.Location
+	tags         map[int64][]string
+	users        map[int64]db.User
+	outbox       []db.CreateOutboxEntryParams
+	scoreLogs    []db.InsertScoreLogParams
+	auditLogs    []db.InsertAuditLogParams
+	translations map[string]string
 }
 
 func newMockIssueStore() *mockIssueStore {
 	return &mockIssueStore{
-		issues:    make(map[int64]db.Issue),
-		locations: make(map[string]db.Location),
-		tags:      make(map[int64][]string),
-		users:     make(map[int64]db.User),
+		issues:       make(map[int64]db.Issue),
+		locations:    make(map[string]db.Location),
+		tags:         make(map[int64][]string),
+		users:        make(map[int64]db.User),
+		translations: make(map[string]string),
 	}
 }
 
@@ -104,6 +108,7 @@ func (m *mockIssueStore) ListIssuesFiltered(_ context.Context, _ db.ListIssuesFi
 			CreatorID:       iss.CreatorID,
 			Category:        iss.Category,
 			LocationCode:    iss.LocationCode,
+			Description:     iss.Description,
 			PhotoBefore:     iss.PhotoBefore,
 			Status:          iss.Status,
 			LocationNameVi:  loc.NameVi,
@@ -147,6 +152,21 @@ func (m *mockIssueStore) ForceResolveIssue(_ context.Context, arg db.ForceResolv
 	iss.ResolvedAt = sql.NullTime{Time: now, Valid: true}
 	m.issues[iss.ID] = iss
 	return iss, nil
+}
+func (m *mockIssueStore) GetTranslationCacheBatch(_ context.Context, arg db.GetTranslationCacheBatchParams) ([]db.GetTranslationCacheBatchRow, error) {
+	if m.translations == nil {
+		return nil, nil
+	}
+	var res []db.GetTranslationCacheBatchRow
+	for _, h := range arg.ContentHashes {
+		if text, ok := m.translations[h+":"+arg.TargetLang]; ok {
+			res = append(res, db.GetTranslationCacheBatchRow{
+				ContentHash:    h,
+				TranslatedText: text,
+			})
+		}
+	}
+	return res, nil
 }
 
 func (m *mockIssueStore) CloseIssue(_ context.Context, arg db.CloseIssueParams) (db.Issue, error) {
@@ -649,5 +669,43 @@ func TestIssueService_CauseTypeClassification(t *testing.T) {
 	}
 	if resp3.CauseType != string(CauseTypeCondition) {
 		t.Errorf("expected CauseType CONDITION for 1S, got %s", resp3.CauseType)
+	}
+}
+
+func TestListIssuesFiltered_AttachTranslationCache(t *testing.T) {
+	mockStore := newMockIssueStore()
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	svc := NewService(mockStore, storageMgr, nil)
+
+	desc := "Khu vực để đồ lộn xộn"
+	h := ai.ComputeContentHash(desc)
+	mockStore.translations[h+":en"] = "Cluttered storage area"
+
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền A1"}
+	mockStore.issues[1] = db.Issue{
+		ID:           1,
+		ClientUuid:   "c0a80101-0000-4000-8000-000000000099",
+		LocationCode: "LINE_A1",
+		Category:     "1S",
+		Description:  sql.NullString{String: desc, Valid: true},
+		Status:       "OPEN",
+		CreatedAt:    time.Now(),
+	}
+
+	ctx := i18n.WithLocale(context.Background(), "en")
+	resp, err := svc.GetIssueByID(ctx, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.TranslatedDescription == nil || *resp.TranslatedDescription != "Cluttered storage area" {
+		t.Errorf("expected translated description 'Cluttered storage area', got %v", resp.TranslatedDescription)
+	}
+
+	items, _, err := svc.ListIssuesFiltered(ctx, nil, nil, nil, 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected list error: %v", err)
+	}
+	if len(items) == 0 || items[0].TranslatedDescription == nil || *items[0].TranslatedDescription != "Cluttered storage area" {
+		t.Errorf("expected list item to have translated description 'Cluttered storage area', got %+v", items)
 	}
 }

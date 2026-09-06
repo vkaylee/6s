@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +23,7 @@ type mockStore struct {
 	cfgErr    error
 	upsertErr error
 	auditLogs []db.InsertAuditLogParams
+	cache     map[string]db.TranslationCache
 }
 
 func (m *mockStore) GetAIConfig(_ context.Context) (db.AiConfig, error) {
@@ -55,6 +59,29 @@ func (m *mockStore) UpsertAIConfig(_ context.Context, arg db.UpsertAIConfigParam
 func (m *mockStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogParams) error {
 	m.auditLogs = append(m.auditLogs, arg)
 	return nil
+}
+func (m *mockStore) GetTranslationCache(_ context.Context, arg db.GetTranslationCacheParams) (db.TranslationCache, error) {
+	if m.cache != nil {
+		if val, ok := m.cache[arg.ContentHash+":"+arg.TargetLang]; ok {
+			return val, nil
+		}
+	}
+	return db.TranslationCache{}, sql.ErrNoRows
+}
+
+func (m *mockStore) UpsertTranslationCache(_ context.Context, arg db.UpsertTranslationCacheParams) (db.TranslationCache, error) {
+	if m.cache == nil {
+		m.cache = make(map[string]db.TranslationCache)
+	}
+	res := db.TranslationCache{
+		ContentHash:    arg.ContentHash,
+		TargetLang:     arg.TargetLang,
+		SourceText:     arg.SourceText,
+		TranslatedText: arg.TranslatedText,
+		CreatedAt:      time.Now(),
+	}
+	m.cache[arg.ContentHash+":"+arg.TargetLang] = res
+	return res, nil
 }
 
 func TestTranslate_FallbackToDefaultModel(t *testing.T) {
@@ -476,5 +503,255 @@ func TestExtractMessageContent_EdgeCases(t *testing.T) {
 	_ = json.Unmarshal([]byte(`{"choices":[{"message":{"content":"","reasoning":"Thinking result"}}]}`), &compReasoning)
 	if got := extractMessageContent(&compReasoning); got != "Thinking result" {
 		t.Errorf("expected 'Thinking result', got %q", got)
+	}
+}
+
+func TestWaitRateLimit_Spacing(t *testing.T) {
+	svc := NewService(&mockStore{}, nil, nil)
+	interval := 50 * time.Millisecond
+	svc.SetMinInterval(interval)
+
+	start := time.Now()
+	if err := svc.waitRateLimit(context.Background()); err != nil {
+		t.Fatalf("first call unexpected err: %v", err)
+	}
+	firstDur := time.Since(start)
+	if firstDur >= interval {
+		t.Errorf("first call should not be delayed, took %v", firstDur)
+	}
+
+	secondStart := time.Now()
+	if err := svc.waitRateLimit(context.Background()); err != nil {
+		t.Fatalf("second call unexpected err: %v", err)
+	}
+	secondDur := time.Since(secondStart)
+	if secondDur < interval-5*time.Millisecond {
+		t.Errorf("second call should wait at least %v, took %v", interval, secondDur)
+	}
+}
+
+func TestWaitRateLimit_ContextCanceled(t *testing.T) {
+	svc := NewService(&mockStore{}, nil, nil)
+	svc.SetMinInterval(200 * time.Millisecond)
+
+	// Consume first slot
+	if err := svc.waitRateLimit(context.Background()); err != nil {
+		t.Fatalf("first call unexpected err: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	err := svc.waitRateLimit(ctx)
+	if err == nil {
+		t.Fatal("expected context cancellation error, got nil")
+	}
+}
+
+func TestTranslate_RateLimitQueueConcurrent(t *testing.T) {
+	var mu sync.Mutex
+	var callTimes []time.Time
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		callTimes = append(callTimes, time.Now())
+		mu.Unlock()
+
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]string{
+						"content": "translated",
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := &mockStore{
+		cfg: db.AiConfig{
+			ID:           1,
+			IsEnabled:    true,
+			BaseUrl:      mockServer.URL,
+			ApiKey:       "test-key",
+			DefaultModel: "gpt-4o-mini",
+		},
+	}
+
+	svc := NewService(store, nil, mockServer.Client())
+	interval := 80 * time.Millisecond
+	svc.SetMinInterval(interval)
+
+	const n = 3
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	results := make([]string, n)
+
+	for i := range n {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = svc.Translate(context.Background(), fmt.Sprintf("text-%d", idx), "vi")
+		}(i)
+	}
+	wg.Wait()
+
+	for i := range n {
+		if errs[i] != nil {
+			t.Fatalf("request %d failed: %v", i, errs[i])
+		}
+		if results[i] != "translated" {
+			t.Errorf("request %d expected 'translated', got %q", i, results[i])
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(callTimes) != n {
+		t.Fatalf("expected %d calls, got %d", n, len(callTimes))
+	}
+
+	sort.Slice(callTimes, func(i, j int) bool {
+		return callTimes[i].Before(callTimes[j])
+	})
+
+	for i := 1; i < len(callTimes); i++ {
+		gap := callTimes[i].Sub(callTimes[i-1])
+		if gap < interval-15*time.Millisecond {
+			t.Errorf("gap between calls %d and %d was %v, expected at least %v", i-1, i, gap, interval)
+		}
+	}
+}
+
+func TestTranslate_CacheHit_NoGatewayCall(t *testing.T) {
+	gatewayCalled := false
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		gatewayCalled = true
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer mockServer.Close()
+
+	sourceText := "Khu vực bừa bộn"
+	cachedTrans := "Messy area"
+	hash := computeContentHash(sourceText)
+
+	store := &mockStore{
+		cfg: db.AiConfig{
+			ID:             1,
+			IsEnabled:      true,
+			BaseUrl:        mockServer.URL,
+			ApiKey:         "token",
+			DefaultModel:   "gpt-4o-mini",
+			ModelTranslate: "gpt-4o-mini",
+		},
+		cache: map[string]db.TranslationCache{
+			hash + ":en": {
+				ContentHash:    hash,
+				TargetLang:     "en",
+				SourceText:     sourceText,
+				TranslatedText: cachedTrans,
+			},
+		},
+	}
+
+	svc := NewService(store, nil, mockServer.Client())
+	result, err := svc.Translate(context.Background(), sourceText, "en")
+	if err != nil {
+		t.Fatalf("expected cache hit with nil error, got %v", err)
+	}
+	if result != cachedTrans {
+		t.Errorf("expected cached translation %q, got %q", cachedTrans, result)
+	}
+	if gatewayCalled {
+		t.Error("gateway should not be called when translation is cached")
+	}
+}
+
+func TestTranslate_CacheMiss_SavesToCache(t *testing.T) {
+	callCount := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]string{
+						"content": "Clean area",
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	sourceText := "Khu vực sạch sẽ"
+	store := &mockStore{
+		cfg: db.AiConfig{
+			ID:           1,
+			IsEnabled:    true,
+			BaseUrl:      mockServer.URL,
+			ApiKey:       "token",
+			DefaultModel: "gpt-4o-mini",
+		},
+	}
+
+	svc := NewService(store, nil, mockServer.Client())
+	// First call: cache miss, calls gateway
+	res1, err := svc.Translate(context.Background(), sourceText, "en")
+	if err != nil || res1 != "Clean area" {
+		t.Fatalf("call 1 failed: res=%q, err=%v", res1, err)
+	}
+	if callCount != 1 {
+		t.Fatalf("expected 1 gateway call, got %d", callCount)
+	}
+
+	// Second call: cache hit, no additional gateway call
+	res2, err := svc.Translate(context.Background(), sourceText, "en")
+	if err != nil || res2 != "Clean area" {
+		t.Fatalf("call 2 failed: res=%q, err=%v", res2, err)
+	}
+	if callCount != 1 {
+		t.Fatalf("expected still 1 gateway call (cache hit), got %d", callCount)
+	}
+}
+
+func TestGetCachedTranslation(t *testing.T) {
+	sourceText := "Khu vực để rác"
+	cachedText := "Waste storage area"
+	hash := computeContentHash(sourceText)
+
+	store := &mockStore{
+		cache: map[string]db.TranslationCache{
+			hash + ":en": {
+				ContentHash:    hash,
+				TargetLang:     "en",
+				SourceText:     sourceText,
+				TranslatedText: cachedText,
+			},
+		},
+	}
+
+	svc := NewService(store, nil, nil)
+
+	// 1. Empty text -> false
+	res, found, err := svc.GetCachedTranslation(context.Background(), "   ", "en")
+	if err != nil || found || res != "" {
+		t.Errorf("expected false for empty text, got (%q, %v, %v)", res, found, err)
+	}
+
+	// 2. Cache miss -> false
+	res, found, err = svc.GetCachedTranslation(context.Background(), "Unknown text", "en")
+	if err != nil || found || res != "" {
+		t.Errorf("expected false for cache miss, got (%q, %v, %v)", res, found, err)
+	}
+
+	// 3. Cache hit -> true
+	res, found, err = svc.GetCachedTranslation(context.Background(), sourceText, "en")
+	if err != nil || !found || res != cachedText {
+		t.Errorf("expected (%q, true, nil), got (%q, %v, %v)", cachedText, res, found, err)
 	}
 }

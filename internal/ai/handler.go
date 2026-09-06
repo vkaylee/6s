@@ -158,3 +158,46 @@ func (h *Handler) Translate(w http.ResponseWriter, r *http.Request) {
 		TranslatedText: translated,
 	})
 }
+
+// CachedTranslationRequest defines input for POST /api/ai/cached.
+type CachedTranslationRequest struct {
+	Text       string `json:"text"`
+	TargetLang string `json:"target_lang"`
+}
+
+// CachedTranslationResponse defines output for POST /api/ai/cached.
+type CachedTranslationResponse struct {
+	Cached         bool   `json:"cached"`
+	TranslatedText string `json:"translated_text,omitempty"`
+}
+
+// GetCached handles POST /api/ai/cached (Authenticated users).
+func (h *Handler) GetCached(w http.ResponseWriter, r *http.Request) {
+	var req CachedTranslationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+
+	trimmedText := strings.TrimSpace(req.Text)
+	if trimmedText == "" {
+		response.JSON(w, http.StatusOK, CachedTranslationResponse{Cached: false})
+		return
+	}
+
+	targetLang := strings.TrimSpace(req.TargetLang)
+	if targetLang == "" {
+		targetLang = i18n.FromContext(r.Context())
+	}
+
+	translated, found, err := h.svc.GetCachedTranslation(r.Context(), trimmedText, targetLang)
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+
+	response.JSON(w, http.StatusOK, CachedTranslationResponse{
+		Cached:         found,
+		TranslatedText: translated,
+	})
+}

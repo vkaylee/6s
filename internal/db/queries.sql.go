@@ -989,6 +989,69 @@ func (q *Queries) GetTopViolatedTags(ctx context.Context, limit int32) ([]GetTop
 	return items, nil
 }
 
+const getTranslationCache = `-- name: GetTranslationCache :one
+SELECT content_hash, target_lang, source_text, translated_text, created_at
+FROM translation_cache
+WHERE content_hash = $1 AND target_lang = $2
+`
+
+type GetTranslationCacheParams struct {
+	ContentHash string
+	TargetLang  string
+}
+
+func (q *Queries) GetTranslationCache(ctx context.Context, arg GetTranslationCacheParams) (TranslationCache, error) {
+	row := q.db.QueryRowContext(ctx, getTranslationCache, arg.ContentHash, arg.TargetLang)
+	var i TranslationCache
+	err := row.Scan(
+		&i.ContentHash,
+		&i.TargetLang,
+		&i.SourceText,
+		&i.TranslatedText,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTranslationCacheBatch = `-- name: GetTranslationCacheBatch :many
+SELECT content_hash, translated_text
+FROM translation_cache
+WHERE content_hash = ANY($1::varchar[]) AND target_lang = $2
+`
+
+type GetTranslationCacheBatchParams struct {
+	ContentHashes []string
+	TargetLang    string
+}
+
+type GetTranslationCacheBatchRow struct {
+	ContentHash    string
+	TranslatedText string
+}
+
+func (q *Queries) GetTranslationCacheBatch(ctx context.Context, arg GetTranslationCacheBatchParams) ([]GetTranslationCacheBatchRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTranslationCacheBatch, pq.Array(arg.ContentHashes), arg.TargetLang)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTranslationCacheBatchRow
+	for rows.Next() {
+		var i GetTranslationCacheBatchRow
+		if err := rows.Scan(&i.ContentHash, &i.TranslatedText); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserByBadgeCode = `-- name: GetUserByBadgeCode :one
 SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
 WHERE badge_code = $1 LIMIT 1
@@ -2650,6 +2713,43 @@ func (q *Queries) UpsertTag(ctx context.Context, arg UpsertTagParams) (Tag, erro
 		&i.UseCount,
 		&i.IsPreset,
 		&i.IsActive,
+	)
+	return i, err
+}
+
+const upsertTranslationCache = `-- name: UpsertTranslationCache :one
+INSERT INTO translation_cache (
+    content_hash, target_lang, source_text, translated_text
+) VALUES (
+    $1, $2, $3, $4
+)
+ON CONFLICT (content_hash, target_lang) DO UPDATE
+SET translated_text = EXCLUDED.translated_text,
+    source_text = EXCLUDED.source_text
+RETURNING content_hash, target_lang, source_text, translated_text, created_at
+`
+
+type UpsertTranslationCacheParams struct {
+	ContentHash    string
+	TargetLang     string
+	SourceText     string
+	TranslatedText string
+}
+
+func (q *Queries) UpsertTranslationCache(ctx context.Context, arg UpsertTranslationCacheParams) (TranslationCache, error) {
+	row := q.db.QueryRowContext(ctx, upsertTranslationCache,
+		arg.ContentHash,
+		arg.TargetLang,
+		arg.SourceText,
+		arg.TranslatedText,
+	)
+	var i TranslationCache
+	err := row.Scan(
+		&i.ContentHash,
+		&i.TargetLang,
+		&i.SourceText,
+		&i.TranslatedText,
+		&i.CreatedAt,
 	)
 	return i, err
 }

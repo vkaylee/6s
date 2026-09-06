@@ -605,3 +605,24 @@ WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id
 ORDER BY i.created_at DESC;
+
+-- name: GetTranslationCache :one
+SELECT content_hash, target_lang, source_text, translated_text, created_at
+FROM translation_cache
+WHERE content_hash = $1 AND target_lang = $2;
+
+-- name: UpsertTranslationCache :one
+INSERT INTO translation_cache (
+    content_hash, target_lang, source_text, translated_text
+) VALUES (
+    $1, $2, $3, $4
+)
+ON CONFLICT (content_hash, target_lang) DO UPDATE
+SET translated_text = EXCLUDED.translated_text,
+    source_text = EXCLUDED.source_text
+RETURNING *;
+
+-- name: GetTranslationCacheBatch :many
+SELECT content_hash, translated_text
+FROM translation_cache
+WHERE content_hash = ANY(sqlc.arg('content_hashes')::varchar[]) AND target_lang = sqlc.arg('target_lang');

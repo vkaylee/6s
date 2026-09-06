@@ -4,6 +4,7 @@ import {
   Check,
   Clock,
   History,
+  Sparkles,
   Star,
   User,
   Wrench,
@@ -188,9 +189,19 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
 
         {/* Description & Tags: Right column on desktop, below photos on mobile */}
         <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch gap-2">
-          <p className="text-sm text-zinc-700 dark:text-zinc-200 line-clamp-3 leading-snug">
-            {issue.description || t("issue.no_description")}
-          </p>
+          <div>
+            {Boolean(issue.translated_description) && (
+              <div className="mb-1">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs">
+                  <Sparkles className="w-2.5 h-2.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>{t("issue.translated_by_ai")}</span>
+                </span>
+              </div>
+            )}
+            <p className="text-sm text-zinc-700 dark:text-zinc-200 line-clamp-3 leading-snug">
+              {issue.translated_description || issue.description || t("issue.no_description")}
+            </p>
+          </div>
           {issue.tags && issue.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {issue.tags.map((tag) => (

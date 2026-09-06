@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Languages, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -49,15 +49,51 @@ export function IssueDetailModal({
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
   const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
 
-  const [translatedDesc, setTranslatedDesc] = useState<string | null>(null);
+  const [translatedDesc, setTranslatedDesc] = useState<string | null>(
+    issue.translated_description || null,
+  );
   const [isTranslating, setIsTranslating] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  const translatedLangRef = useRef<string>(locale);
 
   useEffect(() => {
     setCurrentIssue(issue);
+    setTranslatedDesc(issue.translated_description || null);
+    translatedLangRef.current = locale;
+    setShowOriginal(false);
+  }, [issue, locale]);
+
+  useEffect(() => {
+    if (!isOpen || !currentIssue.description) {
+      return;
+    }
+    if (translatedDesc && translatedLangRef.current === locale) {
+      return;
+    }
+    let isMounted = true;
     setTranslatedDesc(null);
     setShowOriginal(false);
-  }, [issue]);
+    apiClient<{ cached: boolean; translated_text?: string }>("/api/ai/cached", {
+      method: "POST",
+      body: JSON.stringify({
+        text: currentIssue.description,
+        target_lang: locale,
+      }),
+    })
+      .then((res) => {
+        if (isMounted && res?.cached && res.translated_text) {
+          setTranslatedDesc(res.translated_text);
+          translatedLangRef.current = locale;
+          setShowOriginal(false);
+        }
+      })
+      .catch(() => {
+        // Cache lookup failed, keep original text
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, currentIssue.description, locale, translatedDesc]);
 
   const [isEditingFull, setIsEditingFull] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
@@ -80,11 +116,10 @@ export function IssueDetailModal({
 
   const handleTranslate = async () => {
     if (!currentIssue.description || isTranslating) return;
-    if (translatedDesc) {
+    if (translatedDesc && translatedLangRef.current === locale) {
       setShowOriginal(!showOriginal);
       return;
     }
-    setIsTranslating(true);
     try {
       const res = await apiClient<{ translated_text: string }>("/api/ai/translate", {
         method: "POST",
@@ -95,6 +130,7 @@ export function IssueDetailModal({
       });
       if (res?.translated_text) {
         setTranslatedDesc(res.translated_text);
+        translatedLangRef.current = locale;
         setShowOriginal(false);
         haptics.success();
       }
@@ -664,12 +700,13 @@ export function IssueDetailModal({
                         type="button"
                         onClick={handleTranslate}
                         disabled={isTranslating}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors shadow-2xs"
                       >
+                        <Languages className="w-3.5 h-3.5" />
                         <span>
                           {isTranslating
                             ? t("issue_detail.translating")
-                            : translatedDesc
+                            : translatedDesc && translatedLangRef.current === locale
                               ? showOriginal
                                 ? t("issue_detail.translate_btn")
                                 : t("issue_detail.show_original")
@@ -679,10 +716,13 @@ export function IssueDetailModal({
                     )}
                   </div>
                 </div>
-                {translatedDesc && !showOriginal ? (
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                      {t("issue_detail.translated_badge", { lang: locale.toUpperCase() })}
+                {translatedDesc && translatedLangRef.current === locale && !showOriginal ? (
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs">
+                      <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span>
+                        {t("issue_detail.translated_badge", { lang: locale.toUpperCase() })}
+                      </span>
                     </div>
                     <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
                       {translatedDesc}
@@ -744,13 +784,13 @@ export function IssueDetailModal({
                   <div className="text-xs text-zinc-400 py-2 text-center">
                     {t("common.loading")}
                   </div>
-                ) : issueScoreLogs.length === 0 ? (
+                ) : (issueScoreLogs || []).length === 0 ? (
                   <div className="text-xs text-zinc-400 py-1">
                     {t("issue_detail.score_breakdown_empty")}
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {issueScoreLogs.map((log) => {
+                    {(issueScoreLogs || []).map((log) => {
                       const isPositive = log.points > 0;
                       const isLocation = log.target_type === "LOCATION";
                       return (

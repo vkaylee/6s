@@ -1,8 +1,10 @@
 package issue
 
 import (
+	"6s/internal/ai"
 	"6s/internal/auth"
 	"6s/internal/db"
+	"6s/internal/i18n"
 	"6s/internal/storage"
 	"context"
 	"database/sql"
@@ -26,26 +28,27 @@ var (
 
 // Response represents the full API format for an issue according to SPEC.md section 6.3.
 type Response struct {
-	ID           int64     `json:"id"`
-	ClientUUID   string    `json:"client_uuid"`
-	Version      int32     `json:"version"`
-	Category     string    `json:"category"`
-	CauseType    string    `json:"cause_type"`
-	LocationCode string    `json:"location_code"`
-	LocationName string    `json:"location_name"`
-	Tags         []string  `json:"tags"`
-	Description  *string   `json:"description"`
-	RejectReason *string   `json:"reject_reason"`
-	PhotoBefore  string    `json:"photo_before"`
-	PhotoDetail  *string   `json:"photo_detail"`
-	PhotoAfter   *string   `json:"photo_after"`
-	ScoreRating  int16     `json:"score_rating"`
-	Status       string    `json:"status"`
-	Creator      UserItem  `json:"creator"`
-	Resolver     *UserItem `json:"resolver"`
-	CreatedAt    string    `json:"created_at"`
-	ResolvedAt   *string   `json:"resolved_at"`
-	ClosedAt     *string   `json:"closed_at"`
+	ID                    int64     `json:"id"`
+	ClientUUID            string    `json:"client_uuid"`
+	Version               int32     `json:"version"`
+	Category              string    `json:"category"`
+	CauseType             string    `json:"cause_type"`
+	LocationCode          string    `json:"location_code"`
+	LocationName          string    `json:"location_name"`
+	Tags                  []string  `json:"tags"`
+	Description           *string   `json:"description"`
+	TranslatedDescription *string   `json:"translated_description,omitempty"`
+	RejectReason          *string   `json:"reject_reason"`
+	PhotoBefore           string    `json:"photo_before"`
+	PhotoDetail           *string   `json:"photo_detail"`
+	PhotoAfter            *string   `json:"photo_after"`
+	ScoreRating           int16     `json:"score_rating"`
+	Status                string    `json:"status"`
+	Creator               UserItem  `json:"creator"`
+	Resolver              *UserItem `json:"resolver"`
+	CreatedAt             string    `json:"created_at"`
+	ResolvedAt            *string   `json:"resolved_at"`
+	ClosedAt              *string   `json:"closed_at"`
 }
 
 // UserItem formats summary user details in Response.
@@ -77,6 +80,7 @@ type Store interface {
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
 	GetLocationByCode(ctx context.Context, code string) (db.Location, error)
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
+	GetTranslationCacheBatch(ctx context.Context, arg db.GetTranslationCacheBatchParams) ([]db.GetTranslationCacheBatchRow, error)
 }
 
 // ServiceImpl manages issue lifecycle and business rules.
@@ -686,7 +690,18 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 		tags = append(tags, t.Code)
 	}
 
-	return toIssueResponse(issue, loc.NameVi, tags, creator, resolver), nil
+	resp := toIssueResponse(issue, loc.NameVi, tags, creator, resolver)
+	if issue.Description.Valid && strings.TrimSpace(issue.Description.String) != "" {
+		targetLang := ai.NormalizeLangCode(i18n.FromContext(ctx))
+		h := ai.ComputeContentHash(issue.Description.String)
+		if cachedRows, cErr := s.store.GetTranslationCacheBatch(ctx, db.GetTranslationCacheBatchParams{
+			ContentHashes: []string{h},
+			TargetLang:    targetLang,
+		}); cErr == nil && len(cachedRows) > 0 && cachedRows[0].TranslatedText != "" {
+			resp.TranslatedDescription = &cachedRows[0].TranslatedText
+		}
+	}
+	return resp, nil
 }
 
 // ListIssuesFiltered lists issues with filter criteria.
@@ -729,42 +744,10 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 		total = int64(len(rows))
 	}
 
-	items := make([]Response, 0, len(rows))
-	for _, r := range rows {
-		issue := db.Issue{
-			ID:           r.ID,
-			ClientUuid:   r.ClientUuid,
-			Version:      r.Version,
-			CreatorID:    r.CreatorID,
-			ResolverID:   r.ResolverID,
-			Category:     r.Category,
-			CauseType:    r.CauseType,
-			LocationCode: r.LocationCode,
-			Description:  r.Description,
-			RejectReason: r.RejectReason,
-			PhotoBefore:  r.PhotoBefore,
-			PhotoDetail:  r.PhotoDetail,
-			PhotoAfter:   r.PhotoAfter,
-			ScoreRating:  r.ScoreRating,
-			Status:       r.Status,
-			CreatedAt:    r.CreatedAt,
-			ResolvedAt:   r.ResolvedAt,
-			ClosedAt:     r.ClosedAt,
-		}
-		creator := db.User{
-			ID:       r.CreatorID,
-			Username: r.CreatorUsername,
-			FullName: r.CreatorFullName,
-		}
-		var resolver *UserItem
-		if r.ResolverID.Valid {
-			resolver = &UserItem{
-				ID:       r.ResolverID.Int64,
-				Username: r.ResolverUsername.String,
-				FullName: r.ResolverFullName.String,
-			}
-		}
+	translations := s.loadTranslationsForRows(ctx, rows)
 
+	items := make([]Response, 0, len(rows))
+	for i, r := range rows {
 		tagRows, tErr := s.store.ListTagsForIssue(ctx, r.ID)
 		if tErr != nil {
 			log.Printf("failed to list tags: %v", tErr)
@@ -774,10 +757,90 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 			tags = append(tags, tr.Code)
 		}
 
-		items = append(items, *toIssueResponse(issue, r.LocationNameVi, tags, creator, resolver))
+		var trans *string
+		if t, ok := translations[i]; ok {
+			trans = &t
+		}
+		items = append(items, toFilteredRowResponse(r, tags, trans))
 	}
 
 	return items, total, nil
+}
+
+func (s *ServiceImpl) loadTranslationsForRows(ctx context.Context, rows []db.ListIssuesFilteredRow) map[int]string {
+	targetLang := ai.NormalizeLangCode(i18n.FromContext(ctx))
+	hashToIndices := make(map[string][]int)
+	var hashes []string
+	for i, r := range rows {
+		if r.Description.Valid && strings.TrimSpace(r.Description.String) != "" {
+			h := ai.ComputeContentHash(r.Description.String)
+			if _, exists := hashToIndices[h]; !exists {
+				hashes = append(hashes, h)
+			}
+			hashToIndices[h] = append(hashToIndices[h], i)
+		}
+	}
+
+	translations := make(map[int]string)
+	if len(hashes) == 0 {
+		return translations
+	}
+
+	cachedRows, err := s.store.GetTranslationCacheBatch(ctx, db.GetTranslationCacheBatchParams{
+		ContentHashes: hashes,
+		TargetLang:    targetLang,
+	})
+	if err != nil {
+		return translations
+	}
+
+	for _, cr := range cachedRows {
+		if cr.TranslatedText != "" {
+			for _, idx := range hashToIndices[cr.ContentHash] {
+				translations[idx] = cr.TranslatedText
+			}
+		}
+	}
+	return translations
+}
+
+func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *string) Response {
+	issue := db.Issue{
+		ID:           r.ID,
+		ClientUuid:   r.ClientUuid,
+		Version:      r.Version,
+		CreatorID:    r.CreatorID,
+		ResolverID:   r.ResolverID,
+		Category:     r.Category,
+		CauseType:    r.CauseType,
+		LocationCode: r.LocationCode,
+		Description:  r.Description,
+		RejectReason: r.RejectReason,
+		PhotoBefore:  r.PhotoBefore,
+		PhotoDetail:  r.PhotoDetail,
+		PhotoAfter:   r.PhotoAfter,
+		ScoreRating:  r.ScoreRating,
+		Status:       r.Status,
+		CreatedAt:    r.CreatedAt,
+		ResolvedAt:   r.ResolvedAt,
+		ClosedAt:     r.ClosedAt,
+	}
+	creator := db.User{
+		ID:       r.CreatorID,
+		Username: r.CreatorUsername,
+		FullName: r.CreatorFullName,
+	}
+	var resolver *UserItem
+	if r.ResolverID.Valid {
+		resolver = &UserItem{
+			ID:       r.ResolverID.Int64,
+			Username: r.ResolverUsername.String,
+			FullName: r.ResolverFullName.String,
+		}
+	}
+	resp := toIssueResponse(issue, r.LocationNameVi, tags, creator, resolver)
+	resp.TranslatedDescription = trans
+	return *resp
 }
 
 func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.User, resolver *UserItem) *Response {

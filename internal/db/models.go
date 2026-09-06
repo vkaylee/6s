@@ -164,6 +164,14 @@ type Tag struct {
 	IsActive bool
 }
 
+type TranslationCache struct {
+	ContentHash    string
+	TargetLang     string
+	SourceText     string
+	TranslatedText string
+	CreatedAt      time.Time
+}
+
 type User struct {
 	ID                   int64
 	Username             string

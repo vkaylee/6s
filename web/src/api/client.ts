@@ -1,3 +1,4 @@
+import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
 
 export interface ApiEnvelope<T> {
@@ -118,6 +119,14 @@ export async function apiClient<T>(url: string, options: RequestOptions = {}): P
 
   if (!options.skipAuth && accessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  const { locale } = useI18nStore.getState();
+  if (locale && !headers.has("X-Locale")) {
+    headers.set("X-Locale", locale);
+  }
+  if (options.body && typeof options.body === "string" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
   let response: Response;
   try {

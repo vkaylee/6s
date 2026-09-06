@@ -68,6 +68,7 @@ export interface IssueItem {
   location_code: string;
   location_name: string;
   description: string;
+  translated_description?: string | null;
   reject_reason?: string | null;
   photo_before: string;
   photo_detail?: string | null;
