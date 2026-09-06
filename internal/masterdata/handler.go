@@ -19,6 +19,7 @@ type Store interface {
 	ListAllLocations(ctx context.Context) ([]db.Location, error)
 	CreateLocation(ctx context.Context, arg db.CreateLocationParams) (db.Location, error)
 	UpdateLocationActiveStatus(ctx context.Context, arg db.UpdateLocationActiveStatusParams) (db.Location, error)
+	UpdateLocation(ctx context.Context, arg db.UpdateLocationParams) (db.Location, error)
 	ListTags(ctx context.Context) ([]db.Tag, error)
 	ListAllTags(ctx context.Context) ([]db.Tag, error)
 	UpsertTag(ctx context.Context, arg db.UpsertTagParams) (db.Tag, error)
@@ -128,6 +129,57 @@ func (h *Handler) UpdateLocationStatus(w http.ResponseWriter, r *http.Request) {
 	loc, err := h.store.UpdateLocationActiveStatus(r.Context(), db.UpdateLocationActiveStatusParams{
 		Code:     code,
 		IsActive: req.IsActive,
+	})
+	if err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))
+		return
+	}
+
+	response.JSON(w, http.StatusOK, LocationResponse{
+		Code:     loc.Code,
+		NameVi:   loc.NameVi,
+		NameZh:   loc.NameZh,
+		NameEn:   loc.NameEn,
+		QRCode:   loc.QrCode,
+		IsActive: loc.IsActive,
+	})
+}
+
+// UpdateLocationRequest defines payload to update a location's details.
+type UpdateLocationRequest struct {
+	NameVi string `json:"name_vi"`
+	NameZh string `json:"name_zh"`
+	NameEn string `json:"name_en"`
+	QRCode string `json:"qr_code"`
+}
+
+// UpdateLocation handles PUT /api/locations/{code} (Admin only).
+func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if code == "" {
+		code = r.PathValue("code")
+	}
+	if code == "" {
+		code = r.URL.Query().Get("code")
+	}
+
+	var req UpdateLocationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+
+	if req.NameVi == "" || req.QRCode == "" {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationMissingFields))
+		return
+	}
+
+	loc, err := h.store.UpdateLocation(r.Context(), db.UpdateLocationParams{
+		Code:   code,
+		NameVi: req.NameVi,
+		NameZh: req.NameZh,
+		NameEn: req.NameEn,
+		QrCode: req.QRCode,
 	})
 	if err != nil {
 		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))

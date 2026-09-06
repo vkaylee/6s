@@ -74,6 +74,13 @@ export function AdminConfigPage() {
   const [newNameEn, setNewNameEn] = useState("");
   const [newQr, setNewQr] = useState("");
   const [isAddingLocation, setIsAddingLocation] = useState(false);
+  // Edit location state
+  const [editingLocation, setEditingLocation] = useState<LocationItem | null>(null);
+  const [editNameVi, setEditNameVi] = useState("");
+  const [editNameZh, setEditNameZh] = useState("");
+  const [editNameEn, setEditNameEn] = useState("");
+  const [editQr, setEditQr] = useState("");
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
 
   // Notification config state
   const [notifEnabled, setNotifEnabled] = useState(true);
@@ -151,6 +158,46 @@ export function AdminConfigPage() {
       modalDialog.alert(t("admin.location_add_error"));
     } finally {
       setIsAddingLocation(false);
+    }
+  };
+
+  const handleOpenEditLocation = (loc: LocationItem) => {
+    setEditingLocation(loc);
+    setEditNameVi(loc.name_vi);
+    setEditNameZh(loc.name_zh || "");
+    setEditNameEn(loc.name_en || "");
+    setEditQr(loc.qr_code || `LOC:${loc.code}`);
+  };
+
+  const handleSaveEditLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLocation || !editNameVi.trim()) {
+      return;
+    }
+    setIsUpdatingLocation(true);
+    const qrCodeVal = editQr.trim() || `LOC:${editingLocation.code}`;
+    try {
+      const updated = await apiClient<LocationItem>(
+        `/api/locations/${encodeURIComponent(editingLocation.code)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            name_vi: editNameVi.trim(),
+            name_zh: editNameZh.trim(),
+            name_en: editNameEn.trim(),
+            qr_code: qrCodeVal,
+          }),
+        },
+      );
+      haptics.success();
+      setLocations((prev) => prev.map((l) => (l.code === updated.code ? { ...l, ...updated } : l)));
+      setEditingLocation(null);
+      await modalDialog.alert(t("admin.location_update_success"));
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.location_update_error"));
+    } finally {
+      setIsUpdatingLocation(false);
     }
   };
 
@@ -782,22 +829,143 @@ export function AdminConfigPage() {
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleToggleLocation(loc.code, loc.is_active)}
-                          className={`text-xs font-bold px-3 py-2 rounded-xl min-h-[44px] transition-colors border ${
-                            loc.is_active
-                              ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-100"
-                              : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100"
-                          }`}
-                        >
-                          {loc.is_active ? t("admin.inactive_status") : t("admin.active_status")}
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditLocation(loc)}
+                            className="text-xs font-bold px-3 py-2 rounded-xl min-h-[44px] transition-colors border bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700"
+                          >
+                            ✏️ {t("admin.edit_location_btn")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleLocation(loc.code, loc.is_active)}
+                            className={`text-xs font-bold px-3 py-2 rounded-xl min-h-[44px] transition-colors border ${
+                              loc.is_active
+                                ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-100"
+                                : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100"
+                            }`}
+                          >
+                            {loc.is_active ? t("admin.inactive_status") : t("admin.active_status")}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </section>
+
+              {/* Modal Edit Location */}
+              {editingLocation && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-2xl w-full max-w-md space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <div>
+                        <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">
+                          {t("admin.edit_location_title")}
+                        </h3>
+                        <p className="text-xs text-zinc-500 font-mono mt-0.5">
+                          {editingLocation.code}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingLocation(null)}
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1.5 rounded-lg text-lg"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveEditLocation} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">
+                          {t("admin.location_code_label")}
+                        </label>
+                        <input
+                          type="text"
+                          value={editingLocation.code}
+                          disabled
+                          className="w-full bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-mono text-zinc-500 min-h-[44px] cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">
+                          {t("admin.location_name_vi")}
+                        </label>
+                        <input
+                          type="text"
+                          value={editNameVi}
+                          onChange={(e) => setEditNameVi(e.target.value)}
+                          placeholder={t("admin.location_name_vi_placeholder")}
+                          required
+                          className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-500 mb-1">
+                            {t("admin.location_name_zh")}
+                          </label>
+                          <input
+                            type="text"
+                            value={editNameZh}
+                            onChange={(e) => setEditNameZh(e.target.value)}
+                            placeholder={t("admin.location_name_zh_placeholder")}
+                            className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-500 mb-1">
+                            {t("admin.location_name_en")}
+                          </label>
+                          <input
+                            type="text"
+                            value={editNameEn}
+                            onChange={(e) => setEditNameEn(e.target.value)}
+                            placeholder={t("admin.location_name_en_placeholder")}
+                            className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">
+                          {t("admin.location_qr_label")}
+                        </label>
+                        <input
+                          type="text"
+                          value={editQr}
+                          onChange={(e) => setEditQr(e.target.value)}
+                          placeholder={t("admin.location_qr_placeholder")}
+                          className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-mono min-h-[44px]"
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingLocation(null)}
+                          className="flex-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold py-3 px-4 rounded-xl min-h-[48px] transition-colors"
+                        >
+                          {t("admin.cancel_edit_btn")}
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isUpdatingLocation}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl min-h-[48px] flex items-center justify-center transition-colors shadow-sm disabled:opacity-50"
+                        >
+                          {isUpdatingLocation
+                            ? t("admin.saving_location_btn")
+                            : t("admin.save_location_btn")}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

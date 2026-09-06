@@ -46,6 +46,42 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("Chỉnh sửa");
     expect(html).toContain("Biến động điểm 6S của sự cố");
   });
+
+  it("renders quick location edit button when user can edit and locations are provided", () => {
+    useAuthStore.setState({
+      user: {
+        id: 10,
+        username: "van_a",
+        full_name: "Nguyễn Văn A",
+        role: UserRole.USER,
+      },
+    });
+    const html = renderToString(
+      <IssueDetailModal
+        issue={mockIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+        locations={[
+          {
+            code: "LINE_A1",
+            name_vi: "Chuyền May A1",
+            name_zh: "一号线",
+            name_en: "Sewing Line A1",
+            is_active: true,
+          },
+          {
+            code: "LINE_B2",
+            name_vi: "Chuyền May B2",
+            name_zh: "二号线",
+            name_en: "Sewing Line B2",
+            is_active: true,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Chạm để sửa nhanh vị trí (In-place Quick Edit)");
+  });
   it("renders detail photo when photo_detail exists", () => {
     const issueWithDetail: IssueItem = {
       ...mockIssue,

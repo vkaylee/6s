@@ -156,6 +156,15 @@ SET is_active = $2
 WHERE code = $1
 RETURNING *;
 
+-- name: UpdateLocation :one
+UPDATE locations
+SET name_vi = $2,
+    name_zh = $3,
+    name_en = $4,
+    qr_code = $5
+WHERE code = $1
+RETURNING *;
+
 -- name: ListTags :many
 SELECT * FROM tags
 WHERE is_active = TRUE

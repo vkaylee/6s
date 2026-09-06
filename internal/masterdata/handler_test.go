@@ -46,6 +46,19 @@ func (m *mockMDStore) CreateLocation(_ context.Context, arg db.CreateLocationPar
 	return loc, nil
 }
 
+func (m *mockMDStore) UpdateLocation(_ context.Context, arg db.UpdateLocationParams) (db.Location, error) {
+	for i, l := range m.locations {
+		if l.Code == arg.Code {
+			m.locations[i].NameVi = arg.NameVi
+			m.locations[i].NameZh = arg.NameZh
+			m.locations[i].NameEn = arg.NameEn
+			m.locations[i].QrCode = arg.QrCode
+			return m.locations[i], nil
+		}
+	}
+	return db.Location{}, context.DeadlineExceeded
+}
+
 func (m *mockMDStore) ListTags(_ context.Context) ([]db.Tag, error) {
 	var active []db.Tag
 	for _, t := range m.tags {
@@ -238,5 +251,39 @@ func TestMasterDataHandler(t *testing.T) {
 	handler.UpdateLocationStatus(rrMissingCode, reqMissingCode)
 	if rrMissingCode.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 on missing location code, got %d", rrMissingCode.Code)
+	}
+
+	// 7. Update Location Details (Success)
+	updateLocReq := UpdateLocationRequest{
+		NameVi: "Khu vực A (Đã sửa)",
+		NameZh: "区域A (已修改)",
+		NameEn: "Area A (Updated)",
+		QRCode: "LOC:A_NEW",
+	}
+	updateLocBody, _ := json.Marshal(updateLocReq)
+	reqUpdateLoc := httptest.NewRequest("PUT", "/api/locations/LINE_A1", bytes.NewReader(updateLocBody))
+	reqUpdateLoc.SetPathValue("code", "LINE_A1")
+	rrUpdateLoc := httptest.NewRecorder()
+	handler.UpdateLocation(rrUpdateLoc, reqUpdateLoc)
+	if rrUpdateLoc.Code != http.StatusOK {
+		t.Fatalf("expected 200 on update location, got %d, body: %s", rrUpdateLoc.Code, rrUpdateLoc.Body.String())
+	}
+	var updatedLocResp struct {
+		Data LocationResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrUpdateLoc.Body).Decode(&updatedLocResp)
+	if updatedLocResp.Data.NameVi != "Khu vực A (Đã sửa)" || updatedLocResp.Data.QRCode != "LOC:A_NEW" {
+		t.Errorf("unexpected updated location: %+v", updatedLocResp.Data)
+	}
+
+	// 8. Update Location Details (Validation Error - Missing NameVi or QRCode)
+	badUpdateReq := UpdateLocationRequest{NameVi: ""}
+	badUpdateBody, _ := json.Marshal(badUpdateReq)
+	reqBadUpdate := httptest.NewRequest("PUT", "/api/locations/LINE_A1", bytes.NewReader(badUpdateBody))
+	reqBadUpdate.SetPathValue("code", "LINE_A1")
+	rrBadUpdate := httptest.NewRecorder()
+	handler.UpdateLocation(rrBadUpdate, reqBadUpdate)
+	if rrBadUpdate.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 on missing required fields for update location, got %d", rrBadUpdate.Code)
 	}
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -269,17 +270,11 @@ export function CreateIssueModal({
             <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
               {t("issue.step_location")}
             </label>
-            <select
+            <LocationCombobox
+              locations={locations}
               value={locationCode}
-              onChange={(e) => setLocationCode(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base font-bold text-zinc-900 dark:text-zinc-100 min-h-[56px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {locations.map((loc) => (
-                <option key={loc.code} value={loc.code}>
-                  {loc.name_vi} ({loc.code}) - {loc.name_zh}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setLocationCode(val)}
+            />
           </div>
 
           {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}

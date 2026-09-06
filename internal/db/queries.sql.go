@@ -1875,6 +1875,46 @@ func (q *Queries) SetAllTagsActiveStatus(ctx context.Context, isActive bool) err
 	return err
 }
 
+const updateLocation = `-- name: UpdateLocation :one
+UPDATE locations
+SET name_vi = $2,
+    name_zh = $3,
+    name_en = $4,
+    qr_code = $5
+WHERE code = $1
+RETURNING id, code, name_vi, name_zh, name_en, qr_code, is_active, created_at
+`
+
+type UpdateLocationParams struct {
+	Code   string
+	NameVi string
+	NameZh string
+	NameEn string
+	QrCode string
+}
+
+func (q *Queries) UpdateLocation(ctx context.Context, arg UpdateLocationParams) (Location, error) {
+	row := q.db.QueryRowContext(ctx, updateLocation,
+		arg.Code,
+		arg.NameVi,
+		arg.NameZh,
+		arg.NameEn,
+		arg.QrCode,
+	)
+	var i Location
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.QrCode,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateLocationActiveStatus = `-- name: UpdateLocationActiveStatus :one
 UPDATE locations
 SET is_active = $2

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -51,6 +52,7 @@ export function IssueDetailModal({
 
   const [isEditingFull, setIsEditingFull] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
   const [rejectReason, setRejectReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -168,6 +170,29 @@ export function IssueDetailModal({
     }
   };
 
+  const handleQuickChangeLocation = async (newLocCode: string) => {
+    if (!newLocCode || newLocCode === currentIssue.location_code) {
+      setIsEditingLocation(false);
+      return;
+    }
+    try {
+      const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ location_code: newLocCode }),
+      });
+      haptics.success();
+      if (updated) {
+        setCurrentIssue(updated);
+      }
+      setIsEditingLocation(false);
+      onRefresh();
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("issue_detail.update_location_error"));
+    }
+  };
+
   const handleResolveOfflineOrOnline = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
@@ -273,7 +298,10 @@ export function IssueDetailModal({
           <div className="flex items-center space-x-2">
             <button
               type="button"
-              onClick={() => setIsEditingCategory(!isEditingCategory)}
+              onClick={() => {
+                setIsEditingCategory(!isEditingCategory);
+                setIsEditingLocation(false);
+              }}
               className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1"
               title={t("issue_detail.quick_edit_category")}
             >
@@ -281,9 +309,24 @@ export function IssueDetailModal({
               <span className="text-xs opacity-50">✎</span>
             </button>
             <div>
-              <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
-                #{currentIssue.id} - {currentIssue.location_name || currentIssue.location_code}
-              </h2>
+              <div className="flex items-center space-x-1.5">
+                <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
+                  #{currentIssue.id} - {currentIssue.location_name || currentIssue.location_code}
+                </h2>
+                {canEdit && locations && locations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingLocation(!isEditingLocation);
+                      setIsEditingCategory(false);
+                    }}
+                    className="text-xs text-zinc-400 hover:text-blue-600 p-0.5"
+                    title={t("issue_detail.quick_edit_location")}
+                  >
+                    ✎
+                  </button>
+                )}
+              </div>
               <span className="text-xs text-zinc-400">v{currentIssue.version}</span>
             </div>
           </div>
@@ -329,6 +372,16 @@ export function IssueDetailModal({
           </div>
         )}
 
+        {/* In-place quick edit location dropdown */}
+        {isEditingLocation && locations && locations.length > 0 && (
+          <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700">
+            <LocationCombobox
+              locations={locations}
+              value={currentIssue.location_code}
+              onChange={handleQuickChangeLocation}
+            />
+          </div>
+        )}
         {/* Detail Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Split Slider if After photo exists, otherwise show Before photo */}
