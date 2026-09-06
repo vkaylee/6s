@@ -116,6 +116,50 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("/uploads/before/before.jpg");
     expect(html).toContain("/uploads/after/c0a80101-0000-4000-8000-000000000101_after.jpg");
   });
+  it("renders status badge and tags in modal", () => {
+    useAuthStore.setState({
+      user: {
+        id: 10,
+        username: "van_a",
+        full_name: "Nguyễn Văn A",
+        role: UserRole.USER,
+      },
+    });
+    const html = renderToString(
+      <IssueDetailModal
+        issue={mockIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+        tags={[
+          {
+            tag_code: "5S",
+            category: IssueCategory.S5,
+            label_vi: "Chuẩn 5S",
+            label_zh: "5S标准",
+            label_en: "5S Standard",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Mới ghi nhận");
+    expect(html).toContain("#Chuẩn 5S");
+  });
+
+  it("does not render quick edit category button when user cannot edit", () => {
+    useAuthStore.setState({
+      user: {
+        id: 99,
+        username: "other_user",
+        full_name: "Người khác",
+        role: UserRole.USER,
+      },
+    });
+    const html = renderToString(
+      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+    expect(html).not.toContain("Chạm để sửa nhanh phân loại S (In-place Quick Edit)");
+  });
 
   it("attaches wheel listener with passive: false to prevent scroll cancellation warning", () => {
     const listeners: { type: string; options: unknown }[] = [];

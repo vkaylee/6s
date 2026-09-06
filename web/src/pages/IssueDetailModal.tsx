@@ -290,27 +290,57 @@ export function IssueDetailModal({
     }
   };
 
+  const isOpenStatus = currentIssue.status === IssueStatus.OPEN;
+  const isPendingReview = currentIssue.status === IssueStatus.PENDING_REVIEW;
+  const isClosedStatus = currentIssue.status === IssueStatus.CLOSED;
+
+  const statusBadge = isOpenStatus ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shrink-0">
+      ⚠️ {t("status.OPEN")}
+    </span>
+  ) : isPendingReview ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+      ⏳ {t("status.PENDING_REVIEW")}
+    </span>
+  ) : isClosedStatus ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+      ✓ {t("status.CLOSED")}
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shrink-0">
+      {t("status.INVALIDATED")}
+    </span>
+  );
+
+  const dateLocale = locale === "zh" ? "zh-CN" : locale === "en" ? "en-US" : "vi-VN";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden sm:my-auto flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsEditingCategory(!isEditingCategory);
-                setIsEditingLocation(false);
-              }}
-              className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1"
-              title={t("issue_detail.quick_edit_category")}
-            >
-              <span>{currentIssue.category}</span>
-              <span className="text-xs opacity-50">✎</span>
-            </button>
-            <div>
-              <div className="flex items-center space-x-1.5">
-                <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2 min-w-0">
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingCategory(!isEditingCategory);
+                  setIsEditingLocation(false);
+                }}
+                className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1 shrink-0"
+                title={t("issue_detail.quick_edit_category")}
+              >
+                <span>{currentIssue.category}</span>
+                <span className="text-xs opacity-50">✎</span>
+              </button>
+            ) : (
+              <span className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shrink-0">
+                {currentIssue.category}
+              </span>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100 truncate">
                   #{currentIssue.id} - {currentIssue.location_name || currentIssue.location_code}
                 </h2>
                 {canEdit && locations && locations.length > 0 && (
@@ -320,17 +350,22 @@ export function IssueDetailModal({
                       setIsEditingLocation(!isEditingLocation);
                       setIsEditingCategory(false);
                     }}
-                    className="text-xs text-zinc-400 hover:text-blue-600 p-0.5"
+                    className="text-xs text-zinc-400 hover:text-blue-600 p-0.5 shrink-0"
                     title={t("issue_detail.quick_edit_location")}
                   >
                     ✎
                   </button>
                 )}
               </div>
-              <span className="text-xs text-zinc-400">v{currentIssue.version}</span>
+              <div className="flex items-center space-x-2 text-xs text-zinc-400">
+                <span>{currentIssue.location_code}</span>
+                <span>•</span>
+                <span>v{currentIssue.version}</span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {statusBadge}
             {canEdit && (
               <button
                 type="button"
@@ -339,7 +374,7 @@ export function IssueDetailModal({
                 title={t("issue.edit")}
               >
                 <span>✏️</span>
-                <span>{t("issue.edit")}</span>
+                <span className="hidden xs:inline">{t("issue.edit")}</span>
               </button>
             )}
             <button
@@ -486,16 +521,42 @@ export function IssueDetailModal({
           )}
 
           {/* Description & Tags */}
-          <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2">
+          <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2.5">
             <div className="flex items-center justify-between text-xs text-zinc-500">
               <span>
                 {t("issue_detail.reporter_label")} <strong>{currentIssue.creator_name}</strong>
               </span>
-              <span>{new Date(currentIssue.created_at).toLocaleDateString("vi-VN")}</span>
+              <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
             </div>
             <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">
               {currentIssue.description || "Không có mô tả chi tiết."}
             </p>
+            {/* Tags display */}
+            {currentIssue.tags && currentIssue.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {currentIssue.tags.map((tagCode) => {
+                  const matchedTag = tags.find((tg) => (tg.tag_code || tg.code) === tagCode);
+                  const tagName = matchedTag
+                    ? resolveI18n(
+                        {
+                          vi: matchedTag.label_vi || matchedTag.name_vi || tagCode,
+                          zh: matchedTag.label_zh || matchedTag.name_zh || tagCode,
+                          en: matchedTag.label_en || matchedTag.name_en || tagCode,
+                        },
+                        locale,
+                      )
+                    : tagCode;
+                  return (
+                    <span
+                      key={tagCode}
+                      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300"
+                    >
+                      {`#${tagName}`}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             {currentIssue.reject_reason && (
               <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
                 <strong>{t("issue_detail.reject_reason_label")}</strong>{" "}
@@ -626,33 +687,40 @@ export function IssueDetailModal({
 
           {/* Action: Close (Duyệt đạt) */}
           {currentIssue.status === IssueStatus.PENDING_REVIEW && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!canClose || isSubmitting}
-                onClick={() => setShowConfirmAction("CLOSE")}
-                className={`flex-1 font-black text-sm py-4 px-4 rounded-2xl min-h-[56px] flex items-center justify-center space-x-1 shadow-md ${
-                  canClose
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                    : "opacity-40 bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                }`}
-                title={closeDisabledReason || undefined}
-              >
-                <span>
-                  {canClose
-                    ? `✓ ${t("issue.approve").toUpperCase()}`
-                    : `🔒 ${closeDisabledReason || t("issue_detail.locked")}`}
-                </span>
-              </button>
+            <div className="space-y-1.5">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={!canClose || isSubmitting}
+                  onClick={() => setShowConfirmAction("CLOSE")}
+                  className={`flex-1 font-black text-sm py-4 px-4 rounded-2xl min-h-[56px] flex items-center justify-center space-x-1 shadow-md transition ${
+                    canClose
+                      ? "bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white"
+                      : "opacity-50 bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  }`}
+                >
+                  <span>
+                    {canClose
+                      ? `✓ ${t("issue.approve").toUpperCase()}`
+                      : `🔒 ${t("issue_detail.locked")}`}
+                  </span>
+                </button>
 
-              <button
-                type="button"
-                disabled={!canClose || isSubmitting}
-                onClick={() => setShowConfirmAction("REOPEN")}
-                className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs"
-              >
-                {t("issue.reopen")}
-              </button>
+                <button
+                  type="button"
+                  disabled={!canClose || isSubmitting}
+                  onClick={() => setShowConfirmAction("REOPEN")}
+                  className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs disabled:opacity-40"
+                >
+                  {t("issue.reopen")}
+                </button>
+              </div>
+              {!canClose && closeDisabledReason && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium px-1 flex items-center gap-1">
+                  <span>⚠️</span>
+                  <span>{closeDisabledReason}</span>
+                </p>
+              )}
             </div>
           )}
 
@@ -662,55 +730,62 @@ export function IssueDetailModal({
               <button
                 type="button"
                 onClick={() => setShowConfirmAction("INVALID")}
-                className="text-xs text-rose-600 hover:text-rose-700 font-bold py-2 text-center"
+                className="w-full text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold py-3 px-4 rounded-xl min-h-[44px] flex items-center justify-center border border-rose-200 dark:border-rose-900/60 transition"
               >
                 {t("issue.invalidate")}
               </button>
             )}
         </div>
 
-        {/* Confirmation Modal */}
+        {/* Inline Action Confirmation Drawer (Glove Friendly, No Nested Modal Jump) */}
         {showConfirmAction && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80">
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl max-w-sm w-full space-y-4 border border-zinc-200 dark:border-zinc-800 shadow-2xl">
-              <h3 className="font-black text-lg text-zinc-900 dark:text-zinc-100">
+          <div className="border-t border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-850 p-4 space-y-3 animate-fade-in shadow-inner">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-sm text-zinc-900 dark:text-zinc-100">
                 {showConfirmAction === "CLOSE"
                   ? t("issue_detail.confirm_close_title")
                   : showConfirmAction === "REOPEN"
                     ? t("issue_detail.confirm_reopen_title")
                     : t("issue_detail.confirm_invalid_title")}
               </h3>
+              <button
+                type="button"
+                onClick={() => setShowConfirmAction(null)}
+                className="text-zinc-400 hover:text-zinc-600 text-xs font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
 
-              {(showConfirmAction === IssueStatus.INVALID || showConfirmAction === "REOPEN") && (
-                <textarea
-                  rows={2}
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder={t("issue_detail.reason_placeholder")}
-                  className="w-full bg-zinc-50 dark:bg-zinc-800 border rounded-xl p-3 text-sm focus:outline-none"
-                />
-              )}
+            {(showConfirmAction === IssueStatus.INVALID || showConfirmAction === "REOPEN") && (
+              <textarea
+                rows={2}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder={t("issue_detail.reason_placeholder")}
+                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm focus:outline-none"
+              />
+            )}
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (showConfirmAction === "CLOSE") handleConfirmClose();
-                    if (showConfirmAction === "REOPEN") handleConfirmReopen();
-                    if (showConfirmAction === IssueStatus.INVALID) handleConfirmInvalid();
-                  }}
-                  className="flex-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-black py-3 rounded-xl min-h-[48px]"
-                >
-                  {t("common.confirm")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmAction(null)}
-                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-xl min-h-[48px]"
-                >
-                  {t("common.cancel")}
-                </button>
-              </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (showConfirmAction === "CLOSE") handleConfirmClose();
+                  if (showConfirmAction === "REOPEN") handleConfirmReopen();
+                  if (showConfirmAction === IssueStatus.INVALID) handleConfirmInvalid();
+                }}
+                className="flex-1 bg-zinc-900 dark:bg-zinc-100 hover:bg-black dark:hover:bg-white text-white dark:text-zinc-900 font-black py-3 rounded-xl min-h-[48px] text-sm shadow-sm"
+              >
+                {t("common.confirm")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConfirmAction(null)}
+                className="flex-1 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-xl min-h-[48px] text-sm"
+              >
+                {t("common.cancel")}
+              </button>
             </div>
           </div>
         )}
