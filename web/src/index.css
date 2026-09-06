@@ -11,3 +11,16 @@
     scrollbar-width: none;
   }
 }
+
+/* Recharts remove focus outline bounding boxes */
+.recharts-surface,
+.recharts-surface *,
+.recharts-wrapper,
+.recharts-layer,
+.recharts-sector,
+.recharts-pie-sector,
+.recharts-bar-rectangle,
+path.recharts-curve {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}

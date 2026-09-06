@@ -18,6 +18,7 @@ import { AdminConfigPage } from "./pages/AdminConfigPage.tsx";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
 import { IssueDetailModal } from "./pages/IssueDetailModal.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
+import { ReportsPage } from "./pages/ReportsPage.tsx";
 import { ScoreLedgerPage } from "./pages/ScoreLedgerPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 import { useAuthStore } from "./store/authStore.ts";
@@ -718,6 +719,11 @@ export function App() {
         <Route path="/admin">
           <ProtectedRoute>
             <AdminConfigPage />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/reports">
+          <ProtectedRoute>
+            <ReportsPage />
           </ProtectedRoute>
         </Route>
         <Route path="/leaderboard/locations/:code">
