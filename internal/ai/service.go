@@ -1,20 +1,20 @@
 package ai
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/tidwall/gjson"
 
 	"6s/internal/apperror"
 	"6s/internal/crypto"
@@ -231,13 +231,16 @@ func resolveModel(cfg db.AiConfig) (string, error) {
 	return model, nil
 }
 
-// buildEndpoint ensures the base URL points to the chat completions path.
-func buildEndpoint(baseURL string) string {
-	ep := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if !strings.HasSuffix(ep, "/chat/completions") {
-		ep += "/chat/completions"
+// normalizeBaseURL ensures the base URL points to a standard OpenAI-compatible base.
+func normalizeBaseURL(raw string) string {
+	ep := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if ep == "" {
+		return ""
 	}
-	return ep
+	if u, err := url.Parse(ep); err == nil && (u.Path == "" || u.Path == "/") {
+		ep += "/v1"
+	}
+	return ep + "/"
 }
 
 // resolveTargetLang converts code to descriptive language name.
@@ -252,125 +255,37 @@ func resolveTargetLang(lang string) string {
 	}
 }
 
-// buildRequestBody formats standard OpenAI chat completion JSON.
-func buildRequestBody(model, text, targetLang string) ([]byte, error) {
-	langName := resolveTargetLang(targetLang)
-	reqBody := map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{
-				"role":    "system",
-				"content": "You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations.",
-			},
-			{
-				"role":    "user",
-				"content": text,
-			},
-		},
-		"temperature": 0.1,
-		"stream":      false,
+func (s *Service) newOpenAIClient(baseURL, apiKey string) openai.Client {
+	opts := []option.RequestOption{
+		option.WithBaseURL(normalizeBaseURL(baseURL)),
 	}
-	return json.Marshal(reqBody)
+	if apiKey != "" {
+		opts = append(opts, option.WithAPIKey(apiKey))
+	}
+	if s.httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(s.httpClient))
+	}
+	return openai.NewClient(opts...)
 }
 
-type chatMessage struct {
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content"`
-	Reasoning        string `json:"reasoning"`
-}
-
-type chatDelta struct {
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content"`
-}
-
-type chatChoice struct {
-	Message chatMessage `json:"message"`
-	Delta   chatDelta   `json:"delta"`
-}
-
-type chatResponsePayload struct {
-	Choices []chatChoice `json:"choices"`
-	Error   *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
-func parseSSEResponse(trimmed []byte) string {
-	if !bytes.HasPrefix(trimmed, []byte("data:")) {
+func extractMessageContent(completion *openai.ChatCompletion) string {
+	if len(completion.Choices) == 0 {
 		return ""
 	}
-	var sb strings.Builder
-	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
-			continue
-		}
-		var chunk chatResponsePayload
-		dec := json.NewDecoder(strings.NewReader(payload))
-		if err := dec.Decode(&chunk); err == nil && len(chunk.Choices) > 0 {
-			c := chunk.Choices[0]
-			text := c.Delta.Content
-			if text == "" {
-				text = c.Message.Content
-			}
-			sb.WriteString(text)
-		}
+	content := strings.TrimSpace(completion.Choices[0].Message.Content)
+	if content != "" {
+		return content
 	}
-	return strings.TrimSpace(sb.String())
-}
-
-func extractChoiceContent(first chatChoice) string {
-	candidates := []string{
-		first.Message.Content,
-		first.Message.ReasoningContent,
-		first.Message.Reasoning,
-		first.Delta.Content,
-	}
-	for _, text := range candidates {
-		if trimmed := strings.TrimSpace(text); trimmed != "" {
-			return trimmed
+	raw := completion.RawJSON()
+	if raw != "" {
+		if val := strings.TrimSpace(gjson.Get(raw, "choices.0.message.reasoning_content").String()); val != "" {
+			return val
+		}
+		if val := strings.TrimSpace(gjson.Get(raw, "choices.0.message.reasoning").String()); val != "" {
+			return val
 		}
 	}
 	return ""
-}
-
-// parseChatResponse extracts translated text from OpenAI response.
-func parseChatResponse(bodyBytes []byte) (string, error) {
-	trimmed := bytes.TrimSpace(bodyBytes)
-	if len(trimmed) == 0 {
-		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, "empty response from AI gateway")
-	}
-
-	if sseText := parseSSEResponse(trimmed); sseText != "" {
-		return sseText, nil
-	}
-
-	var chatResp chatResponsePayload
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	if err := dec.Decode(&chatResp); err != nil {
-		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, "invalid JSON response from AI gateway").WithCause(err)
-	}
-
-	if chatResp.Error != nil && chatResp.Error.Message != "" {
-		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, "empty response from AI gateway")
-	}
-
-	content := extractChoiceContent(chatResp.Choices[0])
-	if content == "" {
-		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, "empty response content from AI gateway")
-	}
-
-	return content, nil
 }
 
 func (s *Service) getDecryptedAPIKey(apiKey string) string {
@@ -380,38 +295,6 @@ func (s *Service) getDecryptedAPIKey(apiKey string) string {
 		}
 	}
 	return apiKey
-}
-
-func (s *Service) sendChatRequest(ctx context.Context, endpoint, apiKey string, jsonBytes []byte) ([]byte, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBytes))
-	if err != nil {
-		return nil, apperror.Internal(i18n.ErrInternal).WithCause(err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if apiKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, err.Error()).WithCause(err)
-	}
-	defer func() {
-		if cErr := resp.Body.Close(); cErr != nil {
-			log.Printf("close ai resp body err: %v", cErr)
-		}
-	}()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, apperror.Internal(i18n.ErrInternal).WithCause(err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, fmt.Sprintf("status %d: %s", resp.StatusCode, string(bodyBytes)))
-	}
-
-	return bodyBytes, nil
 }
 
 // Translate translates the given text into targetLang using OpenAI-compatible chat completion.
@@ -426,25 +309,38 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 		return "", apperror.BadRequest(i18n.ErrAINotEnabled)
 	}
 
+	baseURL := strings.TrimSpace(cfg.BaseUrl)
+	if baseURL == "" {
+		return "", apperror.BadRequest(i18n.ErrAIBaseURLMissing)
+	}
+
 	model, err := resolveModel(cfg)
 	if err != nil {
 		return "", err
 	}
 
-	jsonBytes, err := buildRequestBody(model, text, targetLang)
-	if err != nil {
-		return "", apperror.Internal(i18n.ErrInternal).WithCause(err)
-	}
-
 	apiKey := s.getDecryptedAPIKey(cfg.ApiKey)
-	endpoint := buildEndpoint(cfg.BaseUrl)
+	client := s.newOpenAIClient(baseURL, apiKey)
+	langName := resolveTargetLang(targetLang)
 
-	bodyBytes, err := s.sendChatRequest(ctx, endpoint, apiKey, jsonBytes)
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations."),
+			openai.UserMessage(text),
+		},
+		Model:       model,
+		Temperature: openai.Float(0.1),
+	})
 	if err != nil {
-		return "", err
+		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, err.Error()).WithCause(err)
 	}
 
-	return parseChatResponse(bodyBytes)
+	content := extractMessageContent(completion)
+	if content == "" {
+		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAITranslateFailed, "empty response content from AI gateway")
+	}
+
+	return content, nil
 }
 
 func resolvePurposeModel(purpose string, cfg db.AiConfig) string {
@@ -504,26 +400,15 @@ func (s *Service) TestConnection(ctx context.Context, req TestRequest) (TestResp
 		return TestResponse{Success: false, Error: err.Error()}, err
 	}
 
-	endpoint := buildEndpoint(baseURL)
-	reqBody := map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{
-				"role":    "user",
-				"content": "ping",
-			},
-		},
-		"max_tokens": 16,
-		"stream":     false,
-	}
-
-	jsonBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return TestResponse{Success: false, ModelUsed: model, Error: err.Error()}, nil
-	}
-
+	client := s.newOpenAIClient(baseURL, apiKey)
 	start := time.Now()
-	bodyBytes, err := s.sendChatRequest(ctx, endpoint, apiKey, jsonBytes)
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("ping"),
+		},
+		Model:     model,
+		MaxTokens: openai.Int(16),
+	})
 	latencyMs := time.Since(start).Milliseconds()
 	if err != nil {
 		return TestResponse{
@@ -534,16 +419,7 @@ func (s *Service) TestConnection(ctx context.Context, req TestRequest) (TestResp
 		}, nil
 	}
 
-	reply, err := parseChatResponse(bodyBytes)
-	if err != nil {
-		return TestResponse{
-			Success:   false,
-			LatencyMs: latencyMs,
-			ModelUsed: model,
-			Error:     err.Error(),
-		}, nil
-	}
-
+	reply := extractMessageContent(completion)
 	return TestResponse{
 		Success:   true,
 		LatencyMs: latencyMs,

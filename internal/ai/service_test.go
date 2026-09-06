@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openai/openai-go"
+
 	"6s/internal/crypto"
 	"6s/internal/db"
 )
@@ -355,34 +357,124 @@ func TestService_TestDNS(t *testing.T) {
 	}
 }
 
-func TestParseChatResponse_EdgeCases(t *testing.T) {
-	// 1. Trailing "data: [DONE]" from gateway
-	trailingData := []byte(`{"choices":[{"message":{"content":"Sàn nhà có dầu."}}]}data: [DONE]`)
-	res1, err := parseChatResponse(trailingData)
-	if err != nil {
-		t.Fatalf("unexpected error on trailing data: %v", err)
+func TestExtractMessageContent(t *testing.T) {
+	// 1. Standard Content
+	comp1 := &openai.ChatCompletion{
+		Choices: []openai.ChatCompletionChoice{
+			{
+				Message: openai.ChatCompletionMessage{
+					Content: "Sàn nhà có dầu.",
+				},
+			},
+		},
 	}
-	if res1 != "Sàn nhà có dầu." {
-		t.Errorf("expected 'Sàn nhà có dầu.', got %q", res1)
-	}
-
-	// 2. SSE stream chunks
-	sseData := []byte("data: {\"choices\":[{\"delta\":{\"content\":\"Chuyền may \"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"A1\"}}]}\n\ndata: [DONE]\n")
-	res2, err := parseChatResponse(sseData)
-	if err != nil {
-		t.Fatalf("unexpected error on SSE data: %v", err)
-	}
-	if res2 != "Chuyền may A1" {
-		t.Errorf("expected 'Chuyền may A1', got %q", res2)
+	if got := extractMessageContent(comp1); got != "Sàn nhà có dầu." {
+		t.Errorf("expected 'Sàn nhà có dầu.', got %q", got)
 	}
 
-	// 3. Fallback to reasoning_content
-	reasoningData := []byte(`{"choices":[{"message":{"content":"","reasoning_content":"Translated: Line A1"}}]}`)
-	res3, err := parseChatResponse(reasoningData)
-	if err != nil {
-		t.Fatalf("unexpected error on reasoning fallback: %v", err)
+	// 2. Fallback to reasoning_content via RawJSON
+	var comp2 openai.ChatCompletion
+	rawJSON := `{"choices":[{"message":{"content":"","reasoning_content":"Translated: Line A1"}}]}`
+	_ = json.Unmarshal([]byte(rawJSON), &comp2)
+	if got := extractMessageContent(&comp2); got != "Translated: Line A1" {
+		t.Errorf("expected 'Translated: Line A1', got %q", got)
 	}
-	if res3 != "Translated: Line A1" {
-		t.Errorf("expected 'Translated: Line A1', got %q", res3)
+}
+
+func TestNormalizeBaseURL(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"https://api.openai.com/v1", "https://api.openai.com/v1/"},
+		{"https://api.openai.com/v1/", "https://api.openai.com/v1/"},
+		{"https://api.openai.com", "https://api.openai.com/v1/"},
+		{"https://openrouter.ai/api/v1", "https://openrouter.ai/api/v1/"},
+		{"http://localhost:11434/v1", "http://localhost:11434/v1/"},
+	}
+
+	for _, c := range cases {
+		got := normalizeBaseURL(c.input)
+		if got != c.expected {
+			t.Errorf("normalizeBaseURL(%q) = %q, expected %q", c.input, got, c.expected)
+		}
+	}
+}
+
+func TestResolvePurposeModel(t *testing.T) {
+	cfg := db.AiConfig{
+		DefaultModel:   "gpt-4o",
+		ModelTranslate: "deepseek-chat",
+		ModelVision:    "gpt-4o-vision",
+		ModelSummary:   "claude-3-haiku",
+	}
+
+	if got := resolvePurposeModel("translate", cfg); got != "deepseek-chat" {
+		t.Errorf("expected deepseek-chat, got %s", got)
+	}
+	if got := resolvePurposeModel("vision", cfg); got != "gpt-4o-vision" {
+		t.Errorf("expected gpt-4o-vision, got %s", got)
+	}
+	if got := resolvePurposeModel("summary", cfg); got != "claude-3-haiku" {
+		t.Errorf("expected claude-3-haiku, got %s", got)
+	}
+	if got := resolvePurposeModel("unknown", cfg); got != "gpt-4o" {
+		t.Errorf("expected fallback gpt-4o, got %s", got)
+	}
+}
+
+func TestResolveTargetLang(t *testing.T) {
+	if got := resolveTargetLang("zh"); got != "Simplified Chinese" {
+		t.Errorf("expected Simplified Chinese, got %s", got)
+	}
+	if got := resolveTargetLang("en"); got != "English" {
+		t.Errorf("expected English, got %s", got)
+	}
+	if got := resolveTargetLang("vi"); got != "Vietnamese" {
+		t.Errorf("expected Vietnamese, got %s", got)
+	}
+}
+
+func TestExtractHost(t *testing.T) {
+	if got := extractHost("https://ai.example.com/v1"); got != "ai.example.com" {
+		t.Errorf("expected ai.example.com, got %s", got)
+	}
+	if got := extractHost("api.internal.lan:8080/v1"); got != "api.internal.lan" {
+		t.Errorf("expected api.internal.lan, got %s", got)
+	}
+	if got := extractHost(""); got != "" {
+		t.Errorf("expected empty string, got %s", got)
+	}
+}
+
+func TestTranslate_EmptyText(t *testing.T) {
+	svc := NewService(&mockStore{}, nil, nil)
+	res, err := svc.Translate(context.Background(), "   ", "vi")
+	if err != nil || res != "" {
+		t.Errorf("expected empty result and nil error, got %q, %v", res, err)
+	}
+}
+
+func TestExtractMessageContent_EdgeCases(t *testing.T) {
+	// Empty choices
+	if got := extractMessageContent(&openai.ChatCompletion{}); got != "" {
+		t.Errorf("expected empty string for no choices, got %q", got)
+	}
+
+	// Empty content and no reasoning
+	compEmpty := &openai.ChatCompletion{
+		Choices: []openai.ChatCompletionChoice{
+			{Message: openai.ChatCompletionMessage{Content: ""}},
+		},
+	}
+	if got := extractMessageContent(compEmpty); got != "" {
+		t.Errorf("expected empty string for empty message, got %q", got)
+	}
+
+	// Reasoning field fallback
+	var compReasoning openai.ChatCompletion
+	_ = json.Unmarshal([]byte(`{"choices":[{"message":{"content":"","reasoning":"Thinking result"}}]}`), &compReasoning)
+	if got := extractMessageContent(&compReasoning); got != "Thinking result" {
+		t.Errorf("expected 'Thinking result', got %q", got)
 	}
 }

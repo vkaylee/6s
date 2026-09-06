@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,5 +148,47 @@ func TestAIHandler(t *testing.T) {
 	handler.TestDNS(rrDNS, reqDNS)
 	if rrDNS.Code != http.StatusOK {
 		t.Fatalf("expected 200 on test dns, got %d", rrDNS.Code)
+	}
+
+	// 8. PUT /api/config/ai without user context -> 401
+	reqNoAuth := httptest.NewRequest(http.MethodPut, "/api/config/ai", bytes.NewReader(putBody))
+	rrNoAuth := httptest.NewRecorder()
+	handler.UpdateConfig(rrNoAuth, reqNoAuth)
+	if rrNoAuth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth, got %d", rrNoAuth.Code)
+	}
+
+	// 9. PUT /api/config/ai with invalid JSON -> 400
+	reqBadJSON := httptest.NewRequest(http.MethodPut, "/api/config/ai", bytes.NewReader([]byte("{invalid-json")))
+	rrBadJSON := httptest.NewRecorder()
+	handler.UpdateConfig(rrBadJSON, reqBadJSON.WithContext(ctxUser))
+	if rrBadJSON.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad JSON, got %d", rrBadJSON.Code)
+	}
+
+	// 10. POST /api/ai/translate text exceeds 10,000 chars -> 400
+	hugeText := strings.Repeat("a", 10001)
+	hugeBody, _ := json.Marshal(TranslateRequest{Text: hugeText, TargetLang: "vi"})
+	reqHuge := httptest.NewRequest(http.MethodPost, "/api/ai/translate", bytes.NewReader(hugeBody))
+	rrHuge := httptest.NewRecorder()
+	handler.Translate(rrHuge, reqHuge)
+	if rrHuge.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for text > 10,000 chars, got %d", rrHuge.Code)
+	}
+
+	// 11. POST /api/config/ai/test bad JSON -> 400
+	reqBadTest := httptest.NewRequest(http.MethodPost, "/api/config/ai/test", bytes.NewReader([]byte("{bad")))
+	rrBadTest := httptest.NewRecorder()
+	handler.TestConnection(rrBadTest, reqBadTest)
+	if rrBadTest.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad test JSON, got %d", rrBadTest.Code)
+	}
+
+	// 12. POST /api/config/ai/test-dns bad JSON -> 400
+	reqBadDNS := httptest.NewRequest(http.MethodPost, "/api/config/ai/test-dns", bytes.NewReader([]byte("{bad")))
+	rrBadDNS := httptest.NewRecorder()
+	handler.TestDNS(rrBadDNS, reqBadDNS)
+	if rrBadDNS.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad dns JSON, got %d", rrBadDNS.Code)
 	}
 }
