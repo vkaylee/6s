@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -558,5 +559,353 @@ func TestHandler_CreateTicket(t *testing.T) {
 	}
 	if consumedUserID != 10 {
 		t.Fatalf("expected ticket bound to userID 10, got %d", consumedUserID)
+	}
+}
+
+func TestHandler_RefreshAndRevokeAndSessions(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	ticketMgr := NewTicketManager()
+	handler := NewHandler(store, tm, limiter, cipher, nil, ticketMgr)
+
+	user := db.User{ID: 1, Username: "worker", Role: RoleUser.String(), IsActive: true}
+	admin := db.User{ID: 2, Username: "admin", Role: RoleAdmin.String(), IsActive: true}
+	store.users[user.ID] = user
+	store.users[admin.ID] = admin
+
+	// 1. Refresh with empty body
+	reqRefEmpty := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader([]byte("{}")))
+	rrRefEmpty := httptest.NewRecorder()
+	handler.Refresh(rrRefEmpty, reqRefEmpty)
+	if rrRefEmpty.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty refresh, got %d", rrRefEmpty.Code)
+	}
+
+	// 2. Refresh with invalid token
+	reqRefInv := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader([]byte(`{"refresh_token":"fake"}`)))
+	rrRefInv := httptest.NewRecorder()
+	handler.Refresh(rrRefInv, reqRefInv)
+	if rrRefInv.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for invalid refresh token, got %d", rrRefInv.Code)
+	}
+
+	// 3. Refresh with valid token
+	rawToken, hash, _ := GenerateRefreshToken()
+	_, _ = store.CreateRefreshToken(context.Background(), db.CreateRefreshTokenParams{
+		UserID:    user.ID,
+		TokenHash: hash,
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	refBody, _ := json.Marshal(RefreshRequest{RefreshToken: rawToken})
+	reqRefValid := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(refBody))
+	rrRefValid := httptest.NewRecorder()
+	handler.Refresh(rrRefValid, reqRefValid)
+	if rrRefValid.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid refresh, got %d, body: %s", rrRefValid.Code, rrRefValid.Body.String())
+	}
+
+	// 4. Revoke unauthenticated
+	reqRevUnauth := httptest.NewRequest("POST", "/api/auth/revoke", nil)
+	rrRevUnauth := httptest.NewRecorder()
+	handler.Revoke(rrRevUnauth, reqRevUnauth)
+	if rrRevUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth revoke, got %d", rrRevUnauth.Code)
+	}
+
+	// 5. Revoke bad JSON
+	reqRevBad := httptest.NewRequest("POST", "/api/auth/revoke", bytes.NewReader([]byte("{invalid")))
+	reqRevBad = reqRevBad.WithContext(context.WithValue(reqRevBad.Context(), UserContextKey, user))
+	rrRevBad := httptest.NewRecorder()
+	handler.Revoke(rrRevBad, reqRevBad)
+	if rrRevBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json revoke, got %d", rrRevBad.Code)
+	}
+
+	// 6. Revoke forbidden (non-admin targeting other user)
+	otherID := int64(99)
+	revOtherBody, _ := json.Marshal(RevokeRequest{UserID: &otherID})
+	reqRevForbid := httptest.NewRequest("POST", "/api/auth/revoke", bytes.NewReader(revOtherBody))
+	reqRevForbid = reqRevForbid.WithContext(context.WithValue(reqRevForbid.Context(), UserContextKey, user))
+	rrRevForbid := httptest.NewRecorder()
+	handler.Revoke(rrRevForbid, reqRevForbid)
+	if rrRevForbid.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for forbidden revoke, got %d", rrRevForbid.Code)
+	}
+
+	// 7. Revoke as admin targeting other user
+	reqRevAdmin := httptest.NewRequest("POST", "/api/auth/revoke", bytes.NewReader(revOtherBody))
+	reqRevAdmin = reqRevAdmin.WithContext(context.WithValue(reqRevAdmin.Context(), UserContextKey, admin))
+	rrRevAdmin := httptest.NewRecorder()
+	handler.Revoke(rrRevAdmin, reqRevAdmin)
+	if rrRevAdmin.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin revoke other user, got %d", rrRevAdmin.Code)
+	}
+
+	// 8. Revoke specific token ID
+	tokID := int64(1)
+	revTokBody, _ := json.Marshal(RevokeRequest{RefreshTokenID: &tokID})
+	reqRevTok := httptest.NewRequest("POST", "/api/auth/revoke", bytes.NewReader(revTokBody))
+	reqRevTok = reqRevTok.WithContext(context.WithValue(reqRevTok.Context(), UserContextKey, user))
+	rrRevTok := httptest.NewRecorder()
+	handler.Revoke(rrRevTok, reqRevTok)
+	if rrRevTok.Code != http.StatusOK {
+		t.Errorf("expected 200 for revoke token id, got %d", rrRevTok.Code)
+	}
+
+	// 9. Revoke self default
+	reqRevSelf := httptest.NewRequest("POST", "/api/auth/revoke", bytes.NewReader([]byte("{}")))
+	reqRevSelf = reqRevSelf.WithContext(context.WithValue(reqRevSelf.Context(), UserContextKey, user))
+	rrRevSelf := httptest.NewRecorder()
+	handler.Revoke(rrRevSelf, reqRevSelf)
+	if rrRevSelf.Code != http.StatusOK {
+		t.Errorf("expected 200 for revoke self, got %d", rrRevSelf.Code)
+	}
+
+	// 10. Sessions unauth
+	reqSessUnauth := httptest.NewRequest("GET", "/api/auth/sessions", nil)
+	rrSessUnauth := httptest.NewRecorder()
+	handler.Sessions(rrSessUnauth, reqSessUnauth)
+	if rrSessUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth sessions, got %d", rrSessUnauth.Code)
+	}
+
+	// 11. Sessions non-admin query other user (403)
+	reqSessForbid := httptest.NewRequest("GET", "/api/auth/sessions?user_id=2", nil)
+	reqSessForbid = reqSessForbid.WithContext(context.WithValue(reqSessForbid.Context(), UserContextKey, user))
+	rrSessForbid := httptest.NewRecorder()
+	handler.Sessions(rrSessForbid, reqSessForbid)
+	if rrSessForbid.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for sessions forbidden, got %d", rrSessForbid.Code)
+	}
+
+	// 12. Sessions admin invalid query user_id (400)
+	reqSessBad := httptest.NewRequest("GET", "/api/auth/sessions?user_id=abc", nil)
+	reqSessBad = reqSessBad.WithContext(context.WithValue(reqSessBad.Context(), UserContextKey, admin))
+	rrSessBad := httptest.NewRecorder()
+	handler.Sessions(rrSessBad, reqSessBad)
+	if rrSessBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for sessions bad user_id, got %d", rrSessBad.Code)
+	}
+
+	// 13. Sessions admin valid query user_id (200)
+	reqSessAdmin := httptest.NewRequest("GET", "/api/auth/sessions?user_id=1", nil)
+	reqSessAdmin = reqSessAdmin.WithContext(context.WithValue(reqSessAdmin.Context(), UserContextKey, admin))
+	rrSessAdmin := httptest.NewRecorder()
+	handler.Sessions(rrSessAdmin, reqSessAdmin)
+	if rrSessAdmin.Code != http.StatusOK {
+		t.Errorf("expected 200 for sessions admin query, got %d", rrSessAdmin.Code)
+	}
+}
+
+func TestHandler_SetupAndErrors(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	ticketMgr := NewTicketManager()
+	handler := NewHandler(store, tm, limiter, cipher, nil, ticketMgr)
+
+	// 1. SetupStatus with 0 admins
+	reqStatus := httptest.NewRequest("GET", "/api/auth/setup-status", nil)
+	rrStatus := httptest.NewRecorder()
+	handler.SetupStatus(rrStatus, reqStatus)
+	if rrStatus.Code != http.StatusOK {
+		t.Fatalf("expected 200 for setup status, got %d", rrStatus.Code)
+	}
+	var statusResp struct {
+		Data SetupStatusResponse `json:"data"`
+	}
+	_ = json.NewDecoder(rrStatus.Body).Decode(&statusResp)
+	if !statusResp.Data.NeedsSetup {
+		t.Errorf("expected needs_setup = true when 0 admins")
+	}
+
+	// 2. SetupSuperadmin with bad JSON
+	reqBad := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader([]byte("{bad")))
+	rrBad := httptest.NewRecorder()
+	handler.SetupSuperadmin(rrBad, reqBad)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in setup, got %d", rrBad.Code)
+	}
+
+	// 3. SetupSuperadmin with missing fields
+	badSetup := SetupSuperadminRequest{Username: "superadmin", Password: ""}
+	bodyBad, _ := json.Marshal(badSetup)
+	reqMiss := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyBad))
+	rrMiss := httptest.NewRecorder()
+	handler.SetupSuperadmin(rrMiss, reqMiss)
+	if rrMiss.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing fields in setup, got %d", rrMiss.Code)
+	}
+
+	// 4. SetupSuperadmin valid
+	validSetup := SetupSuperadminRequest{
+		Username: "superadmin",
+		Password: "Password123!",
+		FullName: "Super Admin",
+		Email:    "admin@factory.lan",
+	}
+	bodyValid, _ := json.Marshal(validSetup)
+	reqValid := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyValid))
+	rrValid := httptest.NewRecorder()
+	handler.SetupSuperadmin(rrValid, reqValid)
+	if rrValid.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid setup, got %d, body: %s", rrValid.Code, rrValid.Body.String())
+	}
+
+	// 5. SetupStatus when admin exists
+	reqStatusAfter := httptest.NewRequest("GET", "/api/auth/setup-status", nil)
+	rrStatusAfter := httptest.NewRecorder()
+	handler.SetupStatus(rrStatusAfter, reqStatusAfter)
+	_ = json.NewDecoder(rrStatusAfter.Body).Decode(&statusResp)
+	if statusResp.Data.NeedsSetup {
+		t.Errorf("expected needs_setup = false after setup")
+	}
+
+	// 6. SetupSuperadmin when admin already exists (403)
+	reqDuplicate := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyValid))
+	rrDuplicate := httptest.NewRecorder()
+	handler.SetupSuperadmin(rrDuplicate, reqDuplicate)
+	if rrDuplicate.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for duplicate superadmin setup, got %d", rrDuplicate.Code)
+	}
+
+	// 7. Login with inactive user (401)
+	store.usersByName["inactive"] = db.User{
+		ID:           99,
+		Username:     "inactive",
+		PasswordHash: sql.NullString{String: "$2a$10$validhashplaceholder", Valid: true},
+		AuthSource:   "LOCAL",
+		IsActive:     false,
+	}
+	loginInactive, _ := json.Marshal(LoginRequest{Username: "inactive", Password: "any"})
+	reqInactive := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(loginInactive))
+	rrInactive := httptest.NewRecorder()
+	handler.Login(rrInactive, reqInactive)
+	if rrInactive.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for inactive user login, got %d", rrInactive.Code)
+	}
+
+	// 8. Login with wrong password (401)
+	loginWrong, _ := json.Marshal(LoginRequest{Username: "superadmin", Password: "wrongpassword"})
+	reqWrong := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(loginWrong))
+	rrWrong := httptest.NewRecorder()
+	handler.Login(rrWrong, reqWrong)
+	if rrWrong.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for wrong password, got %d", rrWrong.Code)
+	}
+}
+
+func TestHandler_LoginMoreBranchesAndADConfigErrors(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	ticketMgr := NewTicketManager()
+	handler := NewHandler(store, tm, limiter, cipher, nil, ticketMgr)
+
+	// 1. Badge login
+	badgeUser := db.User{
+		ID:        55,
+		Username:  "badge_user",
+		BadgeCode: sql.NullString{String: "BADGE_55", Valid: true},
+		Role:      RoleUser.String(),
+		IsActive:  true,
+	}
+	store.users[badgeUser.ID] = badgeUser
+	store.usersByBadge["BADGE_55"] = badgeUser
+
+	bodyBadge, _ := json.Marshal(LoginRequest{BadgeCode: "BADGE_55"})
+	reqBadge := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(bodyBadge))
+	rrBadge := httptest.NewRecorder()
+	handler.Login(rrBadge, reqBadge)
+	if rrBadge.Code != http.StatusOK {
+		t.Errorf("expected 200 for badge login, got %d", rrBadge.Code)
+	}
+
+	// 2. Missing username and badgeCode -> 400
+	bodyEmpty, _ := json.Marshal(LoginRequest{})
+	reqEmpty := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(bodyEmpty))
+	rrEmpty := httptest.NewRecorder()
+	handler.Login(rrEmpty, reqEmpty)
+	if rrEmpty.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty login input, got %d", rrEmpty.Code)
+	}
+
+	// 3. Rate limiting and lockout
+	clientIP := "192.168.1.50"
+	accountKey := "locked_user"
+	for range 6 {
+		limiter.RecordFailure(clientIP, accountKey)
+	}
+	bodyLock, _ := json.Marshal(LoginRequest{Username: accountKey, Password: "any"})
+	reqLock := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(bodyLock))
+	reqLock.RemoteAddr = clientIP + ":12345"
+	rrLock := httptest.NewRecorder()
+	handler.Login(rrLock, reqLock)
+	if rrLock.Code != http.StatusTooManyRequests {
+		t.Errorf("expected 429 for locked user, got %d", rrLock.Code)
+	}
+
+	// 4. ADConfigHandler tests
+	mockLDAP := &MockLDAPClient{ErrToReturn: errors.New("ldap failed")}
+	adHandler := NewADConfigHandler(store, cipher, mockLDAP)
+	adminUser := db.User{ID: 1, Role: RoleAdmin.String(), IsActive: true}
+
+	// UpdateADConfig unauth
+	reqADUnauth := httptest.NewRequest("PUT", "/api/config/ad", bytes.NewReader([]byte("{}")))
+	rrADUnauth := httptest.NewRecorder()
+	adHandler.UpdateADConfig(rrADUnauth, reqADUnauth)
+	if rrADUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth update AD, got %d", rrADUnauth.Code)
+	}
+
+	// UpdateADConfig bad json
+	reqADBad := httptest.NewRequest("PUT", "/api/config/ad", bytes.NewReader([]byte("{bad")))
+	reqADBad = reqADBad.WithContext(context.WithValue(reqADBad.Context(), UserContextKey, adminUser))
+	rrADBad := httptest.NewRecorder()
+	adHandler.UpdateADConfig(rrADBad, reqADBad)
+	if rrADBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json update AD, got %d", rrADBad.Code)
+	}
+
+	// UpdateADConfig with cipher == nil and BindPassword set -> 500
+	noCipherHandler := NewADConfigHandler(store, nil, mockLDAP)
+	adWithPass := UpdateADConfigRequest{BindPassword: "secret"}
+	bodyPass, _ := json.Marshal(adWithPass)
+	reqNoCipher := httptest.NewRequest("PUT", "/api/config/ad", bytes.NewReader(bodyPass))
+	reqNoCipher = reqNoCipher.WithContext(context.WithValue(reqNoCipher.Context(), UserContextKey, adminUser))
+	rrNoCipher := httptest.NewRecorder()
+	noCipherHandler.UpdateADConfig(rrNoCipher, reqNoCipher)
+	if rrNoCipher.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 when cipher is nil and BindPassword is set, got %d", rrNoCipher.Code)
+	}
+
+	// TestADConfig bad JSON -> 400
+	reqTestBad := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{bad")))
+	rrTestBad := httptest.NewRecorder()
+	adHandler.TestADConfig(rrTestBad, reqTestBad)
+	if rrTestBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in test AD, got %d", rrTestBad.Code)
+	}
+
+	// TestADConfig when no server in request and store empty -> 400
+	reqTestNoServer := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{}")))
+	rrTestNoServer := httptest.NewRecorder()
+	adHandler.TestADConfig(rrTestNoServer, reqTestNoServer)
+	if rrTestNoServer.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for test AD with no server, got %d", rrTestNoServer.Code)
+	}
+
+	// TestADConfig failed connection -> 502
+	testWithServer := UpdateADConfigRequest{Server: "ad.lan", Port: 636}
+	bodyTestServer, _ := json.Marshal(testWithServer)
+	reqTestFail := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader(bodyTestServer))
+	rrTestFail := httptest.NewRecorder()
+	adHandler.TestADConfig(rrTestFail, reqTestFail)
+	if rrTestFail.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for failed AD test, got %d", rrTestFail.Code)
 	}
 }

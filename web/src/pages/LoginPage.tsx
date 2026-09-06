@@ -130,7 +130,7 @@ export function LoginPage() {
                     <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
                       {rememberedUser.full_name || rememberedUser.username}
                     </div>
-                    <div className="text-xs text-zinc-500 truncate">@{rememberedUser.username}</div>
+                    <div className="text-xs text-zinc-500 truncate">{`@${rememberedUser.username}`}</div>
                   </div>
                 </div>
                 <button

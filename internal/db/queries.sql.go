@@ -522,6 +522,29 @@ func (q *Queries) GetADConfig(ctx context.Context) (AdConfig, error) {
 	return i, err
 }
 
+const getAIConfig = `-- name: GetAIConfig :one
+SELECT id, is_enabled, base_url, api_key, default_model, model_translate, model_vision, model_summary, updated_at, updated_by FROM ai_configs
+WHERE id = 1 LIMIT 1
+`
+
+func (q *Queries) GetAIConfig(ctx context.Context) (AiConfig, error) {
+	row := q.db.QueryRowContext(ctx, getAIConfig)
+	var i AiConfig
+	err := row.Scan(
+		&i.ID,
+		&i.IsEnabled,
+		&i.BaseUrl,
+		&i.ApiKey,
+		&i.DefaultModel,
+		&i.ModelTranslate,
+		&i.ModelVision,
+		&i.ModelSummary,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
 const getCategoryBreakdown = `-- name: GetCategoryBreakdown :many
 SELECT 
     category,
@@ -2444,6 +2467,65 @@ func (q *Queries) UpsertADConfig(ctx context.Context, arg UpsertADConfigParams) 
 		&i.GroupAdminDn,
 		&i.GroupSafetyDn,
 		&i.GroupLeaderDn,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const upsertAIConfig = `-- name: UpsertAIConfig :one
+INSERT INTO ai_configs (
+    id, is_enabled, base_url, api_key, default_model,
+    model_translate, model_vision, model_summary,
+    updated_at, updated_by
+) VALUES (
+    1, $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8
+)
+ON CONFLICT (id) DO UPDATE SET
+    is_enabled = EXCLUDED.is_enabled,
+    base_url = EXCLUDED.base_url,
+    api_key = CASE WHEN EXCLUDED.api_key = '' THEN ai_configs.api_key ELSE EXCLUDED.api_key END,
+    default_model = EXCLUDED.default_model,
+    model_translate = EXCLUDED.model_translate,
+    model_vision = EXCLUDED.model_vision,
+    model_summary = EXCLUDED.model_summary,
+    updated_at = CURRENT_TIMESTAMP,
+    updated_by = EXCLUDED.updated_by
+RETURNING id, is_enabled, base_url, api_key, default_model, model_translate, model_vision, model_summary, updated_at, updated_by
+`
+
+type UpsertAIConfigParams struct {
+	IsEnabled      bool
+	BaseUrl        string
+	ApiKey         string
+	DefaultModel   string
+	ModelTranslate string
+	ModelVision    string
+	ModelSummary   string
+	UpdatedBy      sql.NullInt64
+}
+
+func (q *Queries) UpsertAIConfig(ctx context.Context, arg UpsertAIConfigParams) (AiConfig, error) {
+	row := q.db.QueryRowContext(ctx, upsertAIConfig,
+		arg.IsEnabled,
+		arg.BaseUrl,
+		arg.ApiKey,
+		arg.DefaultModel,
+		arg.ModelTranslate,
+		arg.ModelVision,
+		arg.ModelSummary,
+		arg.UpdatedBy,
+	)
+	var i AiConfig
+	err := row.Scan(
+		&i.ID,
+		&i.IsEnabled,
+		&i.BaseUrl,
+		&i.ApiKey,
+		&i.DefaultModel,
+		&i.ModelTranslate,
+		&i.ModelVision,
+		&i.ModelSummary,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
 	)

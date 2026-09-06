@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -103,4 +104,18 @@ func TestAppErrorResponse(t *testing.T) {
 	if resVI.Error == nil || resVI.Error.Message != "Yêu cầu đăng nhập" {
 		t.Errorf("expected Vietnamese message, got %v", resVI.Error)
 	}
+}
+
+type errWriter struct{}
+
+func (e *errWriter) Header() http.Header         { return http.Header{} }
+func (e *errWriter) Write(_ []byte) (int, error) { return 0, errors.New("write failed") }
+func (e *errWriter) WriteHeader(_ int)           {}
+
+func TestResponse_WriteErrors(_ *testing.T) {
+	w := &errWriter{}
+	JSON(w, http.StatusOK, "data")
+	Paginated(w, http.StatusOK, []string{"item"}, 1, 10, 1)
+	req := httptest.NewRequest("GET", "/", nil)
+	AppError(w, req, apperror.BadRequest(i18n.ErrBadRequest))
 }

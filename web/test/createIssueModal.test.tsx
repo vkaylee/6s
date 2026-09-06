@@ -1,6 +1,31 @@
 import { describe, expect, it } from "bun:test";
+import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { CreateIssueModal } from "../src/pages/CreateIssueModal.tsx";
+
+function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
+  const internals = (
+    React as unknown as {
+      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
+        ReactCurrentDispatcher: {
+          current: { useState: (init: unknown) => [unknown, () => void] };
+        };
+      };
+    }
+  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
+  let idx = 0;
+  internals.current.useState = (init: unknown) => {
+    const val =
+      idx < values.length
+        ? values[idx++]
+        : typeof init === "function"
+          ? (init as () => unknown)()
+          : init;
+    return [val, () => {}];
+  };
+  return <>{children}</>;
+}
+
 import {
   IssueCategory,
   type IssueItem,
@@ -101,5 +126,93 @@ describe("CreateIssueModal Component", () => {
     expect(html).toContain("before-101.jpg");
     expect(html).toContain("detail-101.jpg");
     expect(html).toContain("San sát");
+  });
+
+  it("renders Safety S6 submit button when S6 is selected", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          IssueCategory.S6, // category
+          "CONDITION", // causeType
+          "LINE_A1", // locationCode
+          [], // selectedTags
+          "Sự cố an toàn", // description
+          null, // photoBefore
+          null, // photoDetail
+          null, // previewBefore
+          null, // previewDetail
+          false, // isSubmitting
+        ]}
+      >
+        <CreateIssueModal
+          isOpen={true}
+          onClose={() => {}}
+          onSuccess={() => {}}
+          locations={mockLocations}
+          tags={mockTags}
+        />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("GỬI BÁO CÁO NGUY HIỂM 6S");
+  });
+
+  it("renders saving indicator when form is submitting", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          IssueCategory.S1, // category
+          "CONDITION", // causeType
+          "LINE_A1", // locationCode
+          [], // selectedTags
+          "", // description
+          null, // photoBefore
+          null, // photoDetail
+          null, // previewBefore
+          null, // previewDetail
+          true, // isSubmitting
+        ]}
+      >
+        <CreateIssueModal
+          isOpen={true}
+          onClose={() => {}}
+          onSuccess={() => {}}
+          locations={mockLocations}
+          tags={mockTags}
+        />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Đang lưu...");
+  });
+
+  it("renders detail photo preview thumbnail and active selected tags", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          IssueCategory.S3, // category
+          "CONDITION", // causeType
+          "LINE_A1", // locationCode
+          ["S3_01"], // selectedTags
+          "Mô tả sự cố", // description
+          null, // photoBefore
+          null, // photoDetail
+          "before.jpg", // previewBefore
+          "detail.jpg", // previewDetail
+          false, // isSubmitting
+        ]}
+      >
+        <CreateIssueModal
+          isOpen={true}
+          onClose={() => {}}
+          onSuccess={() => {}}
+          locations={mockLocations}
+          tags={mockTags}
+        />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("detail.jpg");
+    expect(html).toContain("Bẩn thỉu");
   });
 });

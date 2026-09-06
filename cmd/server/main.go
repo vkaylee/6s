@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"6s/internal/ai"
 	"6s/internal/auth"
 	"6s/internal/config"
 	"6s/internal/cron"
@@ -277,6 +278,22 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		nr.Get("/", notifHandler.GetConfig)
 		nr.Put("/", notifHandler.UpdateConfig)
 		nr.Post("/test", notifHandler.TestConfig)
+	})
+
+	aiSvc := ai.NewService(queries, cipher, nil)
+	aiHandler := ai.NewHandler(aiSvc)
+	r.Route("/api/config/ai", func(air chi.Router) {
+		air.Use(authMw.Authenticate)
+		air.Use(auth.RequireRole(auth.RoleAdmin))
+		air.Get("/", aiHandler.GetConfig)
+		air.Put("/", aiHandler.UpdateConfig)
+		air.Post("/test", aiHandler.TestConnection)
+		air.Post("/test-dns", aiHandler.TestDNS)
+	})
+
+	r.Route("/api/ai", func(air chi.Router) {
+		air.Use(authMw.Authenticate)
+		air.Post("/translate", aiHandler.Translate)
 	})
 
 	// Launch background workers

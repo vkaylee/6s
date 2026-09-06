@@ -273,3 +273,69 @@ func TestScoringService_ScoreLogs(t *testing.T) {
 		t.Fatalf("expected 1 target score log with category 1S, got %+v", targetLogs)
 	}
 }
+
+func TestScoringService_UpdateRulesRetroactive(t *testing.T) {
+	now := time.Now()
+	applyFrom := now.Add(-24 * time.Hour)
+	store := &mockScoringStore{
+		rules: map[string]int32{
+			"penalty_normal": -2,
+		},
+		logs: []db.ScoreLog{
+			{
+				IssueID:    1,
+				TargetType: "LOCATION",
+				TargetID:   "LINE_A1",
+				RuleKey:    "penalty_normal",
+				Points:     -2,
+			},
+			{
+				IssueID:    2,
+				TargetType: "LOCATION",
+				TargetID:   "LINE_A1",
+				RuleKey:    "retro_adjust",
+				Points:     -1,
+			},
+		},
+	}
+	svc := NewService(store, time.UTC)
+	ctx := context.Background()
+
+	// Missing reason error
+	errNoReason := svc.UpdateRules(ctx, UpdateRulesRequest{
+		Rules:     map[string]int32{"penalty_normal": -5},
+		ApplyFrom: &applyFrom,
+		Reason:    "",
+	}, 1)
+	if errNoReason != ErrMissingReason {
+		t.Errorf("expected ErrMissingReason, got %v", errNoReason)
+	}
+
+	// Empty rules error
+	errEmpty := svc.UpdateRules(ctx, UpdateRulesRequest{Rules: nil}, 1)
+	if errEmpty != ErrInvalidRules {
+		t.Errorf("expected ErrInvalidRules, got %v", errEmpty)
+	}
+
+	// Successful retroactive recalculation
+	err := svc.UpdateRules(ctx, UpdateRulesRequest{
+		Rules:     map[string]int32{"penalty_normal": -5},
+		ApplyFrom: &applyFrom,
+		Reason:    "Policy change",
+	}, 1)
+	if err != nil {
+		t.Fatalf("unexpected error on UpdateRules with ApplyFrom: %v", err)
+	}
+
+	// Verify retro_adjust log was created with delta = -5 - (-2) = -3
+	var foundRetro bool
+	for _, l := range store.logs {
+		if l.RuleKey == "retro_adjust" && l.Points == -3 {
+			foundRetro = true
+			break
+		}
+	}
+	if !foundRetro {
+		t.Errorf("expected retro_adjust log with -3 points, logs: %+v", store.logs)
+	}
+}

@@ -2,23 +2,31 @@ package notification
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
+	"6s/internal/crypto"
 	"6s/internal/db"
 )
 
 type mockNotificationStore struct {
-	tasks   []db.NotificationOutbox
-	sentIDs []int64
-	failIDs []int64
-	retried []db.RetryOutboxTaskParams
-	created []db.CreateOutboxEntryParams
-	cfg     db.NotificationConfig
+	tasks    []db.NotificationOutbox
+	sentIDs  []int64
+	failIDs  []int64
+	retried  []db.RetryOutboxTaskParams
+	created  []db.CreateOutboxEntryParams
+	cfg      db.NotificationConfig
+	cfgErr   error
+	claimErr error
 }
 
 func (m *mockNotificationStore) ClaimOutboxTasks(_ context.Context, _ int32) ([]db.NotificationOutbox, error) {
+	if m.claimErr != nil {
+		return nil, m.claimErr
+	}
 	res := m.tasks
 	m.tasks = nil
 	return res, nil
@@ -45,6 +53,9 @@ func (m *mockNotificationStore) CreateOutboxEntry(_ context.Context, arg db.Crea
 }
 
 func (m *mockNotificationStore) GetNotificationConfig(_ context.Context) (db.NotificationConfig, error) {
+	if m.cfgErr != nil {
+		return db.NotificationConfig{}, m.cfgErr
+	}
 	return m.cfg, nil
 }
 
@@ -120,4 +131,69 @@ func TestOutboxWorker_RetryAndFallback(t *testing.T) {
 	if len(store.created) != 1 || store.created[0].Channel != ChannelLANWebhook {
 		t.Errorf("expected LAN_WEBHOOK fallback created, got %+v", store.created)
 	}
+}
+
+func TestOutboxWorker_Start(_ *testing.T) {
+	notifyCh := make(chan struct{}, 1)
+	store := &mockNotificationStore{}
+	sender := &mockSender{}
+	worker := NewWorker(store, sender, nil, notifyCh)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		worker.Start(ctx)
+		close(done)
+	}()
+
+	notifyCh <- struct{}{}
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+	<-done
+}
+
+func TestOutboxWorker_ConfigAndErrorBranches(t *testing.T) {
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	encToken, _ := cipher.Encrypt("my-secret-token")
+	encURL, _ := cipher.Encrypt("http://webhook.lan/hook")
+
+	store := &mockNotificationStore{
+		cfg: db.NotificationConfig{
+			WxpusherEnabled:  true,
+			WxpusherAppToken: encToken,
+			LanWebhookUrl:    encURL,
+			PublicBaseUrl:    "http://6s.lan",
+		},
+		tasks: []db.NotificationOutbox{
+			{ID: 1, Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
+		},
+	}
+	sender := &mockSender{}
+	worker := NewWorker(store, sender, cipher, nil)
+	ctx := context.Background()
+
+	// 1. Decrypts token and webhook
+	worker.ProcessBatch(ctx)
+	if len(store.sentIDs) != 1 || store.sentIDs[0] != 1 {
+		t.Errorf("expected task 1 sent with decrypted config, got %+v", store.sentIDs)
+	}
+
+	// 2. sql.ErrNoRows returns default config
+	store.cfgErr = sql.ErrNoRows
+	store.tasks = []db.NotificationOutbox{
+		{ID: 2, Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
+	}
+	worker.ProcessBatch(ctx)
+	if len(store.sentIDs) != 2 {
+		t.Errorf("expected task 2 sent with fallback config, got %+v", store.sentIDs)
+	}
+
+	// 3. Other config error returns early
+	store.cfgErr = errors.New("db error")
+	worker.ProcessBatch(ctx)
+
+	// 4. Claim error returns early
+	store.cfgErr = nil
+	store.claimErr = errors.New("claim error")
+	worker.ProcessBatch(ctx)
 }

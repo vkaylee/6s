@@ -145,3 +145,55 @@ func TestManager_SaveDetailPhoto(t *testing.T) {
 		t.Errorf("expected %s_detail.jpg, got %s", clientUUID, savedName)
 	}
 }
+
+func TestManager_SavePhoto_Errors(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	clientUUID := "c0a80101-0000-4000-8000-000000000004"
+
+	// Nil file header
+	_, err = mgr.SaveBeforePhoto(nil, clientUUID)
+	if err != ErrEmptyFile {
+		t.Errorf("expected ErrEmptyFile, got %v", err)
+	}
+
+	// Tiny content (< 4 bytes valid header check)
+	tiny := createTestFileHeader(t, "photo_before", "tiny.jpg", []byte{0xFF, 0xD8})
+	_, err = mgr.SaveBeforePhoto(tiny, clientUUID)
+	if err != ErrUnsupportedType {
+		t.Errorf("expected ErrUnsupportedType for tiny file, got %v", err)
+	}
+
+	// SaveDetailPhoto nil returns empty name, no error
+	name, err := mgr.SaveDetailPhoto(nil, clientUUID)
+	if err != nil || name != "" {
+		t.Errorf("expected empty name & nil error for nil detail photo, got %s, %v", name, err)
+	}
+
+	// SaveAfterPhoto with unsupported type
+	txtBytes := []byte("plain text content")
+	fhTxt := createTestFileHeader(t, "photo_after", "after.txt", txtBytes)
+	_, err = mgr.SaveAfterPhoto(fhTxt, clientUUID)
+	if err != ErrUnsupportedType {
+		t.Errorf("expected ErrUnsupportedType for txt file, got %v", err)
+	}
+}
+
+func TestDetectImageExtension_EdgeCases(t *testing.T) {
+	if ext, ok := DetectImageExtension([]byte{0xFF, 0xD8, 0xFF}); !ok || ext != ".jpg" {
+		t.Errorf("expected .jpg for jpeg magic, got %s, %v", ext, ok)
+	}
+	if ext, ok := DetectImageExtension([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}); !ok || ext != ".png" {
+		t.Errorf("expected .png for png magic, got %s, %v", ext, ok)
+	}
+	if _, ok := DetectImageExtension([]byte{0x00, 0x01, 0x02}); ok {
+		t.Error("expected false for unknown bytes")
+	}
+	if _, ok := DetectImageExtension(nil); ok {
+		t.Error("expected false for nil data")
+	}
+}

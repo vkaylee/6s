@@ -49,8 +49,14 @@ export function IssueDetailModal({
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
   const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
 
+  const [translatedDesc, setTranslatedDesc] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
+
   useEffect(() => {
     setCurrentIssue(issue);
+    setTranslatedDesc(null);
+    setShowOriginal(false);
   }, [issue]);
 
   const [isEditingFull, setIsEditingFull] = useState(false);
@@ -71,6 +77,34 @@ export function IssueDetailModal({
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const [issueScoreLogs, setIssueScoreLogs] = useState<ScoreLogItem[]>([]);
   const [loadingScores, setLoadingScores] = useState(false);
+
+  const handleTranslate = async () => {
+    if (!currentIssue.description || isTranslating) return;
+    if (translatedDesc) {
+      setShowOriginal(!showOriginal);
+      return;
+    }
+    setIsTranslating(true);
+    try {
+      const res = await apiClient<{ translated_text: string }>("/api/ai/translate", {
+        method: "POST",
+        body: JSON.stringify({
+          text: currentIssue.description,
+          target_lang: locale,
+        }),
+      });
+      if (res?.translated_text) {
+        setTranslatedDesc(res.translated_text);
+        setShowOriginal(false);
+        haptics.success();
+      }
+    } catch {
+      haptics.errorOrConflict();
+      await modalDialog.alert(t("issue_detail.translate_failed"));
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !issue?.id) {
@@ -623,11 +657,42 @@ export function IssueDetailModal({
                   <span>
                     {t("issue_detail.reporter_label")} <strong>{currentIssue.creator_name}</strong>
                   </span>
-                  <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
+                  <div className="flex items-center space-x-2">
+                    <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
+                    {currentIssue.description && (
+                      <button
+                        type="button"
+                        onClick={handleTranslate}
+                        disabled={isTranslating}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900"
+                      >
+                        <span>
+                          {isTranslating
+                            ? t("issue_detail.translating")
+                            : translatedDesc
+                              ? showOriginal
+                                ? t("issue_detail.translate_btn")
+                                : t("issue_detail.show_original")
+                              : t("issue_detail.translate_btn")}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
-                  {currentIssue.description || "Không có mô tả chi tiết."}
-                </p>
+                {translatedDesc && !showOriginal ? (
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                      {t("issue_detail.translated_badge", { lang: locale.toUpperCase() })}
+                    </div>
+                    <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
+                      {translatedDesc}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
+                    {currentIssue.description || t("issue.no_description")}
+                  </p>
+                )}
                 {/* Tags display */}
                 {currentIssue.tags && currentIssue.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">

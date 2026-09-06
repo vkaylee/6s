@@ -83,6 +83,13 @@ const (
 	ErrMissingRulesReason      Key = "scoring.missing_rules_reason"
 	ErrInvalidRules            Key = "scoring.invalid_rules"
 	ErrScoreLogsFailed         Key = "scoring.score_logs_failed"
+	ErrAILoadFailed            Key = "ai.load_failed"
+	ErrAISaveFailed            Key = "ai.save_failed"
+	ErrAINotEnabled            Key = "ai.not_enabled"
+	ErrAIModelMissing          Key = "ai.model_missing"
+	ErrAITranslateFailed       Key = "ai.translate_failed"
+	ErrAITestFailed            Key = "ai.test_failed"
+	ErrAIBaseURLMissing        Key = "ai.base_url_missing"
 )
 
 // ponytail: hardcoded in-memory dictionary; upgrade to embed.FS or external catalog if multi-file translators needed.
@@ -148,6 +155,13 @@ var catalog = map[string]map[Key]string{
 		ErrMissingRulesReason:      "Bắt buộc cung cấp lý do (reason) khi áp dụng hồi tố điểm (apply_from)",
 		ErrInvalidRules:            "Quy tắc điểm không hợp lệ",
 		ErrScoreLogsFailed:         "Không thể tải lịch sử cộng trừ điểm",
+		ErrAILoadFailed:            "Không thể tải cấu hình AI",
+		ErrAISaveFailed:            "Lưu cấu hình AI thất bại",
+		ErrAINotEnabled:            "Dịch vụ AI chưa được kích hoạt",
+		ErrAIModelMissing:          "Chưa cấu hình model AI",
+		ErrAITranslateFailed:       "Dịch thuật qua AI thất bại: %v",
+		ErrAITestFailed:            "Kiểm tra kết nối AI thất bại: %v",
+		ErrAIBaseURLMissing:        "Chưa cấu hình AI Base URL",
 	},
 	LocaleEN: {
 		ErrSessionsQueryFailed:     "Failed to query active sessions",
@@ -209,6 +223,13 @@ var catalog = map[string]map[Key]string{
 		ErrMissingRulesReason:      "Reason is required when applying retroactive scoring (apply_from)",
 		ErrInvalidRules:            "Invalid scoring rules",
 		ErrScoreLogsFailed:         "Failed to load score history",
+		ErrAILoadFailed:            "Failed to load AI configuration",
+		ErrAISaveFailed:            "Failed to save AI configuration",
+		ErrAINotEnabled:            "AI service is not enabled",
+		ErrAIModelMissing:          "AI model is not configured",
+		ErrAITranslateFailed:       "AI translation failed: %v",
+		ErrAITestFailed:            "AI connection test failed: %v",
+		ErrAIBaseURLMissing:        "AI Base URL is not configured",
 	},
 	LocaleZH: {
 		ErrInternal:                "内部服务器错误",
@@ -273,6 +294,13 @@ var catalog = map[string]map[Key]string{
 		ErrRulesLoadFailed:         "加载评分规则失败",
 		ErrMissingRulesReason:      "追溯积分规则调整时必须提供原因 (reason)",
 		ErrInvalidRules:            "评分规则无效",
+		ErrAILoadFailed:            "无法加载AI配置",
+		ErrAISaveFailed:            "保存AI配置失败",
+		ErrAINotEnabled:            "AI服务未启用",
+		ErrAIModelMissing:          "未配置AI模型",
+		ErrAITranslateFailed:       "AI翻译失败: %v",
+		ErrAITestFailed:            "AI连接测试失败: %v",
+		ErrAIBaseURLMissing:        "未配置AI Base URL",
 	},
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -159,5 +160,65 @@ func TestReportHandler_ExportCSV(t *testing.T) {
 	}
 	if !strings.Contains(body, "Chuyền A1") || !strings.Contains(body, "exposed_wire; safety_gear") {
 		t.Errorf("CSV body missing expected record data: %s", body)
+	}
+}
+
+func TestReport_ErrorAndFilterBranches(t *testing.T) {
+	errStore := &mockReportStore{err: errors.New("db error")}
+	errSvc := report.NewService(errStore)
+	errHandler := report.NewHandler(errSvc)
+
+	// 1. GetSummary error
+	reqErrSum := httptest.NewRequest("GET", "/api/reports/summary", nil)
+	rrErrSum := httptest.NewRecorder()
+	errHandler.GetSummary(rrErrSum, reqErrSum)
+	if rrErrSum.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on summary error, got %d", rrErrSum.Code)
+	}
+
+	// 2. ExportCSV error
+	reqErrExp := httptest.NewRequest("GET", "/api/issues/export", nil)
+	rrErrExp := httptest.NewRecorder()
+	errHandler.ExportCSV(rrErrExp, reqErrExp)
+	if rrErrExp.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on export error, got %d", rrErrExp.Code)
+	}
+
+	// 3. Export with filters (status, category, location)
+	validStore := &mockReportStore{
+		exports: []db.ListIssuesForExportRow{
+			{
+				ID:           2,
+				Category:     "1S",
+				Status:       "CLOSED",
+				LocationCode: "LOC1",
+				ResolvedAt:   sql.NullTime{Time: time.Now(), Valid: true},
+				ClosedAt:     sql.NullTime{Time: time.Now(), Valid: true},
+				RejectReason: sql.NullString{String: "Reason", Valid: true},
+			},
+		},
+	}
+	validSvc := report.NewService(validStore)
+	validHandler := report.NewHandler(validSvc)
+
+	reqFilter := httptest.NewRequest("GET", "/api/issues/export?status=CLOSED&category=1S&location_code=LOC1", nil)
+	rrFilter := httptest.NewRecorder()
+	validHandler.ExportCSV(rrFilter, reqFilter)
+	if rrFilter.Code != http.StatusOK {
+		t.Errorf("expected 200 for filtered export, got %d", rrFilter.Code)
+	}
+
+	// 4. Summary with invalid days query
+	reqBadDays := httptest.NewRequest("GET", "/api/reports/summary?days=invalid", nil)
+	rrBadDays := httptest.NewRecorder()
+	validHandler.GetSummary(rrBadDays, reqBadDays)
+	if rrBadDays.Code != http.StatusOK {
+		t.Errorf("expected 200 for invalid days param falling back to default, got %d", rrBadDays.Code)
+	}
+
+	// 5. Service days out of range (< 0 or > 90)
+	_, errOutOfRange := validSvc.GetSummary(context.Background(), 150)
+	if errOutOfRange != nil {
+		t.Errorf("expected GetSummary to clamp days, got %v", errOutOfRange)
 	}
 }

@@ -1,8 +1,32 @@
 import { describe, expect, it } from "bun:test";
+import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { IssueCategory, type IssueItem, IssueStatus, UserRole } from "../src/types/index.ts";
+
+function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
+  const internals = (
+    React as unknown as {
+      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
+        ReactCurrentDispatcher: {
+          current: { useState: (init: unknown) => [unknown, () => void] };
+        };
+      };
+    }
+  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
+  let idx = 0;
+  internals.current.useState = (init: unknown) => {
+    const val =
+      idx < values.length
+        ? values[idx++]
+        : typeof init === "function"
+          ? (init as () => unknown)()
+          : init;
+    return [val, () => {}];
+  };
+  return <>{children}</>;
+}
 
 describe("IssueDetailModal Component", () => {
   const mockIssue: IssueItem = {
@@ -45,6 +69,7 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("Nguyễn Văn A");
     expect(html).toContain("Chỉnh sửa");
     expect(html).toContain("Biến động điểm 6S của sự cố");
+    expect(html).toContain("Dịch AI");
   });
 
   it("renders quick location edit button when user can edit and locations are provided", () => {
@@ -269,5 +294,239 @@ describe("IssueDetailModal Component", () => {
     );
     expect(behaviorHtml).toContain("👤");
     expect(behaviorHtml).toContain("Hành vi con người");
+  });
+
+  it("renders close confirmation dialog with kaizen rating when showConfirmAction is CLOSE", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue, // currentIssue
+          null, // translatedDesc
+          false, // isTranslating
+          false, // showOriginal
+          false, // isEditingFull
+          false, // isEditingCategory
+          false, // isEditingLocation
+          5, // scoreRating (5 stars)
+          "", // rejectReason
+          false, // isSubmitting
+          "CLOSE", // showConfirmAction
+          null, // previewIndex
+          1, // zoomScale
+          { x: 0, y: 0 }, // panOffset
+          [], // issueScoreLogs
+          false, // loadingScores
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Xác nhận duyệt đạt issue?");
+    expect(html).toContain("Kaizen");
+    expect(html).toContain("🏆 Kaizen Xuất Sắc (+5 điểm)");
+  });
+
+  it("renders invalid confirmation dialog with warning when showConfirmAction is INVALID", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          "INVALID",
+          null,
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Xác nhận bác bỏ issue?");
+    expect(html).toContain("Nhập lý do bắt buộc...");
+  });
+
+  it("renders photo preview overlay when previewIndex is set", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          null,
+          0, // previewIndex on photo_before
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("/uploads/before/before.jpg");
+  });
+
+  it("renders reopen confirmation dialog when showConfirmAction is REOPEN", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          "REOPEN",
+          null,
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Xác nhận mở lại issue?");
+  });
+
+  it("renders in-place category and location editor when enabled", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          false,
+          true, // isEditingCategory
+          true, // isEditingLocation
+          3,
+          "",
+          false,
+          null,
+          null,
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+        ]}
+      >
+        <IssueDetailModal
+          issue={mockIssue}
+          isOpen={true}
+          onClose={() => {}}
+          onRefresh={() => {}}
+          locations={[
+            {
+              code: "LINE_A1",
+              name_vi: "Chuyền A1",
+              name_zh: "A1",
+              name_en: "A1",
+              is_active: true,
+            },
+          ]}
+        />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("1S");
+    expect(html).toContain("6S");
+    expect(html).toContain("Chuyền A1");
+  });
+
+  it("renders multi-photo preview controls when previewIndex is second photo", () => {
+    const resolvedIssue: IssueItem = {
+      ...mockIssue,
+      photo_after: "/uploads/after/after.jpg",
+    };
+
+    const html = renderToString(
+      <WithMockState
+        values={[
+          resolvedIssue,
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          null,
+          1, // previewIndex = 1 (after photo)
+          1.25, // zoomScale
+          { x: 10, y: 20 },
+          [],
+          false,
+        ]}
+      >
+        <IssueDetailModal
+          issue={resolvedIssue}
+          isOpen={true}
+          onClose={() => {}}
+          onRefresh={() => {}}
+        />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Sau khi khắc phục");
+    expect(html).toContain("scale(1.25)");
+    expect(html).toContain("Previous photo");
+  });
+
+  it("renders CreateIssueModal when isEditingFull is true", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          true, // isEditingFull
+          false,
+          false,
+          3,
+          "",
+          false,
+          null,
+          null,
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Dầu loang dưới sàn máy may");
   });
 });

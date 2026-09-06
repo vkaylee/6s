@@ -2,9 +2,44 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"testing"
 	"time"
 )
+
+type mockConn struct{}
+
+func (m *mockConn) Prepare(_ string) (driver.Stmt, error) {
+	return &mockStmt{}, nil
+}
+func (m *mockConn) Close() error              { return nil }
+func (m *mockConn) Begin() (driver.Tx, error) { return nil, nil }
+
+var mockExecErr error
+
+type mockStmt struct{}
+
+func (s *mockStmt) Close() error  { return nil }
+func (s *mockStmt) NumInput() int { return -1 }
+func (s *mockStmt) Exec(_ []driver.Value) (driver.Result, error) {
+	if mockExecErr != nil {
+		return nil, mockExecErr
+	}
+	return driver.RowsAffected(0), nil
+}
+func (s *mockStmt) Query(_ []driver.Value) (driver.Rows, error) { return nil, nil }
+
+type mockDriver struct{}
+
+func (d *mockDriver) Open(_ string) (driver.Conn, error) {
+	return &mockConn{}, nil
+}
+
+func init() {
+	sql.Register("mock_migration_driver", &mockDriver{})
+}
 
 func TestDefaultPoolConfig(t *testing.T) {
 	cfg := DefaultPoolConfig()
@@ -31,5 +66,24 @@ func TestDatabase_ConnectError(t *testing.T) {
 	}
 	if err == nil {
 		t.Log("Note: Ping succeeded or skipped")
+	}
+}
+
+func TestRunMigrations_Mock(t *testing.T) {
+	db, err := sql.Open("mock_migration_driver", "")
+	if err != nil {
+		t.Fatalf("failed to open mock db: %v", err)
+	}
+	defer db.Close()
+
+	if err := RunMigrations(context.Background(), db); err != nil {
+		t.Fatalf("RunMigrations failed: %v", err)
+	}
+
+	// Error branch
+	mockExecErr = errors.New("exec error")
+	defer func() { mockExecErr = nil }()
+	if err := RunMigrations(context.Background(), db); err == nil {
+		t.Error("expected error from RunMigrations when exec fails, got nil")
 	}
 }

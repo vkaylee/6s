@@ -94,3 +94,45 @@ func TestMockLDAPClient(t *testing.T) {
 		t.Errorf("expected ErrLDAPInvalidCredentials, got %v", err)
 	}
 }
+
+func TestLiveLDAPClient_Coverage(t *testing.T) {
+	cfgPlain := LDAPConfig{
+		Server: "127.0.0.1",
+		Port:   1, // Unreachable port
+		UseTLS: false,
+	}
+	clientPlain := NewLiveLDAPClient(cfgPlain)
+	if err := clientPlain.TestConnection(); err == nil {
+		t.Error("expected dial error for unreachable port, got nil")
+	}
+
+	cfgTLS := LDAPConfig{
+		Server: "127.0.0.1",
+		Port:   636, // LDAPS
+		UseTLS: true,
+	}
+	clientTLS := NewLiveLDAPClient(cfgTLS)
+	if err := clientTLS.TestConnection(); err == nil {
+		t.Error("expected LDAPS dial error, got nil")
+	}
+
+	cfgStartTLS := LDAPConfig{
+		Server: "127.0.0.1",
+		Port:   1,
+		UseTLS: true,
+	}
+	clientStartTLS := NewLiveLDAPClient(cfgStartTLS)
+	if err := clientStartTLS.TestConnection(); err == nil {
+		t.Error("expected StartTLS dial error, got nil")
+	}
+
+	// Empty password check in Authenticate
+	if _, err := clientPlain.Authenticate("user", ""); !errors.Is(err, ErrLDAPInvalidCredentials) {
+		t.Errorf("expected ErrLDAPInvalidCredentials for empty password, got %v", err)
+	}
+
+	// Dial failure in Authenticate
+	if _, err := clientPlain.Authenticate("user", "pass"); err == nil {
+		t.Error("expected error for unreachable server in Authenticate, got nil")
+	}
+}

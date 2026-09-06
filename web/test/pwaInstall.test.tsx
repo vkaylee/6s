@@ -1,8 +1,31 @@
 import { describe, expect, it } from "bun:test";
+import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { InstallPrompt } from "../src/components/InstallPrompt.tsx";
 import { usePWAInstall } from "../src/hooks/usePWAInstall.ts";
 
+function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
+  const internals = (
+    React as unknown as {
+      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
+        ReactCurrentDispatcher: {
+          current: { useState: (init: unknown) => [unknown, () => void] };
+        };
+      };
+    }
+  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
+  let idx = 0;
+  internals.current.useState = (init: unknown) => {
+    const val =
+      idx < values.length
+        ? values[idx++]
+        : typeof init === "function"
+          ? (init as () => unknown)()
+          : init;
+    return [val, () => {}];
+  };
+  return <>{children}</>;
+}
 describe("PWA Install Component & Manifest", () => {
   it("InstallPrompt renders without crash in SSR/Node environment", () => {
     const html = renderToString(<InstallPrompt />);
@@ -47,5 +70,24 @@ describe("PWA Install Component & Manifest", () => {
       const installed = await hook.promptInstall();
       expect(installed).toBe(false);
     }
+  });
+
+  it("renders InstallPrompt button and iOS modal when canInstall and isIOS are true", () => {
+    const html = renderToString(
+      <WithMockState values={[null, false, true, true]}>
+        <InstallPrompt />
+      </WithMockState>,
+    );
+    expect(html).toContain('data-testid="pwa-install-btn"');
+    expect(html).toContain("📲");
+  });
+
+  it("renders null when already installed", () => {
+    const html = renderToString(
+      <WithMockState values={[null, true, false, false]}>
+        <InstallPrompt />
+      </WithMockState>,
+    );
+    expect(html).toBe("");
   });
 });

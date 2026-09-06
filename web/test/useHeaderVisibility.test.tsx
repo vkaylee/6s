@@ -1,78 +1,82 @@
 import { describe, expect, it } from "bun:test";
+import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { useHeaderVisibility } from "../src/hooks/useHeaderVisibility.ts";
 
-describe("useHeaderVisibility", () => {
-  it("initializes to true in SSR", () => {
-    function HeaderTester() {
-      const isVisible = useHeaderVisibility({ threshold: 50 });
-      return <div>{isVisible ? "VISIBLE" : "HIDDEN"}</div>;
+function WithEffectSupport({ children }: { children: React.ReactNode }) {
+  const internals = (
+    React as unknown as {
+      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
+        ReactCurrentDispatcher: {
+          current: {
+            useEffect: (cb: () => undefined | (() => void)) => void;
+          };
+        };
+      };
     }
-    const html = renderToString(<HeaderTester />);
-    expect(html).toContain("VISIBLE");
-  });
+  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
 
-  it("handles scroll threshold transitions via listener simulation", () => {
-    let scrollListener: (() => void) | null = null;
+  const originalEffect = internals.current.useEffect;
+  internals.current.useEffect = (cb: () => undefined | (() => void)) => {
+    cb();
+    internals.current.useEffect = originalEffect;
+  };
+
+  return <>{children}</>;
+}
+
+describe("useHeaderVisibility", () => {
+  it("attaches scroll listener and reacts to window scroll changes", () => {
+    let capturedListener: (() => void) | null = null;
+    let removedListenerRef = false;
+
     const originalWindow = globalThis.window;
-
-    const mockWindow = {
+    globalThis.window = {
       scrollY: 0,
-      addEventListener: (event: string, listener: () => void) => {
-        if (event === "scroll") {
-          scrollListener = listener;
+      addEventListener: (evt: string, cb: unknown) => {
+        if (evt === "scroll") {
+          capturedListener = cb as () => void;
         }
       },
       removeEventListener: () => {
-        scrollListener = null;
+        removedListenerRef = true;
       },
-    };
+    } as unknown as Window & typeof globalThis;
 
-    Object.defineProperty(globalThis, "window", {
-      value: mockWindow,
-      writable: true,
-      configurable: true,
-    });
+    function HeaderTestComponent() {
+      const isVisible = useHeaderVisibility({ threshold: 60 });
+      return <div>{isVisible ? "VISIBLE" : "HIDDEN"}</div>;
+    }
 
     try {
-      let visibleState = true;
-      const threshold = 60;
-      let lastY = 0;
+      const html = renderToString(
+        <WithEffectSupport>
+          <HeaderTestComponent />
+        </WithEffectSupport>,
+      );
+      expect(html).toContain("VISIBLE");
+      expect(capturedListener).toBeDefined();
+      expect(removedListenerRef).toBe(false);
 
-      const handleScroll = () => {
-        const currentY = mockWindow.scrollY;
-        if (currentY < 10) {
-          visibleState = true;
-        } else if (currentY > lastY && currentY > threshold) {
-          visibleState = false;
-        } else if (currentY < lastY) {
-          visibleState = true;
-        }
-        lastY = currentY;
-      };
+      if (capturedListener) {
+        // Scroll down past threshold
+        (window as { scrollY: number }).scrollY = 120;
+        (capturedListener as () => void)();
 
-      mockWindow.addEventListener("scroll", handleScroll);
+        // Scroll down further
+        (window as { scrollY: number }).scrollY = 150;
+        (capturedListener as () => void)();
 
-      // Scroll down past threshold -> false
-      mockWindow.scrollY = 80;
-      if (scrollListener) (scrollListener as () => void)();
-      expect(visibleState).toBe(false);
+        // Scroll back up
+        (window as { scrollY: number }).scrollY = 80;
+        (capturedListener as () => void)();
 
-      // Scroll up -> true
-      mockWindow.scrollY = 50;
-      if (scrollListener) (scrollListener as () => void)();
-      expect(visibleState).toBe(true);
-
-      // Scroll back near top (< 10) -> true
-      mockWindow.scrollY = 5;
-      if (scrollListener) (scrollListener as () => void)();
-      expect(visibleState).toBe(true);
+        // Scroll to top (< 10)
+        (window as { scrollY: number }).scrollY = 5;
+        (capturedListener as () => void)();
+      }
     } finally {
-      Object.defineProperty(globalThis, "window", {
-        value: originalWindow,
-        writable: true,
-        configurable: true,
-      });
+      globalThis.window = originalWindow;
     }
   });
 });

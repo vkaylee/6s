@@ -33,6 +33,8 @@ type DecryptedConfig struct {
 	PublicBaseURL    string
 }
 
+var wxPusherAPIURL = "https://wxpusher.zjiecode.com/api/send/message"
+
 // HTTPSender implements real HTTP sending to WxPusher and LAN Webhooks.
 type HTTPSender struct {
 	client *http.Client
@@ -104,7 +106,7 @@ func (s *HTTPSender) sendWxPusher(ctx context.Context, payloadStr string, cfg De
 		return fmt.Errorf("marshal wxpusher req failed: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://wxpusher.zjiecode.com/api/send/message", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", wxPusherAPIURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("create http request failed: %w", err)
 	}

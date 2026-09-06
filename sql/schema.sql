@@ -162,6 +162,19 @@ CREATE TABLE IF NOT EXISTS notification_configs (
     updated_by BIGINT REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS ai_configs (
+    id INT PRIMARY KEY CHECK (id = 1),
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    base_url VARCHAR(500) NOT NULL DEFAULT '',
+    api_key VARCHAR(500) NOT NULL DEFAULT '',
+    default_model VARCHAR(100) NOT NULL DEFAULT '',
+    model_translate VARCHAR(100) NOT NULL DEFAULT '',
+    model_vision VARCHAR(100) NOT NULL DEFAULT '',
+    model_summary VARCHAR(100) NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_client_uuid ON issues(client_uuid);
 CREATE INDEX IF NOT EXISTS idx_issues_location_code ON issues(location_code);

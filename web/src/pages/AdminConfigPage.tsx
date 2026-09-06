@@ -5,7 +5,15 @@ import { PageContainer } from "../components/PageContainer.tsx";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
-import { IssueCategory, type LocationItem, resolveI18n, S_CATEGORIES } from "../types/index.ts";
+import {
+  type AIConfigData,
+  type AIDNSTestResponse,
+  type AITestResponse,
+  IssueCategory,
+  type LocationItem,
+  resolveI18n,
+  S_CATEGORIES,
+} from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
 
@@ -44,7 +52,7 @@ export function AdminConfigPage() {
   const { t, locale } = useI18nStore();
   const isHeaderVisible = useHeaderVisibility();
   const [activeTab, setActiveTab] = useState<
-    "LOCATIONS" | "SCORING" | "AD" | "NOTIFICATIONS" | "TAGS"
+    "LOCATIONS" | "SCORING" | "AD" | "NOTIFICATIONS" | "TAGS" | "AI"
   >("LOCATIONS");
 
   // Scoring config state
@@ -91,6 +99,19 @@ export function AdminConfigPage() {
   const [isTestingNotif, setIsTestingNotif] = useState(false);
   const [notifTestResults, setNotifTestResults] = useState<TestNotifyResult[] | null>(null);
 
+  // AI config state
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiBaseUrl, setAiBaseUrl] = useState("");
+  const [aiHasApiKey, setAiHasApiKey] = useState(false);
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiDefaultModel, setAiDefaultModel] = useState("");
+  const [aiModelTranslate, setAiModelTranslate] = useState("");
+  const [aiModelVision, setAiModelVision] = useState("");
+  const [aiModelSummary, setAiModelSummary] = useState("");
+  const [testingTarget, setTestingTarget] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, AITestResponse>>({});
+  const [dnsTestResult, setDnsTestResult] = useState<AIDNSTestResponse | null>(null);
+
   // Tags management state
   const [tags, setTags] = useState<TagItemData[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
@@ -107,6 +128,7 @@ export function AdminConfigPage() {
     loadADConfig();
     loadNotificationConfig();
     loadTags();
+    loadAIConfig();
   }, []);
 
   const loadLocations = async () => {
@@ -273,6 +295,22 @@ export function AdminConfigPage() {
         if (data.public_base_url) {
           setNotifBaseUrl(data.public_base_url);
         }
+      }
+    } catch {
+      // ignore
+    }
+  };
+  const loadAIConfig = async () => {
+    try {
+      const data = await apiClient<AIConfigData>("/api/config/ai");
+      if (data) {
+        setAiEnabled(data.is_enabled);
+        setAiBaseUrl(data.base_url || "");
+        setAiHasApiKey(data.has_api_key);
+        setAiDefaultModel(data.default_model || "");
+        setAiModelTranslate(data.model_translate || "");
+        setAiModelVision(data.model_vision || "");
+        setAiModelSummary(data.model_summary || "");
       }
     } catch {
       // ignore
@@ -559,6 +597,91 @@ export function AdminConfigPage() {
       setIsTestingNotif(false);
     }
   };
+  const handleSaveAI = async () => {
+    setIsSaving(true);
+    try {
+      await apiClient("/api/config/ai", {
+        method: "PUT",
+        body: JSON.stringify({
+          is_enabled: aiEnabled,
+          base_url: aiBaseUrl,
+          api_key: aiApiKey,
+          default_model: aiDefaultModel,
+          model_translate: aiModelTranslate,
+          model_vision: aiModelVision,
+          model_summary: aiModelSummary,
+        }),
+      });
+      haptics.success();
+      setAiApiKey("");
+      await loadAIConfig();
+      await modalDialog.alert(t("admin.save_ai_success"));
+    } catch {
+      haptics.errorOrConflict();
+      modalDialog.alert(t("admin.save_ai_error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTestAI = async (
+    target: "api_key" | "default" | "translate" | "vision" | "summary",
+  ) => {
+    setTestingTarget(target);
+    try {
+      let model = "";
+      if (target === "default") model = aiDefaultModel;
+      else if (target === "translate") model = aiModelTranslate;
+      else if (target === "vision") model = aiModelVision;
+      else if (target === "summary") model = aiModelSummary;
+
+      const res = await apiClient<AITestResponse>("/api/config/ai/test", {
+        method: "POST",
+        body: JSON.stringify({
+          base_url: aiBaseUrl,
+          api_key: aiApiKey,
+          model,
+          purpose: target === "api_key" ? "default" : target,
+        }),
+      });
+      setTestResults((prev) => ({ ...prev, [target]: res }));
+      if (res.success) {
+        haptics.success();
+      } else {
+        haptics.errorOrConflict();
+      }
+    } catch (err: unknown) {
+      haptics.errorOrConflict();
+      const msg = err instanceof Error ? err.message : t("admin.ai_test_error");
+      setTestResults((prev) => ({ ...prev, [target]: { success: false, error: msg } }));
+    } finally {
+      setTestingTarget(null);
+    }
+  };
+
+  const handleTestDNS = async () => {
+    setTestingTarget("dns");
+    try {
+      const res = await apiClient<AIDNSTestResponse>("/api/config/ai/test-dns", {
+        method: "POST",
+        body: JSON.stringify({
+          base_url: aiBaseUrl,
+        }),
+      });
+      setDnsTestResult(res);
+      if (res.success) {
+        haptics.success();
+      } else {
+        haptics.errorOrConflict();
+      }
+    } catch (err: unknown) {
+      haptics.errorOrConflict();
+      const msg = err instanceof Error ? err.message : t("admin.ai_dns_test_error");
+      setDnsTestResult({ success: false, error: msg });
+    } finally {
+      setTestingTarget(null);
+    }
+  };
 
   const handleAddTag = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -628,7 +751,7 @@ export function AdminConfigPage() {
       <main className="py-4">
         <PageContainer className="space-y-6">
           {/* Tab Navigation */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-zinc-200 dark:bg-zinc-800 p-1.5 rounded-2xl">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 bg-zinc-200 dark:bg-zinc-800 p-1.5 rounded-2xl">
             <button
               type="button"
               onClick={() => setActiveTab("LOCATIONS")}
@@ -687,8 +810,21 @@ export function AdminConfigPage() {
             >
               {t("admin.notify_tab")}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("AI");
+                loadAIConfig();
+              }}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "AI"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.ai_tab")}
+            </button>
           </div>
-
           {/* TAB 1: LOCATIONS MANAGEMENT */}
           {activeTab === "LOCATIONS" && (
             <div className="space-y-6">
@@ -1507,6 +1643,294 @@ export function AdminConfigPage() {
                 <button
                   type="button"
                   onClick={handleSaveNotification}
+                  disabled={isSaving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-2xl min-h-[56px] shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.98] mt-2"
+                >
+                  {isSaving ? t("admin.saving_btn") : t("admin.save_config_btn")}
+                </button>
+              </div>
+            </section>
+          )}
+          {/* TAB 6: AI CONFIG */}
+          {activeTab === "AI" && (
+            <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              {/* AI Enable Toggle */}
+              <label className="flex items-center space-x-2 cursor-pointer border-b pb-3 dark:border-zinc-800">
+                <input
+                  type="checkbox"
+                  checked={aiEnabled}
+                  onChange={(e) => setAiEnabled(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 w-5 h-5"
+                />
+                <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                  {t("admin.ai_enable_label")}
+                </span>
+              </label>
+
+              {/* Base URL */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold uppercase text-zinc-500">
+                    {t("admin.ai_base_url_label")}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleTestDNS}
+                    disabled={testingTarget !== null}
+                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800"
+                  >
+                    {testingTarget === "dns" ? t("admin.ai_testing") : t("admin.ai_test_dns_btn")}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={aiBaseUrl}
+                  onChange={(e) => setAiBaseUrl(e.target.value)}
+                  placeholder={t("admin.ai_base_url_placeholder")}
+                  className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                {dnsTestResult && (
+                  <div
+                    className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
+                      dnsTestResult.success
+                        ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {dnsTestResult.success
+                      ? t("admin.ai_dns_test_success", {
+                          host: dnsTestResult.host || "",
+                          ips: dnsTestResult.ips?.join(", ") || "",
+                          ms: String(dnsTestResult.latency_ms || 0),
+                        })
+                      : `✗ ${dnsTestResult.error}`}
+                  </div>
+                )}
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-zinc-500 mb-1">
+                  {t("admin.ai_api_key_label")}
+                </label>
+                <input
+                  type="password"
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                  placeholder={t("admin.ai_api_key_placeholder")}
+                  className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="flex items-center justify-between mt-1.5">
+                  <div>
+                    {aiHasApiKey && !aiApiKey && (
+                      <p className="text-xs text-emerald-600 font-bold">
+                        {t("admin.has_api_key_hint")}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleTestAI("api_key")}
+                    disabled={testingTarget !== null}
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 transition-colors"
+                  >
+                    {testingTarget === "api_key"
+                      ? t("admin.ai_testing")
+                      : t("admin.ai_test_key_btn")}
+                  </button>
+                </div>
+                {testResults.api_key && (
+                  <div
+                    className={`mt-2 p-2.5 rounded-xl text-xs font-medium border ${
+                      testResults.api_key.success
+                        ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {testResults.api_key.success
+                      ? t("admin.ai_test_success", {
+                          ms: String(testResults.api_key.latency_ms || 0),
+                          model: testResults.api_key.model_used || "",
+                        })
+                      : `✗ ${testResults.api_key.error}`}
+                  </div>
+                )}
+              </div>
+
+              {/* Default Model */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold uppercase text-zinc-500">
+                    {t("admin.ai_default_model_label")}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleTestAI("default")}
+                    disabled={testingTarget !== null}
+                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800"
+                  >
+                    {testingTarget === "default" ? t("admin.ai_testing") : t("admin.ai_test_btn")}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={aiDefaultModel}
+                  onChange={(e) => setAiDefaultModel(e.target.value)}
+                  placeholder={t("admin.ai_default_model_placeholder")}
+                  className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                {testResults.default && (
+                  <div
+                    className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
+                      testResults.default.success
+                        ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {testResults.default.success
+                      ? t("admin.ai_test_success", {
+                          ms: String(testResults.default.latency_ms || 0),
+                          model: testResults.default.model_used || "",
+                        })
+                      : `✗ ${testResults.default.error}`}
+                  </div>
+                )}
+              </div>
+
+              {/* Purpose-specific models */}
+              <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-3">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-wider">
+                  {t("admin.ai_specialized_models_title")}
+                </h3>
+
+                {/* Translate Model */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase text-zinc-500">
+                      {t("admin.ai_model_translate_label")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleTestAI("translate")}
+                      disabled={testingTarget !== null}
+                      className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800"
+                    >
+                      {testingTarget === "translate"
+                        ? t("admin.ai_testing")
+                        : t("admin.ai_test_btn")}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={aiModelTranslate}
+                    onChange={(e) => setAiModelTranslate(e.target.value)}
+                    placeholder={t("admin.ai_model_translate_placeholder")}
+                    className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                  {testResults.translate && (
+                    <div
+                      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
+                        testResults.translate.success
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                      }`}
+                    >
+                      {testResults.translate.success
+                        ? t("admin.ai_test_success", {
+                            ms: String(testResults.translate.latency_ms || 0),
+                            model: testResults.translate.model_used || "",
+                          })
+                        : `✗ ${testResults.translate.error}`}
+                    </div>
+                  )}
+                </div>
+
+                {/* Vision Model */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase text-zinc-500">
+                      {t("admin.ai_model_vision_label")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleTestAI("vision")}
+                      disabled={testingTarget !== null}
+                      className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800"
+                    >
+                      {testingTarget === "vision" ? t("admin.ai_testing") : t("admin.ai_test_btn")}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={aiModelVision}
+                    onChange={(e) => setAiModelVision(e.target.value)}
+                    placeholder={t("admin.ai_model_vision_placeholder")}
+                    className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                  {testResults.vision && (
+                    <div
+                      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
+                        testResults.vision.success
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                      }`}
+                    >
+                      {testResults.vision.success
+                        ? t("admin.ai_test_success", {
+                            ms: String(testResults.vision.latency_ms || 0),
+                            model: testResults.vision.model_used || "",
+                          })
+                        : `✗ ${testResults.vision.error}`}
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary Model */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase text-zinc-500">
+                      {t("admin.ai_model_summary_label")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleTestAI("summary")}
+                      disabled={testingTarget !== null}
+                      className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800"
+                    >
+                      {testingTarget === "summary" ? t("admin.ai_testing") : t("admin.ai_test_btn")}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={aiModelSummary}
+                    onChange={(e) => setAiModelSummary(e.target.value)}
+                    placeholder={t("admin.ai_model_summary_placeholder")}
+                    className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-800 text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                  {testResults.summary && (
+                    <div
+                      className={`mt-1.5 p-2 rounded-xl text-xs font-medium border ${
+                        testResults.summary.success
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                          : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                      }`}
+                    >
+                      {testResults.summary.success
+                        ? t("admin.ai_test_success", {
+                            ms: String(testResults.summary.latency_ms || 0),
+                            model: testResults.summary.model_used || "",
+                          })
+                        : `✗ ${testResults.summary.error}`}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAI}
                   disabled={isSaving}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-6 rounded-2xl min-h-[56px] shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.98] mt-2"
                 >

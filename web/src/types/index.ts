@@ -336,3 +336,34 @@ export interface ReportSummaryResponse {
   trends: ReportTrendPoint[];
   topTags: ReportTagItem[];
 }
+
+export interface AIConfigData {
+  is_enabled: boolean;
+  base_url: string;
+  has_api_key: boolean;
+  default_model: string;
+  model_translate: string;
+  model_vision: string;
+  model_summary: string;
+  updated_at?: string;
+}
+
+export interface AITranslateResponse {
+  translated_text: string;
+}
+
+export interface AITestResponse {
+  success: boolean;
+  latency_ms?: number;
+  model_used?: string;
+  reply?: string;
+  error?: string;
+}
+
+export interface AIDNSTestResponse {
+  success: boolean;
+  host?: string;
+  ips?: string[];
+  latency_ms?: number;
+  error?: string;
+}

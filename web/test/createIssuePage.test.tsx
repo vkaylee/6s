@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { ImageAnnotatorModal } from "../src/components/ImageAnnotatorModal.tsx";
@@ -84,6 +85,57 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("Nguy cơ cháy nổ");
   });
 
+  it("renders TaxonomySelectorModal search filtering and custom tag creation hint", () => {
+    const html = renderToString(
+      <WithMockState values={["ALL", null, "rò rỉ"]}>
+        <TaxonomySelectorModal
+          isOpen={true}
+          onClose={() => {}}
+          tags={mockTags}
+          selectedTags={[]}
+          currentCategory={null}
+          onToggleTag={() => {}}
+          onSelectCategory={() => {}}
+        />
+      </WithMockState>,
+    );
+    expect(html).toContain("Rò rỉ dầu mỡ");
+    expect(html).not.toContain("Nguy cơ cháy nổ");
+  });
+
+  it("renders TaxonomySelectorModal no match state with custom tag suggestion", () => {
+    const html = renderToString(
+      <WithMockState values={["ALL", null, "zzz_tidak_ada"]}>
+        <TaxonomySelectorModal
+          isOpen={true}
+          onClose={() => {}}
+          tags={mockTags}
+          selectedTags={[]}
+          currentCategory={null}
+          onToggleTag={() => {}}
+          onSelectCategory={() => {}}
+        />
+      </WithMockState>,
+    );
+    expect(html).toContain("Không tìm thấy nhãn phù hợp");
+    expect(html).toContain("+ Dùng nhãn mới:");
+  });
+
+  it("renders TaxonomySelectorModal in closed state", () => {
+    const html = renderToString(
+      <TaxonomySelectorModal
+        isOpen={false}
+        onClose={() => {}}
+        tags={mockTags}
+        selectedTags={[]}
+        currentCategory={null}
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
+    expect(html).toBe("");
+  });
+
   it("renders searchable LocationCombobox correctly", () => {
     const html = renderToString(
       <LocationCombobox locations={mockLocations} value="LINE_A1" onChange={() => {}} />,
@@ -163,6 +215,26 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("lucide-chevron-down");
   });
 
+  it("renders open LocationCombobox dropdown list and search input", () => {
+    const html = renderToString(
+      <WithMockState values={[true, ""]}>
+        <LocationCombobox locations={mockLocations} value="LINE_A1" onChange={() => {}} />
+      </WithMockState>,
+    );
+    expect(html).toContain("Chuyền May A1");
+    expect(html).toContain("Chuyền May B2");
+    expect(html).toContain('placeholder="Tìm theo mã, tên tiếng Việt, tiếng Trung..."');
+  });
+
+  it("renders empty location search message when no matches found", () => {
+    const html = renderToString(
+      <WithMockState values={[true, "xyz999"]}>
+        <LocationCombobox locations={mockLocations} value="LINE_A1" onChange={() => {}} />
+      </WithMockState>,
+    );
+    expect(html).toContain("Không tìm thấy vị trí phù hợp");
+  });
+
   it("renders 6S root cause Condition vs Behavior 1-touch selector", () => {
     const pageHtml = renderToString(
       <Router ssrPath="/issues/new">
@@ -187,5 +259,124 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(pageHtml).toContain("4S");
     expect(pageHtml).toContain("5S");
     expect(pageHtml).toContain("6S");
+  });
+});
+
+function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
+  const internals = (
+    React as unknown as {
+      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
+        ReactCurrentDispatcher: {
+          current: { useState: (init: unknown) => [unknown, () => void] };
+        };
+      };
+    }
+  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
+  let idx = 0;
+  internals.current.useState = (init: unknown) => {
+    const val =
+      idx < values.length
+        ? values[idx++]
+        : typeof init === "function"
+          ? (init as () => unknown)()
+          : init;
+    return [val, () => {}];
+  };
+  return <>{children}</>;
+}
+
+describe("CreateIssuePage with uploaded photos and states", () => {
+  const mockLocations: LocationItem[] = [
+    {
+      code: "LINE_A1",
+      name_vi: "Chuyền May A1",
+      name_zh: "缝纫一号线",
+      name_en: "Sewing Line A1",
+      is_active: true,
+    },
+  ];
+
+  const mockTags: TagItem[] = [
+    {
+      tag_code: "s6_fire",
+      category: IssueCategory.S6,
+      label_vi: "Nguy cơ cháy nổ",
+      label_zh: "火灾隐患",
+    },
+  ];
+
+  it("renders photo preview controls, annotator button, and Safety S6 submit trigger", () => {
+    const pageHtml = renderToString(
+      <WithMockState
+        values={[
+          true, // isHeaderVisible
+          IssueCategory.S6, // category
+          "CONDITION", // causeType
+          "LINE_A1", // locationCode
+          mockTags, // localTags
+          ["s6_fire"], // selectedTags
+          "Mô tả chi tiết sự cố rò rỉ", // description
+          new Blob(["wide"], { type: "image/jpeg" }), // photoBefore
+          new Blob(["detail"], { type: "image/jpeg" }), // photoDetail
+          "blob:mock-wide-photo", // previewBefore
+          "blob:mock-detail-photo", // previewDetail
+          false, // isSubmitting
+          null, // lastDraftTime
+          false, // dragOverWide
+          false, // dragOverDetail
+          ["LINE_A1"], // recentLocations
+          true, // touched
+          false, // categoryError
+          false, // photoError
+          null, // annotatorTarget
+        ]}
+      >
+        <Router ssrPath="/issues/new">
+          <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+        </Router>
+      </WithMockState>,
+    );
+
+    expect(pageHtml).toContain("blob:mock-wide-photo");
+    expect(pageHtml).toContain("blob:mock-detail-photo");
+    expect(pageHtml).toContain("Khoanh lỗi");
+    expect(pageHtml).toContain("Chụp lại");
+    expect(pageHtml).toContain("GỬI BÁO CÁO NGUY HIỂM 6S");
+  });
+
+  it("renders validation errors when form is touched with missing category or photo", () => {
+    const pageHtml = renderToString(
+      <WithMockState
+        values={[
+          true,
+          null, // category missing
+          "CONDITION",
+          "LINE_A1",
+          mockTags,
+          [],
+          "",
+          null, // photo missing
+          null,
+          null,
+          null,
+          false,
+          null,
+          false,
+          false,
+          [],
+          true, // touched
+          true, // categoryError
+          true, // photoError
+          null,
+        ]}
+      >
+        <Router ssrPath="/issues/new">
+          <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+        </Router>
+      </WithMockState>,
+    );
+
+    expect(pageHtml).toContain("Vui lòng chọn phân loại 6S");
+    expect(pageHtml).toContain("Bắt buộc chụp ảnh toàn cảnh (Ảnh 1)");
   });
 });

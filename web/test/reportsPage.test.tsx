@@ -180,4 +180,77 @@ describe("ReportsPage & Export CSV UI", () => {
     expect(html).toContain("1S");
     expect(html).toContain("2S");
   });
+
+  it("renders drilldown drawer when drilldownType is SAFETY", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockSummary,
+          mockLocations,
+          mockReporters,
+          mockMasterLocations,
+          mockMasterTags,
+          false, // isLoading
+          false, // isExporting
+          14, // daysRange
+          "LOCATIONS", // activeTab
+          5, // locationLimit
+          "HEALTH_ASC", // locationSort
+          "", // selectedLocationFilter
+          false, // isFullscreen
+          "SAFETY", // drilldownType
+          null, // selectedLocationDrill
+          null, // selectedCategoryDrill
+          null, // selectedTagDrill
+          null, // inspectingIssue
+          [], // drilldownIssues
+          0, // drilldownTotal
+          1, // drilldownPage
+          false, // isLoadingDrilldown
+        ]}
+      >
+        <Router ssrPath="/reports">
+          <ReportsPage />
+        </Router>
+      </WithMockState>,
+    );
+    expect(html).toContain("Danh sách sự cố An toàn 6S khẩn cấp");
+  });
+
+  it("renders TRENDS empty state and tag drilldown buttons when topTags loaded", () => {
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockSummary,
+          mockLocations,
+          mockReporters,
+          mockMasterLocations,
+          mockMasterTags,
+          false,
+          false,
+          14,
+          "TRENDS",
+          5,
+          "HEALTH_ASC",
+          "",
+          false,
+          null, // drilldownType
+          null,
+          null,
+          null,
+          null,
+          [],
+          0,
+          1,
+          false,
+        ]}
+      >
+        <Router ssrPath="/reports">
+          <ReportsPage />
+        </Router>
+      </WithMockState>,
+    );
+    expect(html).toContain("1S");
+    expect(html).toContain("2S");
+  });
 });

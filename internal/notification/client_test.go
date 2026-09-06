@@ -46,4 +46,25 @@ func TestHTTPSender_Send(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing webhook url")
 	}
+
+	// Test WxPusher Happy Path
+	oldURL := wxPusherAPIURL
+	wxPusherAPIURL = wxServer.URL
+	defer func() { wxPusherAPIURL = oldURL }()
+
+	cfgWx := DecryptedConfig{
+		WxPusherEnabled:  true,
+		WxPusherAppToken: "AT_mock_token",
+		PublicBaseURL:    "http://localhost:8080",
+	}
+	err = sender.Send(context.Background(), ChannelWxPusher, payload, cfgWx)
+	if err != nil {
+		t.Fatalf("send WxPusher failed: %v", err)
+	}
+
+	// Test WxPusher disabled or missing token
+	err = sender.Send(context.Background(), ChannelWxPusher, payload, DecryptedConfig{})
+	if err == nil {
+		t.Fatal("expected error when wxpusher disabled")
+	}
 }

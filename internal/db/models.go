@@ -28,6 +28,19 @@ type AdConfig struct {
 	UpdatedBy     sql.NullInt64
 }
 
+type AiConfig struct {
+	ID             int32
+	IsEnabled      bool
+	BaseUrl        string
+	ApiKey         string
+	DefaultModel   string
+	ModelTranslate string
+	ModelVision    string
+	ModelSummary   string
+	UpdatedAt      time.Time
+	UpdatedBy      sql.NullInt64
+}
+
 type CronTaskLog struct {
 	ID        int64
 	TaskName  string

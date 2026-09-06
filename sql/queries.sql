@@ -433,6 +433,30 @@ ON CONFLICT (id) DO UPDATE SET
     updated_by = EXCLUDED.updated_by
 RETURNING *;
 
+-- name: GetAIConfig :one
+SELECT * FROM ai_configs
+WHERE id = 1 LIMIT 1;
+
+-- name: UpsertAIConfig :one
+INSERT INTO ai_configs (
+    id, is_enabled, base_url, api_key, default_model,
+    model_translate, model_vision, model_summary,
+    updated_at, updated_by
+) VALUES (
+    1, $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8
+)
+ON CONFLICT (id) DO UPDATE SET
+    is_enabled = EXCLUDED.is_enabled,
+    base_url = EXCLUDED.base_url,
+    api_key = CASE WHEN EXCLUDED.api_key = '' THEN ai_configs.api_key ELSE EXCLUDED.api_key END,
+    default_model = EXCLUDED.default_model,
+    model_translate = EXCLUDED.model_translate,
+    model_vision = EXCLUDED.model_vision,
+    model_summary = EXCLUDED.model_summary,
+    updated_at = CURRENT_TIMESTAMP,
+    updated_by = EXCLUDED.updated_by
+RETURNING *;
+
 -- name: ClaimOutboxTasks :many
 UPDATE notification_outbox
 SET status = 'SENDING',

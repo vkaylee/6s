@@ -356,3 +356,193 @@ func TestIssueHandler_ErrorPaths(t *testing.T) {
 		t.Errorf("expected 400 for resolve missing photo, got %d", rrResNoPhoto.Code)
 	}
 }
+
+func TestIssueHandler_AdditionalCoverage(t *testing.T) {
+	mockSvc := &mockIssueService{
+		issueResp: &Response{ID: 1, Category: "1S"},
+	}
+	handler := NewHandler(mockSvc)
+	user := db.User{ID: 10, Username: "worker", Role: "ADMIN", IsActive: true}
+
+	// 1. Multipart Patch
+	r := chi.NewRouter()
+	r.Patch("/api/issues/{id}", handler.Patch)
+
+	patchBody := &bytes.Buffer{}
+	patchWriter := multipart.NewWriter(patchBody)
+	_ = patchWriter.WriteField("category", "2S")
+	_ = patchWriter.WriteField("cause_type", "CONDITION")
+	_ = patchWriter.WriteField("location_code", "LINE_A1")
+	_ = patchWriter.WriteField("description", "Updated desc")
+	_ = patchWriter.WriteField("tags", `["tag1","tag2"]`)
+	partBefore, _ := patchWriter.CreateFormFile("photo_before", "before.jpg")
+	_, _ = partBefore.Write([]byte("fake-jpeg"))
+	partDetail, _ := patchWriter.CreateFormFile("photo_detail", "detail.jpg")
+	_, _ = partDetail.Write([]byte("fake-detail"))
+	_ = patchWriter.Close()
+
+	reqPatchMulti := httptest.NewRequest("PATCH", "/api/issues/1", patchBody)
+	reqPatchMulti.Header.Set("Content-Type", patchWriter.FormDataContentType())
+	reqPatchMulti = reqPatchMulti.WithContext(context.WithValue(reqPatchMulti.Context(), auth.UserContextKey, user))
+	rrPatchMulti := httptest.NewRecorder()
+	r.ServeHTTP(rrPatchMulti, reqPatchMulti)
+	if rrPatchMulti.Code != http.StatusOK {
+		t.Errorf("expected 200 for multipart patch, got %d", rrPatchMulti.Code)
+	}
+
+	// 2. Patch Error Branches
+	mockSvc.err = ErrPermissionDenied
+	reqPatchForbidden := httptest.NewRequest("PATCH", "/api/issues/1", bytes.NewReader([]byte("{}")))
+	reqPatchForbidden = reqPatchForbidden.WithContext(context.WithValue(reqPatchForbidden.Context(), auth.UserContextKey, user))
+	rrPatchForbidden := httptest.NewRecorder()
+	r.ServeHTTP(rrPatchForbidden, reqPatchForbidden)
+	if rrPatchForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for patch forbidden, got %d", rrPatchForbidden.Code)
+	}
+
+	mockSvc.err = ErrInvalidCategory
+	reqPatchInvalidCat := httptest.NewRequest("PATCH", "/api/issues/1", bytes.NewReader([]byte("{}")))
+	reqPatchInvalidCat = reqPatchInvalidCat.WithContext(context.WithValue(reqPatchInvalidCat.Context(), auth.UserContextKey, user))
+	rrPatchInvalidCat := httptest.NewRecorder()
+	r.ServeHTTP(rrPatchInvalidCat, reqPatchInvalidCat)
+	if rrPatchInvalidCat.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for patch invalid category, got %d", rrPatchInvalidCat.Code)
+	}
+
+	// Patch Unauth & Bad ID
+	reqPatchUnauth := httptest.NewRequest("PATCH", "/api/issues/1", bytes.NewReader([]byte("{}")))
+	rrPatchUnauth := httptest.NewRecorder()
+	r.ServeHTTP(rrPatchUnauth, reqPatchUnauth)
+	if rrPatchUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth patch, got %d", rrPatchUnauth.Code)
+	}
+
+	reqPatchBadID := httptest.NewRequest("PATCH", "/api/issues/invalid", bytes.NewReader([]byte("{}")))
+	reqPatchBadID = reqPatchBadID.WithContext(context.WithValue(reqPatchBadID.Context(), auth.UserContextKey, user))
+	rrPatchBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrPatchBadID, reqPatchBadID)
+	if rrPatchBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad id patch, got %d", rrPatchBadID.Code)
+	}
+
+	// 3. Close, Reopen, Invalid Error Branches
+	r.Post("/api/issues/{id}/close", handler.Close)
+	r.Post("/api/issues/{id}/reopen", handler.Reopen)
+	r.Post("/api/issues/{id}/invalid", handler.Invalid)
+
+	// Close Unauth, BadID, Forbidden
+	reqCloseUnauth := httptest.NewRequest("POST", "/api/issues/1/close", nil)
+	rrCloseUnauth := httptest.NewRecorder()
+	r.ServeHTTP(rrCloseUnauth, reqCloseUnauth)
+	if rrCloseUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth close, got %d", rrCloseUnauth.Code)
+	}
+
+	reqCloseBadID := httptest.NewRequest("POST", "/api/issues/abc/close", nil)
+	reqCloseBadID = reqCloseBadID.WithContext(context.WithValue(reqCloseBadID.Context(), auth.UserContextKey, user))
+	rrCloseBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrCloseBadID, reqCloseBadID)
+	if rrCloseBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad id close, got %d", rrCloseBadID.Code)
+	}
+
+	mockSvc.err = ErrPermissionDenied
+	reqCloseForbidden := httptest.NewRequest("POST", "/api/issues/1/close", bytes.NewReader([]byte("{}")))
+	reqCloseForbidden = reqCloseForbidden.WithContext(context.WithValue(reqCloseForbidden.Context(), auth.UserContextKey, user))
+	rrCloseForbidden := httptest.NewRecorder()
+	r.ServeHTTP(rrCloseForbidden, reqCloseForbidden)
+	if rrCloseForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for close forbidden, got %d", rrCloseForbidden.Code)
+	}
+
+	// Reopen Unauth, BadID, Forbidden
+	reqReopenUnauth := httptest.NewRequest("POST", "/api/issues/1/reopen", nil)
+	rrReopenUnauth := httptest.NewRecorder()
+	r.ServeHTTP(rrReopenUnauth, reqReopenUnauth)
+	if rrReopenUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth reopen, got %d", rrReopenUnauth.Code)
+	}
+
+	reqReopenBadID := httptest.NewRequest("POST", "/api/issues/abc/reopen", nil)
+	reqReopenBadID = reqReopenBadID.WithContext(context.WithValue(reqReopenBadID.Context(), auth.UserContextKey, user))
+	rrReopenBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrReopenBadID, reqReopenBadID)
+	if rrReopenBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad id reopen, got %d", rrReopenBadID.Code)
+	}
+
+	reqReopenForbidden := httptest.NewRequest("POST", "/api/issues/1/reopen", bytes.NewReader([]byte("{}")))
+	reqReopenForbidden = reqReopenForbidden.WithContext(context.WithValue(reqReopenForbidden.Context(), auth.UserContextKey, user))
+	rrReopenForbidden := httptest.NewRecorder()
+	r.ServeHTTP(rrReopenForbidden, reqReopenForbidden)
+	if rrReopenForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for reopen forbidden, got %d", rrReopenForbidden.Code)
+	}
+
+	// Invalid Unauth, BadID, Forbidden
+	reqInvalidUnauth := httptest.NewRequest("POST", "/api/issues/1/invalid", nil)
+	rrInvalidUnauth := httptest.NewRecorder()
+	r.ServeHTTP(rrInvalidUnauth, reqInvalidUnauth)
+	if rrInvalidUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth invalid, got %d", rrInvalidUnauth.Code)
+	}
+
+	reqInvalidBadID := httptest.NewRequest("POST", "/api/issues/abc/invalid", nil)
+	reqInvalidBadID = reqInvalidBadID.WithContext(context.WithValue(reqInvalidBadID.Context(), auth.UserContextKey, user))
+	rrInvalidBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrInvalidBadID, reqInvalidBadID)
+	if rrInvalidBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad id invalid, got %d", rrInvalidBadID.Code)
+	}
+
+	reqInvalidForbidden := httptest.NewRequest("POST", "/api/issues/1/invalid", bytes.NewReader([]byte("{}")))
+	reqInvalidForbidden = reqInvalidForbidden.WithContext(context.WithValue(reqInvalidForbidden.Context(), auth.UserContextKey, user))
+	rrInvalidForbidden := httptest.NewRecorder()
+	r.ServeHTTP(rrInvalidForbidden, reqInvalidForbidden)
+	if rrInvalidForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for invalid forbidden, got %d", rrInvalidForbidden.Code)
+	}
+
+	// Sync Unauth
+	reqSyncUnauth := httptest.NewRequest("POST", "/api/issues/sync", nil)
+	rrSyncUnauth := httptest.NewRecorder()
+	handler.Sync(rrSyncUnauth, reqSyncUnauth)
+	if rrSyncUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth sync, got %d", rrSyncUnauth.Code)
+	}
+
+	// Resolve Unauth & BadID
+	r.Post("/api/issues/{id}/resolve", handler.Resolve)
+	reqResolveUnauth := httptest.NewRequest("POST", "/api/issues/1/resolve", nil)
+	rrResolveUnauth := httptest.NewRecorder()
+	r.ServeHTTP(rrResolveUnauth, reqResolveUnauth)
+	if rrResolveUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauth resolve, got %d", rrResolveUnauth.Code)
+	}
+
+	reqResolveBadID := httptest.NewRequest("POST", "/api/issues/abc/resolve", nil)
+	reqResolveBadID = reqResolveBadID.WithContext(context.WithValue(reqResolveBadID.Context(), auth.UserContextKey, user))
+	rrResolveBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrResolveBadID, reqResolveBadID)
+	if rrResolveBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad id resolve, got %d", rrResolveBadID.Code)
+	}
+
+	// GetByID BadID
+	r.Get("/api/issues/{id}", handler.GetByID)
+	reqGetBadID := httptest.NewRequest("GET", "/api/issues/abc", nil)
+	rrGetBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrGetBadID, reqGetBadID)
+	if rrGetBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad id get, got %d", rrGetBadID.Code)
+	}
+
+	// List with query params
+	mockSvc.err = nil
+	reqListParams := httptest.NewRequest("GET", "/api/issues?statuses=OPEN,CLOSED&categories=1S,2S&location_codes=LINE_A1&page=2&limit=50", nil)
+	rrListParams := httptest.NewRecorder()
+	handler.List(rrListParams, reqListParams)
+	if rrListParams.Code != http.StatusOK {
+		t.Errorf("expected 200 for list with params, got %d", rrListParams.Code)
+	}
+}

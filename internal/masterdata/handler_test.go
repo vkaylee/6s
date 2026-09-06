@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -285,5 +286,208 @@ func TestMasterDataHandler(t *testing.T) {
 	handler.UpdateLocation(rrBadUpdate, reqBadUpdate)
 	if rrBadUpdate.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 on missing required fields for update location, got %d", rrBadUpdate.Code)
+	}
+}
+
+type mockMDErrorStore struct{}
+
+func (m *mockMDErrorStore) ListLocations(_ context.Context) ([]db.Location, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockMDErrorStore) ListAllLocations(_ context.Context) ([]db.Location, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockMDErrorStore) UpdateLocationActiveStatus(_ context.Context, _ db.UpdateLocationActiveStatusParams) (db.Location, error) {
+	return db.Location{}, errors.New("db error")
+}
+func (m *mockMDErrorStore) CreateLocation(_ context.Context, _ db.CreateLocationParams) (db.Location, error) {
+	return db.Location{}, errors.New("db error")
+}
+func (m *mockMDErrorStore) UpdateLocation(_ context.Context, _ db.UpdateLocationParams) (db.Location, error) {
+	return db.Location{}, errors.New("db error")
+}
+func (m *mockMDErrorStore) ListTags(_ context.Context) ([]db.Tag, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockMDErrorStore) ListAllTags(_ context.Context) ([]db.Tag, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockMDErrorStore) UpdateTagActiveStatus(_ context.Context, _ db.UpdateTagActiveStatusParams) (db.Tag, error) {
+	return db.Tag{}, errors.New("db error")
+}
+func (m *mockMDErrorStore) SetAllTagsActiveStatus(_ context.Context, _ bool) error {
+	return errors.New("db error")
+}
+func (m *mockMDErrorStore) UpsertTag(_ context.Context, _ db.UpsertTagParams) (db.Tag, error) {
+	return db.Tag{}, errors.New("db error")
+}
+
+func TestMasterDataHandler_ErrorBranches(t *testing.T) {
+	validStore := &mockMDStore{
+		tags: []db.Tag{{Code: "T1", IsActive: true}},
+	}
+	handler := NewHandler(validStore)
+	errHandler := NewHandler(&mockMDErrorStore{})
+
+	// Batch update specific codes
+	batchReq := BatchUpdateTagsStatusRequest{Codes: []string{"T1"}, IsActive: false}
+	body, _ := json.Marshal(batchReq)
+	req := httptest.NewRequest("POST", "/api/tags/batch-status", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.BatchUpdateTagsStatus(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 for batch specific codes, got %d", rr.Code)
+	}
+
+	// Batch update bad JSON
+	reqBad := httptest.NewRequest("POST", "/api/tags/batch-status", bytes.NewReader([]byte("{invalid")))
+	rrBad := httptest.NewRecorder()
+	handler.BatchUpdateTagsStatus(rrBad, reqBad)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in batch status, got %d", rrBad.Code)
+	}
+
+	// Batch update error store (all=true)
+	allTrue := true
+	batchAllReq := BatchUpdateTagsStatusRequest{All: &allTrue, IsActive: true}
+	bodyAll, _ := json.Marshal(batchAllReq)
+	reqAllErr := httptest.NewRequest("POST", "/api/tags/batch-status", bytes.NewReader(bodyAll))
+	rrAllErr := httptest.NewRecorder()
+	errHandler.BatchUpdateTagsStatus(rrAllErr, reqAllErr)
+	if rrAllErr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for batch all on error store, got %d", rrAllErr.Code)
+	}
+
+	// Batch update error store (codes)
+	reqCodesErr := httptest.NewRequest("POST", "/api/tags/batch-status", bytes.NewReader(body))
+	rrCodesErr := httptest.NewRecorder()
+	errHandler.BatchUpdateTagsStatus(rrCodesErr, reqCodesErr)
+	if rrCodesErr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for batch codes on error store, got %d", rrCodesErr.Code)
+	}
+
+	// Upsert tag bad JSON & missing fields
+	reqBadTag := httptest.NewRequest("POST", "/api/tags", bytes.NewReader([]byte("{invalid")))
+	rrBadTag := httptest.NewRecorder()
+	handler.UpsertTag(rrBadTag, reqBadTag)
+	if rrBadTag.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in upsert tag, got %d", rrBadTag.Code)
+	}
+
+	missingTagReq := UpsertTagRequest{Code: "T2", NameVi: ""}
+	bodyMissing, _ := json.Marshal(missingTagReq)
+	reqMissingTag := httptest.NewRequest("POST", "/api/tags", bytes.NewReader(bodyMissing))
+	rrMissingTag := httptest.NewRecorder()
+	handler.UpsertTag(rrMissingTag, reqMissingTag)
+	if rrMissingTag.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing fields in upsert tag, got %d", rrMissingTag.Code)
+	}
+
+	validTagReq := UpsertTagRequest{Code: "T2", NameVi: "Ten", Category: "1S"}
+	bodyValidTag, _ := json.Marshal(validTagReq)
+	reqErrTag := httptest.NewRequest("POST", "/api/tags", bytes.NewReader(bodyValidTag))
+	rrErrTag := httptest.NewRecorder()
+	errHandler.UpsertTag(rrErrTag, reqErrTag)
+	if rrErrTag.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on upsert tag error store, got %d", rrErrTag.Code)
+	}
+
+	// Update tag status bad JSON & error store
+	reqBadTagStatus := httptest.NewRequest("PATCH", "/api/tags/T1/status?code=T1", bytes.NewReader([]byte("{invalid")))
+	rrBadTagStatus := httptest.NewRecorder()
+	handler.UpdateTagStatus(rrBadTagStatus, reqBadTagStatus)
+	if rrBadTagStatus.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in update tag status, got %d", rrBadTagStatus.Code)
+	}
+
+	tagStatusReq := UpdateTagStatusRequest{IsActive: true}
+	bodyTagStatus, _ := json.Marshal(tagStatusReq)
+	reqErrTagStatus := httptest.NewRequest("PATCH", "/api/tags/T1/status?code=T1", bytes.NewReader(bodyTagStatus))
+	rrErrTagStatus := httptest.NewRecorder()
+	errHandler.UpdateTagStatus(rrErrTagStatus, reqErrTagStatus)
+	if rrErrTagStatus.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for update tag status error store, got %d", rrErrTagStatus.Code)
+	}
+
+	// Update location status bad JSON & error store
+	reqBadLocStatus := httptest.NewRequest("PATCH", "/api/locations/L1/status?code=L1", bytes.NewReader([]byte("{invalid")))
+	rrBadLocStatus := httptest.NewRecorder()
+	handler.UpdateLocationStatus(rrBadLocStatus, reqBadLocStatus)
+	if rrBadLocStatus.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in update location status, got %d", rrBadLocStatus.Code)
+	}
+
+	locStatusReq := UpdateLocationStatusRequest{IsActive: true}
+	bodyLocStatus, _ := json.Marshal(locStatusReq)
+	reqErrLocStatus := httptest.NewRequest("PATCH", "/api/locations/L1/status?code=L1", bytes.NewReader(bodyLocStatus))
+	rrErrLocStatus := httptest.NewRecorder()
+	errHandler.UpdateLocationStatus(rrErrLocStatus, reqErrLocStatus)
+	if rrErrLocStatus.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for update location status error store, got %d", rrErrLocStatus.Code)
+	}
+
+	// Update location bad JSON & error store
+	reqBadLocUpdate := httptest.NewRequest("PUT", "/api/locations/L1", bytes.NewReader([]byte("{invalid")))
+	reqBadLocUpdate.SetPathValue("code", "L1")
+	rrBadLocUpdate := httptest.NewRecorder()
+	handler.UpdateLocation(rrBadLocUpdate, reqBadLocUpdate)
+	if rrBadLocUpdate.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in update location, got %d", rrBadLocUpdate.Code)
+	}
+
+	validLocUpdate := UpdateLocationRequest{NameVi: "Loc", QRCode: "QR"}
+	bodyLocUpdate, _ := json.Marshal(validLocUpdate)
+	reqErrLocUpdate := httptest.NewRequest("PUT", "/api/locations/L1", bytes.NewReader(bodyLocUpdate))
+	reqErrLocUpdate.SetPathValue("code", "L1")
+	rrErrLocUpdate := httptest.NewRecorder()
+	errHandler.UpdateLocation(rrErrLocUpdate, reqErrLocUpdate)
+	if rrErrLocUpdate.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for update location error store, got %d", rrErrLocUpdate.Code)
+	}
+
+	// Create location bad JSON & error store
+	reqBadCreate := httptest.NewRequest("POST", "/api/locations", bytes.NewReader([]byte("{invalid")))
+	rrBadCreate := httptest.NewRecorder()
+	handler.CreateLocation(rrBadCreate, reqBadCreate)
+	if rrBadCreate.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad json in create location, got %d", rrBadCreate.Code)
+	}
+
+	validCreate := CreateLocationRequest{Code: "L2", NameVi: "Loc2", QRCode: "QR2"}
+	bodyCreate, _ := json.Marshal(validCreate)
+	reqErrCreate := httptest.NewRequest("POST", "/api/locations", bytes.NewReader(bodyCreate))
+	rrErrCreate := httptest.NewRecorder()
+	errHandler.CreateLocation(rrErrCreate, reqErrCreate)
+	if rrErrCreate.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for create location error store, got %d", rrErrCreate.Code)
+	}
+
+	// List queries on error store
+	reqListLoc := httptest.NewRequest("GET", "/api/locations", nil)
+	rrListLoc := httptest.NewRecorder()
+	errHandler.ListLocations(rrListLoc, reqListLoc)
+	if rrListLoc.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for list locations error store, got %d", rrListLoc.Code)
+	}
+
+	reqListAllLoc := httptest.NewRequest("GET", "/api/locations/all", nil)
+	rrListAllLoc := httptest.NewRecorder()
+	errHandler.ListAllLocations(rrListAllLoc, reqListAllLoc)
+	if rrListAllLoc.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for list all locations error store, got %d", rrListAllLoc.Code)
+	}
+
+	reqListTags := httptest.NewRequest("GET", "/api/tags", nil)
+	rrListTags := httptest.NewRecorder()
+	errHandler.ListTags(rrListTags, reqListTags)
+	if rrListTags.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for list tags error store, got %d", rrListTags.Code)
+	}
+
+	reqListAllTags := httptest.NewRequest("GET", "/api/tags/all", nil)
+	rrListAllTags := httptest.NewRecorder()
+	errHandler.ListAllTags(rrListAllTags, reqListAllTags)
+	if rrListAllTags.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for list all tags error store, got %d", rrListAllTags.Code)
 	}
 }
