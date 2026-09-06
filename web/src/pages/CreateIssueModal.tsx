@@ -11,6 +11,7 @@ import {
   type IssueItem,
   type LocationItem,
   resolveI18n,
+  resolveTagLabel,
   S_CATEGORIES,
   type TagItem,
 } from "../types/index.ts";
@@ -365,7 +366,7 @@ export function CreateIssueModal({
                           : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
-                      {tag.label_vi} / {tag.label_zh}
+                      {resolveTagLabel(tag, locale)}
                     </button>
                   );
                 })}

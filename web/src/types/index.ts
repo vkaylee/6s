@@ -1,6 +1,6 @@
 import type { I18nObject } from "./i18n.ts";
 
-export { resolveI18n } from "./i18n.ts";
+export { resolveI18n, resolveTagLabel } from "./i18n.ts";
 export type { I18nObject };
 
 export const IssueCategory = {
@@ -79,6 +79,7 @@ export interface TagItem {
   label_vi: string;
   label_zh: string;
   label_en?: string;
+  use_count?: number;
   code?: string;
   name_vi?: string;
   name_zh?: string;
@@ -124,6 +125,8 @@ export const S_CATEGORIES: {
   hint_zh: string;
   hint_en?: string;
   hint_i18n?: I18nObject;
+  description_i18n?: I18nObject;
+  action_i18n?: I18nObject;
   isSafety?: boolean;
 }[] = [
   {
@@ -138,6 +141,16 @@ export const S_CATEGORIES: {
       en: "Clutter / Scrap",
       zh: "整理 / 废弃物",
     },
+    description_i18n: {
+      vi: "Vật dụng thừa, máy móc hỏng, phế liệu, rác chiếm lối đi hoặc mặt sàn.",
+      zh: "闲置工具、报废托盘、多余物料、占用通道的无用物品。",
+      en: "Unneeded items, broken equipment, scrap material, or stagnant WIP.",
+    },
+    action_i18n: {
+      vi: "Gắn thẻ đỏ, di dời hoặc đưa vào khu vực thanh lý.",
+      zh: "贴红牌警示，清理出作业现场或移交报废区。",
+      en: "Apply red tag, move out of work area, or scrap.",
+    },
   },
   {
     key: "2S",
@@ -150,6 +163,16 @@ export const S_CATEGORIES: {
       vi: "Sai chỗ / Thiếu vạch",
       en: "Wrong place / Missing line",
       zh: "整顿 / 缺标线",
+    },
+    description_i18n: {
+      vi: "Để đồ sai vị trí, thiếu biển tên/nhãn mác, mờ vạch kẻ sàn, dây cáp lộn xộn.",
+      zh: "物品乱放未归位、缺定位标线、箱体无标签、线缆凌乱、超高码放。",
+      en: "Items in wrong place, missing floor markings, missing labels, or tangled cables.",
+    },
+    action_i18n: {
+      vi: "Quy định vị trí, dán nhãn nhận diện, kẻ vạch và đặt về đúng chỗ.",
+      zh: "定置定位、标识清楚、整理线缆并归位放置。",
+      en: "Designate location, label clearly, mark boundaries, and return to place.",
     },
   },
   {
@@ -164,6 +187,16 @@ export const S_CATEGORIES: {
       en: "Dirty / Oil leak",
       zh: "清扫 / 漏油灰尘",
     },
+    description_i18n: {
+      vi: "Rò rỉ dầu mỡ/nước, bụi bẩn bám máy, rác vương vãi, thùng rác đầy tràn.",
+      zh: "设备漏油漏水、积灰积垢、地面污迹、垃圾桶溢出。",
+      en: "Oil/water leaks, dust accumulation, stained floors, or overflowing trash.",
+    },
+    action_i18n: {
+      vi: "Lau chùi sạch sẽ, xử lý dứt điểm điểm rò rỉ, vệ sinh thiết bị.",
+      zh: "彻底清扫擦拭、消除泄漏源并清理地面污迹。",
+      en: "Clean thoroughly, fix source of leak, and wipe down machines.",
+    },
   },
   {
     key: "4S",
@@ -176,6 +209,16 @@ export const S_CATEGORIES: {
       vi: "Hỏng chuẩn / Bảng tin",
       en: "Broken standard / Notice board",
       zh: "清洁 / 标准失效",
+    },
+    description_i18n: {
+      vi: "Bảng tin rách hỏng, biểu mẫu vệ sinh không cập nhật, chuẩn 3S bị bỏ bê.",
+      zh: "标准化标识损坏、点检表未更新、清扫维护未形成例行机制。",
+      en: "Damaged notice boards, missing checklists, or neglected 3S routines.",
+    },
+    action_i18n: {
+      vi: "Thay mới bảng biểu, duy trì lịch kiểm tra và chuẩn hóa quy trình.",
+      zh: "更新标准化看板与检查表，坚持每日点检维护。",
+      en: "Update visual boards, maintain check schedules, and enforce standards.",
     },
   },
   {
@@ -190,6 +233,16 @@ export const S_CATEGORIES: {
       en: "Discipline / Rules",
       zh: "素养 / 违规违纪",
     },
+    description_i18n: {
+      vi: "Vi phạm nội quy xưởng, không mang bảo hộ cá nhân (PPE), ý thức tự giác kém.",
+      zh: "违反厂规厂纪、未穿戴劳保用品(PPE)、吸烟乱扔或缺乏自律意识。",
+      en: "Disregarding factory rules, missing PPE, or lacking safety habits.",
+    },
+    action_i18n: {
+      vi: "Nhắc nhở, đào tạo lại nhận thức và kiểm điểm tuân thủ nội quy.",
+      zh: "现场提醒纠正、重新培训并严格执行规程。",
+      en: "Remind immediately, retrain personnel, and enforce compliance.",
+    },
   },
   {
     key: "6S",
@@ -202,6 +255,16 @@ export const S_CATEGORIES: {
       vi: "Nguy hiểm / Cháy nổ",
       en: "Danger / Fire hazard",
       zh: "安全 / 紧急危险",
+    },
+    description_i18n: {
+      vi: "Chặn lối thoát hiểm/bình chữa cháy, hở dây điện, máy mất che chắn an toàn.",
+      zh: "堵塞消防栓/逃生通道、电线裸露破损、防护罩缺失、存在起火隐患。",
+      en: "Blocked emergency exits, exposed wiring, missing guards, or fire risks.",
+    },
+    action_i18n: {
+      vi: "XỬ LÝ NGAY LẬP TỨC: Cảnh báo khu vực, dừng thao tác nguy hiểm, báo an toàn.",
+      zh: "立即就地整改：设置警示、停止危险作业并通知安全员。",
+      en: "IMMEDIATE ACTION: Cord off area, halt hazard, alert safety supervisor.",
     },
     isSafety: true,
   },

@@ -8,3 +8,27 @@ export function resolveI18n(text: I18nObject | string, locale?: SupportedLocale)
   const targetLocale = locale ?? useI18nStore.getState().locale;
   return text[targetLocale] ?? text.vi;
 }
+
+export function resolveTagLabel(
+  tag: {
+    label_vi?: string;
+    label_zh?: string;
+    label_en?: string;
+    name_vi?: string;
+    name_zh?: string;
+    name_en?: string;
+    tag_code?: string;
+    code?: string;
+  },
+  locale?: SupportedLocale,
+): string {
+  const targetLocale = locale ?? useI18nStore.getState().locale;
+  const vi = tag.label_vi || tag.name_vi || "";
+  const zh = tag.label_zh || tag.name_zh || "";
+  const en = tag.label_en || tag.name_en || "";
+  const fallback = tag.tag_code || tag.code || "";
+
+  if (targetLocale === "en") return en || vi || zh || fallback;
+  if (targetLocale === "zh") return zh || vi || en || fallback;
+  return vi || zh || en || fallback;
+}
