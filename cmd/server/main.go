@@ -24,6 +24,7 @@ import (
 	"6s/internal/issue"
 	"6s/internal/masterdata"
 	"6s/internal/notification"
+	"6s/internal/observability"
 	"6s/internal/report"
 	"6s/internal/response"
 	"6s/internal/scoring"
@@ -93,22 +94,25 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
-	timeoutMw := middleware.Timeout(60 * time.Second)
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if req.URL.Path == "/api/issues/events" {
-				next.ServeHTTP(w, req)
-				return
-			}
-			timeoutMw(next).ServeHTTP(w, req)
-		})
-	})
+	r.Use(timeoutByRoute)
 	r.Use(i18n.Middleware)
-	// Liveness reports process health only; readiness includes a DB ping.
-	livenessHandler := func(w http.ResponseWriter, _ *http.Request) {
-		response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		dbStatus := "disconnected"
+		if dbConn != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
+			defer cancel()
+			if err := dbConn.PingContext(ctx); err == nil {
+				dbStatus = "ok"
+			}
+		}
+
+		response.JSON(w, http.StatusOK, map[string]string{
+			"status": "ok",
+			"db":     dbStatus,
+		})
 	}
 	readinessHandler := func(w http.ResponseWriter, req *http.Request) {
 		if dbConn == nil {
@@ -332,11 +336,40 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		air.Post("/review", aiHandler.Review)
 		air.Post("/review-follow-up", aiHandler.FollowUp)
 	})
-
-	// Launch background workers
+	backgroundCtx := context.Background()
 	outboxWorker := notification.NewWorker(queries, httpSender, cipher, notifyCh)
-	go outboxWorker.Start(context.Background())
+	go outboxWorker.Start(backgroundCtx)
 
 	cronRunner := cron.NewRunner(queries, nil, storageDir)
-	go cronRunner.Start(context.Background())
+	go cronRunner.Start(backgroundCtx)
+}
+
+func timeoutByRoute(next http.Handler) http.Handler {
+	timeout := middleware.Timeout(60 * time.Second)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		patterns := chi.RouteContext(r.Context()).RoutePatterns
+		for _, pattern := range patterns {
+			if pattern == "/api/issues/events" {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		timeout(next).ServeHTTP(w, r)
+	})
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := middleware.GetReqID(r.Context())
+		if requestID != "" {
+			w.Header().Set("X-Request-ID", requestID)
+		}
+		started := time.Now()
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		observability.Log("info", "http request", map[string]any{
+			"request_id": requestID, "route": r.URL.Path, "status": ww.Status(),
+			"duration_ms": time.Since(started).Seconds() * 1000,
+		})
+	})
 }

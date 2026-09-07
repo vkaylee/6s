@@ -30,50 +30,31 @@ type ErrorBody struct {
 	Details any    `json:"details,omitempty"`
 }
 
-// JSON renders data into the standard Envelope response.
 func JSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(Envelope{Data: data}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(Envelope{Data: data})
 }
 
-// Paginated renders a paginated list of items in the standard Envelope format.
 func Paginated(w http.ResponseWriter, status int, data any, page, limit, total int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(Envelope{
-		Data: data,
-		Pagination: &Pagination{
-			Page:  page,
-			Limit: limit,
-			Total: total,
-		},
-	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(Envelope{
+		Data:       data,
+		Pagination: &Pagination{Page: page, Limit: limit, Total: total},
+	})
 }
 
 // (Deprecated direct error helpers removed to enforce AppError with i18n)
 
-// AppError renders an *apperror.AppError with localized message based on request context.
 func AppError(w http.ResponseWriter, r *http.Request, appErr *apperror.AppError) {
 	locale := i18n.FromContext(r.Context())
 	msg := i18n.Translate(locale, appErr.Key, appErr.Args...)
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(appErr.HTTPStatus)
-	if err := json.NewEncoder(w).Encode(Envelope{
-		Error: &ErrorBody{
-			Code:    appErr.Code,
-			Key:     string(appErr.Key),
-			Message: msg,
-			Details: appErr.Details,
-		},
-	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(Envelope{Error: &ErrorBody{
+		Code: appErr.Code, Key: string(appErr.Key), Message: msg,
+	}})
 }
 
 // RenderError handles generic errors, extracting *apperror.AppError if present or falling back to internal server error.
