@@ -127,8 +127,8 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 		}
 		response.JSON(w, http.StatusOK, map[string]string{"status": "ok", "db": "ok"})
 	}
-	r.Get("/api/health", livenessHandler)
-	r.Head("/api/health", livenessHandler)
+	r.Get("/api/health", healthHandler)
+	r.Head("/api/health", healthHandler)
 	r.Get("/api/ready", readinessHandler)
 	r.Head("/api/ready", readinessHandler)
 	if dbConn != nil && cfg != nil {
