@@ -1,3 +1,4 @@
+import { normalizeTags } from "../src/hooks/useDashboardData.ts";
 import { beforeEach, describe, expect, it } from "bun:test";
 import * as React from "react";
 import { renderToString } from "react-dom/server";
@@ -660,5 +661,33 @@ describe("Wouter UX & Routing Verification", () => {
     );
 
     expect(html).toContain("Item 301");
+  });
+});
+
+describe("dashboard data boundary", () => {
+  it("normalizes generated server tags without client-side defaults", () => {
+    expect(
+      normalizeTags([
+        {
+          code: "oil_leak",
+          category: "3S",
+          name_vi: "Rò rỉ dầu",
+          name_zh: "设备漏油",
+          name_en: "Oil leak",
+          use_count: 4,
+          is_preset: true,
+        },
+      ]),
+    ).toEqual([
+      {
+        tag_code: "oil_leak",
+        category: "3S",
+        label_vi: "Rò rỉ dầu",
+        label_zh: "设备漏油",
+        label_en: "Oil leak",
+        use_count: 4,
+        is_preset: true,
+      },
+    ]);
   });
 });
