@@ -188,6 +188,28 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                   {user.role === UserRole.ADMIN && (
                     <>
                       <Link
+                        href="/admin/locations"
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate?.("/admin/locations");
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                      >
+                        <span>📍</span>
+                        <span>{t("admin.locations_page_title")}</span>
+                      </Link>
+                      <Link
+                        href="/admin/tags"
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate?.("/admin/tags");
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                      >
+                        <span>🏷️</span>
+                        <span>{t("admin.tags_page_title")}</span>
+                      </Link>
+                      <Link
                         href="/admin"
                         onClick={() => {
                           setIsProfileOpen(false);

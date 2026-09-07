@@ -10,6 +10,7 @@ import {
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { apiClient } from "./api/client.ts";
+import { AppShell } from "./components/AppShell.tsx";
 import { ConflictModal } from "./components/ConflictModal.tsx";
 import { FilterDrawer, type FilterState } from "./components/FilterDrawer.tsx";
 import { GlobalDialog } from "./components/GlobalDialog.tsx";
@@ -20,7 +21,6 @@ import { OfflineOutboxDrawer } from "./components/OfflineOutboxDrawer.tsx";
 import { PageContainer } from "./components/PageContainer.tsx";
 import { ProtectedRoute } from "./components/ProtectedRoute.tsx";
 import { type FacetKey, QuickFacets } from "./components/QuickFacets.tsx";
-import { StatusBar } from "./components/StatusBar.tsx";
 import type { DraftResolve } from "./db/indexeddb.ts";
 import { useI18nStore } from "./i18n/index.ts";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
@@ -59,6 +59,12 @@ const UserAccessPage = lazy(() =>
 );
 const PermissionMatrixPage = lazy(() =>
   import("./pages/PermissionMatrixPage.tsx").then((m) => ({ default: m.PermissionMatrixPage })),
+);
+const FactoryLocationsPage = lazy(() =>
+  import("./pages/FactoryLocationsPage.tsx").then((m) => ({ default: m.FactoryLocationsPage })),
+);
+const IssueTagsPage = lazy(() =>
+  import("./pages/IssueTagsPage.tsx").then((m) => ({ default: m.IssueTagsPage })),
 );
 
 function ScrollToTop() {
@@ -911,7 +917,19 @@ export function App() {
   return (
     <>
       <ScrollToTop />
-      <Switch>
+      <AppShell
+        showStatusBar={Boolean(user) && !currentPath.startsWith("/login")}
+        onOpenDrawer={() => setIsDrawerOpen(true)}
+        onNavigate={(path) => setLocation(path)}
+        globalOverlay={
+          <OfflineOutboxDrawer
+            isOpen={isDrawerOpen}
+            onClose={() => setIsDrawerOpen(false)}
+            onResolveConflict={(r) => setConflictItem(r)}
+          />
+        }
+      >
+        <Switch>
         <Route path="/login">
           <LoginPage />
         </Route>
@@ -951,6 +969,32 @@ export function App() {
               }
             >
               <PermissionMatrixPage />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/locations">
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <FactoryLocationsPage />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/tags">
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <IssueTagsPage />
             </Suspense>
           </ProtectedRoute>
         </Route>
@@ -1008,15 +1052,6 @@ export function App() {
               }}
             />
           </ProtectedRoute>
-        </Route>
-        <Route path="/">
-          <ProtectedRoute>
-            <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
-              {/* Top Unified Header & Status Bar */}
-              <StatusBar
-                onOpenDrawer={() => setIsDrawerOpen(true)}
-                onNavigate={(path) => setLocation(path)}
-              />
 
               {/* Main Container */}
               <main className="pt-4">
@@ -1446,11 +1481,6 @@ export function App() {
                 onClose={() => setIsFilterDrawerOpen(false)}
                 locations={locations}
                 filters={advancedFilters}
-                onApply={applyAdvancedFilters}
-                onReset={resetAdvancedFilters}
-              />
-              <OfflineOutboxDrawer
-                isOpen={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
                 onResolveConflict={(r) => setConflictItem(r)}
               />
