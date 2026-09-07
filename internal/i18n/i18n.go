@@ -41,6 +41,7 @@ const (
 	ErrMissingRefreshToken     Key = "auth.missing_refresh_token"
 	ErrInvalidRefreshToken     Key = "auth.invalid_refresh_token"
 	ErrADConfigNotFound        Key = "auth.ad_config_not_found"
+	ErrADEncryptionKeyMissing  Key = "auth.ad_encryption_key_missing"
 	ErrADTestFailed            Key = "auth.ad_test_failed"
 	ErrSessionsQueryFailed     Key = "auth.sessions_query_failed"
 	ErrAdminExists             Key = "auth.admin_already_exists"
@@ -104,6 +105,7 @@ var catalog = map[string]map[Key]string{
 		ErrConflict:                "Dữ liệu bị xung đột hoặc đã bị thay đổi",
 		ErrInvalidInput:            "Dữ liệu nhập không hợp lệ: %v",
 		ErrADConfigNotFound:        "Chưa có cấu hình Active Directory để kiểm tra",
+		ErrADEncryptionKeyMissing:  "Thiếu APP_ENCRYPTION_KEY để giải mã mật khẩu bind AD",
 		ErrADTestFailed:            "Kiểm tra kết nối Active Directory thất bại: %v",
 		ErrSessionsQueryFailed:     "Lỗi truy vấn danh sách phiên đăng nhập",
 		ErrAdminExists:             "Hệ thống đã có quản trị viên. Không thể khởi tạo lại.",
@@ -191,6 +193,8 @@ var catalog = map[string]map[Key]string{
 		ErrMissingRefreshToken:     "Missing refresh token",
 		ErrInvalidRefreshToken:     "Invalid or expired refresh token",
 		ErrADConfigNotFound:        "No Active Directory configuration found to test",
+		ErrADTestFailed:            "Active Directory test failed: %v",
+		ErrADEncryptionKeyMissing:  "APP_ENCRYPTION_KEY is required to decrypt the AD bind password",
 		ErrAccountLockedTemp:       "Account temporarily locked for 15 minutes due to 10 consecutive failed attempts",
 		ErrIssueNotFound:           "Issue not found",
 		ErrIssueConflict:           "Issue status or version conflict",
@@ -256,6 +260,7 @@ var catalog = map[string]map[Key]string{
 		ErrMissingRefreshToken:     "缺少 refresh token",
 		ErrInvalidRefreshToken:     "refresh token 无效或已过期",
 		ErrADConfigNotFound:        "未找到用于测试的 Active Directory 配置",
+		ErrADEncryptionKeyMissing:  "缺少 APP_ENCRYPTION_KEY，无法解密 AD 绑定密码",
 		ErrADTestFailed:            "Active Directory 连接测试失败: %v",
 		ErrSessionsQueryFailed:     "查询活动会话列表失败",
 		ErrAdminExists:             "系统已存在管理员，无法重新初始化",

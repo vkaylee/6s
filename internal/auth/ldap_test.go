@@ -3,6 +3,8 @@ package auth
 import (
 	"errors"
 	"testing"
+
+	"github.com/go-ldap/ldap/v3"
 )
 
 type MockLDAPClient struct {
@@ -18,6 +20,10 @@ func (m *MockLDAPClient) Authenticate(_, _ string) (*LDAPUser, error) {
 }
 
 func (m *MockLDAPClient) TestConnection() error {
+	return m.ErrToReturn
+}
+
+func (m *MockLDAPClient) TestSearchPermission() error {
 	return m.ErrToReturn
 }
 
@@ -65,6 +71,19 @@ func TestMapRoleFromGroups(t *testing.T) {
 				t.Errorf("expected %s, got %s", tc.expected, got)
 			}
 		})
+	}
+}
+
+func TestNormalizeADUsername(t *testing.T) {
+	for input, expected := range map[string]string{
+		"jdoe":             "jdoe",
+		"jdoe@factory.lan": "jdoe@factory.lan",
+		`FACTORY\jdoe`:     "jdoe",
+		"  jdoe  ":         "jdoe",
+	} {
+		if got := normalizeADUsername(input); got != expected {
+			t.Errorf("normalizeADUsername(%q) = %q, want %q", input, got, expected)
+		}
 	}
 }
 
@@ -134,5 +153,22 @@ func TestLiveLDAPClient_Coverage(t *testing.T) {
 	// Dial failure in Authenticate
 	if _, err := clientPlain.Authenticate("user", "pass"); err == nil {
 		t.Error("expected error for unreachable server in Authenticate, got nil")
+	}
+}
+
+func TestValidateSearchResult(t *testing.T) {
+	entry := &ldap.Entry{DN: "CN=user,DC=example,DC=com"}
+	valid := &ldap.SearchResult{Entries: []*ldap.Entry{entry}}
+	if err := validateSearchResult("DC=example,DC=com", valid, nil); err != nil {
+		t.Fatalf("valid result: %v", err)
+	}
+	if err := validateSearchResult("DC=example,DC=com", valid, &ldap.Error{ResultCode: ldap.LDAPResultSizeLimitExceeded}); err != nil {
+		t.Fatalf("size-limited result: %v", err)
+	}
+	if err := validateSearchResult("DC=example,DC=com", &ldap.SearchResult{}, nil); err == nil {
+		t.Fatal("expected empty result error")
+	}
+	if err := validateSearchResult("DC=example,DC=com", valid, &ldap.Error{ResultCode: ldap.LDAPResultInsufficientAccessRights}); err == nil {
+		t.Fatal("expected access-denied error")
 	}
 }

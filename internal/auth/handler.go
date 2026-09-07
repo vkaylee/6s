@@ -157,15 +157,17 @@ func (h *Handler) checkRateAndLockout(w http.ResponseWriter, r *http.Request, cl
 }
 
 func (h *Handler) authenticateUser(ctx context.Context, req LoginRequest, clientIP, userAgent string) (db.User, bool) {
-	// Try AD auth if enabled
-	adCfg, err := h.store.GetADConfig(ctx)
-	if err == nil && adCfg.IsEnabled && req.Username != "" && req.Password != "" {
+	// Local administrators must remain usable when AD is enabled or unavailable.
+	if user, ok := h.authenticateLocal(ctx, req); ok {
+		return user, true
+	}
+
+	if adCfg, err := h.store.GetADConfig(ctx); err == nil && adCfg.IsEnabled && req.Username != "" && req.Password != "" {
 		u, ok, isCredError := h.authenticateAD(ctx, adCfg, req.Username, req.Password)
 		if ok {
 			return u, true
 		}
 		if isCredError {
-			// Do NOT fallback to local on wrong AD credentials
 			return db.User{}, false
 		}
 		if aErr := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
@@ -178,7 +180,7 @@ func (h *Handler) authenticateUser(ctx context.Context, req LoginRequest, client
 			return db.User{}, false
 		}
 	}
-	return h.authenticateLocal(ctx, req)
+	return db.User{}, false
 }
 
 func (h *Handler) authenticateAD(ctx context.Context, adCfg db.AdConfig, username, password string) (db.User, bool, bool) {

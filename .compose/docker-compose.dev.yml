@@ -10,3 +10,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Development-only key; production must provide APP_ENCRYPTION_KEY externally.
+    environment:
+      APP_ENCRYPTION_KEY: "01234567890123456789012345678901"

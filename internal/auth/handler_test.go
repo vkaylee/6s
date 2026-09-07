@@ -13,6 +13,8 @@ import (
 
 	"6s/internal/crypto"
 	"6s/internal/db"
+	"6s/internal/i18n"
+	"strings"
 )
 
 type mockFullStore struct {
@@ -514,6 +516,26 @@ func TestHandler_LoginAD_JITProvision(t *testing.T) {
 	}
 }
 
+func TestHandler_LoginLocalAdminWithADEnabled(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	hashed, err := HashPassword("LocalAdmin123!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.usersByName["admin"] = db.User{ID: 1, Username: "admin", PasswordHash: sql.NullString{String: hashed, Valid: true}, AuthSource: "LOCAL", Role: RoleAdmin.String(), IsActive: true}
+	store.adConfig = db.AdConfig{IsEnabled: true, Server: "ad.factory.lan", Port: 636}
+	handler := NewHandler(store, tm, limiter, nil, &MockLDAPClient{ErrToReturn: errors.New("AD unavailable")})
+	body, _ := json.Marshal(LoginRequest{Username: "admin", Password: "LocalAdmin123!"})
+	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.Login(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected local admin login with AD enabled to succeed, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestHandler_CreateTicket(t *testing.T) {
 	store := newMockFullStore()
 	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
@@ -899,13 +921,33 @@ func TestHandler_LoginMoreBranchesAndADConfigErrors(t *testing.T) {
 		t.Errorf("expected 400 for test AD with no server, got %d", rrTestNoServer.Code)
 	}
 
+	// TestADConfig with encrypted stored password and missing cipher -> explicit configuration error.
+	store.adConfig = db.AdConfig{Server: "ad.lan", Port: 636, BindPassword: "encrypted"}
+	noCipherTestHandler := NewADConfigHandler(store, nil, mockLDAP)
+	reqMissingKey := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{}")))
+	rrMissingKey := httptest.NewRecorder()
+	noCipherTestHandler.TestADConfig(rrMissingKey, reqMissingKey)
+	if rrMissingKey.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when encryption key is missing, got %d", rrMissingKey.Code)
+	}
+	if !strings.Contains(rrMissingKey.Body.String(), string(i18n.ErrADEncryptionKeyMissing)) {
+		t.Fatalf("expected encryption-key error, got %s", rrMissingKey.Body.String())
+	}
+
 	// TestADConfig failed connection -> 502
 	testWithServer := UpdateADConfigRequest{Server: "ad.lan", Port: 636}
 	bodyTestServer, _ := json.Marshal(testWithServer)
 	reqTestFail := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader(bodyTestServer))
 	rrTestFail := httptest.NewRecorder()
 	adHandler.TestADConfig(rrTestFail, reqTestFail)
-	if rrTestFail.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for failed AD test, got %d", rrTestFail.Code)
+	if rrTestFail.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for invalid stored AD secret, got %d", rrTestFail.Code)
+	}
+}
+
+func TestADTestErrorUsesLocalizedMessage(t *testing.T) {
+	msg := i18n.Translate(i18n.LocaleEN, i18n.ErrADTestFailed, "search permission denied")
+	if msg == string(i18n.ErrADTestFailed) || !strings.Contains(msg, "search permission denied") {
+		t.Fatalf("expected localized AD test error, got %q", msg)
 	}
 }

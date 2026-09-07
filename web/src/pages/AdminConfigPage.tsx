@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiClient } from "../api/client.ts";
+import { ApiError, apiClient } from "../api/client.ts";
 import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
@@ -550,8 +550,8 @@ export function AdminConfigPage() {
       });
       setAdTestResult(res.message || "OK");
       haptics.success();
-    } catch {
-      setAdTestResult(t("admin.connection_failed"));
+    } catch (error) {
+      setAdTestResult(error instanceof ApiError ? error.message : t("admin.connection_failed"));
     }
   };
 

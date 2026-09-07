@@ -22,10 +22,11 @@ var ErrLDAPUserNotFound = errors.New("ldap user not found")
 // ErrLDAPUnreachable indicates LDAP server connection, DNS, or TLS handshake failure.
 var ErrLDAPUnreachable = errors.New("ldap server unreachable")
 
-// LDAPClient interface defines methods for LDAP authentication and health checking.
+// LDAPClient interface defines methods for connection, service bind, and search checks.
 type LDAPClient interface {
 	Authenticate(username, password string) (*LDAPUser, error)
 	TestConnection() error
+	TestSearchPermission() error
 }
 
 // LDAPConfig holds parameters for Active Directory / LDAP connection.
@@ -121,6 +122,50 @@ func (c *LiveLDAPClient) TestConnection() error {
 	return nil
 }
 
+// TestSearchPermission verifies service bind can search user entries under BaseDN.
+func (c *LiveLDAPClient) TestSearchPermission() error {
+	conn, err := c.dial()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if c.cfg.BindDN != "" {
+		if err := conn.Bind(c.cfg.BindDN, c.cfg.BindPassword); err != nil {
+			if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {
+				return fmt.Errorf("bind authentication failed: %w", ErrLDAPInvalidCredentials)
+			}
+			return fmt.Errorf("bind failed: %w", err)
+		}
+	}
+	sr, err := conn.Search(ldap.NewSearchRequest(
+		c.cfg.BaseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, 10, false,
+		"(&(objectCategory=person)(objectClass=user))",
+		[]string{"dn"}, nil,
+	))
+	return validateSearchResult(c.cfg.BaseDN, sr, err)
+}
+
+func validateSearchResult(baseDN string, sr *ldap.SearchResult, err error) error {
+	if err != nil && !ldap.IsErrorWithCode(err, ldap.LDAPResultSizeLimitExceeded) {
+		return fmt.Errorf("search permission denied: %w", err)
+	}
+	if sr == nil || len(sr.Entries) == 0 {
+		if err != nil {
+			return fmt.Errorf("search permission denied: %w", err)
+		}
+		return fmt.Errorf("no user entries found under BaseDN %s", baseDN)
+	}
+	return nil
+}
+
+func normalizeADUsername(username string) string {
+	username = strings.TrimSpace(username)
+	if i := strings.LastIndex(username, `\`); i >= 0 && i+1 < len(username) {
+		return username[i+1:]
+	}
+	return username
+}
+
 // Authenticate performs service bind, user search, and user credentials verification.
 func (c *LiveLDAPClient) Authenticate(username, password string) (*LDAPUser, error) {
 	if password == "" {
@@ -149,6 +194,7 @@ func (c *LiveLDAPClient) Authenticate(username, password string) (*LDAPUser, err
 	if filter == "" {
 		filter = "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=%s)(userPrincipalName=%s)))"
 	}
+	username = normalizeADUsername(username)
 	escapedUser := ldap.EscapeFilter(username)
 	filterStr := fmt.Sprintf(filter, escapedUser, escapedUser)
 

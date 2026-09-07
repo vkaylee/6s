@@ -189,23 +189,43 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.Server == "" {
-		cfg, err := h.store.GetADConfig(r.Context())
-		if err != nil {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrADConfigNotFound).WithCause(err))
-			return
+	if saved, err := h.store.GetADConfig(r.Context()); err == nil {
+		if req.Server == "" {
+			req.Server = saved.Server
 		}
-		req.Server = cfg.Server
-		req.Port = int(cfg.Port)
-		req.UseTLS = cfg.UseTls
-		req.SkipTLSVerify = cfg.SkipTlsVerify
-		req.BaseDN = cfg.BaseDn
-		req.BindDN = cfg.BindDn
-		if cfg.BindPassword != "" && h.cipher != nil {
-			if dec, err := h.cipher.Decrypt(cfg.BindPassword); err == nil {
-				req.BindPassword = dec
+		if req.Port == 0 {
+			req.Port = int(saved.Port)
+		}
+		if req.BaseDN == "" {
+			req.BaseDN = saved.BaseDn
+		}
+		if req.BindDN == "" {
+			req.BindDN = saved.BindDn
+		}
+		if req.UserFilter == "" {
+			req.UserFilter = saved.UserFilter
+		}
+		if !req.UseTLS {
+			req.UseTLS = saved.UseTls
+		}
+		if !req.SkipTLSVerify {
+			req.SkipTLSVerify = saved.SkipTlsVerify
+		}
+		if req.BindPassword == "" && saved.BindPassword != "" {
+			if h.cipher == nil {
+				response.AppError(w, r, apperror.Internal(i18n.ErrADEncryptionKeyMissing))
+				return
+			}
+			var decryptErr error
+			req.BindPassword, decryptErr = h.cipher.Decrypt(saved.BindPassword)
+			if decryptErr != nil {
+				response.AppError(w, r, apperror.Internal(i18n.ErrADEncryptionKeyMissing))
+				return
 			}
 		}
+	} else if req.Server == "" {
+		response.AppError(w, r, apperror.BadRequest(i18n.ErrADConfigNotFound).WithCause(err))
+		return
 	}
 
 	var client LDAPClient = h.ldapClient
@@ -218,11 +238,12 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 			BaseDN:        req.BaseDN,
 			BindDN:        req.BindDN,
 			BindPassword:  req.BindPassword,
+			UserFilter:    req.UserFilter,
 		})
 	}
 
 	start := time.Now()
-	if err := client.TestConnection(); err != nil {
+	if err := client.TestSearchPermission(); err != nil {
 		response.AppError(w, r, apperror.BadRequest(i18n.ErrADTestFailed, err.Error()).WithCause(err))
 		return
 	}
@@ -230,7 +251,7 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 	elapsed := time.Since(start).Milliseconds()
 	response.JSON(w, http.StatusOK, map[string]any{
 		"success":  true,
-		"message":  "LDAP connection & service bind OK",
+		"message":  "LDAP bind and user search permission OK",
 		"duration": elapsed,
 	})
 }
