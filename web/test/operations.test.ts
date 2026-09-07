@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { issueOperations, issueMutationPath, mutateIssue } from "../src/api/operations.ts";
+import { issueMutationPath, issueOperations, mutateIssue } from "../src/api/operations.ts";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { UserRole } from "../src/types/index.ts";
 
@@ -28,7 +28,9 @@ function jsonEnvelope(data: unknown) {
 }
 
 beforeAll(() => {
-  useAuthStore.setState({ user: { id: 1, username: "admin", full_name: "Admin", role: UserRole.ADMIN } });
+  useAuthStore.setState({
+    user: { id: 1, username: "admin", full_name: "Admin", role: UserRole.ADMIN },
+  });
 });
 
 describe("OpenAPI-derived issue operations", () => {
@@ -56,7 +58,9 @@ describe("OpenAPI-derived issue operations", () => {
     try {
       await issueOperations.reopen(101, { reject_reason: "Chưa đạt yêu cầu 6S" });
       expect(capture.calls[0].url).toBe("/api/issues/101/reopen");
-      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({ reject_reason: "Chưa đạt yêu cầu 6S" });
+      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({
+        reject_reason: "Chưa đạt yêu cầu 6S",
+      });
     } finally {
       capture.restore();
     }
@@ -67,7 +71,9 @@ describe("OpenAPI-derived issue operations", () => {
     try {
       await issueOperations.invalid(101, { reason: "Báo cáo không đúng thực tế" });
       expect(capture.calls[0].url).toBe("/api/issues/101/invalid");
-      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({ reason: "Báo cáo không đúng thực tế" });
+      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({
+        reason: "Báo cáo không đúng thực tế",
+      });
     } finally {
       capture.restore();
     }

@@ -1,6 +1,6 @@
-import type { Client } from "./generated/client/index.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
+import type { Client } from "./generated/client/index.ts";
 
 export interface ApiEnvelope<T> {
   data?: T;
@@ -175,7 +175,6 @@ export async function apiClient<T>(url: string, options: RequestOptions = {}): P
 
   return (await response.text()) as unknown as T;
 }
-
 
 export function buildSdkTransport(): Client {
   type SdkOptions = {
