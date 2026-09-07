@@ -2,7 +2,15 @@ import { describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import { IssueCard } from "../src/components/IssueCard.tsx";
 import { IssueCardSkeleton } from "../src/components/IssueCardSkeleton.tsx";
-import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
+import { TagLabel } from "../src/components/TagLabel.tsx";
+import { useI18nStore } from "../src/i18n/index.ts";
+import {
+  IssueCategory,
+  type IssueItem,
+  IssueStatus,
+  resolveTagLabel,
+  type TagItem,
+} from "../src/types/index.ts";
 
 describe("IssueCard Component", () => {
   const mockIssue: IssueItem = {
@@ -71,6 +79,40 @@ describe("IssueCard Component", () => {
     const html = renderToString(<IssueCard issue={overdueIssue} onClick={() => {}} />);
     expect(html).toContain("animate-pulse");
     expect(html).toContain("bg-rose-600");
+  });
+
+  it("renders localized tag labels and falls back to the tag code", () => {
+    const localizedTag: TagItem = {
+      tag_code: "clutter",
+      category: "1S",
+      label_vi: "Đồ thừa",
+      label_zh: "废弃物",
+      label_en: "Clutter",
+    };
+    const issueWithTags = { ...mockIssue, tags: ["clutter", "unknown_tag"] };
+
+    useI18nStore.getState().setLocale("vi");
+    const html = renderToString(
+      <IssueCard issue={issueWithTags} tags={[localizedTag]} onClick={() => {}} />,
+    );
+    expect(html).toContain("Đồ thừa");
+    expect(html).toContain("unknown_tag");
+    expect(resolveTagLabel(localizedTag, "en")).toBe("Clutter");
+    expect(resolveTagLabel(localizedTag, "zh")).toBe("废弃物");
+    expect(resolveTagLabel({ tag_code: "unknown_tag" }, "en")).toBe("unknown_tag");
+  });
+
+  it("renders TagLabel with localized label and fallback", () => {
+    const tag: TagItem = {
+      tag_code: "clutter",
+      category: "1S",
+      label_vi: "Đồ thừa",
+      label_zh: "废弃物",
+      label_en: "Clutter",
+    };
+    useI18nStore.getState().setLocale("vi");
+    expect(renderToString(<TagLabel code="clutter" tags={[tag]} />)).toContain("Đồ thừa");
+    expect(renderToString(<TagLabel code="missing" tags={[tag]} />)).toContain("missing");
   });
 
   it("renders IssueCardSkeleton placeholder with pulse animation", () => {

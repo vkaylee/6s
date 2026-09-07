@@ -1,5 +1,5 @@
 import { useI18nStore } from "../i18n/index.ts";
-import { type IssueItem, resolveI18n, type TagItem } from "../types/index.ts";
+import { type IssueItem, resolveTagLabel, type TagItem } from "../types/index.ts";
 
 export type AIReviewResult = {
   verdict: "OK" | "REVIEW" | "MISMATCH";
@@ -91,16 +91,7 @@ export function AIReviewPanel({
           <span>{t("issue_detail.ai_review_suggested_tags")}:</span>
           {review.suggestion.tags.map((tagCode) => {
             const matchedTag = tags.find((tg) => (tg.tag_code || tg.code) === tagCode);
-            const tagName = matchedTag
-              ? resolveI18n(
-                  {
-                    vi: matchedTag.label_vi || matchedTag.name_vi || tagCode,
-                    zh: matchedTag.label_zh || matchedTag.name_zh || tagCode,
-                    en: matchedTag.label_en || matchedTag.name_en || tagCode,
-                  },
-                  locale,
-                )
-              : tagCode;
+            const tagName = matchedTag ? resolveTagLabel(matchedTag, locale) : tagCode;
             return (
               <button
                 key={tagCode}

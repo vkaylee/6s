@@ -4,6 +4,7 @@ import { apiClient } from "../api/client.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
+import { TagLabel } from "../components/TagLabel.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
@@ -856,27 +857,14 @@ export function IssueDetailModal({
                 {/* Tags display */}
                 {currentIssue.tags && currentIssue.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {currentIssue.tags.map((tagCode) => {
-                      const matchedTag = tags.find((tg) => (tg.tag_code || tg.code) === tagCode);
-                      const tagName = matchedTag
-                        ? resolveI18n(
-                            {
-                              vi: matchedTag.label_vi || matchedTag.name_vi || tagCode,
-                              zh: matchedTag.label_zh || matchedTag.name_zh || tagCode,
-                              en: matchedTag.label_en || matchedTag.name_en || tagCode,
-                            },
-                            locale,
-                          )
-                        : tagCode;
-                      return (
-                        <span
-                          key={tagCode}
-                          className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300"
-                        >
-                          {`#${tagName}`}
-                        </span>
-                      );
-                    })}
+                    {currentIssue.tags.map((tagCode) => (
+                      <TagLabel
+                        key={tagCode}
+                        code={tagCode}
+                        tags={tags}
+                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300"
+                      />
+                    ))}
                   </div>
                 )}
                 {aiReview && (

@@ -1118,6 +1118,7 @@ export function ReportsPage() {
                       key={issue.id}
                       issue={issue}
                       locations={masterLocations}
+                      tags={masterTags}
                       onClick={() => setInspectingIssue(issue)}
                     />
                   ))}

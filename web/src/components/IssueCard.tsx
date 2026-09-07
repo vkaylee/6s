@@ -17,10 +17,10 @@ import {
   IssueStatus,
   type LocationItem,
   resolveLocationNameByCode,
-  resolveTagLabel,
   type TagItem,
 } from "../types/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
+import { TagLabel } from "./TagLabel.tsx";
 
 interface IssueCardProps {
   issue: IssueItem;
@@ -28,7 +28,6 @@ interface IssueCardProps {
   locations?: LocationItem[];
   tags?: TagItem[];
 }
-
 export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCardProps) {
   const { t, locale } = useI18nStore();
   const isSafety = issue.category === IssueCategory.S6;
@@ -219,17 +218,14 @@ export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCa
           </div>
           {issue.tags && issue.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
-              {issue.tags.map((tag) => {
-                const matchedTag = tags.find((item) => (item.tag_code || item.code) === tag);
-                return (
-                  <span
-                    key={tag}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                  >
-                    #{matchedTag ? resolveTagLabel(matchedTag, locale) : tag}
-                  </span>
-                );
-              })}
+              {issue.tags.map((tag) => (
+                <TagLabel
+                  key={tag}
+                  code={tag}
+                  tags={tags}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                />
+              ))}
             </div>
           )}
         </div>
