@@ -11,6 +11,8 @@
     "type-check": "tsc --noEmit",
     "check-i18n": "bun test test/i18n.test.tsx",
     "openapi:check": "node scripts/openapi-operations.mjs",
+    "openapi:generate": "openapi-ts --file openapi-ts.config.ts",
+    "openapi:drift": "node scripts/openapi-generate-check.mjs",
     "test": "bun test",
     "test:coverage": "bun test --coverage"
   },
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
+    "@hey-api/openapi-ts": "0.99.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^18.3.12",
@@ -32,7 +35,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "bun-types": "^1.4.1",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.6.3",
+    "typescript": "5.6.3",
     "vite": "^5.4.11"
   }
 }

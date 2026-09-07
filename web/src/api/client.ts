@@ -1,3 +1,4 @@
+import type { Client } from "./generated/client/index.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
 
@@ -173,4 +174,45 @@ export async function apiClient<T>(url: string, options: RequestOptions = {}): P
   }
 
   return (await response.text()) as unknown as T;
+}
+
+
+export function buildSdkTransport(): Client {
+  type SdkOptions = {
+    url: string;
+    method: string;
+    path?: Record<string, unknown>;
+    body?: unknown;
+    headers?: HeadersInit;
+  };
+
+  const request = async (options: SdkOptions) => {
+    const path = Object.entries(options.path ?? {}).reduce(
+      (url, [key, value]) => url.replace(`{${key}}`, encodeURIComponent(String(value))),
+      options.url,
+    );
+    const result = await apiClient<unknown>(`/api${path}`, {
+      method: options.method,
+      headers: options.headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    return { data: result, error: undefined };
+  };
+
+  return {
+    request,
+    get: (options: SdkOptions) => request({ ...options, method: "GET" }),
+    post: (options: SdkOptions) => request({ ...options, method: "POST" }),
+    put: (options: SdkOptions) => request({ ...options, method: "PUT" }),
+    patch: (options: SdkOptions) => request({ ...options, method: "PATCH" }),
+    delete: (options: SdkOptions) => request({ ...options, method: "DELETE" }),
+    head: (options: SdkOptions) => request({ ...options, method: "HEAD" }),
+    options: (options: SdkOptions) => request({ ...options, method: "OPTIONS" }),
+    connect: (options: SdkOptions) => request({ ...options, method: "CONNECT" }),
+    trace: (options: SdkOptions) => request({ ...options, method: "TRACE" }),
+    buildUrl: (options: SdkOptions) => options.url,
+    getConfig: () => ({}),
+    setConfig: () => ({}),
+    interceptors: { request: {}, response: {}, error: {} },
+  } as unknown as Client;
 }
