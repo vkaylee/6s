@@ -10,6 +10,7 @@
     "lint:fix": "biome check --write . && tsc --noEmit",
     "type-check": "tsc --noEmit",
     "check-i18n": "bun test test/i18n.test.tsx",
+    "openapi:check": "node scripts/openapi-operations.mjs",
     "test": "bun test",
     "test:coverage": "bun test --coverage"
   },

@@ -1,6 +1,6 @@
 import { AlertTriangle, Languages, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { apiClient } from "../api/client.ts";
+import { issueOperations } from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
@@ -463,12 +463,8 @@ export function IssueDetailModal({
   const handleConfirmClose = async () => {
     setIsSubmitting(true);
     try {
-      await apiClient(`/api/issues/${currentIssue.id}/close`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          score_rating: scoreRating,
-        }),
+      await issueOperations.close(currentIssue.id, {
+        score_rating: scoreRating,
       });
       haptics.success();
       setShowConfirmAction(null);
@@ -485,12 +481,8 @@ export function IssueDetailModal({
   const handleConfirmReopen = async () => {
     setIsSubmitting(true);
     try {
-      await apiClient(`/api/issues/${currentIssue.id}/reopen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
-        }),
+      await issueOperations.reopen(currentIssue.id, {
+        reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
       });
       haptics.success();
       setShowConfirmAction(null);
@@ -507,12 +499,8 @@ export function IssueDetailModal({
   const handleConfirmInvalid = async () => {
     setIsSubmitting(true);
     try {
-      await apiClient(`/api/issues/${currentIssue.id}/invalidate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reject_reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
-        }),
+      await issueOperations.invalid(currentIssue.id, {
+        reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
       });
       haptics.success();
       setShowConfirmAction(null);
