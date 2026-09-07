@@ -1077,3 +1077,40 @@ func TestReview_InvalidGatewayJSON(t *testing.T) {
 		t.Fatalf("expected 502 AppError, got %v", err)
 	}
 }
+
+func TestFollowUp_ValidatesQuestionAndReturnsAnswer(t *testing.T) {
+	var receivedQuestion string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		messages, _ := body["messages"].([]any)
+		if len(messages) > 1 {
+			content, _ := messages[1].(map[string]any)
+			receivedQuestion, _ = content["content"].(string)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": "Cần chụp thêm góc rộng của khu vực."}}}})
+	}))
+	defer mockServer.Close()
+	store := reviewTestFixture(mockServer.URL, "")
+	svc := NewService(store, nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+	if _, err := svc.FollowUp(context.Background(), FollowUpRequest{IssueID: 7, Question: strings.Repeat("x", reviewMaxQuestionRunes+1)}); err == nil {
+		t.Fatal("expected oversized question error")
+	}
+	got, err := svc.FollowUp(context.Background(), FollowUpRequest{IssueID: 7, Lang: "vi", Question: "Cần chụp thêm ảnh gì?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Answer == "" || receivedQuestion == "" {
+		t.Fatalf("expected answer and forwarded question, got answer=%q question=%q", got.Answer, receivedQuestion)
+	}
+}
+
+func TestFilterSuggestedQuestions(t *testing.T) {
+	questions := []string{"", "Q1", "Q1", strings.Repeat("x", reviewMaxQuestionRunes+1), "Q2", "Q3", "Q4", "Q5", "Q6"}
+	got := filterSuggestedQuestions(questions)
+	if len(got) != reviewMaxSuggestedQuestions || strings.Join(got, ",") != "Q1,Q2,Q3,Q4,Q5" {
+		t.Fatalf("unexpected filtered questions: %#v", got)
+	}
+}

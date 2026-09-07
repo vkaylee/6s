@@ -297,6 +297,7 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		air.Post("/translate", aiHandler.Translate)
 		air.Post("/cached", aiHandler.GetCached)
 		air.Post("/review", aiHandler.Review)
+		air.Post("/review-follow-up", aiHandler.FollowUp)
 	})
 
 	// Launch background workers

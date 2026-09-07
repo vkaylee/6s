@@ -1,6 +1,7 @@
 import { AlertTriangle, Languages, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
@@ -94,15 +95,7 @@ export function IssueDetailModal({
       isMounted = false;
     };
   }, [isOpen, currentIssue.description, locale, translatedDesc]);
-
-  type AIReviewResult = {
-    verdict: "OK" | "REVIEW" | "MISMATCH";
-    feedback: string;
-    suggestion: { category?: string; cause_type?: string; tags?: string[] };
-    used_vision: boolean;
-  };
-
-  // Fetch AI availability once per open; hide the review affordance when disabled.
+  // AIReviewResult is rendered by AIReviewPanel.
   useEffect(() => {
     if (!isOpen) {
       setAiEnabled(false);
@@ -147,6 +140,27 @@ export function IssueDetailModal({
     }
   };
 
+  const handleFollowUp = async (question = followUpQuestion) => {
+    const trimmed = question.trim();
+    if (!trimmed || isAskingFollowUp || !currentIssue.id) return;
+    setIsAskingFollowUp(true);
+    try {
+      const res = await apiClient<{ answer: string }>("/api/ai/review-follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ issue_id: currentIssue.id, lang: locale, question: trimmed }),
+      });
+      setFollowUpQuestion("");
+      setFollowUpAnswer(res.answer);
+      haptics.success();
+    } catch {
+      haptics.errorOrConflict();
+      await modalDialog.alert(t("issue_detail.ai_follow_up_failed"));
+    } finally {
+      setIsAskingFollowUp(false);
+    }
+  };
+
   // Apply one AI suggestion through the existing quick-edit PATCH flow.
   const handleApplySuggestion = async (patch: Record<string, unknown>) => {
     try {
@@ -159,7 +173,7 @@ export function IssueDetailModal({
       if (updated) {
         setCurrentIssue(updated);
       }
-      setAiReview(null);
+      // Keep AI feedback and follow-up answer visible after applying a suggestion.
       onRefresh();
     } catch {
       haptics.errorOrConflict();
@@ -188,6 +202,9 @@ export function IssueDetailModal({
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiReview, setAiReview] = useState<AIReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [followUpQuestion, setFollowUpQuestion] = useState("");
+  const [followUpAnswer, setFollowUpAnswer] = useState<string | null>(null);
+  const [isAskingFollowUp, setIsAskingFollowUp] = useState(false);
 
   const handleTranslate = async () => {
     if (!currentIssue.description || isTranslating) return;
@@ -849,94 +866,18 @@ export function IssueDetailModal({
                     })}
                   </div>
                 )}
-                {/* AI review result panel */}
                 {aiReview && (
-                  <div
-                    className={`p-3 rounded-xl border text-xs space-y-2 ${
-                      aiReview.verdict === "OK"
-                        ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900"
-                        : aiReview.verdict === "MISMATCH"
-                          ? "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900"
-                          : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900"
-                    }`}
-                  >
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black text-white ${
-                        aiReview.verdict === "OK"
-                          ? "bg-emerald-600"
-                          : aiReview.verdict === "MISMATCH"
-                            ? "bg-rose-600"
-                            : "bg-amber-500 text-zinc-950"
-                      }`}
-                    >
-                      {t(`issue_detail.ai_review_verdict_${aiReview.verdict.toLowerCase()}`)}
-                    </span>
-                    {aiReview.feedback && (
-                      <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
-                        {aiReview.feedback}
-                      </p>
-                    )}
-                    {(aiReview.suggestion.category || aiReview.suggestion.cause_type) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {aiReview.suggestion.category && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleApplySuggestion({ category: aiReview.suggestion.category })
-                            }
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-zinc-800 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/60"
-                          >
-                            {t("issue_detail.ai_review_suggested_category")}:{" "}
-                            {aiReview.suggestion.category} · {t("issue_detail.ai_review_apply")}
-                          </button>
-                        )}
-                        {aiReview.suggestion.cause_type && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleApplySuggestion({ cause_type: aiReview.suggestion.cause_type })
-                            }
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-zinc-800 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/60"
-                          >
-                            {t("issue_detail.ai_review_suggested_cause")}:{" "}
-                            {aiReview.suggestion.cause_type} · {t("issue_detail.ai_review_apply")}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {aiReview.suggestion.tags && aiReview.suggestion.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 self-center">
-                          {t("issue_detail.ai_review_suggested_tags")}:
-                        </span>
-                        {aiReview.suggestion.tags.map((tagCode) => {
-                          const matchedTag = tags.find(
-                            (tg) => (tg.tag_code || tg.code) === tagCode,
-                          );
-                          const tagName = matchedTag
-                            ? resolveI18n(
-                                {
-                                  vi: matchedTag.label_vi || matchedTag.name_vi || tagCode,
-                                  zh: matchedTag.label_zh || matchedTag.name_zh || tagCode,
-                                  en: matchedTag.label_en || matchedTag.name_en || tagCode,
-                                },
-                                locale,
-                              )
-                            : tagCode;
-                          return (
-                            <button
-                              key={tagCode}
-                              type="button"
-                              onClick={() => handleApplySuggestion({ tags: [tagCode] })}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-zinc-800 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/60"
-                            >
-                              {`#${tagName}`} · {t("issue_detail.ai_review_apply")}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  <AIReviewPanel
+                    review={aiReview}
+                    currentIssue={currentIssue}
+                    tags={tags}
+                    value={followUpQuestion}
+                    answer={followUpAnswer ? { answer: followUpAnswer } : null}
+                    isAskingFollowUp={isAskingFollowUp}
+                    onFollowUpQuestionChange={setFollowUpQuestion}
+                    onApplySuggestion={handleApplySuggestion}
+                    onFollowUp={handleFollowUp}
+                  />
                 )}
                 {currentIssue.reject_reason && (
                   <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
