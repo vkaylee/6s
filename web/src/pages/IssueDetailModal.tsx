@@ -1,4 +1,4 @@
-import { AlertTriangle, Languages, Sparkles } from "lucide-react";
+import { AlertTriangle, Languages, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
@@ -213,6 +213,7 @@ export function IssueDetailModal({
       setShowOriginal(!showOriginal);
       return;
     }
+    setIsTranslating(true);
     try {
       const res = await apiClient<{ translated_text: string }>("/api/ai/translate", {
         method: "POST",
@@ -816,9 +817,14 @@ export function IssueDetailModal({
                         type="button"
                         onClick={handleTranslate}
                         disabled={isTranslating}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors shadow-2xs"
+                        aria-busy={isTranslating}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors shadow-2xs disabled:cursor-wait disabled:opacity-70"
                       >
-                        <Languages className="w-3.5 h-3.5" />
+                        {isTranslating ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Languages className="w-3.5 h-3.5" />
+                        )}
                         <span>
                           {isTranslating
                             ? t("issue_detail.translating")
