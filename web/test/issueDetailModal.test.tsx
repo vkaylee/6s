@@ -62,7 +62,31 @@ describe("IssueDetailModal Component", () => {
       },
     });
     const html = renderToString(
-      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          null,
+          null,
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+          true,
+          null,
+          false,
+        ]}
+      >
+        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+      </WithMockState>,
     );
     expect(html).toContain("Chuyền May A1");
     expect(html).toContain("Dầu loang dưới sàn máy may");
@@ -581,7 +605,7 @@ describe("IssueDetailModal Component", () => {
     );
 
     expect(html).not.toContain("Hỏi AI");
-    expect(html).toContain("Dịch AI");
+    expect(html).not.toContain("Dịch AI");
   });
 
   it("shows the AI review button when AI is enabled", () => {

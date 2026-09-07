@@ -65,7 +65,7 @@ export function IssueDetailModal({
   }, [issue, locale]);
 
   useEffect(() => {
-    if (!isOpen || !currentIssue.description) {
+    if (!isOpen || !aiEnabled || !currentIssue.description) {
       return;
     }
     if (translatedDesc && translatedLangRef.current === locale) {
@@ -120,7 +120,7 @@ export function IssueDetailModal({
   }, [isOpen]);
 
   const handleAIReview = async () => {
-    if (isReviewing) {
+    if (!aiEnabled || isReviewing) {
       return;
     }
     setIsReviewing(true);
@@ -142,7 +142,7 @@ export function IssueDetailModal({
 
   const handleFollowUp = async (question = followUpQuestion) => {
     const trimmed = question.trim();
-    if (!trimmed || isAskingFollowUp || !currentIssue.id) return;
+    if (!aiEnabled || !trimmed || isAskingFollowUp || !currentIssue.id) return;
     setIsAskingFollowUp(true);
     try {
       const res = await apiClient<{ answer: string }>("/api/ai/review-follow-up", {
@@ -207,7 +207,7 @@ export function IssueDetailModal({
   const [isAskingFollowUp, setIsAskingFollowUp] = useState(false);
 
   const handleTranslate = async () => {
-    if (!currentIssue.description || isTranslating) return;
+    if (!aiEnabled || !currentIssue.description || isTranslating) return;
     if (translatedDesc && translatedLangRef.current === locale) {
       setShowOriginal(!showOriginal);
       return;
@@ -802,7 +802,7 @@ export function IssueDetailModal({
                         </span>
                       </button>
                     )}
-                    {currentIssue.description && (
+                    {aiEnabled && currentIssue.description && (
                       <button
                         type="button"
                         onClick={handleTranslate}
