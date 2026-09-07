@@ -125,6 +125,9 @@ export async function apiClient<T>(url: string, options: RequestOptions = {}): P
   if (locale && !headers.has("X-Locale")) {
     headers.set("X-Locale", locale);
   }
+  if (options.body && (!options.method || options.method.toUpperCase() === "GET")) {
+    throw new TypeError("apiClient mutation requests require an explicit HTTP method");
+  }
   if (options.body && typeof options.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }

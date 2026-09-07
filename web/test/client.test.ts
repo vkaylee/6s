@@ -13,6 +13,40 @@ describe("apiClient ApiError", () => {
   });
 });
 
+describe("apiClient request contract", () => {
+  it("rejects body-bearing requests without an explicit mutation method", async () => {
+    await expect(
+      apiClient("/api/issues/101/close", {
+        body: JSON.stringify({ score_rating: 5 }),
+        skipAuth: true,
+      }),
+    ).rejects.toThrow("apiClient mutation requests require an explicit HTTP method");
+  });
+
+  it("preserves explicit POST methods for mutation requests", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedMethod = "";
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      capturedMethod = init?.method ?? "";
+      return new Response(JSON.stringify({ data: { ok: true } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      await apiClient<{ ok: boolean }>("/api/issues/101/close", {
+        method: "POST",
+        body: JSON.stringify({ score_rating: 5 }),
+        skipAuth: true,
+      });
+      expect(capturedMethod).toBe("POST");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 describe("apiClient authentication", () => {
   it("proactively refreshes token before making request when user exists but accessToken is missing", async () => {
     useAuthStore.setState({

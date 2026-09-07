@@ -464,6 +464,7 @@ export function IssueDetailModal({
     setIsSubmitting(true);
     try {
       await apiClient(`/api/issues/${currentIssue.id}/close`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           score_rating: scoreRating,
@@ -485,6 +486,7 @@ export function IssueDetailModal({
     setIsSubmitting(true);
     try {
       await apiClient(`/api/issues/${currentIssue.id}/reopen`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
@@ -506,6 +508,7 @@ export function IssueDetailModal({
     setIsSubmitting(true);
     try {
       await apiClient(`/api/issues/${currentIssue.id}/invalidate`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reject_reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
