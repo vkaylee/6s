@@ -269,6 +269,8 @@
   },
   "admin": {
     "title": "System Settings",
+    "locations_page_title": "Factory Locations",
+    "tags_page_title": "Issue Tags",
     "scoring_rules": "Scoring Rules",
     "ad_ldap": "AD / LDAP Configuration",
     "save_rules": "Save Rules",

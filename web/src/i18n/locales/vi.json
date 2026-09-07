@@ -269,6 +269,8 @@
   },
   "admin": {
     "title": "Cấu hình hệ thống",
+    "locations_page_title": "Vị trí xưởng",
+    "tags_page_title": "Thẻ sự cố",
     "scoring_rules": "Quy tắc tính điểm",
     "ad_ldap": "Cấu hình AD / LDAP",
     "save_rules": "Lưu quy tắc",

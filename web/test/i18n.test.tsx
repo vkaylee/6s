@@ -67,6 +67,21 @@ describe("i18n Locale Parity & Consistency (vi, en, zh)", () => {
     }
   });
 
+  it("translates admin page titles in every locale", () => {
+    const { setLocale, t } = useI18nStore.getState();
+    const expected = {
+      vi: ["Vị trí xưởng", "Thẻ sự cố"],
+      en: ["Factory Locations", "Issue Tags"],
+      zh: ["车间位置", "问题标签"],
+    } as const;
+
+    for (const [locale, [locations, tags]] of Object.entries(expected)) {
+      setLocale(locale as keyof typeof expected);
+      expect(t("admin.locations_page_title")).toBe(locations);
+      expect(t("admin.tags_page_title")).toBe(tags);
+    }
+  });
+
   it("correctly translates and interpolates per locale", () => {
     const { t, setLocale } = useI18nStore.getState();
 

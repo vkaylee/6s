@@ -65,4 +65,27 @@ describe("ProtectedRoute component", () => {
     expect(html).toContain("Secret Content");
     expect(html).toContain("dashboard");
   });
+
+  it("blocks authenticated non-admin users from admin-only routes", () => {
+    useAuthStore.setState({
+      isLoading: false,
+      user: {
+        id: 2,
+        username: "worker",
+        full_name: "Worker User",
+        role: UserRole.USER,
+      },
+      accessToken: "worker-token",
+    });
+
+    const html = renderToString(
+      <Router ssrPath="/admin/locations">
+        <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <div>Admin Only</div>
+        </ProtectedRoute>
+      </Router>,
+    );
+
+    expect(html).toBe("");
+  });
 });

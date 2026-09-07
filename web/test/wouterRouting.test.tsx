@@ -3,6 +3,8 @@ import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { App } from "../src/App.tsx";
+import { FactoryLocationsPage } from "../src/pages/FactoryLocationsPage.tsx";
+import { IssueTagsPage } from "../src/pages/IssueTagsPage.tsx";
 import { NotFoundPage } from "../src/pages/NotFoundPage.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { IssueCategory, IssueStatus, UserRole } from "../src/types/index.ts";
@@ -171,6 +173,21 @@ describe("Wouter UX & Routing Verification", () => {
       </Router>,
     );
     expect(html).toContain("Hệ thống 6S");
+  });
+
+  it("admin page components render their translated titles", () => {
+    const locationsHtml = renderToString(
+      <Router ssrPath="/admin/locations">
+        <FactoryLocationsPage />
+      </Router>,
+    );
+    const tagsHtml = renderToString(
+      <Router ssrPath="/admin/tags">
+        <IssueTagsPage />
+      </Router>,
+    );
+    expect(locationsHtml).toContain("Vị trí xưởng");
+    expect(tagsHtml).toContain("Danh mục Thẻ");
   });
 
   it("renders /leaderboard/locations/:code route within App", () => {
