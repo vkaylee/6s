@@ -400,7 +400,7 @@ export function IssueDetailModal({
       onRefresh();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Không thể đổi phân loại issue");
+      modalDialog.alert(t("issue_detail.update_category_error"));
     }
   };
 
@@ -455,7 +455,7 @@ export function IssueDetailModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Lỗi khi xử lý ảnh khắc phục");
+      modalDialog.alert(t("issue_detail.resolve_image_error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -464,26 +464,23 @@ export function IssueDetailModal({
   const handleConfirmClose = async () => {
     setIsSubmitting(true);
     try {
-      await issueOperations.close(currentIssue.id, {
-        score_rating: scoreRating,
-      });
+      await issueOperations.close(currentIssue.id, { score_rating: scoreRating });
       haptics.success();
       setShowConfirmAction(null);
       onRefresh();
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Duyệt đạt thất bại");
+      modalDialog.alert(t("issue_detail.approve_failed"));
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleConfirmReopen = async () => {
     setIsSubmitting(true);
     try {
       await issueOperations.reopen(currentIssue.id, {
-        reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
+        reject_reason: rejectReason.trim() || t("issue_detail.default_reopen_reason"),
       });
       haptics.success();
       setShowConfirmAction(null);
@@ -491,7 +488,7 @@ export function IssueDetailModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Mở lại issue thất bại");
+      modalDialog.alert(t("issue_detail.reopen_failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -501,7 +498,7 @@ export function IssueDetailModal({
     setIsSubmitting(true);
     try {
       await issueOperations.invalid(currentIssue.id, {
-        reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
+        reason: rejectReason.trim() || t("issue_detail.default_invalid_reason"),
       });
       haptics.success();
       setShowConfirmAction(null);
@@ -509,7 +506,7 @@ export function IssueDetailModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Bác bỏ thất bại");
+      modalDialog.alert(t("issue_detail.invalidate_failed"));
     } finally {
       setIsSubmitting(false);
     }

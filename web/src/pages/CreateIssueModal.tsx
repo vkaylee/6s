@@ -214,7 +214,7 @@ export function CreateIssueModal({
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(
-        initialIssue ? "Không thể cập nhật báo cáo" : "Không thể lưu bản nháp vào IndexedDB",
+        initialIssue ? t("issue.update_error") : t("issue.draft_save_error"),
       );
       setIsSubmitting(false);
     }

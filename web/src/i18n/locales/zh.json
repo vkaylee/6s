@@ -261,7 +261,11 @@
     "photo_before_hint_condition": "清晰拍摄多余杂物、故障点或凌乱现场",
     "photo_before_hint_behavior": "清晰拍摄违章行为或人员不规范作业状态",
     "photo_after_hint_condition": "整改后照片要求：拍摄已清理物品、修复设备或新配件。",
-    "photo_after_hint_behavior": "整改后照片要求：拍摄已规范整改的人员（规范佩戴劳保/正确姿势）。"
+    "photo_after_hint_behavior": "整改后照片要求：拍摄已规范整改的人员（规范佩戴劳保/正确姿势）。",
+    "update_error": "更新报告失败",
+    "draft_save_error": "保存草稿到 IndexedDB 失败",
+    "cancel_confirm_message": "确定要放弃当前正在输入的内容吗？",
+    "cancel_confirm_title": "取消报告"
   },
   "admin": {
     "title": "系统配置",
@@ -274,7 +278,9 @@
     "system_admin": "系统管理 (Admin)",
     "score_6s_tab": "6S评分",
     "ad_tab": "Active Directory",
-    "locations_tab": "车间位置管理",
+    "locations_tab": "车间位置",
+    "locations_page_title": "车间位置",
+    "tags_page_title": "问题标签",
     "location_code_label": "位置编号 (Code) *",
     "location_code_placeholder": "例如: LINE_A3, WAREHOUSE_2",
     "location_name_vi": "越南语名称 *",
@@ -455,7 +461,8 @@
     "current_server_version": "当前服务器版本: v{version}",
     "server_updated_notice": "在设备同步前已被服务器更新",
     "overwrite_btn": "强制覆盖记录（需权限）",
-    "discard_btn": "保存图片至相册并删除草稿"
+    "discard_btn": "保存图片至相册并删除草稿",
+    "overwrite_requested": "覆盖请求已提交"
   },
   "issue_detail": {
     "quick_edit_category": "点击快速修改6S分类",
@@ -514,7 +521,14 @@
     "close_checklist_title": "6S 验收复核清单",
     "check_condition_resolved": "不符合物品/故障设备已彻底整改",
     "check_behavior_corrected": "相关责任人已现场纠正并接受再培训",
-    "check_recurrence_prevented": "现场再发生隐患已完全消除"
+    "check_recurrence_prevented": "现场再发生隐患已完全消除",
+    "update_category_error": "修改问题分类失败",
+    "resolve_image_error": "处理整改照片失败",
+    "approve_failed": "审核通过失败",
+    "reopen_failed": "重新打开问题失败",
+    "invalidate_failed": "作废失败",
+    "default_reopen_reason": "未达到6S要求",
+    "default_invalid_reason": "报告与事实不符"
   },
   "app": {
     "issues_list": "问题列表 ({count})",

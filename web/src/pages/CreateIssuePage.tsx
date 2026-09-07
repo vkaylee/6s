@@ -275,9 +275,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const handleBack = async () => {
     if (photoBefore || photoDetail || description.trim()) {
       const confirmed = await modalDialog.confirm(
-        "Bạn có chắc muốn hủy bỏ nội dung đang nhập không?",
-        "Hủy báo cáo",
-        true,
+        t("issue.cancel_confirm_message"),
+        t("issue.cancel_confirm_title"),
       );
       if (!confirmed) return;
     }
@@ -334,7 +333,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       setLocation("/", { replace: true });
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Không thể lưu bản nháp vào IndexedDB");
+      modalDialog.alert(t("issue.draft_save_error"));
     } finally {
       setIsSubmitting(false);
     }

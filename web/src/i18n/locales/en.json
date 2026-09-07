@@ -261,7 +261,11 @@
     "photo_before_hint_condition": "Capture clear shot of excess scrap, defect or cluttered area",
     "photo_before_hint_behavior": "Capture clear shot of unsafe act or incorrect worker operation",
     "photo_after_hint_condition": "Resolution photo requirement: Capture cleared scrap, repaired machine or replaced parts.",
-    "photo_after_hint_behavior": "Resolution photo requirement: Capture worker corrected (proper PPE worn, safe stance)."
+    "photo_after_hint_behavior": "Resolution photo requirement: Capture worker corrected (proper PPE worn, safe stance).",
+    "update_error": "Failed to update the report",
+    "draft_save_error": "Failed to save draft to IndexedDB",
+    "cancel_confirm_message": "Discard the content you are entering?",
+    "cancel_confirm_title": "Cancel report"
   },
   "admin": {
     "title": "System Settings",
@@ -275,6 +279,8 @@
     "score_6s_tab": "6S Scoring",
     "ad_tab": "Active Directory",
     "locations_tab": "Factory Locations",
+    "locations_page_title": "Factory Locations",
+    "tags_page_title": "Issue Tags",
     "location_code_label": "Location Code *",
     "location_code_placeholder": "e.g. LINE_A3, WAREHOUSE_2",
     "location_name_vi": "Vietnamese Name *",
@@ -455,7 +461,8 @@
     "current_server_version": "Current server version: v{version}",
     "server_updated_notice": "Updated on server before local sync",
     "overwrite_btn": "Overwrite record (If authorized)",
-    "discard_btn": "Save photo to device & Discard draft"
+    "discard_btn": "Save photo to device & Discard draft",
+    "overwrite_requested": "Overwrite request submitted"
   },
   "issue_detail": {
     "quick_edit_category": "Tap to quick edit S category",
@@ -514,7 +521,14 @@
     "close_checklist_title": "6S Acceptance Checklist",
     "check_condition_resolved": "Defective item / clutter thoroughly resolved",
     "check_behavior_corrected": "Worker was cautioned / retrained on safety standards",
-    "check_recurrence_prevented": "Recurrence risk eliminated at location"
+    "check_recurrence_prevented": "Recurrence risk eliminated at location",
+    "update_category_error": "Failed to change issue category",
+    "resolve_image_error": "Failed to process resolution photo",
+    "approve_failed": "Approval failed",
+    "reopen_failed": "Failed to reopen issue",
+    "invalidate_failed": "Invalidation failed",
+    "default_reopen_reason": "Does not meet 6S requirements",
+    "default_invalid_reason": "Report is not factual"
   },
   "app": {
     "issues_list": "Issues List ({count})",

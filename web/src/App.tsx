@@ -1515,7 +1515,7 @@ export function App() {
                     resolveItem={conflictItem}
                     serverVersion={2}
                     onOverwrite={() => {
-                      modalDialog.alert("Đã gửi yêu cầu ghi đè");
+                      modalDialog.alert(t("conflict.overwrite_requested"));
                       setConflictItem(null);
                     }}
                     onDiscard={() => {
