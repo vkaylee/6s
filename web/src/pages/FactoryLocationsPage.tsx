@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
-import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import type { LocationItem } from "../types/index.ts";
@@ -11,7 +9,6 @@ import { goBack } from "../utils/navigation.ts";
 
 export function FactoryLocationsPage() {
   const { t } = useI18nStore();
-  const isHeaderVisible = useHeaderVisibility();
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [newCode, setNewCode] = useState("");
@@ -143,12 +140,9 @@ export function FactoryLocationsPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
-      <header
-        className={`sticky top-0 z-40 bg-white/90 dark:bg-zinc-950/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-800 transition-transform ${
-          isHeaderVisible ? "translate-y-0" : "-translate-y-full"
-        }`}
-      >
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      {/* Page Heading */}
+      <PageContainer className="pt-4">
+        <div className="flex items-center space-x-3">
           <button
             type="button"
             onClick={() => goBack()}
@@ -158,9 +152,8 @@ export function FactoryLocationsPage() {
             ←
           </button>
           <h1 className="text-base font-black">{t("admin.locations_page_title")}</h1>
-          <NavActions />
         </div>
-      </header>
+      </PageContainer>
 
       <PageContainer className="py-4 space-y-6">
         <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">

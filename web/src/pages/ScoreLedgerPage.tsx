@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import type { ScoreLogItem } from "../types/index.ts";
@@ -69,36 +68,31 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
-        <PageContainer className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <button
-              type="button"
-              onClick={() => goBack("/")}
-              className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
-              aria-label={t("leaderboard.back_to_home")}
-            >
-              ←
-            </button>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-xl">{isLocation ? "🏭" : "🎖️"}</span>
-                <h1 className="text-lg font-black text-zinc-900 dark:text-zinc-100">{id}</h1>
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                  {isLocation ? t("leaderboard.cycle_weekly") : t("leaderboard.cycle_monthly")}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-500 font-medium">
-                {t("leaderboard.score_history_title")}
-              </p>
+      {/* Page Heading */}
+      <PageContainer className="pt-4">
+        <div className="flex items-center space-x-3">
+          <button
+            type="button"
+            onClick={() => goBack("/")}
+            className="p-2 -ml-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-lg font-bold"
+            aria-label={t("leaderboard.back_to_home")}
+          >
+            ←
+          </button>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xl">{isLocation ? "🏭" : "🎖️"}</span>
+              <h1 className="text-lg font-black text-zinc-900 dark:text-zinc-100">{id}</h1>
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                {isLocation ? t("leaderboard.cycle_weekly") : t("leaderboard.cycle_monthly")}
+              </span>
             </div>
+            <p className="text-xs text-zinc-500 font-medium">
+              {t("leaderboard.score_history_title")}
+            </p>
           </div>
-          <div className="flex items-center space-x-2">
-            <NavActions />
-          </div>
-        </PageContainer>
-      </header>
+        </div>
+      </PageContainer>
 
       {/* Main Content */}
       <main className="py-4 sm:py-6">

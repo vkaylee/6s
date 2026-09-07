@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
-import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import type { AIConfigData, AIDNSTestResponse, AITestResponse } from "../types/index.ts";
@@ -59,7 +57,6 @@ function AIResultBox({ result, t }: AIResultBoxProps) {
 
 export function AdminConfigPage() {
   const { t } = useI18nStore();
-  const isHeaderVisible = useHeaderVisibility();
   const [activeTab, setActiveTab] = useState<"SCORING" | "AD" | "NOTIFICATIONS" | "AI">("SCORING");
 
   // Scoring config state
@@ -399,8 +396,6 @@ export function AdminConfigPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
-
-      {/* Main Content */}
       {/* Page Heading */}
       <PageContainer className="pt-4">
         <div className="flex items-center space-x-3">

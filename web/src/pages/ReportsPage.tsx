@@ -29,7 +29,6 @@ import {
 import { Link } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { IssueCard } from "../components/IssueCard.tsx";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import { useThemeStore } from "../store/themeStore.ts";
@@ -299,10 +298,10 @@ export function ReportsPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-20">
-      {/* Sticky Header */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-3 sm:px-4 py-2.5 shadow-sm">
+      {/* Page Heading */}
+      <div className="pt-4">
         <PageContainer className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          {/* Top row on mobile / Left section on desktop: Back button, Title & NavActions */}
+          {/* Back button, Title & Quick Actions */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center space-x-2 min-w-0">
               <button
@@ -365,7 +364,6 @@ export function ReportsPage() {
                   {isExporting ? t("reports.exporting") : t("reports.export_csv")}
                 </span>
               </button>
-              <NavActions />
             </div>
           </div>
 
@@ -408,7 +406,7 @@ export function ReportsPage() {
             </div>
           </div>
         </PageContainer>
-      </header>
+      </div>
 
       {/* Main Content Area */}
       <main className="pt-4">

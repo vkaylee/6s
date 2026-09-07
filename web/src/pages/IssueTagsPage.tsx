@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
-import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { IssueCategory, resolveI18n, S_CATEGORIES } from "../types/index.ts";
@@ -108,7 +106,6 @@ const PACKS: Record<Exclude<PackKey, "ALL">, Record<string, true>> = {
 
 export function IssueTagsPage() {
   const { t, locale } = useI18nStore();
-  const isHeaderVisible = useHeaderVisibility();
   const [tags, setTags] = useState<TagItemData[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
   const [tagCode, setTagCode] = useState("");
@@ -219,10 +216,9 @@ export function IssueTagsPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
-      <header
-        className={`sticky top-0 z-40 bg-white/90 dark:bg-zinc-950/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-800 transition-transform ${isHeaderVisible ? "translate-y-0" : "-translate-y-full"}`}
-      >
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      {/* Page Heading */}
+      <PageContainer className="pt-4">
+        <div className="flex items-center space-x-3">
           <button
             type="button"
             onClick={() => goBack()}
@@ -232,9 +228,8 @@ export function IssueTagsPage() {
             ←
           </button>
           <h1 className="text-base font-black">{t("admin.tags_tab")}</h1>
-          <NavActions />
         </div>
-      </header>
+      </PageContainer>
       <PageContainer className="py-4 space-y-6">
         <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
           <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">

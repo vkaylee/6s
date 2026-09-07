@@ -17,12 +17,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
-import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
@@ -52,7 +50,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const [, setLocation] = useLocation();
-  const isHeaderVisible = useHeaderVisibility();
   // Form states
   const [category, setCategory] = useState<IssueCategory | null>(null);
   const [causeType, setCauseType] = useState<CauseType>("CONDITION");
@@ -408,13 +405,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         className="hidden"
       />
 
-      {/* Top Navigation Bar */}
-      <header
-        className={`sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 transition-transform duration-300 ${
-          isHeaderVisible ? "translate-y-0" : "-translate-y-full"
-        }`}
-      >
-        <PageContainer className="flex items-center justify-between">
+      {/* Page Heading */}
+      <PageContainer className="pt-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <button
               type="button"
@@ -439,7 +432,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 <span>{t("issue.draft_saved_at", { time: lastDraftTime })}</span>
               </div>
             )}
-            <NavActions />
             <button
               type="button"
               onClick={handleBack}
@@ -448,8 +440,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
               {t("common.cancel")}
             </button>
           </div>
-        </PageContainer>
-      </header>
+        </div>
+      </PageContainer>
 
       {/* Main Responsive Grid Form */}
       <main className="py-4 sm:py-6">
