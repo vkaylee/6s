@@ -17,8 +17,8 @@ func TestTokenManager_GenerateAndValidate(t *testing.T) {
 		t.Fatalf("GenerateAccessToken failed: %v", err)
 	}
 
-	if exp != 3600 {
-		t.Errorf("expected exp 3600, got %d", exp)
+	if exp != int64(AccessTokenDuration.Seconds()) {
+		t.Errorf("expected exp %d, got %d", int64(AccessTokenDuration.Seconds()), exp)
 	}
 
 	parsedID, err := tm.ValidateAccessToken(tokenStr)
@@ -30,7 +30,7 @@ func TestTokenManager_GenerateAndValidate(t *testing.T) {
 	}
 
 	// Test invalid signature
-	wrongTM := NewTokenManager([]byte("wrong-secret-key-1234567890123456"))
+	wrongTM := NewTokenManager([]byte("wrong-secret-key-12345678901234567890"))
 	_, err = wrongTM.ValidateAccessToken(tokenStr)
 	if err == nil {
 		t.Error("expected validation to fail with wrong secret")
@@ -48,6 +48,34 @@ func TestTokenManager_GenerateAndValidate(t *testing.T) {
 	_, err = tm.ValidateAccessToken(expiredStr)
 	if err == nil {
 		t.Error("expected expired token to fail")
+	}
+}
+
+func TestNewTokenManagerRejectsEmptySecret(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on empty secret")
+		}
+	}()
+	NewTokenManager(nil)
+}
+
+func TestNewTokenManagerRejectsShortSecret(t *testing.T) {
+	// HS256 keys shorter than 32 bytes are below RFC 7518 §3.2 requirements.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on secret shorter than 32 bytes")
+		}
+	}()
+	NewTokenManager([]byte("too-short"))
+}
+
+func TestTokenDurationPolicyMaximums(t *testing.T) {
+	if AccessTokenDuration > 15*time.Minute {
+		t.Errorf("access token TTL %v exceeds policy maximum 15m", AccessTokenDuration)
+	}
+	if RefreshTokenDuration > 7*24*time.Hour {
+		t.Errorf("refresh token TTL %v exceeds policy maximum 7d", RefreshTokenDuration)
 	}
 }
 

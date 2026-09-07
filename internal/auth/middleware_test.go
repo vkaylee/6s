@@ -22,7 +22,7 @@ func (m *mockUserGetter) GetUserByID(_ context.Context, _ int64) (db.User, error
 }
 
 func TestMiddleware_Authenticate(t *testing.T) {
-	secret := []byte("secret-key-12345678901234567890")
+	secret := []byte("secret-key-123456789012345678901234")
 	tm := NewTokenManager(secret)
 	getter := &mockUserGetter{
 		user: db.User{

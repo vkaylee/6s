@@ -33,7 +33,7 @@ import (
 func main() {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("invalid config: %v", err)
 	}
 
 	ctx := context.Background()
@@ -68,6 +68,14 @@ func main() {
 		Addr:              fmt.Sprintf(":%s", cfg.Port),
 		Handler:           r,
 		ReadHeaderTimeout: 3 * time.Second,
+	}
+
+	if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		log.Printf("Server listening with TLS on :%s", cfg.Port)
+		if err := server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server terminated: %v", err)
+		}
+		return
 	}
 
 	log.Printf("Server listening on :%s", cfg.Port)
@@ -128,9 +136,6 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) {
 	queries := db.New(dbConn)
 	jwtKey := []byte(cfg.JWTSecret)
-	if len(jwtKey) == 0 {
-		jwtKey = []byte("default-secret-key-32-bytes-secure")
-	}
 	tm := auth.NewTokenManager(jwtKey)
 
 	var trustedProxies []string

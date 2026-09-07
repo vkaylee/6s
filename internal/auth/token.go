@@ -18,12 +18,18 @@ var ErrInvalidToken = errors.New("invalid or expired token")
 // ErrInvalidSub indicates an invalid or missing subject claim in the JWT.
 var ErrInvalidSub = errors.New("invalid token subject")
 
-const (
-	// AccessTokenDuration defines the standard 1-hour lifetime for access tokens.
-	AccessTokenDuration = 3600 * time.Second
+// MinSecretLen is the minimum JWT HMAC secret length in bytes, matching the
+// HS256 output size per RFC 7518 §3.2.
+const MinSecretLen = 32
 
-	// RefreshTokenDuration defines the 30-day lifetime for refresh tokens.
-	RefreshTokenDuration = 30 * 24 * time.Hour
+const (
+	// AccessTokenDuration is the 15-minute web-session lifetime required by
+	// the access-control policy.
+	AccessTokenDuration = 15 * time.Minute
+
+	// RefreshTokenDuration is the 7-day web-session lifetime required by the
+	// access-control policy.
+	RefreshTokenDuration = 7 * 24 * time.Hour
 
 	// RefreshTokenBytes defines the entropy size (32 bytes) for refresh tokens.
 	RefreshTokenBytes = 32
@@ -34,10 +40,11 @@ type TokenManager struct {
 	secretKey []byte
 }
 
-// NewTokenManager initializes TokenManager with a secret key.
+// NewTokenManager initializes TokenManager with a secret key. It fails closed
+// on empty or sub-32-byte secrets (RFC 7518 §3.2 for HS256).
 func NewTokenManager(secretKey []byte) *TokenManager {
-	if len(secretKey) == 0 {
-		panic("JWT secretKey cannot be empty")
+	if len(secretKey) < MinSecretLen {
+		panic(fmt.Sprintf("JWT secretKey must be at least %d bytes", MinSecretLen))
 	}
 	return &TokenManager{secretKey: secretKey}
 }
