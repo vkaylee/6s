@@ -40,7 +40,11 @@ func main() {
 	var dbConn *sql.DB
 	dbConn, err = database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
 	if err != nil {
-		log.Printf("warning: db connection failed (will retry or operate offline): %v", err)
+		if dbConn != nil {
+			_ = dbConn.Close()
+		}
+		dbConn = nil
+		log.Printf("warning: db connection failed: %v", err)
 	} else {
 		defer func() {
 			if err := dbConn.Close(); err != nil {
@@ -48,7 +52,7 @@ func main() {
 			}
 		}()
 		if err := database.RunMigrations(ctx, dbConn); err != nil {
-			log.Printf("warning: run migrations failed: %v", err)
+			log.Fatalf("database migrations failed: %v", err)
 		}
 	}
 
@@ -102,25 +106,27 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 		})
 	})
 	r.Use(i18n.Middleware)
-	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
-	healthHandler := func(w http.ResponseWriter, r *http.Request) {
-		dbStatus := "disconnected"
-		if dbConn != nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-			defer cancel()
-			if err := dbConn.PingContext(ctx); err == nil {
-				dbStatus = "ok"
-			}
-		}
-
-		response.JSON(w, http.StatusOK, map[string]string{
-			"status": "ok",
-			"db":     dbStatus,
-		})
+	// Liveness reports process health only; readiness includes a DB ping.
+	livenessHandler := func(w http.ResponseWriter, _ *http.Request) {
+		response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
-	r.Get("/api/health", healthHandler)
-	r.Head("/api/health", healthHandler)
-
+	readinessHandler := func(w http.ResponseWriter, req *http.Request) {
+		if dbConn == nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(req.Context(), time.Second)
+		defer cancel()
+		if err := dbConn.PingContext(ctx); err != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
+			return
+		}
+		response.JSON(w, http.StatusOK, map[string]string{"status": "ok", "db": "ok"})
+	}
+	r.Get("/api/health", livenessHandler)
+	r.Head("/api/health", livenessHandler)
+	r.Get("/api/ready", readinessHandler)
+	r.Head("/api/ready", readinessHandler)
 	if dbConn != nil && cfg != nil {
 		registerAPIRoutes(r, dbConn, cfg, cipher, ldapClient)
 	}
@@ -265,26 +271,26 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 	reportSvc := report.NewService(queries)
 	reportHandler := report.NewHandler(reportSvc)
 
-  r.Route("/api/reports", func(rr chi.Router) {
-    rr.Use(authMw.Authenticate)
-    rr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
-    rr.Get("/summary", reportHandler.GetSummary)
-  })
+	r.Route("/api/reports", func(rr chi.Router) {
+		rr.Use(authMw.Authenticate)
+		rr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+		rr.Get("/summary", reportHandler.GetSummary)
+	})
 
-  // Allow CSV export under /api/issues/export
-  r.With(authMw.Authenticate, auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader)).Get("/api/issues/export", reportHandler.ExportCSV)
+	// Allow CSV export under /api/issues/export
+	r.With(authMw.Authenticate, auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader)).Get("/api/issues/export", reportHandler.ExportCSV)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
 	scoringSvc := scoring.NewService(queries, nil)
 	scoringHandler := scoring.NewHandler(scoringSvc)
-  r.Route("/api/leaderboard", func(lbr chi.Router) {
-    lbr.Use(authMw.Authenticate)
-    lbr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
-    lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
-    lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
-    lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
-  })
+	r.Route("/api/leaderboard", func(lbr chi.Router) {
+		lbr.Use(authMw.Authenticate)
+		lbr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+		lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
+		lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
+		lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
+	})
 
 	r.Route("/api/issues/{id}/score-logs", func(ilr chi.Router) {
 		ilr.Use(authMw.Authenticate)

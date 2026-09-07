@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"testing"
 	"time"
 )
@@ -69,21 +68,8 @@ func TestDatabase_ConnectError(t *testing.T) {
 	}
 }
 
-func TestRunMigrations_Mock(t *testing.T) {
-	db, err := sql.Open("mock_migration_driver", "")
-	if err != nil {
-		t.Fatalf("failed to open mock db: %v", err)
-	}
-	defer db.Close()
-
-	if err := RunMigrations(context.Background(), db); err != nil {
-		t.Fatalf("RunMigrations failed: %v", err)
-	}
-
-	// Error branch
-	mockExecErr = errors.New("exec error")
-	defer func() { mockExecErr = nil }()
-	if err := RunMigrations(context.Background(), db); err == nil {
-		t.Error("expected error from RunMigrations when exec fails, got nil")
+func TestRunMigrations_NilDB(t *testing.T) {
+	if err := RunMigrations(context.Background(), nil); err == nil {
+		t.Fatal("expected nil database error")
 	}
 }

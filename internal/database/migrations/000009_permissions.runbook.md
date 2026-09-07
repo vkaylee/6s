@@ -54,3 +54,9 @@ Expected results: `permission_count = 14`, `role_permission_count = 32`, `orphan
 - If migration execution fails, stop rollout. Do not run the down migration. Resolve the SQL/data issue, then rerun the idempotent up migration or restore the pre-change backup.
 - If reconciliation fails, keep traffic on the previous application behavior where possible, investigate the recorded counts, and roll forward with a corrected idempotent migration. Restore the verified backup only when roll-forward is unsafe or data integrity is at risk.
 - After reconciliation passes, deploy the permission-enforcing application and smoke-test a USER, LINE_LEADER, SAFETY_OFFICER, and ADMIN action matrix. Monitor authorization failures and database errors.
+
+## Version tracking and operator rollback
+
+The runner creates `schema_migrations` and records each migration version, filename, SHA-256 checksum, and commit time. It holds a PostgreSQL advisory lock, applies pending migrations numerically, and commits each SQL file with its tracking row. Restarting is safe: recorded versions are skipped; edited applied assets fail with a checksum mismatch.
+
+Never delete rows from `schema_migrations` or run a down migration as a routine rollback. Down scripts can destroy data and are for disposable databases or an explicitly approved restore procedure. For an application rollback, deploy the prior compatible binary while retaining the schema. For a failed migration, the transaction is rolled back and the failed version remains unrecorded; fix forward with a new migration. If a non-transactional PostgreSQL operation or integrity risk prevents fix-forward, stop traffic and restore the verified pre-deploy backup, then verify `schema_migrations` and application compatibility before restart.
