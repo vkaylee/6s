@@ -23,7 +23,8 @@
     "load_more": "Tải thêm vấn đề",
     "loading_more": "Đang tải thêm...",
     "showing_count": "Đang hiển thị {current} / {total} vấn đề",
-    "all_loaded": "Đã hiển thị tất cả {total} vấn đề"
+    "all_loaded": "Đã hiển thị tất cả {total} vấn đề",
+    "back": "Quay lại"
   },
   "auth": {
     "login": "Đăng nhập",
@@ -394,7 +395,32 @@
     "industry_garment": "May mặc / Giày da",
     "industry_machinery": "Cơ khí / Gia công",
     "industry_electronics": "Điện tử / SMT",
-    "industry_activated": "Đã cập nhật trạng thái nhãn"
+    "industry_activated": "Đã cập nhật trạng thái nhãn",
+    "users_tab": "Người dùng & Phân quyền",
+    "users_filter_title": "Bộ lọc người dùng",
+    "users_filter_role": "Vai trò",
+    "users_load_error": "Không thể tải danh sách người dùng",
+    "users_update_error": "Cập nhật người dùng thất bại",
+    "users_empty": "Không có người dùng nào khớp bộ lọc.",
+    "users_role_label": "Vai trò (Role)",
+    "users_location_label": "Chuyền/Khu vực phụ trách",
+    "users_no_location": "— Không gán chuyền —",
+    "users_saving": "Đang lưu...",
+    "users_edit_title": "Chỉnh sửa quyền: {name}",
+    "users_last_admin_hint": "Không thể vô hiệu hóa/quản trị viên hoạt động cuối cùng",
+    "users_self_hint": "Không thể tự vô hiệu hóa tài khoản của bạn",
+    "user_activate_confirm": "Kích hoạt lại tài khoản {name}?",
+    "user_deactivate_confirm": "Vô hiệu hóa tài khoản {name}? Tất cả phiên đăng nhập sẽ bị thu hồi.",
+    "permissions_tab": "Ma trận phân quyền",
+    "permissions_subtitle": "Phân quyền theo vai trò (RBAC). Thay đổi có hiệu lực ngay.",
+    "permissions_load_error": "Không thể tải ma trận phân quyền",
+    "permissions_update_error": "Lưu quyền của vai trò thất bại",
+    "permissions_empty": "Chưa có quyền nào được cấu hình.",
+    "permissions_permission_col": "Quyền",
+    "permissions_save_confirm": "Lưu thay đổi cho {count} vai trò?",
+    "permissions_reset": "Bỏ thay đổi",
+    "permissions_dirty_hint": "{count} vai trò có thay đổi chưa lưu",
+    "permissions_locked_hint": "{code} bị khóa cho {role} để tránh mất quyền truy cập"
   },
   "outbox": {
     "title": "Hàng đợi ngoại tuyến ({total})",

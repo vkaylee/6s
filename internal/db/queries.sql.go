@@ -14,6 +14,22 @@ import (
 	"github.com/lib/pq"
 )
 
+const addRolePermission = `-- name: AddRolePermission :exec
+INSERT INTO role_permissions (role, permission_code)
+VALUES ($1, $2)
+ON CONFLICT (role, permission_code) DO NOTHING
+`
+
+type AddRolePermissionParams struct {
+	Role           string
+	PermissionCode string
+}
+
+func (q *Queries) AddRolePermission(ctx context.Context, arg AddRolePermissionParams) error {
+	_, err := q.db.ExecContext(ctx, addRolePermission, arg.Role, arg.PermissionCode)
+	return err
+}
+
 const claimOutboxTasks = `-- name: ClaimOutboxTasks :many
 UPDATE notification_outbox
 SET status = 'SENDING',
@@ -448,6 +464,16 @@ WHERE issue_id = $1
 
 func (q *Queries) DeleteIssueTags(ctx context.Context, issueID int64) error {
 	_, err := q.db.ExecContext(ctx, deleteIssueTags, issueID)
+	return err
+}
+
+const deleteRolePermissions = `-- name: DeleteRolePermissions :exec
+DELETE FROM role_permissions
+WHERE role = $1
+`
+
+func (q *Queries) DeleteRolePermissions(ctx context.Context, role string) error {
+	_, err := q.db.ExecContext(ctx, deleteRolePermissions, role)
 	return err
 }
 
@@ -1136,6 +1162,37 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const getUserPermissions = `-- name: GetUserPermissions :many
+SELECT rp.permission_code
+FROM role_permissions rp
+JOIN users u ON u.role = rp.role
+WHERE u.id = $1
+ORDER BY rp.permission_code ASC
+`
+
+func (q *Queries) GetUserPermissions(ctx context.Context, id int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getUserPermissions, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var permission_code string
+		if err := rows.Scan(&permission_code); err != nil {
+			return nil, err
+		}
+		items = append(items, permission_code)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const incrementTagUseCount = `-- name: IncrementTagUseCount :exec
 UPDATE tags
 SET use_count = use_count + 1
@@ -1691,6 +1748,64 @@ func (q *Queries) ListOpenOverdueIssues(ctx context.Context) ([]ListOpenOverdueI
 	return items, nil
 }
 
+const listPermissions = `-- name: ListPermissions :many
+
+SELECT code, description, is_system FROM permissions
+ORDER BY code ASC
+`
+
+func (q *Queries) ListPermissions(ctx context.Context) ([]Permission, error) {
+	rows, err := q.db.QueryContext(ctx, listPermissions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Permission
+	for rows.Next() {
+		var i Permission
+		if err := rows.Scan(&i.Code, &i.Description, &i.IsSystem); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRolePermissions = `-- name: ListRolePermissions :many
+SELECT role, permission_code
+FROM role_permissions
+ORDER BY role ASC, permission_code ASC
+`
+
+func (q *Queries) ListRolePermissions(ctx context.Context) ([]RolePermission, error) {
+	rows, err := q.db.QueryContext(ctx, listRolePermissions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RolePermission
+	for rows.Next() {
+		var i RolePermission
+		if err := rows.Scan(&i.Role, &i.PermissionCode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listScoreLogsByIssue = `-- name: ListScoreLogsByIssue :many
 SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points, sl.created_at, sl.penalty_date, COALESCE(sr.description, sl.rule_key) AS rule_description
 FROM score_logs sl
@@ -2156,6 +2271,26 @@ func (q *Queries) ReopenIssue(ctx context.Context, arg ReopenIssueParams) (Issue
 		&i.ClosedAt,
 	)
 	return i, err
+}
+
+const replaceRolePermissions = `-- name: ReplaceRolePermissions :exec
+WITH deleted AS (
+    DELETE FROM role_permissions WHERE role = $1
+)
+INSERT INTO role_permissions (role, permission_code)
+SELECT $1, permission_code
+FROM unnest($2::varchar[]) AS permission_code
+ON CONFLICT (role, permission_code) DO NOTHING
+`
+
+type ReplaceRolePermissionsParams struct {
+	Role    string
+	Column2 []string
+}
+
+func (q *Queries) ReplaceRolePermissions(ctx context.Context, arg ReplaceRolePermissionsParams) error {
+	_, err := q.db.ExecContext(ctx, replaceRolePermissions, arg.Role, pq.Array(arg.Column2))
+	return err
 }
 
 const resolveIssue = `-- name: ResolveIssue :one

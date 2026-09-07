@@ -23,7 +23,8 @@
     "load_more": "加载更多问题",
     "loading_more": "加载中...",
     "showing_count": "已显示 {current} / {total} 个问题",
-    "all_loaded": "已加载全部 {total} 个问题"
+    "all_loaded": "已加载全部 {total} 个问题",
+    "back": "返回"
   },
   "auth": {
     "login": "登录",
@@ -394,7 +395,32 @@
     "industry_garment": "服装 / 鞋业",
     "industry_machinery": "机械 / 五金加工",
     "industry_electronics": "电子 / SMT",
-    "industry_activated": "已更新标签状态"
+    "industry_activated": "已更新标签状态",
+    "users_tab": "用户与权限管理",
+    "users_filter_title": "用户筛选",
+    "users_filter_role": "角色",
+    "users_load_error": "加载用户列表失败",
+    "users_update_error": "更新用户失败",
+    "users_empty": "没有符合筛选条件的用户。",
+    "users_role_label": "角色 (Role)",
+    "users_location_label": "负责的产线/区域",
+    "users_no_location": "— 未分配产线 —",
+    "users_saving": "保存中...",
+    "users_edit_title": "编辑权限: {name}",
+    "users_last_admin_hint": "无法停用最后一位在职管理员",
+    "users_self_hint": "无法停用您自己的账号",
+    "user_activate_confirm": "重新激活账号 {name}？",
+    "user_deactivate_confirm": "停用账号 {name}？其所有登录会话将被吊销。",
+    "permissions_tab": "权限矩阵",
+    "permissions_subtitle": "基于角色的访问控制（RBAC）。更改立即生效。",
+    "permissions_load_error": "加载权限矩阵失败",
+    "permissions_update_error": "保存角色权限失败",
+    "permissions_empty": "尚未配置权限。",
+    "permissions_permission_col": "权限",
+    "permissions_save_confirm": "保存 {count} 个角色的更改？",
+    "permissions_reset": "放弃更改",
+    "permissions_dirty_hint": "{count} 个角色有未保存的更改",
+    "permissions_locked_hint": "为避免失去访问权限，{role} 的 {code} 已锁定"
   },
   "outbox": {
     "title": "离线发件箱 ({total})",

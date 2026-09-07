@@ -147,6 +147,8 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient, ticketMgr)
 	authMw := auth.NewMiddleware(tm, queries, ticketMgr)
 	adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
+	permissionHandler := auth.NewPermissionHandler(queries)
+	userAdminHandler := auth.NewAdminHandler(queries)
 
 	// Public auth routes
 	r.Route("/api/auth", func(ar chi.Router) {
@@ -172,6 +174,25 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 		cr.Get("/ad", adHandler.GetADConfig)
 		cr.Put("/ad", adHandler.UpdateADConfig)
 		cr.Post("/ad/test", adHandler.TestADConfig)
+	})
+
+// Permission administration routes (permission:manage only).
+	r.Route("/api/admin/permissions", func(pr chi.Router) {
+		pr.Use(authMw.Authenticate)
+		pr.Use(auth.RequirePermission(auth.PermissionManage))
+		pr.Get("/", permissionHandler.List)
+		pr.Get("", permissionHandler.List)
+	})
+	// The PUT route requires authentication and permission management.
+	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionManage)).Put("/api/admin/roles/{role}/permissions", permissionHandler.UpdateRole)
+
+	// User administration routes (Admin only).
+	r.Route("/api/admin/users", func(ur chi.Router) {
+		ur.Use(authMw.Authenticate)
+		ur.Use(auth.RequireRole(auth.RoleAdmin))
+
+		ur.Get("/", userAdminHandler.ListUsers)
+		ur.Patch("/{id}", userAdminHandler.UpdateUser)
 	})
 
 	registerBusinessRoutes(r, queries, authMw, cipher, cfg)

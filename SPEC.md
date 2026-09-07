@@ -22,8 +22,8 @@ Hệ thống webapp mobile-first hỗ trợ nhân viên nhà xưởng ghi nhận
   │  │   ├── Internal DB Auth (Argon2id, QR badge)
   │  │   └── Active Directory / LDAP (LDAPS/StartTLS, bind authentication, auto-provision user, sync role/group)
   │  ├── Business Logic (RBAC 4 cấp, JWT Access + Refresh Token, Rate Limiting)
-  │  ├── Concurrency Control: PostgreSQL Connection Pool (pgxpool) + Optimistic Locking
-  │  ├── Storage: PostgreSQL 16+ (pg_dump 6h) + Local File System ./uploads (rsync delta lên NAS mỗi giờ; Strict Sanitized UUIDs)
+  │  ├── Concurrency Control: database/sql connection pool (`pgx/v5/stdlib`) + Optimistic Locking
+  │  ├── Storage: PostgreSQL 18 (pg_dump 6h) + Local File System ./uploads (rsync delta lên NAS mỗi giờ; Strict Sanitized UUIDs)
   │  ├── Worker dọn dẹp (Orphan files & Archival) & Cron phục hồi (Cron Ledger)
   │  └── Transactional Outbox Worker (Outbound HTTP + Persistent Webhook Fallback)
   │
@@ -34,25 +34,22 @@ Hệ thống webapp mobile-first hỗ trợ nhân viên nhà xưởng ghi nhận
 
 ---
 
-## 3. CƠ SỞ DỮ LIỆU (POSTGRESQL) & CHIẾN LƯỢC MIGRATION
+## 3. CƠ SỞ DỮ LIỆU (POSTGRESQL 18) & CHIẾN LƯỢC MIGRATION
 
 ### 3.1. Cấu hình Kết nối Go PostgreSQL
 ```go
 // Cấu hình kết nối bắt buộc trong Go:
 // DSN: postgres://user:password@host:5432/6s_db?sslmode=disable (hoặc verify-full khi có cert)
 // Go backend: Chuẩn hóa database/sql kết hợp pgx/v5 driver (github.com/jackc/pgx/v5/stdlib) để tương thích 100% sqlc (sql_package: database/sql).
-// Cấu hình pool (mã mẫu dưới dùng API database/sql; pgxpool tương đương qua pgxpool.ParseConfig ->
-// cfg.MaxConns=25, cfg.MinIdleConns=5, cfg.MaxConnLifetime=15m, cfg.MaxConnIdleTime=5m):
-//   db.SetMaxOpenConns(25)
-//   db.SetMaxIdleConns(5)
+// Cấu hình pool dùng API database/sql:
+//   db.SetMaxOpenConns(25), db.SetMaxIdleConns(5)
 //   db.SetConnMaxLifetime(15 * time.Minute)
 //   db.SetConnMaxIdleTime(5 * time.Minute)
 ```
 ### 3.2. Quản lý Migration & Rollback (Tuân thủ .agent/rules/migration-and-rollback.md)
-- Sử dụng thư viện migration chuẩn hóa (ví dụ: `golang-migrate/migrate/v4` với driver `postgres` hoặc embedded migrations).
-- Cấu trúc thư mục: `internal/database/migrations/`
-  - `000001_init_schema.up.sql`
-  - `000001_init_schema.down.sql`
+- Sử dụng migration embedded trong `internal/database/migrations/`; runtime hiện chạy các file `.up.sql` theo thứ tự.
+- Mọi migration mới phải có `.down.sql` tương ứng để rollback vận hành thủ công; runtime hiện chưa có migration version table hoặc rollback command.
+- Khi cần rollback tự động/versioned: thay thế runner hiện tại bằng migration library có tracking version trước khi triển khai production.
 - **Nguyên tắc bắt buộc**: Mỗi migration file `.up.sql` luôn đi kèm file `.down.sql` có khả năng rollback hoàn toàn.
 - **Mã hóa dữ liệu nhạy cảm at-rest**: Các cột credential (`ad_configs.bind_password`, `notification_configs.wxpusher_app_token`, `notification_configs.lan_webhook_url`) phải được mã hóa bằng thuật toán `AES-256-GCM` trước khi lưu vào PostgreSQL, sử dụng master key đọc từ biến môi trường `APP_ENCRYPTION_KEY` (32 bytes base64). Tuyệt đối không lưu plaintext credential trong database.
 ### 3.3. Chi tiết Schema DDL
@@ -349,51 +346,52 @@ Màn hình chính hiển thị 3 chỉ số nhanh giúp cấp quản lý nhận 
 | Bác bỏ issue (`INVALID`) | Chặn (403) | Chặn (403) | Cho phép | Cho phép |
 | Cấu hình điểm & Hồi tố | Chặn (403) | Chặn (403) | Chặn (403) | **Toàn quyền** |
 | Cấu hình Active Directory / LDAP | Chặn (403) | Chặn (403) | Chặn (403) | **Toàn quyền** |
-| Thu hồi token / Khóa user | Chặn (403) | Chặn (403) | Chặn (403) | **Toàn quyền** |
----
+| Quản lý permission matrix | Chặn (403) | Chặn (403) | Chặn (403) | Theo permission `permission:manage` |
+| Xem audit/score logs | Theo quyền | Theo quyền | Theo quyền | Theo quyền |
 
 ## 5.3. CHUẨN HÓA KỸ THUẬT & PHẢN HỒI API (TECHNICAL CONTRACTS)
 
 ### A. Khóa cứng Công nghệ (Strict Tech Stack)
 - **Backend**: Go 1.23+.
   - HTTP Router: `github.com/go-chi/chi/v5` (nhẹ, chuẩn `net/http`, không boilerplate).
-  - PostgreSQL Driver: `github.com/jackc/pgx/v5` hoặc driver chuẩn PostgreSQL với connection pool `pgxpool`.
+  - Database: `database/sql` + `github.com/jackc/pgx/v5/stdlib`; pool cấu hình qua `database/sql`.
   - Auth: `github.com/golang-jwt/jwt/v5`, `golang.org/x/crypto/argon2`.
   - LDAP: `github.com/go-ldap/ldap/v3`.
+  - AI: `github.com/openai/openai-go` với provider OpenAI-compatible.
 - **Frontend**:
-  - Build tool: Vite 5+.
-  - Framework: React 18+ (TypeScript).
-  - Styling: Tailwind CSS v3 (thuần utility classes, không UI library cồng kềnh).
-  - State Management: `zustand` (nhẹ, dễ đồng bộ IndexedDB) + `idb` (IndexedDB Promise wrapper).
+  - Runtime/build: React 18+ (TypeScript), Vite 5+.
+  - Styling: Tailwind CSS v4.3+ (CSS-first, engine Oxide, `@tailwindcss/vite`; không UI library cồng kềnh).
+  - State: `zustand`; offline storage: `idb`/IndexedDB.
+  - Routing: `wouter`.
+  - Charts: `recharts`.
   - Icons: `lucide-react`.
+  - Quality: Biome + TypeScript; unit tests bằng Bun; E2E bằng Playwright.
 
 ### B. Cấu trúc Thư mục Dự án Bắt buộc (Prescribed Directory Layout)
 ```text
 6s/
-├── cmd/
-│   └── server/
-│       └── main.go              # Khởi tạo DB, router, background workers, server listener
+├── cmd/server/main.go
 ├── internal/
-│   ├── config/                  # Đọc env & CLI flags hạ tầng (port, db path, cert)
-│   ├── database/                # PostgreSQL connection pool (pgxpool), schema migration
-│   ├── auth/                    # Argon2id, JWT, AD/LDAP client, RBAC middleware
-│   ├── issue/                   # Logic CRUD issue, upload validator, state transitions
-│   ├── scoring/                 # Logic tính điểm tuần, hồi tố, audit logs
-│   ├── notification/            # Outbox poller, WxPusher & LAN Webhook sender
-│   ├── cron/                    # Quét quá hạn 00:00, hot backup, dọn ảnh orphan
-│   └── response/                # Helper chuẩn hóa JSON response envelope
-├── web/                         # React PWA codebase
-│   ├── src/
-│   │   ├── api/                 # Fetch client & offline queue dispatch
-│   │   ├── db/                  # IndexedDB stores & CRUD
-│   │   ├── hooks/               # useOnline, useSync, useHaptic
-│   │   ├── components/          # Canvas draw, Split slider, Status bar, QR Scanner
-│   │   ├── pages/               # Home, IssueDetail, CreateIssue, Admin
-│   │   └── store/               # Zustand authStore, filterStore
-│   ├── dist/                    # Static bundle được build
+│   ├── config/                  # Env & runtime configuration
+│   ├── auth/                    # Argon2id, JWT, AD/LDAP, RBAC, permission matrix, sessions
+│   ├── issue/                   # CRUD, uploads, state transitions, SSE events
+│   ├── scoring/                 # Scores, leaderboard, retroactive adjustments
+│   ├── report/                  # Summary and CSV export
+│   ├── notification/            # Transactional outbox and HTTP senders
+│   ├── ai/                      # Translation, cache, review, provider config
+│   ├── cron/                    # Scheduled jobs and task ledger
+│   ├── storage/                 # Safe upload serving and file management
+│   ├── crypto/                  # AES-256-GCM credential encryption
+│   ├── i18n/                    # vi/en/zh error localization
+│   ├── apperror/                # Typed application errors
+│   └── response/                # JSON envelope helpers
+├── web/                         # React PWA
+│   ├── src/{api,components,db,hooks,i18n,pages,store,sync,types,utils}/
+│   ├── public/{manifest.webmanifest,sw.js}
 │   └── index.html
-├── data/                        # Chứa uploads, backups
-├── SPEC.md
+├── data/                        # Uploads and backups
+├── openapi.yaml
+├── sql/schema.sql
 └── go.mod
 ```
 
@@ -489,6 +487,7 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
   - Rate Limit: Tối đa 5 lần thử sai / 1 phút / IP, vượt ngưỡng trả HTTP 429. Khi chạy sau reverse proxy, backend CHỈ tin `X-Forwarded-For` từ danh sách proxy cấu hình trước (env `TRUSTED_PROXIES`) — không trust header từ client trực tiếp.
   - Khóa theo tài khoản: 10 lần sai liên tiếp trong 15 phút cho cùng `username`/`badge_code` -> tạm khóa 15 phút (bộ đếm in-memory theo tài khoản, reset khi đăng nhập thành công), ghi `system_audit_logs` (`action = 'LOGIN_LOCKED'`) để Admin biết công nhân nào bị khóa.
   - **Chuẩn JWT Token (.agent/rules/access-control.md)**:
+    - Runtime hiện có default `JWT_SECRET` cho môi trường dev; production MUST override bằng environment/CLI. Đây là khoản cần harden: production phải fail fast khi thiếu secret hợp lệ, tuyệt đối không dùng default secret.
     - Payload chỉ chứa claims tối giản: `sub` (user_id dạng int/string), `exp`, `iat`. Tuyệt đối không nhúng PII, tên, hay danh sách roles vào JWT payload.
     - Role và quyền được tra cứu trực tiếp theo `sub` từ PostgreSQL/cache tại middleware xác thực.
     - Thời hạn Access Token: tối đa `3600` giây (60 phút) cho mobile/web. Refresh Token: tối đa 30 ngày.
@@ -703,12 +702,16 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
 
 - `POST /api/issues/{id}/invalid` (Bác bỏ issue do báo sai / spam)
   - Điều kiện trạng thái: `status IN ('OPEN', 'PENDING_REVIEW')`; ngược lại 409. Điều kiện quyền: `current_user.role IN ('ADMIN', 'SAFETY_OFFICER')`.
-  - Body: `{"reason": "Ảnh không rõ ràng / Báo cáo không đúng thực tế", "expected_version": 2}` (lệch version -> 409)
+  - Body: `{"reason": "Ảnh không rõ ràng / Báo cáo không đúng thực tế", "expected_version": 2}` (lệch version -> 409).
   - Kết quả: UPDATE guard theo status + version: `status = 'INVALID'`, `reject_reason = body.reason`, `version = version + 1`, ghi `system_audit_logs`, ghi `score_logs` phạt Creator theo `penalty_reporter_invalid` (`target_type='USER'`).
 - `PATCH /api/issues/{id}` (Sửa nhanh phân loại hoặc tags khi phát hiện sai)
   - Điều kiện: `current_user.id == issue.creator_id` HOẶC `current_user.id == issue.resolver_id` HOẶC `current_user.role IN ('ADMIN', 'SAFETY_OFFICER')`.
-  - Body: `{"category": "6S", "location_code": "LINE_A1", "tags": ["nguy_hiểm", "dây_điện"]}`
+  - Body: `{"category": "6S", "location_code": "LINE_A1", "tags": ["nguy_hiểm", "dây_điện"]}`.
   - Kết quả: Cập nhật DB, tăng `version = version + 1`. Nếu đổi sang `6S`, ghi nhận outbox để kích hoạt thông báo khẩn cấp WeChat / Webhook.
+- **Tên endpoint thực tế**: User administration dùng `PATCH /api/admin/users/{id}` và `GET /api/admin/users/`; issue invalidation dùng `/api/issues/{id}/invalid`.
+- **Sự kiện realtime**: `GET /api/issues/events` dùng Server-Sent Events (SSE), yêu cầu xác thực.
+- **Export**: `GET /api/issues/export` xuất CSV, yêu cầu xác thực.
+**OpenAPI**: `openapi.yaml` là contract máy đọc; mọi route mới phải cập nhật đồng thời tại đây và trong mục API này.
 
 ### 6.4. Chấm điểm & Bảng xếp hạng (Scoring & Leaderboard)
 - `GET /api/leaderboard/locations` (Bảng sức khỏe khu vực)
@@ -808,16 +811,37 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
   - Trả về: `{"data": {"success": true, "message": "LDAP connection & service bind OK"}}` hoặc HTTP 400 (Error Envelope) kèm lỗi chi tiết (`Lỗi DNS`, `Sai TLS certificate`, `Sai thông tin Bind DN`).
 
 ### 6.6. Users Admin & Cấu hình Kênh Thông Báo (Admin)
-- `PATCH /api/users/{id}` (Admin): Body `{"role": "...", "assigned_location_code": "LINE_A2", "is_active": false}` — BẮT BUỘC cho luồng AD JIT: group mapping chỉ quyết định `role`, còn `assigned_location_code` luôn rỗng lúc provision -> Line Leader đồng bộ từ AD phải được Admin gán chuyền qua endpoint này thì các rule "duyệt/reopen chuyền mình" mới hoạt động. Ghi `system_audit_logs` (`action='USER_UPDATED'`).
-- `GET /api/users?location_code=&active=true` (Admin): danh mục nhân sự phục vụ màn Admin.
-- `GET /api/config/notifications` (Admin): trả bản ghi `notification_configs` (`id=1`), ẩn giá trị `wxpusher_app_token`/`lan_webhook_url`, chỉ trả cờ `has_app_token` / `has_webhook_url`.
-- `PUT /api/config/notifications` (Admin): upsert `id=1`; token & webhook URL mã hóa AES-256-GCM trước khi lưu; `bind_password` style — chỉ gửi khi thay đổi; ghi `system_audit_logs` (`action='UPDATE_NOTIFICATION_CONFIG'`).
-- `POST /api/config/notifications/test` (Admin): gửi tin test `[6S TEST]` qua từng kênh đang bật, trả kết quả per-kênh để Admin biết kênh nào chết mà không phải đọc log server.
-- `GET /api/health` (KHÔNG yêu cầu Auth): `{"data": {"status": "ok", "db": "ok"}}` — phục vụ probe mạng của PWA (Mục 7.3) và liveness check của Caddy/systemd.
+- `PATCH /api/admin/users/{id}` (Admin): Body `{"role": "...", "assigned_location_code": "LINE_A2", "is_active": false}` — BẮT BUỘC cho luồng AD JIT: group mapping chỉ quyết định `role`, còn `assigned_location_code` luôn rỗng lúc provision -> Line Leader đồng bộ từ AD phải được Admin gán chuyền qua endpoint này thì các rule "duyệt/reopen chuyền mình" mới hoạt động. Ghi `system_audit_logs` (`action='USER_UPDATED'`).
+- `GET /api/admin/users/` (Admin): danh mục nhân sự phục vụ màn Admin.
+### 6.7. AI & Dịch tự động
+- `GET /api/config/ai`, `PUT /api/config/ai`, `POST /api/config/ai/test`, `POST /api/config/ai/test-dns`: Admin-only; cấu hình provider OpenAI-compatible, model, base URL và kiểm tra kết nối/DNS.
+- `GET /api/ai/status`: User đã xác thực; chỉ trả trạng thái bật/tắt, không lộ secret.
+- `POST /api/ai/translate`: User đã xác thực; dịch nội dung giới hạn kích thước, hỗ trợ cache.
+- `POST /api/ai/cached`: User đã xác thực; tra cache trước khi gọi provider.
+- `POST /api/ai/review`, `POST /api/ai/review-follow-up`: User đã xác thực; AI review issue và hỏi tiếp.
+- Provider lỗi, timeout hoặc AI tắt: trả error envelope chuẩn; không làm mất issue/offline draft.
+
+### 6.8. Error Localization
+- Error envelope gồm `code`, `key`, `message`, tùy chọn `details`.
+- `message` bản địa hóa theo locale `vi`, `en`, `zh` từ request; `key` ổn định cho client.
+
+---
+
+### 6.9. Cấu hình Kênh Thông Báo & Health
+- `GET /api/admin/users/` (Admin): danh mục nhân sự phục vụ màn Admin.
+- `GET /api/config/notifications` (Admin): trả bản ghi `notification_configs` (`id=1`), ẩn secret, chỉ trả cờ `has_app_token` / `has_webhook_url`.
+- `PUT /api/config/notifications` (Admin): upsert cấu hình; mã hóa AES-256-GCM; chỉ gửi secret khi thay đổi.
+- `POST /api/config/notifications/test` (Admin): gửi tin test theo từng kênh.
+- `GET /api/health` (public): trả trạng thái service và DB cho probe PWA/liveness.
 
 ---
 
 ## 7. CLIENT PWA & LUỒNG OFFLINE (REACT)
+- PWA assets: `web/public/manifest.webmanifest`, `web/public/sw.js`; Service Worker đăng ký từ `web/src/main.tsx` chỉ khi chạy HTTPS.
+- Service Worker precache app shell, fallback `index.html` cho SPA navigation offline; bypass `/api/`, `/uploads/`.
+- Install flow: `beforeinstallprompt` trên Chromium; hướng dẫn cài thủ công trên iOS.
+- IndexedDB lưu `draft_issues`, `draft_resolves`, `auth_session`; `syncEngine` đồng bộ khi online, xử lý HTTP 409 conflict.
+- Cache Service Worker không phải nguồn dữ liệu nghiệp vụ; draft chờ gửi nằm trong IndexedDB.
 
 ### 7.1. Xử lý ảnh tại Client (Tiết kiệm bộ nhớ & băng thông)
 - Input: File gốc từ camera điện thoại (thường 5MB - 15MB).
@@ -1008,7 +1032,7 @@ func StartOutboxWorker(ctx context.Context, db *sql.DB, notifyCh <-chan struct{}
   - `PENDING_REVIEW`: Cam (`#D97706`) + Icon đồng hồ chờ duyệt.
   - `CLOSED`: Xanh lá (`#16A34A`) + Icon dấu tích hoàn thành.
 ### 9.5. Hiệu năng thiết bị thấp & Chống giật lag (Low-end Device Optimization)
-- Sử dụng Tailwind CSS, không cài đặt các bộ thư viện UI cồng kềnh (MUI, Ant Design).
+- Sử dụng Tailwind CSS v4.3+ với engine Oxide, không cài đặt các bộ thư viện UI cồng kềnh (MUI, Ant Design).
 - Bundle JavaScript gzipped < 150KB. Thời gian tải lần đầu < 1.5s trên mạng 3G/LAN yếu.
 - **Tối ưu hóa máy yếu & Chế độ giảm chuyển động (`prefers-reduced-motion`)**:
   - Tự động tắt animation shimmer skeleton và các hiệu ứng chuyển cảnh nặng khi thiết bị bật chế độ tiết kiệm pin hoặc hệ thống yêu cầu giảm chuyển động, thay bằng màu nền tĩnh nhẹ (`#E5E7EB` / `#27272A`).
@@ -1154,12 +1178,11 @@ func StartOutboxWorker(ctx context.Context, db *sql.DB, notifyCh <-chan struct{}
   - **Root CA Onboarding Endpoint (`GET /cert/ca.crt`)**: Cung cấp endpoint tải chứng chỉ CA và trang giao diện hướng dẫn 3 bước cài đặt Trust Profile trên iOS / Android, đảm bảo Camera hoạt động mượt mà không bị trình duyệt chặn bảo mật.
   - File nhúng Go hỗ trợ cấu hình cờ `-tls-cert` và `-tls-key` để chạy TLS trực tiếp không cần reverse proxy nếu muốn tối giản.
 
-### 10.2. Sao lưu Dữ liệu Tự động (PostgreSQL Backup & Disaster Recovery)
-- **PostgreSQL Automated Dump** (RPO 6 giờ; không chạy WAL archiving/PITR ở quy mô 1 server nhà máy — bỏ tuyên bố WAL để khỏi sai kỳ vọng khôi phục): Go runtime hoặc Cron container chạy tác vụ sao lưu định kỳ mỗi 6 giờ bằng lệnh `pg_dump -Fc` tạo snapshot nén nhị phân `./backups/6s_backup_YYYYMMDD_HH.dump`.
-- **Lưu trữ ngoài (Off-site / NAS)**: Tự động copy file backup dump sang thư mục chia sẻ NFS/SMB của máy chủ NAS nhà máy.
-- **RPO bằng chứng ảnh**: `pg_dump` chỉ phủ metadata, ảnh là bằng chứng bắt buộc của mọi issue. Đồng bộ `./uploads/` lên NAS bằng `rsync -a` (delta) mỗi giờ — điểm khôi phục đầy đủ không quá 1 giờ mất dữ liệu.
-- **Dọn dẹp ảnh rác (Orphan Files Cleaner)**: Mỗi đêm lúc 01:00, worker quét thư mục `./uploads/` đối chiếu với database, tự động xóa các file tạm mồ côi sinh ra do client hủy kết nối giữa chừng.
-- **Retention kiểm toán**: `system_audit_logs` chứa IP/user-agent (PII) — cron `CLEANUP_AUDIT_LOGS` mỗi tuần xóa bản ghi > 12 tháng; bảng lớn thì chuyển partition theo tháng (upgrade path khi > 10M dòng).
+### 10.2. Sao lưu Dữ liệu Tự động (PostgreSQL 18 Backup & Disaster Recovery)
+- **Trạng thái hiện tại — chưa triển khai trong Go runtime**: Chưa có job thực thi `pg_dump`, copy backup NAS hoặc `rsync` ảnh. Các yêu cầu dưới đây là mục tiêu vận hành, không phải tính năng đang chạy.
+- **Mục tiêu backup PostgreSQL 18** (RPO 6 giờ; không chạy WAL archiving/PITR ở quy mô 1 server nhà máy): Cron/sidecar vận hành chạy `pg_dump -Fc` tạo `./backups/6s_backup_YYYYMMDD_HH.dump`, sau đó copy sang NAS NFS/SMB.
+- **Mục tiêu RPO bằng chứng ảnh**: `pg_dump` chỉ phủ metadata, ảnh là bằng chứng bắt buộc của mọi issue. Đồng bộ `./uploads/` lên NAS bằng `rsync -a` (delta) mỗi giờ.
+- **Đã triển khai trong runtime**: dọn dẹp orphan uploads lúc 01:00 và dọn audit logs hằng tuần (`CLEANUP_AUDIT_LOGS` > 12 tháng) qua `internal/cron`; xem Mục 10.3.
 - **Lưu trữ ảnh cũ (Cold Data Archival - Zero CPU Penalty)**: 
   - File JPEG vốn đã được nén lossy tại client; việc chạy gzip ngốn 100% CPU của VPS 1 core mà tỷ lệ nén thu được < 2%.
   - Thay vào đó: Tự động gom archive theo định dạng uncompressed `tar` hoặc di chuyển trực tiếp cây thư mục `./uploads/YYYY/MM` của các issue `CLOSED` > 6 tháng sang ổ lưu trữ thứ cấp/NAS mà không tốn CPU nén lại.

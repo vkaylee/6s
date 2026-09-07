@@ -289,7 +289,27 @@ components:
         safety_count:
           type: integer
           example: 3
-
+    AIConfig:
+      type: object
+      required: [is_enabled, base_url, has_api_key, default_model, model_translate, model_vision, model_summary]
+      properties:
+        is_enabled:
+          type: boolean
+        base_url:
+          type: string
+        has_api_key:
+          type: boolean
+        default_model:
+          type: string
+        model_translate:
+          type: string
+        model_vision:
+          type: string
+        model_summary:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
     ADConfig:
       type: object
       required:
@@ -984,7 +1004,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /issues/{id}/invalid:
+  /issues/{id}/invalidate:
     post:
       summary: Bác bỏ issue do báo sai hoặc spam (Admin / Safety Officer only)
       parameters:
@@ -1231,7 +1251,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /users:
+  /admin/users:
     get:
       summary: Danh mục nhân sự phục vụ màn Admin (Admin only)
       parameters:
@@ -1268,7 +1288,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /users/{id}:
+  /admin/users/{id}:
     patch:
       summary: Cập nhật thông tin/quyền nhân sự (Admin only)
       parameters:
@@ -1310,6 +1330,538 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /config/ai:
+    get:
+      summary: Lấy cấu hình AI (Admin only)
+      responses:
+        '200':
+          description: Cấu hình AI hiện hành, secret masked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AIConfig'
+        '403':
+          description: Yêu cầu quyền ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      summary: Cập nhật cấu hình AI (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_enabled:
+                  type: boolean
+                base_url:
+                  type: string
+                api_key:
+                  type: string
+                  description: Chỉ gửi khi thay đổi
+                default_model:
+                  type: string
+                model_translate:
+                  type: string
+                model_vision:
+                  type: string
+                model_summary:
+                  type: string
+      responses:
+        '200':
+          description: Cập nhật cấu hình AI thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updated:
+                        type: boolean
+                        example: true
+
+  /config/ai/test:
+    post:
+      summary: Kiểm tra kết nối và chức năng model AI (Admin only)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                base_url:
+                  type: string
+                api_key:
+                  type: string
+                model:
+                  type: string
+                purpose:
+                  type: string
+                  enum: [connectivity, translate, vision, summary]
+      responses:
+        '200':
+          description: Kết quả kiểm tra AI
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      latency_ms:
+                        type: integer
+                      model_used:
+                        type: string
+                      purpose:
+                        type: string
+                      reply:
+                        type: string
+                      error:
+                        type: string
+        '400':
+          description: Kiểm tra thất bại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /config/ai/test-dns:
+    post:
+      summary: Kiểm tra phân giải DNS cho AI gateway (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_url]
+              properties:
+                base_url:
+                  type: string
+      responses:
+        '200':
+          description: Kết quả phân giải DNS
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      host:
+                        type: string
+                      ips:
+                        type: array
+                        items:
+                          type: string
+                      latency_ms:
+                        type: integer
+                      error:
+                        type: string
+
+  /ai/status:
+    get:
+      summary: Trạng thái bật/tắt AI (không lộ secret)
+      responses:
+        '200':
+          description: Trạng thái AI
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [enabled]
+                    properties:
+                      enabled:
+                        type: boolean
+
+  /ai/translate:
+    post:
+      summary: Dịch văn bản qua AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, target_lang]
+              properties:
+                text:
+                  type: string
+                  maxLength: 10000
+                target_lang:
+                  type: string
+                  example: vi
+      responses:
+        '200':
+          description: Kết quả dịch
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [translated_text]
+                    properties:
+                      translated_text:
+                        type: string
+        '400':
+          description: Input không hợp lệ hoặc AI disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /ai/cached:
+    post:
+      summary: Tra cache dịch trước khi gọi provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, target_lang]
+              properties:
+                text:
+                  type: string
+                target_lang:
+                  type: string
+      responses:
+        '200':
+          description: Kết quả cache
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      cached:
+                        type: boolean
+                      translated_text:
+                        type: string
+
+  /ai/review:
+    post:
+      summary: AI review issue theo bằng chứng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [issue_id, lang]
+              properties:
+                issue_id:
+                  type: integer
+                lang:
+                  type: string
+      responses:
+        '200':
+          description: Kết quả review
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /ai/review-follow-up:
+    post:
+      summary: Hỏi tiếp theo ngữ cảnh review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [issue_id, lang]
+              properties:
+                issue_id:
+                  type: integer
+                lang:
+                  type: string
+      responses:
+        '200':
+          description: Kết quả follow-up
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /issues/events:
+    get:
+      summary: SSE stream sự kiện issue
+      responses:
+        '200':
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /issues/export:
+    get:
+      summary: Xuất CSV danh sách issue
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /issues/{id}/score-logs:
+    get:
+      summary: Sổ cái điểm của một issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Danh sách score logs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rule_key:
+                          type: string
+                        points:
+                          type: integer
+                        created_at:
+                          type: string
+                          format: date-time
+
+  /leaderboard/score-logs:
+    get:
+      summary: Sổ cái điểm theo target (location/user)
+      responses:
+        '200':
+          description: Danh sách score logs theo target
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /auth/setup-status:
+    get:
+      summary: Kiểm tra cần setup superadmin ban đầu
+      security: []
+      responses:
+        '200':
+          description: Trạng thái setup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [needs_setup]
+                    properties:
+                      needs_setup:
+                        type: boolean
+
+  /auth/setup:
+    post:
+      summary: Thiết lập superadmin đầu tiên
+      security: []
+      responses:
+        '200':
+          description: Kết quả setup
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /auth/ticket:
+    post:
+      summary: Tạo ticket auth ngắn hạn (QR login / thiết bị mới)
+      responses:
+        '200':
+          description: Ticket info
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /reports/summary:
+    get:
+      summary: Báo cáo tổng hợp KPI issue
+      responses:
+        '200':
+          description: KPI summary
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /admin/permissions:
+    get:
+      summary: Danh sách permission matrix (permission:manage)
+      responses:
+        '200':
+          description: Danh sách permissions theo role
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /admin/roles/{role}/permissions:
+    put:
+      summary: Cập nhật permission cho một role (permission:manage)
+      parameters:
+        - name: role
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [USER, LINE_LEADER, SAFETY_OFFICER, ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Permission đã cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /locations/all:
+    get:
+      summary: Danh sách locations (kể cả inactive) cho Admin
+      responses:
+        '200':
+          description: Danh sách locations đầy đủ
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /locations/{code}/status:
+    patch:
+      summary: Bật/tắt location (Admin only)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cập nhật trạng thái location
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /locations/{code}:
+    put:
+      summary: Cập nhật location (Admin only)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cập nhật location
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tags/all:
+    get:
+      summary: Danh sách tags (kể cả inactive) cho Admin
+      responses:
+        '200':
+          description: Danh sách tags đầy đủ
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tags/{code}/status:
+    patch:
+      summary: Bật/tắt tag (Admin only)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cập nhật trạng thái tag
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tags/batch-status:
+    post:
+      summary: Bật/tắt nhiều tag (Admin only)
+      responses:
+        '200':
+          description: Kết quả cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
 
   /config/notifications:
     get:

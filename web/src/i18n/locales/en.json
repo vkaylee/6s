@@ -23,7 +23,8 @@
     "load_more": "Load More Issues",
     "loading_more": "Loading more...",
     "showing_count": "Showing {current} of {total} issues",
-    "all_loaded": "All {total} issues loaded"
+    "all_loaded": "All {total} issues loaded",
+    "back": "Back"
   },
   "auth": {
     "login": "Login",
@@ -394,7 +395,32 @@
     "industry_garment": "Garment / Footwear",
     "industry_machinery": "Machinery / Hardware",
     "industry_electronics": "Electronics / SMT",
-    "industry_activated": "Tag statuses updated"
+    "industry_activated": "Tag statuses updated",
+    "users_tab": "Users & Permissions",
+    "users_filter_title": "User filters",
+    "users_filter_role": "Role",
+    "users_load_error": "Failed to load users",
+    "users_update_error": "Failed to update user",
+    "users_empty": "No users match the filter.",
+    "users_role_label": "Role",
+    "users_location_label": "Assigned line/area",
+    "users_no_location": "— No line assigned —",
+    "users_saving": "Saving...",
+    "users_edit_title": "Edit permissions: {name}",
+    "users_last_admin_hint": "Cannot deactivate the last active administrator",
+    "users_self_hint": "You cannot deactivate your own account",
+    "user_activate_confirm": "Reactivate account {name}?",
+    "user_deactivate_confirm": "Deactivate account {name}? All sessions will be revoked.",
+    "permissions_tab": "Permission Matrix",
+    "permissions_subtitle": "Role-based access control (RBAC). Changes apply immediately.",
+    "permissions_load_error": "Failed to load permission matrix",
+    "permissions_update_error": "Failed to save role permissions",
+    "permissions_empty": "No permissions configured.",
+    "permissions_permission_col": "Permission",
+    "permissions_save_confirm": "Save changes for {count} role(s)?",
+    "permissions_reset": "Discard changes",
+    "permissions_dirty_hint": "{count} role(s) have unsaved changes",
+    "permissions_locked_hint": "{code} is locked for {role} to prevent losing access"
   },
   "outbox": {
     "title": "Offline Outbox ({total})",

@@ -182,17 +182,41 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
 
                   {/* Action 1: Admin Settings (if admin) */}
                   {user.role === UserRole.ADMIN && (
-                    <Link
-                      href="/admin"
-                      onClick={() => {
-                        setIsProfileOpen(false);
-                        onNavigate?.("/admin");
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                    >
-                      <span>⚙️</span>
-                      <span>{t("admin.title")}</span>
-                    </Link>
+                    <>
+                      <Link
+                        href="/admin"
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate?.("/admin");
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                      >
+                        <span>⚙️</span>
+                        <span>{t("admin.title")}</span>
+                      </Link>
+                      <Link
+                        href="/admin/users"
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate?.("/admin/users");
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                      >
+                        <span>👥</span>
+                        <span>{t("admin.users_tab")}</span>
+                      </Link>
+                      <Link
+                        href="/admin/permissions"
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate?.("/admin/permissions");
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                      >
+                        <span>🔑</span>
+                        <span>{t("admin.permissions_tab")}</span>
+                      </Link>
+                    </>
                   )}
 
                   {/* Action 2: Logout */}

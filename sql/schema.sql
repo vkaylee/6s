@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS system_audit_logs (
     action VARCHAR(100) NOT NULL,
     target_table VARCHAR(100) NOT NULL,
     target_id VARCHAR(100) NOT NULL,
+
     old_value JSONB,
     new_value JSONB,
     ip_address VARCHAR(45),
@@ -183,6 +184,19 @@ CREATE TABLE IF NOT EXISTS translation_cache (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (content_hash, target_lang)
 );
+CREATE TABLE IF NOT EXISTS permissions (
+    code VARCHAR(100) PRIMARY KEY,
+    description TEXT NOT NULL,
+    is_system BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role VARCHAR(30) NOT NULL CHECK (role IN ('USER','LINE_LEADER','SAFETY_OFFICER','ADMIN')),
+    permission_code VARCHAR(100) NOT NULL REFERENCES permissions(code) ON DELETE CASCADE,
+    PRIMARY KEY (role, permission_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_role_permissions_permission ON role_permissions(permission_code);
 
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_client_uuid ON issues(client_uuid);

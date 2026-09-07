@@ -53,6 +53,12 @@ const AdminConfigPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import("./pages/ReportsPage.tsx").then((m) => ({ default: m.ReportsPage })),
 );
+const UserAccessPage = lazy(() =>
+  import("./pages/UserAccessPage.tsx").then((m) => ({ default: m.UserAccessPage })),
+);
+const PermissionMatrixPage = lazy(() =>
+  import("./pages/PermissionMatrixPage.tsx").then((m) => ({ default: m.PermissionMatrixPage })),
+);
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -918,6 +924,32 @@ export function App() {
               }
             >
               <AdminConfigPage />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/users">
+          <ProtectedRoute>
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <UserAccessPage />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/permissions">
+          <ProtectedRoute>
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <PermissionMatrixPage />
             </Suspense>
           </ProtectedRoute>
         </Route>

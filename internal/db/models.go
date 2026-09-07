@@ -111,6 +111,12 @@ type NotificationOutbox struct {
 	SentAt      sql.NullTime
 }
 
+type Permission struct {
+	Code        string
+	Description string
+	IsSystem    bool
+}
+
 type RefreshToken struct {
 	ID         int64
 	UserID     int64
@@ -119,6 +125,11 @@ type RefreshToken struct {
 	ExpiresAt  time.Time
 	RevokedAt  sql.NullTime
 	CreatedAt  time.Time
+}
+
+type RolePermission struct {
+	Role           string
+	PermissionCode string
 }
 
 type ScoreLog struct {

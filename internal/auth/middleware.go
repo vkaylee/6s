@@ -27,9 +27,10 @@ type UserGetter interface {
 
 // Middleware handles authentication and authorization.
 type Middleware struct {
-	tokenManager  *TokenManager
-	ticketManager *TicketManager
-	userGetter    UserGetter
+	tokenManager     *TokenManager
+	ticketManager    *TicketManager
+	userGetter       UserGetter
+	permissionGetter PermissionGetter
 }
 
 // NewMiddleware instantiates auth Middleware.
@@ -38,10 +39,10 @@ func NewMiddleware(tokenManager *TokenManager, userGetter UserGetter, ticketMana
 	if len(ticketManager) > 0 {
 		tm = ticketManager[0]
 	}
+	permissionGetter, _ := userGetter.(PermissionGetter)
 	return &Middleware{
-		tokenManager:  tokenManager,
-		ticketManager: tm,
-		userGetter:    userGetter,
+		tokenManager: tokenManager, ticketManager: tm, userGetter: userGetter,
+		permissionGetter: permissionGetter,
 	}
 }
 
@@ -108,8 +109,16 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), UserContextKey, user)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		ctx := r.Context()
+		if m.permissionGetter != nil {
+			permissions, err := m.permissionGetter.GetUserPermissions(ctx, user.ID)
+			if err != nil {
+				response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+				return
+			}
+			ctx = withPermissions(ctx, permissions)
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, UserContextKey, user)))
 	})
 }
 

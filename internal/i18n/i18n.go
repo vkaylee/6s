@@ -92,6 +92,12 @@ const (
 	ErrAITestFailed            Key = "ai.test_failed"
 	ErrAIBaseURLMissing        Key = "ai.base_url_missing"
 	ErrAIReviewFailed          Key = "ai.review_failed"
+	ErrPermissionLockout        Key = "auth.permission_admin_lockout"
+	ErrPermissionSystemRequired Key = "auth.permission_system_required"
+	ErrPermissionLoadFailed     Key = "auth.permission_load_failed"
+	ErrPermissionSaveFailed     Key = "auth.permission_save_failed"
+	ErrLastAdmin              Key = "auth.last_admin"
+	ErrUserUpdateFailed       Key = "auth.user_update_failed"
 )
 
 // ponytail: hardcoded in-memory dictionary; upgrade to embed.FS or external catalog if multi-file translators needed.
@@ -166,6 +172,12 @@ var catalog = map[string]map[Key]string{
 		ErrAITestFailed:            "Kiểm tra kết nối AI thất bại: %v",
 		ErrAIBaseURLMissing:        "Chưa cấu hình AI Base URL",
 		ErrAIReviewFailed:          "AI đánh giá issue thất bại: %v",
+		ErrPermissionLockout:       "Không thể gỡ quyền quản lý người dùng hoặc quản lý phân quyền khỏi ADMIN",
+		ErrPermissionSystemRequired: "Không thể gỡ quyền hệ thống khỏi ADMIN",
+		ErrPermissionLoadFailed:    "Không thể tải danh sách phân quyền",
+		ErrPermissionSaveFailed:    "Lưu phân quyền thất bại",
+		ErrLastAdmin:              "Không thể gỡ quản trị viên hoạt động cuối cùng",
+		ErrUserUpdateFailed:       "Cập nhật thông tin người dùng thất bại",
 	},
 	LocaleEN: {
 		ErrSessionsQueryFailed:     "Failed to query active sessions",
@@ -237,6 +249,12 @@ var catalog = map[string]map[Key]string{
 		ErrAITestFailed:            "AI connection test failed: %v",
 		ErrAIBaseURLMissing:        "AI Base URL is not configured",
 		ErrAIReviewFailed:          "AI issue review failed: %v",
+		ErrPermissionLockout:       "Cannot remove user management or permission management from ADMIN",
+		ErrPermissionSystemRequired: "System permissions cannot be removed from ADMIN",
+		ErrPermissionLoadFailed:    "Failed to load permissions",
+		ErrPermissionSaveFailed:    "Failed to save permissions",
+		ErrLastAdmin:              "Cannot remove the last active administrator",
+		ErrUserUpdateFailed:       "Failed to update user",
 	},
 	LocaleZH: {
 		ErrInternal:                "内部服务器错误",
@@ -310,6 +328,12 @@ var catalog = map[string]map[Key]string{
 		ErrAITestFailed:            "AI连接测试失败: %v",
 		ErrAIBaseURLMissing:        "未配置AI Base URL",
 		ErrAIReviewFailed:          "AI问题评审失败: %v",
+		ErrPermissionLockout:       "无法从 ADMIN 移除用户管理或权限管理",
+		ErrPermissionSystemRequired: "无法从 ADMIN 移除系统权限",
+		ErrPermissionLoadFailed:    "加载权限列表失败",
+		ErrPermissionSaveFailed:    "保存权限失败",
+		ErrLastAdmin:              "无法移除最后一位在职管理员",
+		ErrUserUpdateFailed:       "更新用户信息失败",
 	},
 }
 

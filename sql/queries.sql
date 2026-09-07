@@ -127,6 +127,40 @@ INSERT INTO system_audit_logs (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP
 );
+-- name: ListPermissions :many
+
+SELECT * FROM permissions
+ORDER BY code ASC;
+
+-- name: ListRolePermissions :many
+SELECT role, permission_code
+FROM role_permissions
+ORDER BY role ASC, permission_code ASC;
+
+-- name: GetUserPermissions :many
+SELECT rp.permission_code
+FROM role_permissions rp
+JOIN users u ON u.role = rp.role
+WHERE u.id = $1
+ORDER BY rp.permission_code ASC;
+
+-- name: DeleteRolePermissions :exec
+DELETE FROM role_permissions
+WHERE role = $1;
+
+-- name: AddRolePermission :exec
+INSERT INTO role_permissions (role, permission_code)
+VALUES ($1, $2)
+ON CONFLICT (role, permission_code) DO NOTHING;
+
+-- name: ReplaceRolePermissions :exec
+WITH deleted AS (
+    DELETE FROM role_permissions WHERE role = $1
+)
+INSERT INTO role_permissions (role, permission_code)
+SELECT $1, permission_code
+FROM unnest($2::varchar[]) AS permission_code
+ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- name: ListLocations :many
 SELECT * FROM locations
