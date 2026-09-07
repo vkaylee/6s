@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import type { DialogOptions } from "../store/dialogStore.ts";
 import { useDialogStore } from "../store/dialogStore.ts";
@@ -18,12 +19,57 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
   const handleConfirm = props.onConfirm || store.handleConfirm;
   const handleCancel = props.onCancel || store.handleCancel;
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Restore focus to the opener when the dialog closes or unmounts.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    return () => previouslyFocused?.focus();
+  }, [isOpen]);
+
+  // Escape cancels; Tab cycles inside the dialog.
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = () =>
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
+    focusables()[0]?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        handleCancel();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, handleCancel]);
+
   if (!isOpen) return null;
 
   const isConfirm = options.type === "confirm";
   const isDestructive = options.destructive;
 
-  const defaultTitle = isConfirm ? t("common.confirm") : "Notice";
+  const defaultTitle = isConfirm ? t("common.confirm") : t("common.error");
   const defaultCancelText = t("common.cancel");
   const defaultConfirmText = isConfirm ? t("common.confirm") : t("common.close");
 
@@ -38,6 +84,7 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="global-dialog-title"

@@ -25,8 +25,8 @@ export function NavActions() {
       <button
         type="button"
         data-testid="theme-toggle"
+        aria-label={isDark ? t("nav.theme_light") : t("nav.theme_dark")}
         onClick={toggleTheme}
-        className="w-8 h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold flex items-center justify-center border border-zinc-200 dark:border-zinc-700 transition-colors"
         title={isDark ? t("nav.theme_light") : t("nav.theme_dark")}
       >
         {isDark ? "☀️" : "🌙"}
