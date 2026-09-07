@@ -156,6 +156,11 @@ export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCa
               ))}
             </div>
           )}
+          {issue.score_deducted !== undefined && issue.score_deducted > 0 && (
+            <span className="text-xs font-black text-rose-600 dark:text-rose-400">
+              -{issue.score_deducted} {t("leaderboard.points_unit")}
+            </span>
+          )}
         </div>
       </div>
       {/* Body: Vertical on mobile, 2-column horizontal on medium/large screens (meetings/projectors) */}

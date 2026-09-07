@@ -43,6 +43,7 @@ type Response struct {
 	PhotoDetail           *string   `json:"photo_detail"`
 	PhotoAfter            *string   `json:"photo_after"`
 	ScoreRating           int16     `json:"score_rating"`
+	ScoreDeducted         int64     `json:"score_deducted"`
 	Status                string    `json:"status"`
 	Creator               UserItem  `json:"creator"`
 	Resolver              *UserItem `json:"resolver"`
@@ -844,6 +845,7 @@ func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *str
 		}
 	}
 	resp := toIssueResponse(issue, r.LocationNameVi, tags, creator, resolver)
+	resp.ScoreDeducted = r.ScoreDeducted
 	resp.TranslatedDescription = trans
 	return *resp
 }

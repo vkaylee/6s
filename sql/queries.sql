@@ -271,6 +271,11 @@ WHERE issue_id = $1;
 
 -- name: ListIssuesFiltered :many
 SELECT i.*, 
+       COALESCE((
+           SELECT SUM(CASE WHEN sl.points < 0 THEN -sl.points ELSE 0 END)
+           FROM score_logs sl
+           WHERE sl.issue_id = i.id
+       ), 0)::bigint AS score_deducted,
        loc.name_vi AS location_name_vi,
        u.username AS creator_username,
        u.full_name AS creator_full_name,

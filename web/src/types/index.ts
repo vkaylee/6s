@@ -78,6 +78,7 @@ export interface IssueItem {
   photo_before: string;
   photo_detail?: string | null;
   photo_after?: string | null;
+  score_deducted?: number;
   score_rating?: number | null;
   status: IssueStatus;
   created_at: string;

@@ -260,25 +260,26 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 	reportSvc := report.NewService(queries)
 	reportHandler := report.NewHandler(reportSvc)
 
-	r.Route("/api/reports", func(rr chi.Router) {
-		rr.Use(authMw.Authenticate)
-		rr.Get("/summary", reportHandler.GetSummary)
-	})
+  r.Route("/api/reports", func(rr chi.Router) {
+    rr.Use(authMw.Authenticate)
+    rr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+    rr.Get("/summary", reportHandler.GetSummary)
+  })
 
-	// Allow CSV export under /api/issues/export
-	r.With(authMw.Authenticate).Get("/api/issues/export", reportHandler.ExportCSV)
+  // Allow CSV export under /api/issues/export
+  r.With(authMw.Authenticate, auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader)).Get("/api/issues/export", reportHandler.ExportCSV)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
 	scoringSvc := scoring.NewService(queries, nil)
 	scoringHandler := scoring.NewHandler(scoringSvc)
-
-	r.Route("/api/leaderboard", func(lbr chi.Router) {
-		lbr.Use(authMw.Authenticate)
-		lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
-		lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
-		lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
-	})
+  r.Route("/api/leaderboard", func(lbr chi.Router) {
+    lbr.Use(authMw.Authenticate)
+    lbr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+    lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
+    lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
+    lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
+  })
 
 	r.Route("/api/issues/{id}/score-logs", func(ilr chi.Router) {
 		ilr.Use(authMw.Authenticate)

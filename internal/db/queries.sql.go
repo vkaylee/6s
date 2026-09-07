@@ -1464,6 +1464,11 @@ func (q *Queries) ListAllTags(ctx context.Context) ([]Tag, error) {
 
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
 SELECT i.id, i.client_uuid, i.version, i.creator_id, i.resolver_id, i.category, i.cause_type, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
+       COALESCE((
+           SELECT SUM(CASE WHEN sl.points < 0 THEN -sl.points ELSE 0 END)
+           FROM score_logs sl
+           WHERE sl.issue_id = i.id
+       ), 0)::bigint AS score_deducted,
        loc.name_vi AS location_name_vi,
        u.username AS creator_username,
        u.full_name AS creator_full_name,
@@ -1509,6 +1514,7 @@ type ListIssuesFilteredRow struct {
 	CreatedAt        time.Time
 	ResolvedAt       sql.NullTime
 	ClosedAt         sql.NullTime
+	ScoreDeducted    int64
 	LocationNameVi   string
 	CreatorUsername  string
 	CreatorFullName  string
@@ -1550,6 +1556,7 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 			&i.CreatedAt,
 			&i.ResolvedAt,
 			&i.ClosedAt,
+			&i.ScoreDeducted,
 			&i.LocationNameVi,
 			&i.CreatorUsername,
 			&i.CreatorFullName,

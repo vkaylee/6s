@@ -33,6 +33,11 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsProfileOpen(false);
+      }
+    }
     function handleClickOutside(event: MouseEvent) {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
@@ -40,8 +45,12 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
     }
     if (isProfileOpen) {
       document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
     }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, [isProfileOpen]);
 
   useEffect(() => {
@@ -112,17 +121,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
             </button>
           )}
         </div>
-
-        {/* Right: Reports button + Lang/Theme + Profile avatar / Login */}
         <div className="flex items-center space-x-2">
-          <button
-            type="button"
-            onClick={() => onNavigate?.("/reports")}
-            className="w-8 h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold flex items-center justify-center border border-zinc-200 dark:border-zinc-700 transition-colors"
-            title={t("nav.reports")}
-          >
-            📊
-          </button>
           <NavActions />
           {user ? (
             <div className="relative" ref={profileMenuRef}>
@@ -131,7 +130,8 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                 onClick={() => setIsProfileOpen((prev) => !prev)}
                 aria-expanded={isProfileOpen}
                 aria-haspopup="true"
-                className="flex items-center space-x-1.5 p-1 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none min-h-[36px]"
+                aria-label={user.full_name}
+                className="flex items-center space-x-1.5 p-1 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-h-[36px]"
                 title={user.full_name}
               >
                 {/* Avatar Badge */}
@@ -167,18 +167,22 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                     )}
                   </div>
 
-                  {/* Action 0: Reports (for all logged-in staff/leaders) */}
-                  <Link
-                    href="/reports"
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      onNavigate?.("/reports");
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                  >
-                    <span>📊</span>
-                    <span>{t("nav.reports")}</span>
-                  </Link>
+                  {/* Reports: management roles only */}
+                  {(user.role === UserRole.ADMIN ||
+                    user.role === UserRole.SAFETY_OFFICER ||
+                    user.role === UserRole.LINE_LEADER) && (
+                    <Link
+                      href="/reports"
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        onNavigate?.("/reports");
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>📊</span>
+                      <span>{t("nav.reports")}</span>
+                    </Link>
+                  )}
 
                   {/* Action 1: Admin Settings (if admin) */}
                   {user.role === UserRole.ADMIN && (

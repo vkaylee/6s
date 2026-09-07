@@ -45,6 +45,7 @@ import {
   type ReporterLeaderboard,
   resolveLocationNameByCode,
   type TagItem,
+  UserRole,
 } from "./types/index.ts";
 
 const AdminConfigPage = lazy(() =>
@@ -954,7 +955,9 @@ export function App() {
           </ProtectedRoute>
         </Route>
         <Route path="/reports">
-          <ProtectedRoute>
+          <ProtectedRoute
+            allowedRoles={[UserRole.ADMIN, UserRole.SAFETY_OFFICER, UserRole.LINE_LEADER]}
+          >
             <Suspense
               fallback={
                 <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
