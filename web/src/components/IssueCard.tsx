@@ -11,16 +11,23 @@ import {
   XCircle,
 } from "lucide-react";
 import { useI18nStore } from "../i18n/index.ts";
-import { IssueCategory, type IssueItem, IssueStatus } from "../types/index.ts";
+import {
+  IssueCategory,
+  type IssueItem,
+  IssueStatus,
+  type LocationItem,
+  resolveLocationName,
+} from "../types/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
 
 interface IssueCardProps {
   issue: IssueItem;
   onClick: () => void;
+  locations?: LocationItem[];
 }
 
-export function IssueCard({ issue, onClick }: IssueCardProps) {
-  const { t } = useI18nStore();
+export function IssueCard({ issue, onClick, locations = [] }: IssueCardProps) {
+  const { t, locale } = useI18nStore();
   const isSafety = issue.category === IssueCategory.S6;
   const isOpen = issue.status === IssueStatus.OPEN;
   const isPendingReview = issue.status === IssueStatus.PENDING_REVIEW;
@@ -103,7 +110,14 @@ export function IssueCard({ issue, onClick }: IssueCardProps) {
           </span>
           <div className="min-w-0">
             <div className="font-bold text-base text-zinc-900 dark:text-zinc-100 leading-tight truncate">
-              {issue.location_name || issue.location_code}
+              {resolveLocationName(
+                locations.find((l) => l.code === issue.location_code) || {
+                  name_vi: issue.location_name,
+                  name_zh: "",
+                  name_en: "",
+                },
+                locale,
+              ) || issue.location_code}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-0.5 truncate">
               <span>

@@ -1,7 +1,12 @@
 import { Check, ChevronDown, MapPin, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
-import { type I18nObject, type LocationItem, resolveI18n } from "../types/index.ts";
+import {
+  type I18nObject,
+  type LocationItem,
+  resolveI18n,
+  resolveLocationName,
+} from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 
 interface LocationComboboxProps {
@@ -85,11 +90,7 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
           {selectedLoc ? (
             <div className="truncate">
               <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                {locale === "zh"
-                  ? selectedLoc.name_zh || selectedLoc.name_vi
-                  : locale === "en"
-                    ? selectedLoc.name_en || selectedLoc.name_vi
-                    : selectedLoc.name_vi}
+                {resolveLocationName(selectedLoc, locale)}
               </div>
               <div className="text-[11px] font-mono font-semibold text-zinc-400">
                 {selectedLoc.code}
@@ -157,10 +158,7 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
                   >
                     <div className="truncate pr-2">
                       <div className="font-bold text-zinc-900 dark:text-zinc-100">
-                        {loc.name_vi}
-                        {loc.name_zh && (
-                          <span className="text-zinc-400 font-normal ml-1">/ {loc.name_zh}</span>
-                        )}
+                        {resolveLocationName(loc, locale)}
                       </div>
                       <div className="text-[10px] font-mono text-zinc-400">{loc.code}</div>
                     </div>

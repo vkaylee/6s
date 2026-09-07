@@ -33,6 +33,7 @@ import {
   isBehaviorTag,
   type LocationItem,
   resolveI18n,
+  resolveLocationName,
   resolveTagLabel,
   S_CATEGORIES,
   type TagItem,
@@ -723,7 +724,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                               : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-blue-400"
                           }`}
                         >
-                          <span>{loc ? loc.name_vi : code}</span>
+                          <span>{loc ? resolveLocationName(loc, locale) : code}</span>
                           <span className="text-[10px] opacity-70 font-mono">({code})</span>
                         </button>
                       );

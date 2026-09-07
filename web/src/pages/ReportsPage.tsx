@@ -1117,6 +1117,7 @@ export function ReportsPage() {
                     <IssueCard
                       key={issue.id}
                       issue={issue}
+                      locations={masterLocations}
                       onClick={() => setInspectingIssue(issue)}
                     />
                   ))}

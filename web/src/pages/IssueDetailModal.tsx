@@ -16,6 +16,7 @@ import {
   IssueStatus,
   type LocationItem,
   resolveI18n,
+  resolveLocationName,
   S_CATEGORIES,
   type ScoreLogItem,
   type TagItem,
@@ -579,7 +580,15 @@ export function IssueDetailModal({
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5 min-w-0">
                 <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100 truncate">
-                  #{currentIssue.id} - {currentIssue.location_name || currentIssue.location_code}
+                  #{currentIssue.id} -{" "}
+                  {resolveLocationName(
+                    locations.find((l) => l.code === currentIssue.location_code) || {
+                      name_vi: currentIssue.location_name,
+                      name_zh: "",
+                      name_en: "",
+                    },
+                    locale,
+                  ) || currentIssue.location_code}
                 </h2>
                 {canEdit && locations && locations.length > 0 && (
                   <button

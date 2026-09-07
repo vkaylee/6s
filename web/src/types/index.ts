@@ -1,6 +1,6 @@
 import type { I18nObject } from "./i18n.ts";
 
-export { resolveI18n, resolveTagLabel } from "./i18n.ts";
+export { resolveI18n, resolveLocationName, resolveTagLabel } from "./i18n.ts";
 export type { I18nObject };
 
 export const IssueCategory = {

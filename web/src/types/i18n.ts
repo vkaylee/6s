@@ -9,6 +9,15 @@ export function resolveI18n(text: I18nObject | string, locale?: SupportedLocale)
   return text[targetLocale] ?? text.vi;
 }
 
+export function resolveLocationName(
+  location: { name_vi?: string; name_zh?: string; name_en?: string },
+  locale?: SupportedLocale,
+): string {
+  const targetLocale = locale ?? useI18nStore.getState().locale;
+  if (targetLocale === "zh") return location.name_zh || location.name_vi || location.name_en || "";
+  if (targetLocale === "en") return location.name_en || location.name_vi || location.name_zh || "";
+  return location.name_vi || location.name_zh || location.name_en || "";
+}
 export function resolveTagLabel(
   tag: {
     label_vi?: string;

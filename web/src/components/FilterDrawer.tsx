@@ -1,6 +1,11 @@
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useI18nStore } from "../i18n/index.ts";
-import { IssueCategory, IssueStatus, type LocationItem } from "../types/index.ts";
+import {
+  IssueCategory,
+  IssueStatus,
+  type LocationItem,
+  resolveLocationName,
+} from "../types/index.ts";
 
 export interface FilterState {
   statuses: string[];
@@ -200,12 +205,7 @@ export function FilterDrawer({
             <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-1 border border-zinc-200 dark:border-zinc-700 rounded-xl bg-zinc-50 dark:bg-zinc-800/40">
               {locations.map((loc) => {
                 const isSelected = filters.locationCodes.includes(loc.code);
-                const locName =
-                  locale === "zh"
-                    ? loc.name_zh || loc.name_vi
-                    : locale === "en"
-                      ? loc.name_en || loc.name_vi
-                      : loc.name_vi;
+                const locName = resolveLocationName(loc, locale);
                 return (
                   <button
                     key={loc.code}
