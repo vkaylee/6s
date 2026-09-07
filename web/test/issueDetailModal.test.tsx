@@ -3,7 +3,13 @@ import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
-import { IssueCategory, type IssueItem, IssueStatus, UserRole } from "../src/types/index.ts";
+import {
+  IssueCategory,
+  type IssueItem,
+  IssueStatus,
+  type ScoreLogItem,
+  UserRole,
+} from "../src/types/index.ts";
 
 function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
   const internals = (
@@ -130,6 +136,69 @@ describe("IssueDetailModal Component", () => {
       />,
     );
     expect(html).toContain("Chạm để sửa nhanh vị trí (In-place Quick Edit)");
+  });
+
+  it("renders localized location name in score breakdown logs", () => {
+    useAuthStore.setState({
+      user: {
+        id: 10,
+        username: "van_a",
+        full_name: "Nguyễn Văn A",
+        role: UserRole.USER,
+      },
+    });
+    const scoreLog: ScoreLogItem = {
+      id: 1,
+      issue_id: 101,
+      target_type: "LOCATION",
+      target_id: "LINE_A1",
+      rule_key: "OVERDUE_ISSUE",
+      rule_description: "Quá hạn xử lý",
+      points: -3,
+      created_at: new Date().toISOString(),
+    };
+    const html = renderToString(
+      <WithMockState
+        values={[
+          mockIssue,
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          null,
+          null,
+          1,
+          { x: 0, y: 0 },
+          [scoreLog],
+          false,
+          true,
+          null,
+          false,
+        ]}
+      >
+        <IssueDetailModal
+          issue={mockIssue}
+          isOpen={true}
+          onClose={() => {}}
+          onRefresh={() => {}}
+          locations={[
+            {
+              code: "LINE_A1",
+              name_vi: "Chuyền May A1",
+              name_zh: "一号线",
+              name_en: "Sewing Line A1",
+              is_active: true,
+            },
+          ]}
+        />
+      </WithMockState>,
+    );
+    expect(html).toContain("Chuyền May A1");
   });
   it("renders detail photo when photo_detail exists", () => {
     const issueWithDetail: IssueItem = {

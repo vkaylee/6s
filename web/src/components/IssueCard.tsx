@@ -16,7 +16,9 @@ import {
   type IssueItem,
   IssueStatus,
   type LocationItem,
-  resolveLocationName,
+  resolveLocationNameByCode,
+  resolveTagLabel,
+  type TagItem,
 } from "../types/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
 
@@ -24,9 +26,10 @@ interface IssueCardProps {
   issue: IssueItem;
   onClick: () => void;
   locations?: LocationItem[];
+  tags?: TagItem[];
 }
 
-export function IssueCard({ issue, onClick, locations = [] }: IssueCardProps) {
+export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCardProps) {
   const { t, locale } = useI18nStore();
   const isSafety = issue.category === IssueCategory.S6;
   const isOpen = issue.status === IssueStatus.OPEN;
@@ -110,14 +113,12 @@ export function IssueCard({ issue, onClick, locations = [] }: IssueCardProps) {
           </span>
           <div className="min-w-0">
             <div className="font-bold text-base text-zinc-900 dark:text-zinc-100 leading-tight truncate">
-              {resolveLocationName(
-                locations.find((l) => l.code === issue.location_code) || {
-                  name_vi: issue.location_name,
-                  name_zh: "",
-                  name_en: "",
-                },
+              {resolveLocationNameByCode(
+                locations,
+                issue.location_code,
+                issue.location_name,
                 locale,
-              ) || issue.location_code}
+              )}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-0.5 truncate">
               <span>
@@ -218,14 +219,17 @@ export function IssueCard({ issue, onClick, locations = [] }: IssueCardProps) {
           </div>
           {issue.tags && issue.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
-              {issue.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                >
-                  #{tag}
-                </span>
-              ))}
+              {issue.tags.map((tag) => {
+                const matchedTag = tags.find((item) => (item.tag_code || item.code) === tag);
+                return (
+                  <span
+                    key={tag}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                  >
+                    #{matchedTag ? resolveTagLabel(matchedTag, locale) : tag}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>

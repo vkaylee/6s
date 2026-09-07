@@ -18,6 +18,17 @@ export function resolveLocationName(
   if (targetLocale === "en") return location.name_en || location.name_vi || location.name_zh || "";
   return location.name_vi || location.name_zh || location.name_en || "";
 }
+
+/** Resolves a location code to its localized name with a safe code fallback. */
+export function resolveLocationNameByCode(
+  locations: { code: string; name_vi?: string; name_zh?: string; name_en?: string }[],
+  code: string,
+  fallbackName = "",
+  locale?: SupportedLocale,
+): string {
+  const location = locations.find((item) => item.code === code);
+  return resolveLocationName(location ?? { name_vi: fallbackName }, locale) || code;
+}
 export function resolveTagLabel(
   tag: {
     label_vi?: string;

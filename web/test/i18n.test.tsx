@@ -18,6 +18,7 @@ import {
   type IssueItem,
   IssueStatus,
   resolveI18n,
+  resolveLocationNameByCode,
 } from "../src/types/index.ts";
 
 function extractKeys(obj: Record<string, unknown>, prefix = ""): string[] {
@@ -73,6 +74,20 @@ describe("i18n Locale Parity & Consistency (vi, en, zh)", () => {
 
     // Missing key returns key path
     expect(t("non_existent_key")).toBe("non_existent_key");
+  });
+});
+
+describe("resolveLocationNameByCode", () => {
+  const locations = [
+    { code: "LINE_A1", name_vi: "Chuyền May A1", name_en: "Sewing Line A1", name_zh: "一号线" },
+  ];
+
+  it("resolves the selected locale and falls back safely", () => {
+    expect(resolveLocationNameByCode(locations, "LINE_A1", "", "en")).toBe("Sewing Line A1");
+    expect(resolveLocationNameByCode(locations, "MISSING", "Tên dự phòng", "vi")).toBe(
+      "Tên dự phòng",
+    );
+    expect(resolveLocationNameByCode([], "MISSING", "", "vi")).toBe("MISSING");
   });
 });
 
@@ -240,6 +255,19 @@ describe("Frontend i18n usage guard", () => {
     }
 
     expect(missing).toEqual([]);
+  });
+
+  it("uses the shared resolver for location code lookups", async () => {
+    const files = await Array.fromAsync(new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: sourceRoot }));
+    const violations: string[] = [];
+    const directLookup = /resolveLocationName\(\s*locations\.find/su;
+
+    for (const file of files) {
+      const source = await Bun.file(`${sourceRoot}${file}`).text();
+      if (directLookup.test(source)) violations.push(file);
+    }
+
+    expect(violations).toEqual([]);
   });
 });
 

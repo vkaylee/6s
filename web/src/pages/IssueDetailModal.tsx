@@ -16,7 +16,7 @@ import {
   IssueStatus,
   type LocationItem,
   resolveI18n,
-  resolveLocationName,
+  resolveLocationNameByCode,
   S_CATEGORIES,
   type ScoreLogItem,
   type TagItem,
@@ -582,14 +582,12 @@ export function IssueDetailModal({
               <div className="flex items-center space-x-1.5 min-w-0">
                 <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100 truncate">
                   #{currentIssue.id} -{" "}
-                  {resolveLocationName(
-                    locations.find((l) => l.code === currentIssue.location_code) || {
-                      name_vi: currentIssue.location_name,
-                      name_zh: "",
-                      name_en: "",
-                    },
+                  {resolveLocationNameByCode(
+                    locations,
+                    currentIssue.location_code,
+                    currentIssue.location_name,
                     locale,
-                  ) || currentIssue.location_code}
+                  )}
                 </h2>
                 {canEdit && locations && locations.length > 0 && (
                   <button
@@ -943,11 +941,15 @@ export function IssueDetailModal({
                                 }`}
                               >
                                 {isLocation
-                                  ? t("issue_detail.target_location")
-                                  : t("issue_detail.target_user")}
-                              </span>
-                              <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                                {log.target_id}
+                                  ? resolveLocationNameByCode(
+                                      locations,
+                                      log.target_id,
+                                      log.target_id === currentIssue.location_code
+                                        ? currentIssue.location_name
+                                        : "",
+                                      locale,
+                                    )
+                                  : log.target_id}
                               </span>
                             </div>
                             <div className="text-[11px] text-zinc-500 dark:text-zinc-400">

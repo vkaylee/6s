@@ -43,7 +43,7 @@ import {
   type PaginatedResult,
   type PaginationMeta,
   type ReporterLeaderboard,
-  resolveLocationName,
+  resolveLocationNameByCode,
   type TagItem,
 } from "./types/index.ts";
 
@@ -1049,14 +1049,12 @@ export function App() {
                               >
                                 <div className="flex items-center space-x-2 min-w-0">
                                   <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 truncate">
-                                    {resolveLocationName(
-                                      locations.find((l) => l.code === loc.location_code) || {
-                                        name_vi: loc.location_name,
-                                        name_zh: "",
-                                        name_en: "",
-                                      },
+                                    {resolveLocationNameByCode(
+                                      locations,
+                                      loc.location_code,
+                                      loc.location_name,
                                       locale,
-                                    ) || loc.location_code}
+                                    )}
                                   </span>
                                   {loc.overdue_count > 0 && (
                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse shrink-0">
@@ -1349,6 +1347,7 @@ export function App() {
                             key={iss.id}
                             issue={iss}
                             locations={locations}
+                            tags={tags}
                             onClick={() => setSelectedIssue(iss)}
                           />
                         ))}
