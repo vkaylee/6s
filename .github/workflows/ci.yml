@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version-file: web/.bun-version
+          bun-version: '1.1'
       - name: Install web dependencies
         working-directory: web
         run: bun install --frozen-lockfile
