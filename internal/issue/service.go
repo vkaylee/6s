@@ -65,8 +65,9 @@ type Store interface {
 	GetIssueByUUID(ctx context.Context, clientUUID string) (db.Issue, error)
 	CreateIssue(ctx context.Context, arg db.CreateIssueParams) (db.Issue, error)
 	InsertIssueTag(ctx context.Context, arg db.InsertIssueTagParams) error
-	ListTagsForIssue(ctx context.Context, issueID int64) ([]db.ListTagsForIssueRow, error)
 	DeleteIssueTags(ctx context.Context, issueID int64) error
+	ListTagsForIssue(ctx context.Context, issueID int64) ([]db.ListTagsForIssueRow, error)
+	ListTagsForIssues(ctx context.Context, issueIDs []int64) ([]db.ListTagsForIssuesRow, error)
 	IncrementTagUseCount(ctx context.Context, code string) error
 	ListIssuesFiltered(ctx context.Context, arg db.ListIssuesFilteredParams) ([]db.ListIssuesFilteredRow, error)
 	CountIssuesFiltered(ctx context.Context, arg db.CountIssuesFilteredParams) (int64, error)
@@ -752,22 +753,26 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 
 	translations := s.loadTranslationsForRows(ctx, rows)
 
+	issueIDs := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		issueIDs = append(issueIDs, r.ID)
+	}
+	tagRows, tagErr := s.store.ListTagsForIssues(ctx, issueIDs)
+	if tagErr != nil {
+		log.Printf("failed to list tags: %v", tagErr)
+	}
+	tagsByIssue := make(map[int64][]string, len(rows))
+	for _, tr := range tagRows {
+		tagsByIssue[tr.IssueID] = append(tagsByIssue[tr.IssueID], tr.Code)
+	}
+
 	items := make([]Response, 0, len(rows))
 	for i, r := range rows {
-		tagRows, tErr := s.store.ListTagsForIssue(ctx, r.ID)
-		if tErr != nil {
-			log.Printf("failed to list tags: %v", tErr)
-		}
-		tags := make([]string, 0, len(tagRows))
-		for _, tr := range tagRows {
-			tags = append(tags, tr.Code)
-		}
-
 		var trans *string
 		if t, ok := translations[i]; ok {
 			trans = &t
 		}
-		items = append(items, toFilteredRowResponse(r, tags, trans))
+		items = append(items, toFilteredRowResponse(r, tagsByIssue[r.ID], trans))
 	}
 
 	return items, total, nil

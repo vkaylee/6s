@@ -265,6 +265,14 @@ FROM tags t
 JOIN issue_tags it ON t.code = it.tag_code
 WHERE it.issue_id = $1;
 
+-- name: ListTagsForIssues :many
+SELECT it.issue_id, t.code, t.name_vi, t.name_zh, t.name_en, t.category
+FROM tags t
+JOIN issue_tags it ON t.code = it.tag_code
+WHERE it.issue_id = ANY(sqlc.arg('issue_ids')::bigint[])
+ORDER BY it.issue_id, t.code;
+
+
 -- name: DeleteIssueTags :exec
 DELETE FROM issue_tags
 WHERE issue_id = $1;
@@ -415,6 +423,30 @@ FROM issues
 WHERE location_code = $1
   AND status = 'OPEN'
   AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours';
+
+-- name: GetLocationLeaderboardStats :many
+WITH score_totals AS (
+    SELECT target_id AS location_code, COALESCE(SUM(points), 0)::bigint AS sum_points
+    FROM score_logs
+    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $1
+    GROUP BY target_id
+), issue_totals AS (
+    SELECT location_code,
+           COUNT(*) FILTER (WHERE status = 'OPEN')::bigint AS open_count,
+           COUNT(*) FILTER (WHERE status = 'OPEN' AND issues.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours')::bigint AS overdue_count
+    FROM issues
+    GROUP BY location_code
+)
+SELECT l.code AS location_code,
+       l.name_vi AS location_name,
+       COALESCE(st.sum_points, 0)::bigint AS sum_points,
+       COALESCE(it.open_count, 0)::bigint AS open_count,
+       COALESCE(it.overdue_count, 0)::bigint AS overdue_count
+FROM locations l
+LEFT JOIN score_totals st ON st.location_code = l.code
+LEFT JOIN issue_totals it ON it.location_code = l.code
+WHERE l.is_active = TRUE
+ORDER BY l.code;
 
 -- name: GetReporterLeaderboardInMonth :many
 SELECT u.id AS user_id,
@@ -643,7 +675,8 @@ WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category'))
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id
-ORDER BY i.created_at DESC;
+ORDER BY i.created_at DESC
+LIMIT 100000;
 
 -- name: GetTranslationCache :one
 SELECT content_hash, target_lang, source_text, translated_text, created_at

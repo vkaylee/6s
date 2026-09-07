@@ -22,9 +22,7 @@ var (
 // Store defines database operations required by the scoring service.
 type Store interface {
 	ListLocations(ctx context.Context) ([]db.Location, error)
-	GetLocationScoreSumInWeek(ctx context.Context, arg db.GetLocationScoreSumInWeekParams) (int64, error)
-	CountOpenIssuesByLocation(ctx context.Context, locationCode string) (int64, error)
-	CountOverdueIssuesByLocation(ctx context.Context, locationCode string) (int64, error)
+	GetLocationLeaderboardStats(ctx context.Context, createdAt time.Time) ([]db.GetLocationLeaderboardStatsRow, error)
 	GetReporterLeaderboardInMonth(ctx context.Context, createdAt time.Time) ([]db.GetReporterLeaderboardInMonthRow, error)
 	GetScoringRules(ctx context.Context) ([]db.ScoringRule, error)
 	GetScoringRuleByKey(ctx context.Context, ruleKey string) (db.ScoringRule, error)
@@ -107,50 +105,31 @@ func StartOfMonth(t time.Time, loc *time.Location) time.Time {
 
 // GetLocationLeaderboard calculates real-time weekly health scores for all active locations.
 func (s *Service) GetLocationLeaderboard(ctx context.Context) ([]LocationHealthItem, error) {
-	locations, err := s.store.ListLocations(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list locations: %w", err)
-	}
-
-	startOfWeek := StartOfWeek(time.Now(), s.loc)
 	baseScore := int64(100)
 	if baseRule, bErr := s.store.GetScoringRuleByKey(ctx, "base_weekly_score"); bErr == nil {
 		baseScore = int64(baseRule.Points)
 	}
 
-	items := make([]LocationHealthItem, 0, len(locations))
-	for _, loc := range locations {
-		sumPoints, sErr := s.store.GetLocationScoreSumInWeek(ctx, db.GetLocationScoreSumInWeekParams{
-			TargetID:  loc.Code,
-			CreatedAt: startOfWeek,
-		})
-		if sErr != nil {
-			sumPoints = 0
-		}
+	stats, err := s.store.GetLocationLeaderboardStats(ctx, StartOfWeek(time.Now(), s.loc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get location leaderboard stats: %w", err)
+	}
 
-		rawScore := baseScore + sumPoints
-		finalScore := rawScore
+	items := make([]LocationHealthItem, 0, len(stats))
+	for _, st := range stats {
+		finalScore := baseScore + st.SumPoints
 		if finalScore < 0 {
 			finalScore = 0
 		} else if finalScore > 120 {
 			finalScore = 120
 		}
 
-		openCount, oErr := s.store.CountOpenIssuesByLocation(ctx, loc.Code)
-		if oErr != nil {
-			openCount = 0
-		}
-		overdueCount, odErr := s.store.CountOverdueIssuesByLocation(ctx, loc.Code)
-		if odErr != nil {
-			overdueCount = 0
-		}
-
 		items = append(items, LocationHealthItem{
-			LocationCode: loc.Code,
-			LocationName: loc.NameVi,
+			LocationCode: st.LocationCode,
+			LocationName: st.LocationName,
 			HealthScore:  finalScore,
-			OpenCount:    openCount,
-			OverdueCount: overdueCount,
+			OpenCount:    st.OpenCount,
+			OverdueCount: st.OverdueCount,
 		})
 	}
 

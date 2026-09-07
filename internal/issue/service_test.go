@@ -110,6 +110,58 @@ func (m *mockIssueStore) ListTagsForIssue(_ context.Context, issueID int64) ([]d
 	return rows, nil
 }
 
+func (m *mockIssueStore) ListTagsForIssues(_ context.Context, issueIDs []int64) ([]db.ListTagsForIssuesRow, error) {
+	rows := make([]db.ListTagsForIssuesRow, 0)
+	for _, id := range issueIDs {
+		for _, code := range m.tags[id] {
+			rows = append(rows, db.ListTagsForIssuesRow{IssueID: id, Code: code, NameVi: code})
+		}
+	}
+	return rows, nil
+}
+
+type countingIssueStore struct {
+	*mockIssueStore
+	tagCalls int
+}
+
+func (c *countingIssueStore) ListTagsForIssues(_ context.Context, issueIDs []int64) ([]db.ListTagsForIssuesRow, error) {
+	c.tagCalls++
+	return c.mockIssueStore.ListTagsForIssues(context.Background(), issueIDs)
+}
+
+func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
+	store := &countingIssueStore{mockIssueStore: newMockIssueStore()}
+	store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 1, Category: "1S", CauseType: "MANUAL", LocationCode: "LINE_A1", PhotoBefore: "a.jpg", Status: "OPEN", CreatedAt: time.Now()}
+	store.issues[2] = db.Issue{ID: 2, ClientUuid: "u2", Version: 1, CreatorID: 1, Category: "2S", CauseType: "MANUAL", LocationCode: "LINE_A1", PhotoBefore: "b.jpg", Status: "OPEN", CreatedAt: time.Now()}
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền A1"}
+	store.users[1] = db.User{ID: 1, Username: "tin", FullName: "Tin"}
+	store.tags[1] = []string{"DIRT", "SCRAP"}
+	store.tags[2] = []string{"SCRAP"}
+
+	svc := NewService(store, nil, nil)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(store.users[1]), nil, nil, nil, 1, 20)
+	if err != nil {
+		t.Fatalf("ListIssuesFiltered error: %v", err)
+	}
+	if len(items) != 2 || total != 2 {
+		t.Fatalf("expected 2 items with total 2, got %d items / total %d", len(items), total)
+	}
+	if store.tagCalls != 1 {
+		t.Fatalf("expected exactly 1 batched tag query, got %d", store.tagCalls)
+	}
+	byID := make(map[int64]Response, len(items))
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	if got := byID[1].Tags; len(got) != 2 || got[0] != "DIRT" || got[1] != "SCRAP" {
+		t.Errorf("expected issue 1 tags [DIRT SCRAP], got %v", got)
+	}
+	if got := byID[2].Tags; len(got) != 1 || got[0] != "SCRAP" {
+		t.Errorf("expected issue 2 tags [SCRAP], got %v", got)
+	}
+}
+
 func (m *mockIssueStore) DeleteIssueTags(_ context.Context, issueID int64) error {
 	delete(m.tags, issueID)
 	return nil
