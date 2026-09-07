@@ -116,7 +116,7 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 				return
 			}
-			ctx = withPermissions(ctx, permissions)
+			ctx = WithPermissions(ctx, permissions)
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, UserContextKey, user)))
 	})

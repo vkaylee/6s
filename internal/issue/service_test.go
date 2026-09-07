@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
@@ -11,10 +12,32 @@ import (
 	"time"
 
 	"6s/internal/ai"
+	"6s/internal/auth"
 	"6s/internal/db"
 	"6s/internal/i18n"
 	"6s/internal/storage"
 )
+
+// seededPermissions mirrors migration 000009 defaults (SPEC.md 5.2 matrix).
+func seededPermissions(role string) []string {
+	switch role {
+	case "USER":
+		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseOwn, auth.PermissionIssueReopen}
+	case "LINE_LEADER":
+		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseOwn, auth.PermissionIssueCloseLine, auth.PermissionIssueReopen}
+	case "SAFETY_OFFICER":
+		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseAny, auth.PermissionIssueCloseSafety, auth.PermissionIssueReopen, auth.PermissionIssueInvalidate}
+	case "ADMIN":
+		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseOwn, auth.PermissionIssueCloseLine, auth.PermissionIssueCloseAny, auth.PermissionIssueCloseSafety, auth.PermissionIssueReopen, auth.PermissionIssueInvalidate, auth.PermissionScoringManage, auth.PermissionADManage, auth.PermissionUserManage, auth.PermissionManage, auth.PermissionMasterdataManage}
+	default:
+		return nil
+	}
+}
+
+// ctxFor reproduces the middleware context for a seeded-role user.
+func ctxFor(user db.User) context.Context {
+	return auth.WithPermissions(context.WithValue(context.Background(), auth.UserContextKey, user), seededPermissions(user.Role))
+}
 
 type mockIssueStore struct {
 	issues       map[int64]db.Issue
@@ -322,7 +345,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
 
 	clientUUID := "c0a80101-0000-4000-8000-000000000001"
-	resp, created, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	resp, created, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   clientUUID,
 		Category:     "3S",
 		LocationCode: "LINE_A1",
@@ -356,7 +379,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	// 2. Resolve issue
 	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
 	resolveUUID := "c0a80101-0000-4000-8000-000000000002"
-	resResp, err := svc.ResolveIssue(context.Background(), ResolveIssueRequest{
+	resResp, err := svc.ResolveIssue(ctxFor(worker), ResolveIssueRequest{
 		IssueID:            resp.ID,
 		ResolvedClientUUID: resolveUUID,
 		ExpectedVersion:    resp.Version,
@@ -374,7 +397,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	}
 	// 3. Close issue by Admin (score rating 5)
 	expVer := resResp.Version
-	closedResp, err := svc.CloseIssue(context.Background(), CloseIssueRequest{
+	closedResp, err := svc.CloseIssue(ctxFor(admin), CloseIssueRequest{
 		IssueID:         resResp.ID,
 		ScoreRating:     5,
 		ExpectedVersion: &expVer,
@@ -413,7 +436,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 
 	// 1. Create issue with detail photo and tags
 	clientUUID := "c0a80101-0000-4000-8000-000000000010"
-	resp, created, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	resp, created, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   clientUUID,
 		Category:     "2S",
 		LocationCode: "LINE_A1",
@@ -430,7 +453,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 	newCat := "3S"
 	newLoc := "LINE_A2"
 	newDesc := "Updated description text"
-	patchResp, err := svc.PatchIssue(context.Background(), PatchIssueRequest{
+	patchResp, err := svc.PatchIssue(ctxFor(worker), PatchIssueRequest{
 		IssueID:      resp.ID,
 		Category:     &newCat,
 		LocationCode: &newLoc,
@@ -445,7 +468,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 	}
 
 	// Non-owner cannot patch
-	_, err = svc.PatchIssue(context.Background(), PatchIssueRequest{
+	_, err = svc.PatchIssue(ctxFor(worker), PatchIssueRequest{
 		IssueID:  resp.ID,
 		Category: &newCat,
 	}, otherWorker)
@@ -456,7 +479,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 	// 3. Resolve issue
 	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
 	resolveUUID := "c0a80101-0000-4000-8000-000000000020"
-	resResp, err := svc.ResolveIssue(context.Background(), ResolveIssueRequest{
+	resResp, err := svc.ResolveIssue(ctxFor(worker), ResolveIssueRequest{
 		IssueID:            resp.ID,
 		ResolvedClientUUID: resolveUUID,
 		ExpectedVersion:    patchResp.Version,
@@ -468,7 +491,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 
 	// 4. Reopen issue by creator
 	expVer := resResp.Version
-	reopenedResp, err := svc.ReopenIssue(context.Background(), ReopenIssueRequest{
+	reopenedResp, err := svc.ReopenIssue(ctxFor(worker), ReopenIssueRequest{
 		IssueID:         resResp.ID,
 		RejectReason:    "Chưa sạch dầu",
 		ExpectedVersion: &expVer,
@@ -482,7 +505,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 
 	// 5. Invalidate issue by Admin
 	invVer := reopenedResp.Version
-	invResp, err := svc.InvalidateIssue(context.Background(), InvalidateIssueRequest{
+	invResp, err := svc.InvalidateIssue(ctxFor(admin), InvalidateIssueRequest{
 		IssueID:         reopenedResp.ID,
 		Reason:          "Không phải lỗi 6S",
 		ExpectedVersion: &invVer,
@@ -495,7 +518,7 @@ func TestIssueService_ReopenAndInvalidateAndPatch(t *testing.T) {
 	}
 
 	// Worker cannot invalidate
-	_, err = svc.InvalidateIssue(context.Background(), InvalidateIssueRequest{
+	_, err = svc.InvalidateIssue(ctxFor(worker), InvalidateIssueRequest{
 		IssueID: reopenedResp.ID,
 		Reason:  "test",
 	}, worker)
@@ -511,7 +534,7 @@ func TestIssueService_ValidationAndErrors(t *testing.T) {
 	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
 
 	// Invalid category
-	_, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	_, _, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   "c0a80101-0000-4000-8000-000000000099",
 		Category:     "INVALID_CAT",
 		LocationCode: "LINE_A1",
@@ -521,7 +544,7 @@ func TestIssueService_ValidationAndErrors(t *testing.T) {
 	}
 
 	// Issue not found
-	_, err = svc.GetIssueByID(context.Background(), 99999)
+	_, err = svc.GetIssueByID(ctxFor(worker), 99999)
 	if err != ErrIssueNotFound {
 		t.Errorf("expected ErrIssueNotFound, got %v", err)
 	}
@@ -545,7 +568,7 @@ func TestIssueService_ListIssuesFiltered(t *testing.T) {
 	storageMgr, _ := storage.NewManager(t.TempDir())
 	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
 
-	items, total, err := svc.ListIssuesFiltered(context.Background(), []string{StatusOpen.String()}, []string{Category1S.String()}, []string{"LINE_A1"}, 1, 10)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(worker), []string{StatusOpen.String()}, []string{Category1S.String()}, []string{"LINE_A1"}, 1, 10)
 	if err != nil {
 		t.Fatalf("ListIssuesFiltered err: %v", err)
 	}
@@ -570,7 +593,7 @@ func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
 	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
 	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
 
-	resp, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	resp, _, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   "c0a80101-0000-4000-8000-000000000077",
 		Category:     Category6S.String(),
 		LocationCode: "LINE_A1",
@@ -581,7 +604,7 @@ func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
 	}
 
 	// Force resolve
-	resResp, err := svc.ResolveIssue(context.Background(), ResolveIssueRequest{
+	resResp, err := svc.ResolveIssue(ctxFor(worker), ResolveIssueRequest{
 		IssueID:            resp.ID,
 		ResolvedClientUUID: "c0a80101-0000-4000-8000-000000000078",
 		Force:              true,
@@ -592,7 +615,7 @@ func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
 	}
 
 	// Normal worker cannot close 6S issue
-	_, err = svc.CloseIssue(context.Background(), CloseIssueRequest{
+	_, err = svc.CloseIssue(ctxFor(worker), CloseIssueRequest{
 		IssueID:     resResp.ID,
 		ScoreRating: 5,
 	}, worker)
@@ -601,7 +624,7 @@ func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
 	}
 
 	// Safety officer can close 6S issue
-	closed, err := svc.CloseIssue(context.Background(), CloseIssueRequest{
+	closed, err := svc.CloseIssue(ctxFor(safety), CloseIssueRequest{
 		IssueID:     resResp.ID,
 		ScoreRating: 5,
 	}, safety)
@@ -629,7 +652,7 @@ func TestIssueService_CauseTypeClassification(t *testing.T) {
 	jpegBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
 	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
 	// 1. Explicit BEHAVIOR
-	resp1, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	resp1, _, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   "c0a80101-0000-4000-8000-000000000091",
 		Category:     Category6S.String(),
 		CauseType:    string(CauseTypeBehavior),
@@ -644,7 +667,7 @@ func TestIssueService_CauseTypeClassification(t *testing.T) {
 	}
 
 	// 2. Default 5S -> BEHAVIOR
-	resp2, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	resp2, _, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   "c0a80101-0000-4000-8000-000000000092",
 		Category:     Category5S.String(),
 		LocationCode: "LINE_A1",
@@ -658,7 +681,7 @@ func TestIssueService_CauseTypeClassification(t *testing.T) {
 	}
 
 	// 3. Default 1S -> CONDITION
-	resp3, _, err := svc.SyncIssue(context.Background(), SyncIssueRequest{
+	resp3, _, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
 		ClientUUID:   "c0a80101-0000-4000-8000-000000000093",
 		Category:     Category1S.String(),
 		LocationCode: "LINE_A1",
@@ -708,4 +731,142 @@ func TestListIssuesFiltered_AttachTranslationCache(t *testing.T) {
 	if len(items) == 0 || items[0].TranslatedDescription == nil || *items[0].TranslatedDescription != "Cluttered storage area" {
 		t.Errorf("expected list item to have translated description 'Cluttered storage area', got %+v", items)
 	}
+}
+
+// Permission-based authorization parity with SPEC.md 5.2 seed defaults.
+func TestIssueService_PermissionParity(t *testing.T) {
+	mockStore := newMockIssueStore()
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	mockStore.locations["LINE_A2"] = db.Location{Code: "LINE_A2", NameVi: "Chuyền May A2"}
+
+	creator := db.User{ID: 10, Username: "creator", Role: "USER", IsActive: true}
+	stranger := db.User{ID: 11, Username: "stranger", Role: "USER", IsActive: true}
+	leader := db.User{ID: 20, Username: "leader", Role: "LINE_LEADER", IsActive: true, AssignedLocationCode: sql.NullString{String: "LINE_A1", Valid: true}}
+	leaderOther := db.User{ID: 21, Username: "leader2", Role: "LINE_LEADER", IsActive: true, AssignedLocationCode: sql.NullString{String: "LINE_A2", Valid: true}}
+	safety := db.User{ID: 30, Username: "safety", Role: "SAFETY_OFFICER", IsActive: true}
+	admin := db.User{ID: 1, Username: "admin", Role: "ADMIN", IsActive: true}
+	for _, u := range []db.User{creator, stranger, leader, leaderOther, safety, admin} {
+		mockStore.users[u.ID] = u
+	}
+
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
+	sequence := int64(100)
+	nextUUID := func() string {
+		sequence++
+		return fmt.Sprintf("c0a80101-0000-4000-8000-%012d", sequence)
+	}
+
+	newPendingIssue := func(t *testing.T, category, location string) *Response {
+		t.Helper()
+		jpeg := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+		fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpeg)
+		fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpeg)
+		resp, _, err := svc.SyncIssue(ctxFor(creator), SyncIssueRequest{
+			ClientUUID:   nextUUID(),
+			Category:     category,
+			LocationCode: location,
+			PhotoBefore:  fhBefore,
+		}, creator)
+		if err != nil {
+			t.Fatalf("sync issue failed: %v", err)
+		}
+		if _, err := svc.ResolveIssue(ctxFor(creator), ResolveIssueRequest{
+			IssueID:            resp.ID,
+			ResolvedClientUUID: nextUUID(),
+			ExpectedVersion:    resp.Version,
+			PhotoAfter:         fhAfter,
+		}, creator); err != nil {
+			t.Fatalf("resolve issue failed: %v", err)
+		}
+		updated, err := svc.GetIssueByID(context.Background(), resp.ID)
+		if err != nil {
+			t.Fatalf("reload issue failed: %v", err)
+		}
+		return updated
+	}
+
+	deny := func(t *testing.T, err error, who, what string) {
+		t.Helper()
+		if err != ErrPermissionDenied {
+			t.Errorf("%s should be denied %s (seed parity), got %v", who, what, err)
+		}
+	}
+
+	// Close: USER cannot close others' issues (1S-5S and 6S).
+	normal := newPendingIssue(t, Category1S.String(), "LINE_A1")
+	_, err := svc.CloseIssue(ctxFor(stranger), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, stranger)
+	deny(t, err, "USER stranger", "close others' 1S issue")
+
+	// Close: creator closes own issue.
+	ownClosed, err := svc.CloseIssue(ctxFor(creator), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, creator)
+	if err != nil || ownClosed.Status != StatusClosed.String() {
+		t.Errorf("creator close own issue failed: %v", err)
+	}
+
+	// Close: LINE_LEADER closes issue on assigned line, not other lines.
+	lineIssue := newPendingIssue(t, Category2S.String(), "LINE_A1")
+	_, err = svc.CloseIssue(ctxFor(leaderOther), CloseIssueRequest{IssueID: lineIssue.ID, ScoreRating: 3}, leaderOther)
+	deny(t, err, "LINE_LEADER (other line)", "close LINE_A1 issue")
+	lineClosed, err := svc.CloseIssue(ctxFor(leader), CloseIssueRequest{IssueID: lineIssue.ID, ScoreRating: 3}, leader)
+	if err != nil || lineClosed.Status != StatusClosed.String() {
+		t.Errorf("LINE_LEADER close own-line issue failed: %v", err)
+	}
+
+	// Close: 6S restricted to SAFETY_OFFICER/ADMIN; LINE_LEADER blocked.
+	safetyIssue := newPendingIssue(t, Category6S.String(), "LINE_A1")
+	_, err = svc.CloseIssue(ctxFor(leader), CloseIssueRequest{IssueID: safetyIssue.ID, ScoreRating: 3}, leader)
+	deny(t, err, "LINE_LEADER", "close 6S issue")
+	_, err = svc.CloseIssue(ctxFor(creator), CloseIssueRequest{IssueID: safetyIssue.ID, ScoreRating: 3}, creator)
+	deny(t, err, "USER creator", "close 6S issue")
+	safetyClosed, err := svc.CloseIssue(ctxFor(safety), CloseIssueRequest{IssueID: safetyIssue.ID, ScoreRating: 3}, safety)
+	if err != nil || safetyClosed.Status != StatusClosed.String() {
+		t.Errorf("SAFETY_OFFICER close 6S issue failed: %v", err)
+	}
+	adminIssue := newPendingIssue(t, Category6S.String(), "LINE_A1")
+	adminClosed, err := svc.CloseIssue(ctxFor(admin), CloseIssueRequest{IssueID: adminIssue.ID, ScoreRating: 3}, admin)
+	if err != nil || adminClosed.Status != StatusClosed.String() {
+		t.Errorf("ADMIN close 6S issue failed: %v", err)
+	}
+
+	// Close: fail closed without permission context.
+	plainIssue := newPendingIssue(t, Category3S.String(), "LINE_A1")
+	_, err = svc.CloseIssue(context.Background(), CloseIssueRequest{IssueID: plainIssue.ID, ScoreRating: 3}, admin)
+	deny(t, err, "context without permissions", "close issue")
+
+	// Reopen mirrors close scope: stranger blocked, leader on assigned line allowed.
+	reopenIssue := newPendingIssue(t, Category4S.String(), "LINE_A1")
+	_, err = svc.ReopenIssue(ctxFor(stranger), ReopenIssueRequest{IssueID: reopenIssue.ID, RejectReason: "làm lại"}, stranger)
+	deny(t, err, "USER stranger", "reopen others' issue")
+	if _, err := svc.ReopenIssue(ctxFor(leader), ReopenIssueRequest{IssueID: reopenIssue.ID, RejectReason: "làm lại"}, leader); err != nil {
+		t.Errorf("LINE_LEADER reopen own-line issue failed: %v", err)
+	}
+
+	// Invalidate: only SAFETY_OFFICER/ADMIN.
+	invalidIssue := newPendingIssue(t, Category5S.String(), "LINE_A1")
+	for _, u := range []db.User{creator, leader, leaderOther} {
+		_, err = svc.InvalidateIssue(ctxFor(u), InvalidateIssueRequest{IssueID: invalidIssue.ID, Reason: "spam"}, u)
+		deny(t, err, u.Role, "invalidate issue")
+	}
+	if _, err := svc.InvalidateIssue(ctxFor(safety), InvalidateIssueRequest{IssueID: invalidIssue.ID, Reason: "spam"}, safety); err != nil {
+		t.Errorf("SAFETY_OFFICER invalidate failed: %v", err)
+	}
+	invalidIssue2 := newPendingIssue(t, Category5S.String(), "LINE_A1")
+	if _, err := svc.InvalidateIssue(ctxFor(admin), InvalidateIssueRequest{IssueID: invalidIssue2.ID, Reason: "spam"}, admin); err != nil {
+		t.Errorf("ADMIN invalidate failed: %v", err)
+	}
+
+	// Patch: creator/resolver with close_own allowed; stranger denied; close_any/safety privileged allowed.
+	patchIssue := newPendingIssue(t, Category2S.String(), "LINE_A1")
+	newCat := Category3S.String()
+	if _, err := svc.PatchIssue(ctxFor(creator), PatchIssueRequest{IssueID: patchIssue.ID, Category: &newCat}, creator); err != nil {
+		t.Errorf("creator patch failed: %v", err)
+	}
+	_, err = svc.PatchIssue(ctxFor(stranger), PatchIssueRequest{IssueID: patchIssue.ID, Category: &newCat}, stranger)
+	deny(t, err, "USER stranger", "patch others' issue")
+	if _, err := svc.PatchIssue(ctxFor(safety), PatchIssueRequest{IssueID: patchIssue.ID, Category: &newCat}, safety); err != nil {
+		t.Errorf("SAFETY_OFFICER patch failed: %v", err)
+	}
+	_, err = svc.PatchIssue(ctxFor(leader), PatchIssueRequest{IssueID: patchIssue.ID, Category: &newCat}, leader)
+	deny(t, err, "LINE_LEADER", "patch others' issue")
 }

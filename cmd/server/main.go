@@ -169,19 +169,19 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	// Config routes (Admin only)
 	r.Route("/api/config", func(cr chi.Router) {
 		cr.Use(authMw.Authenticate)
-		cr.Use(auth.RequireRole(auth.RoleAdmin))
+		cr.Use(auth.RequirePermission(auth.PermissionADManage))
 
 		cr.Get("/ad", adHandler.GetADConfig)
 		cr.Put("/ad", adHandler.UpdateADConfig)
 		cr.Post("/ad/test", adHandler.TestADConfig)
 	})
 
-// Permission administration routes (permission:manage only).
+	// Permission administration routes (permission:manage only).
 	r.Route("/api/admin/permissions", func(pr chi.Router) {
 		pr.Use(authMw.Authenticate)
 		pr.Use(auth.RequirePermission(auth.PermissionManage))
 		pr.Get("/", permissionHandler.List)
-		pr.Get("", permissionHandler.List)
+		pr.Get("/", permissionHandler.List)
 	})
 	// The PUT route requires authentication and permission management.
 	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionManage)).Put("/api/admin/roles/{role}/permissions", permissionHandler.UpdateRole)
@@ -189,7 +189,7 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	// User administration routes (Admin only).
 	r.Route("/api/admin/users", func(ur chi.Router) {
 		ur.Use(authMw.Authenticate)
-		ur.Use(auth.RequireRole(auth.RoleAdmin))
+		ur.Use(auth.RequirePermission(auth.PermissionUserManage))
 
 		ur.Get("/", userAdminHandler.ListUsers)
 		ur.Patch("/{id}", userAdminHandler.UpdateUser)
@@ -222,18 +222,18 @@ func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Midd
 	r.Route("/api/locations", func(lr chi.Router) {
 		lr.Use(authMw.Authenticate)
 		lr.Get("/", mdHandler.ListLocations)
-		lr.With(auth.RequireRole(auth.RoleAdmin)).Get("/all", mdHandler.ListAllLocations)
-		lr.With(auth.RequireRole(auth.RoleAdmin)).Post("/", mdHandler.CreateLocation)
-		lr.With(auth.RequireRole(auth.RoleAdmin)).Patch("/{code}/status", mdHandler.UpdateLocationStatus)
-		lr.With(auth.RequireRole(auth.RoleAdmin)).Put("/{code}", mdHandler.UpdateLocation)
+		lr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Get("/all", mdHandler.ListAllLocations)
+		lr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Post("/", mdHandler.CreateLocation)
+		lr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Patch("/{code}/status", mdHandler.UpdateLocationStatus)
+		lr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Put("/{code}", mdHandler.UpdateLocation)
 	})
 	r.Route("/api/tags", func(tr chi.Router) {
 		tr.Use(authMw.Authenticate)
 		tr.Get("/", mdHandler.ListTags)
-		tr.With(auth.RequireRole(auth.RoleAdmin)).Get("/all", mdHandler.ListAllTags)
-		tr.With(auth.RequireRole(auth.RoleAdmin)).Post("/", mdHandler.UpsertTag)
-		tr.With(auth.RequireRole(auth.RoleAdmin)).Patch("/{code}/status", mdHandler.UpdateTagStatus)
-		tr.With(auth.RequireRole(auth.RoleAdmin)).Post("/batch-status", mdHandler.BatchUpdateTagsStatus)
+		tr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Get("/all", mdHandler.ListAllTags)
+		tr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Post("/", mdHandler.UpsertTag)
+		tr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Patch("/{code}/status", mdHandler.UpdateTagStatus)
+		tr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Post("/batch-status", mdHandler.BatchUpdateTagsStatus)
 	})
 }
 
@@ -288,7 +288,7 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 	r.Route("/api/config/scoring", func(scr chi.Router) {
 		scr.Use(authMw.Authenticate)
 		scr.Get("/", scoringHandler.GetRules)
-		scr.With(auth.RequireRole(auth.RoleAdmin)).Put("/", scoringHandler.UpdateRules)
+		scr.With(auth.RequirePermission(auth.PermissionScoringManage)).Put("/", scoringHandler.UpdateRules)
 	})
 
 	httpSender := notification.NewHTTPSender(cipher)

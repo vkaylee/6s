@@ -18,12 +18,13 @@ import (
 type PermissionStore interface {
 	ListPermissions(context.Context) ([]db.Permission, error)
 	ListRolePermissions(context.Context) ([]db.RolePermission, error)
-	ReplaceRolePermissions(context.Context, db.ReplaceRolePermissionsParams) error
-	InsertAuditLog(context.Context, db.InsertAuditLogParams) error
+	ReplaceRolePermissionsAndAudit(context.Context, db.ReplaceRolePermissionsParams, db.InsertAuditLogParams) error
 }
 type PermissionHandler struct{ store PermissionStore }
 
-func NewPermissionHandler(store PermissionStore) *PermissionHandler { return &PermissionHandler{store: store} }
+func NewPermissionHandler(store PermissionStore) *PermissionHandler {
+	return &PermissionHandler{store: store}
+}
 
 type permissionRoleResponse struct {
 	Role        string   `json:"role"`
@@ -36,7 +37,7 @@ type permissionResponse struct {
 }
 
 type permissionsResponse struct {
-	Permissions []permissionResponse       `json:"permissions"`
+	Permissions []permissionResponse     `json:"permissions"`
 	Roles       []permissionRoleResponse `json:"roles"`
 }
 
@@ -128,20 +129,21 @@ func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(old)
-	if err := h.store.ReplaceRolePermissions(r.Context(), db.ReplaceRolePermissionsParams{Role: role, Column2: req.Permissions}); err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrPermissionSaveFailed).WithCause(err))
-		return
-	}
 	actor, _ := GetUserFromContext(r.Context())
 	oldJSON, _ := json.Marshal(permissionRoleResponse{Role: role, Permissions: old})
 	newJSON, _ := json.Marshal(permissionRoleResponse{Role: role, Permissions: req.Permissions})
-	_ = h.store.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
+	audit := db.InsertAuditLogParams{
 		UserID: sql.NullInt64{Int64: actor.ID, Valid: actor.ID != 0},
 		Action: "ADMIN_UPDATE_ROLE_PERMISSIONS", TargetTable: "role_permissions", TargetID: role,
 		OldValue: oldJSON, NewValue: newJSON,
 		IpAddress: sql.NullString{String: clientIP(r), Valid: true}, UserAgent: sql.NullString{String: r.UserAgent(), Valid: true},
-	})
+	}
+	if err := h.store.ReplaceRolePermissionsAndAudit(r.Context(), db.ReplaceRolePermissionsParams{Role: role, Column2: req.Permissions}, audit); err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrPermissionSaveFailed).WithCause(err))
+		return
+	}
 	response.JSON(w, http.StatusOK, permissionRoleResponse{Role: role, Permissions: req.Permissions})
+
 }
 
 func clientIP(r *http.Request) string {

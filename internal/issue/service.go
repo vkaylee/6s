@@ -324,14 +324,22 @@ type CloseIssueRequest struct {
 	ExpectedVersion *int32
 }
 
-// CloseIssue handles closing and scoring a resolved issue.
-func (s *ServiceImpl) canCloseIssue(currentUser db.User, issue db.Issue) bool {
+// canCloseIssue applies permission scope plus creator/location/category constraints.
+func (s *ServiceImpl) canCloseIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
 	if issue.Category == Category6S.String() {
-		return currentUser.Role == auth.RoleSafetyOfficer.String() || currentUser.Role == auth.RoleAdmin.String()
+		return auth.HasPermission(ctx, auth.PermissionIssueCloseSafety)
 	}
-	isCreator := (currentUser.ID == issue.CreatorID)
-	isPrivileged := (currentUser.Role == auth.RoleAdmin.String() || currentUser.Role == auth.RoleSafetyOfficer.String())
-	return isCreator || isPrivileged
+	if auth.HasPermission(ctx, auth.PermissionIssueCloseAny) {
+		return true
+	}
+	if currentUser.ID == issue.CreatorID && auth.HasPermission(ctx, auth.PermissionIssueCloseOwn) {
+		return true
+	}
+	return auth.HasPermission(ctx, auth.PermissionIssueCloseLine) && currentUser.AssignedLocationCode.Valid && currentUser.AssignedLocationCode.String == issue.LocationCode
+}
+
+func canReviewIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
+	return auth.HasPermission(ctx, auth.PermissionIssueReopen) && (&ServiceImpl{}).canCloseIssue(ctx, currentUser, issue)
 }
 
 // CloseIssue handles closing and scoring a resolved issue.
@@ -344,7 +352,7 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 		return nil, fmt.Errorf("%w: issue must be PENDING_REVIEW", ErrIssueConflict)
 	}
 
-	if !s.canCloseIssue(currentUser, issue) {
+	if !s.canCloseIssue(ctx, currentUser, issue) {
 		return nil, ErrPermissionDenied
 	}
 
@@ -421,10 +429,7 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 	if issue.Status != StatusPendingReview.String() {
 		return nil, fmt.Errorf("%w: issue must be PENDING_REVIEW", ErrIssueConflict)
 	}
-
-	isCreator := (currentUser.ID == issue.CreatorID)
-	isPrivileged := (currentUser.Role == auth.RoleAdmin.String() || currentUser.Role == auth.RoleSafetyOfficer.String())
-	if !isCreator && !isPrivileged {
+	if !canReviewIssue(ctx, currentUser, issue) {
 		return nil, ErrPermissionDenied
 	}
 
@@ -473,7 +478,7 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 		return nil, ErrIssueNotFound
 	}
 
-	if currentUser.Role != auth.RoleAdmin.String() && currentUser.Role != auth.RoleSafetyOfficer.String() {
+	if !auth.HasPermission(ctx, auth.PermissionIssueInvalidate) {
 		return nil, ErrPermissionDenied
 	}
 
@@ -545,11 +550,11 @@ type PatchIssueRequest struct {
 	PhotoDetail  *multipart.FileHeader
 }
 
-func (s *ServiceImpl) canPatchIssue(currentUser db.User, issue db.Issue) bool {
-	isCreator := (currentUser.ID == issue.CreatorID)
-	isResolver := (issue.ResolverID.Valid && currentUser.ID == issue.ResolverID.Int64)
-	isPrivileged := (currentUser.Role == auth.RoleAdmin.String() || currentUser.Role == auth.RoleSafetyOfficer.String())
-	return isCreator || isResolver || isPrivileged
+func canPatchIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
+	if (currentUser.ID == issue.CreatorID || (issue.ResolverID.Valid && currentUser.ID == issue.ResolverID.Int64)) && auth.HasPermission(ctx, auth.PermissionIssueCloseOwn) {
+		return true
+	}
+	return auth.HasPermission(ctx, auth.PermissionIssueCloseAny)
 }
 
 // PatchIssue handles quick or full edit of an issue.
@@ -607,7 +612,7 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 	if err != nil {
 		return nil, ErrIssueNotFound
 	}
-	if !s.canPatchIssue(currentUser, issue) {
+	if !canPatchIssue(ctx, currentUser, issue) {
 		return nil, ErrPermissionDenied
 	}
 

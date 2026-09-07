@@ -34,7 +34,9 @@ type PermissionGetter interface {
 	GetUserPermissions(ctx context.Context, id int64) ([]string, error)
 }
 
-func withPermissions(ctx context.Context, permissions []string) context.Context {
+// WithPermissions attaches effective permissions to a trusted request context.
+// Middleware is the production source; tests use this helper to exercise policies.
+func WithPermissions(ctx context.Context, permissions []string) context.Context {
 	set := make(map[string]struct{}, len(permissions))
 	for _, p := range permissions {
 		set[p] = struct{}{}

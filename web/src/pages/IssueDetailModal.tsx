@@ -1,5 +1,6 @@
 import { AlertTriangle, Languages, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { apiClient } from "../api/client.ts";
 import { issueOperations } from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -83,7 +84,7 @@ export function IssueDetailModal({
         target_lang: locale,
       }),
     })
-      .then((res) => {
+      .then((res: { cached: boolean; translated_text?: string }) => {
         if (isMounted && res?.cached && res.translated_text) {
           setTranslatedDesc(res.translated_text);
           translatedLangRef.current = locale;
@@ -106,7 +107,7 @@ export function IssueDetailModal({
     }
     let isMounted = true;
     apiClient<{ enabled: boolean }>("/api/ai/status")
-      .then((res) => {
+      .then((res: { enabled: boolean }) => {
         if (isMounted) {
           setAiEnabled(res?.enabled === true);
         }
@@ -245,7 +246,7 @@ export function IssueDetailModal({
     let isMounted = true;
     setLoadingScores(true);
     apiClient<ScoreLogItem[]>(`/api/issues/${issue.id}/score-logs`)
-      .then((data) => {
+      .then((data: ScoreLogItem[]) => {
         if (isMounted) {
           setIssueScoreLogs(data || []);
         }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -14,10 +15,12 @@ import (
 
 	"6s/internal/db"
 )
+
 type mockPermissionStore struct {
 	permissions []db.Permission
 	pairs       []db.RolePermission
 	auditLogs   []db.InsertAuditLogParams
+	auditErr    error
 }
 
 func (m *mockPermissionStore) ListPermissions(_ context.Context) ([]db.Permission, error) {
@@ -42,8 +45,22 @@ func (m *mockPermissionStore) ReplaceRolePermissions(_ context.Context, arg db.R
 	return nil
 }
 
+func (m *mockPermissionStore) ReplaceRolePermissionsAndAudit(ctx context.Context, replace db.ReplaceRolePermissionsParams, audit db.InsertAuditLogParams) error {
+	oldPairs := append([]db.RolePermission(nil), m.pairs...)
+	if err := m.ReplaceRolePermissions(ctx, replace); err != nil {
+		return err
+	}
+	if err := m.InsertAuditLog(ctx, audit); err != nil {
+		m.pairs = oldPairs
+		return err
+	}
+	return nil
+}
 
 func (m *mockPermissionStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogParams) error {
+	if m.auditErr != nil {
+		return m.auditErr
+	}
 	m.auditLogs = append(m.auditLogs, arg)
 	return nil
 }
@@ -77,10 +94,16 @@ func permissionRequest(t *testing.T, method, target string, body []byte, role st
 	}
 	ctx := chi.NewRouteContext()
 	parts := strings.Split(strings.Trim(target, "/"), "/")
-	if len(parts) >= 5 { ctx.URLParams.Add("role", parts[3]) }
+	if len(parts) >= 5 {
+		ctx.URLParams.Add("role", parts[3])
+	}
 	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), UserContextKey, db.User{ID: 7, Role: role}), chi.RouteCtxKey, ctx))
 	rr := httptest.NewRecorder()
-	if method == http.MethodGet { handler.List(rr, req) } else { handler.UpdateRole(rr, req) }
+	if method == http.MethodGet {
+		handler.List(rr, req)
+	} else {
+		handler.UpdateRole(rr, req)
+	}
 	return rr, store
 }
 
@@ -102,7 +125,7 @@ func TestPermissionHandler_List(t *testing.T) {
 		t.Fatalf("permission projection missing code/description: %+v", body.Data.Permissions[0])
 	}
 	for _, roleRow := range body.Data.Roles {
-		if roleRow.Role == "ADMIN" {
+		if roleRow.Role == RoleAdmin.String() {
 			if len(roleRow.Permissions) != 2 {
 				t.Fatalf("expected ADMIN to hold 2 seeded permissions, got %v", roleRow.Permissions)
 			}
@@ -119,7 +142,7 @@ func TestPermissionHandler_UpdateRole(t *testing.T) {
 	}
 	updated := 0
 	for _, pair := range store.pairs {
-		if pair.Role == "USER" {
+		if pair.Role == RoleUser.String() {
 			updated++
 		}
 	}
@@ -128,6 +151,24 @@ func TestPermissionHandler_UpdateRole(t *testing.T) {
 	}
 	if len(store.auditLogs) != 1 || store.auditLogs[0].Action != "ADMIN_UPDATE_ROLE_PERMISSIONS" {
 		t.Fatalf("expected audit log for mutation, got %+v", store.auditLogs)
+	}
+}
+
+func TestPermissionHandler_AuditFailureRollsBack(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{"permissions": []string{PermissionIssueCloseOwn, PermissionIssueViewAll}})
+	store := &mockPermissionStore{permissions: catalogFixture(), pairs: rolePermissionsFixture(), auditErr: errors.New("audit unavailable")}
+	handler := NewPermissionHandler(store)
+	ctx := chi.NewRouteContext()
+	ctx.URLParams.Add("role", "USER")
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/roles/USER/permissions", bytes.NewReader(payload))
+	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), UserContextKey, db.User{ID: 7, Role: RoleAdmin.String()}), chi.RouteCtxKey, ctx))
+	rr := httptest.NewRecorder()
+	handler.UpdateRole(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on audit failure, got %d", rr.Code)
+	}
+	if len(store.pairs) != 3 || store.pairs[0].PermissionCode != PermissionIssueCloseOwn {
+		t.Fatalf("expected mappings unchanged after audit failure, got %+v", store.pairs)
 	}
 }
 
@@ -192,7 +233,7 @@ func TestPermissionHandler_RequiresPermissionManage(t *testing.T) {
 		t.Fatalf("expected 403 without permission, got %d", rr.Code)
 	}
 
-	allowedCtx := withPermissions(ctxUser, []string{PermissionManage})
+	allowedCtx := WithPermissions(ctxUser, []string{PermissionManage})
 	allowed := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(allowedCtx)
 	rrOK := httptest.NewRecorder()
 	next.ServeHTTP(rrOK, allowed)
@@ -205,10 +246,10 @@ func TestPermissionHandler_HasPermissionFailsClosed(t *testing.T) {
 	if HasPermission(context.Background(), PermissionManage) {
 		t.Fatal("empty context must fail closed")
 	}
-	if !HasPermission(withPermissions(context.Background(), []string{PermissionManage}), PermissionManage) {
+	if !HasPermission(WithPermissions(context.Background(), []string{PermissionManage}), PermissionManage) {
 		t.Fatal("expected permission present")
 	}
-	if HasPermission(withPermissions(context.Background(), []string{PermissionManage}), "") {
+	if HasPermission(WithPermissions(context.Background(), []string{PermissionManage}), "") {
 		t.Fatal("empty code must fail closed")
 	}
 }

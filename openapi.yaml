@@ -368,6 +368,7 @@ security:
 paths:
   /auth/login:
     post:
+      operationId: login
       summary: Đăng nhập tài khoản Local hoặc Active Directory / LDAP
       security: []
       requestBody:
@@ -432,6 +433,7 @@ paths:
 
   /auth/refresh:
     post:
+      operationId: refresh
       summary: Cấp mới Access Token bằng Refresh Token (Token Rotation)
       security: []
       requestBody:
@@ -482,6 +484,7 @@ paths:
 
   /auth/revoke:
     post:
+      operationId: revokeSession
       summary: Thu hồi phiên đăng nhập (Đăng xuất hoặc thu hồi khẩn cấp)
       requestBody:
         required: true
@@ -511,6 +514,7 @@ paths:
 
   /auth/sessions:
     get:
+      operationId: listAuthSessions
       summary: Liệt kê các phiên đăng nhập đang hoạt động
       parameters:
         - name: user_id
@@ -560,6 +564,7 @@ paths:
 
   /locations:
     get:
+      operationId: listLocations
       summary: Lấy danh mục vị trí chuẩn hóa (Master Data)
       responses:
         '200':
@@ -576,7 +581,8 @@ paths:
                     items:
                       $ref: '#/components/schemas/Location'
     post:
-      summary: Thêm mới vị trí (Admin only)
+      operationId: createLocation
+      summary: Thêm mới vị trí (Requires permission `masterdata:manage`)
       requestBody:
         required: true
         content:
@@ -618,7 +624,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Location'
         '403':
-          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          description: Requires the route-specific management permission
           content:
             application/json:
               schema:
@@ -626,6 +632,7 @@ paths:
 
   /tags:
     get:
+      operationId: listTags
       summary: Lấy danh mục tags đa ngôn ngữ theo tần suất sử dụng
       responses:
         '200':
@@ -642,7 +649,8 @@ paths:
                     items:
                       $ref: '#/components/schemas/Tag'
     post:
-      summary: Thêm hoặc cập nhật tag (Admin only)
+      operationId: upsertTag
+      summary: Thêm hoặc cập nhật tag (Requires permission `masterdata:manage`)
       requestBody:
         required: true
         content:
@@ -687,6 +695,7 @@ paths:
 
   /issues:
     get:
+      operationId: listIssues
       summary: Lấy danh sách issues có phân trang và bộ lọc
       parameters:
         - name: status
@@ -733,6 +742,7 @@ paths:
 
   /issues/{id}:
     get:
+      operationId: getIssue
       summary: Xem chi tiết một issue
       parameters:
         - name: id
@@ -759,6 +769,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
     patch:
+      operationId: updateIssue
       summary: Sửa nhanh phân loại S hoặc tags khi phát hiện sai
       parameters:
         - name: id
@@ -803,6 +814,7 @@ paths:
 
   /issues/sync:
     post:
+      operationId: syncIssues
       summary: Đồng bộ tạo mới issue từ client (hỗ trợ offline sync với client_uuid)
       requestBody:
         required: true
@@ -878,6 +890,7 @@ paths:
 
   /issues/{id}/resolve:
     post:
+      operationId: resolveIssue
       summary: Upload ảnh khắc phục (hỗ trợ offline sync với expected_version)
       parameters:
         - name: id
@@ -926,6 +939,7 @@ paths:
 
   /issues/{id}/close:
     post:
+      operationId: closeIssue
       summary: Duyệt hoàn thành issue và chấm điểm Kaizen
       parameters:
         - name: id
@@ -966,6 +980,7 @@ paths:
 
   /issues/{id}/reopen:
     post:
+      operationId: reopenIssue
       summary: Từ chối duyệt khắc phục, yêu cầu làm lại (Reopen)
       parameters:
         - name: id
@@ -1004,9 +1019,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /issues/{id}/invalidate:
+  /issues/{id}/invalid:
     post:
-      summary: Bác bỏ issue do báo sai hoặc spam (Admin / Safety Officer only)
+      operationId: invalidateIssue
+      summary: Bác bỏ issue do báo sai hoặc spam (Requires permission `issue:invalidate`)
       parameters:
         - name: id
           in: path
@@ -1038,7 +1054,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Issue'
         '403':
-          description: Không có quyền (Yêu cầu ADMIN hoặc SAFETY_OFFICER)
+          description: Requires permission `issue:invalidate`
           content:
             application/json:
               schema:
@@ -1046,6 +1062,7 @@ paths:
 
   /leaderboard/locations:
     get:
+      operationId: getLocationLeaderboard
       summary: Lấy bảng xếp hạng sức khỏe các khu vực/chuyền sản xuất
       responses:
         '200':
@@ -1064,6 +1081,7 @@ paths:
 
   /leaderboard/reporters:
     get:
+      operationId: getReporterLeaderboard
       summary: Bảng vinh danh cá nhân (Top Thợ săn 6S)
       responses:
         '200':
@@ -1082,6 +1100,7 @@ paths:
 
   /config/scoring:
     get:
+      operationId: getScoringRules
       summary: Lấy danh sách quy tắc chấm điểm
       responses:
         '200':
@@ -1108,7 +1127,8 @@ paths:
                         description:
                           type: string
     put:
-      summary: Cập nhật quy tắc chấm điểm & hồi tố điểm (Admin only)
+      operationId: updateScoringRules
+      summary: Cập nhật quy tắc chấm điểm & hồi tố điểm (Requires `scoring:manage`)
       requestBody:
         required: true
         content:
@@ -1144,7 +1164,8 @@ paths:
 
   /config/ad:
     get:
-      summary: Lấy cấu hình Active Directory / LDAP (Admin only)
+      operationId: getAdConfig
+      summary: Lấy cấu hình Active Directory / LDAP (Requires `ad:manage`)
       responses:
         '200':
           description: Cấu hình AD hiện hành
@@ -1158,13 +1179,14 @@ paths:
                   data:
                     $ref: '#/components/schemas/ADConfig'
         '403':
-          description: Yêu cầu quyền ADMIN
+          description: Requires permission `ad:manage` or the route-specific management permission
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
     put:
-      summary: Cập nhật cấu hình Active Directory / LDAP vào DB (Admin only)
+      operationId: updateAdConfig
+      summary: Cập nhật cấu hình Active Directory / LDAP vào DB (Requires `ad:manage`)
       requestBody:
         required: true
         content:
@@ -1220,6 +1242,7 @@ paths:
 
   /config/ad/test:
     post:
+      operationId: testAdConfig
       summary: Kiểm tra kết nối và thử bind với Active Directory
       requestBody:
         required: false
@@ -1253,7 +1276,8 @@ paths:
 
   /admin/users:
     get:
-      summary: Danh mục nhân sự phục vụ màn Admin (Admin only)
+      operationId: listAdminUsers
+      summary: Danh mục nhân sự phục vụ màn Admin (Requires `user:manage`)
       parameters:
         - name: location_code
           in: query
@@ -1261,7 +1285,7 @@ paths:
           schema:
             type: string
           description: Lọc theo mã vị trí
-        - name: active
+        - name: is_active
           in: query
           required: false
           schema:
@@ -1282,7 +1306,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/UserSummary'
         '403':
-          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          description: Requires the route-specific management permission
           content:
             application/json:
               schema:
@@ -1290,7 +1314,8 @@ paths:
 
   /admin/users/{id}:
     patch:
-      summary: Cập nhật thông tin/quyền nhân sự (Admin only)
+      operationId: updateAdminUser
+      summary: Cập nhật thông tin/quyền nhân sự (Requires `user:manage`)
       parameters:
         - name: id
           in: path
@@ -1325,14 +1350,15 @@ paths:
                   data:
                     $ref: '#/components/schemas/UserSummary'
         '403':
-          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          description: Requires the route-specific management permission
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
   /config/ai:
     get:
-      summary: Lấy cấu hình AI (Admin only)
+      operationId: getAiConfig
+      summary: Lấy cấu hình AI (Requires `ad:manage`)
       responses:
         '200':
           description: Cấu hình AI hiện hành, secret masked
@@ -1345,13 +1371,14 @@ paths:
                   data:
                     $ref: '#/components/schemas/AIConfig'
         '403':
-          description: Yêu cầu quyền ADMIN
+          description: Requires permission `ad:manage` or the route-specific management permission
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
     put:
-      summary: Cập nhật cấu hình AI (Admin only)
+      operationId: updateAiConfig
+      summary: Cập nhật cấu hình AI (Requires `ad:manage`)
       requestBody:
         required: true
         content:
@@ -1392,7 +1419,8 @@ paths:
 
   /config/ai/test:
     post:
-      summary: Kiểm tra kết nối và chức năng model AI (Admin only)
+      operationId: testAiConnection
+      summary: Kiểm tra kết nối và chức năng model AI (Requires `ad:manage`)
       requestBody:
         required: false
         content:
@@ -1442,7 +1470,8 @@ paths:
 
   /config/ai/test-dns:
     post:
-      summary: Kiểm tra phân giải DNS cho AI gateway (Admin only)
+      operationId: testAiDns
+      summary: Kiểm tra phân giải DNS cho AI gateway (Requires `ad:manage`)
       requestBody:
         required: true
         content:
@@ -1480,6 +1509,7 @@ paths:
 
   /ai/status:
     get:
+      operationId: getAiStatus
       summary: Trạng thái bật/tắt AI (không lộ secret)
       responses:
         '200':
@@ -1499,6 +1529,7 @@ paths:
 
   /ai/translate:
     post:
+      operationId: translateText
       summary: Dịch văn bản qua AI
       requestBody:
         required: true
@@ -1538,6 +1569,7 @@ paths:
 
   /ai/cached:
     post:
+      operationId: getCachedTranslation
       summary: Tra cache dịch trước khi gọi provider
       requestBody:
         required: true
@@ -1570,6 +1602,7 @@ paths:
 
   /ai/review:
     post:
+      operationId: reviewIssueWithAi
       summary: AI review issue theo bằng chứng
       requestBody:
         required: true
@@ -1593,6 +1626,7 @@ paths:
 
   /ai/review-follow-up:
     post:
+      operationId: followUpAiReview
       summary: Hỏi tiếp theo ngữ cảnh review
       requestBody:
         required: true
@@ -1616,6 +1650,7 @@ paths:
 
   /issues/events:
     get:
+      operationId: streamIssueEvents
       summary: SSE stream sự kiện issue
       responses:
         '200':
@@ -1627,6 +1662,7 @@ paths:
 
   /issues/export:
     get:
+      operationId: exportIssuesCsv
       summary: Xuất CSV danh sách issue
       responses:
         '200':
@@ -1638,6 +1674,7 @@ paths:
 
   /issues/{id}/score-logs:
     get:
+      operationId: getIssueScoreLogs
       summary: Sổ cái điểm của một issue
       parameters:
         - name: id
@@ -1669,6 +1706,7 @@ paths:
 
   /leaderboard/score-logs:
     get:
+      operationId: getTargetScoreLogs
       summary: Sổ cái điểm theo target (location/user)
       responses:
         '200':
@@ -1686,6 +1724,7 @@ paths:
 
   /auth/setup-status:
     get:
+      operationId: getSetupStatus
       summary: Kiểm tra cần setup superadmin ban đầu
       security: []
       responses:
@@ -1706,6 +1745,7 @@ paths:
 
   /auth/setup:
     post:
+      operationId: setupSuperadmin
       summary: Thiết lập superadmin đầu tiên
       security: []
       responses:
@@ -1718,6 +1758,7 @@ paths:
 
   /auth/ticket:
     post:
+      operationId: createAuthTicket
       summary: Tạo ticket auth ngắn hạn (QR login / thiết bị mới)
       responses:
         '200':
@@ -1729,6 +1770,7 @@ paths:
 
   /reports/summary:
     get:
+      operationId: getReportSummary
       summary: Báo cáo tổng hợp KPI issue
       responses:
         '200':
@@ -1740,6 +1782,7 @@ paths:
 
   /admin/permissions:
     get:
+      operationId: listPermissions
       summary: Danh sách permission matrix (permission:manage)
       responses:
         '200':
@@ -1751,6 +1794,7 @@ paths:
 
   /admin/roles/{role}/permissions:
     put:
+      operationId: updateRolePermissions
       summary: Cập nhật permission cho một role (permission:manage)
       parameters:
         - name: role
@@ -1781,6 +1825,7 @@ paths:
 
   /locations/all:
     get:
+      operationId: listAllLocations
       summary: Danh sách locations (kể cả inactive) cho Admin
       responses:
         '200':
@@ -1792,7 +1837,8 @@ paths:
 
   /locations/{code}/status:
     patch:
-      summary: Bật/tắt location (Admin only)
+      operationId: updateLocationStatus
+      summary: Bật/tắt location (Requires permission `masterdata:manage`)
       parameters:
         - name: code
           in: path
@@ -1809,7 +1855,8 @@ paths:
 
   /locations/{code}:
     put:
-      summary: Cập nhật location (Admin only)
+      operationId: updateLocation
+      summary: Cập nhật location (Requires permission `masterdata:manage`)
       parameters:
         - name: code
           in: path
@@ -1826,6 +1873,7 @@ paths:
 
   /tags/all:
     get:
+      operationId: listAllTags
       summary: Danh sách tags (kể cả inactive) cho Admin
       responses:
         '200':
@@ -1837,7 +1885,8 @@ paths:
 
   /tags/{code}/status:
     patch:
-      summary: Bật/tắt tag (Admin only)
+      operationId: updateTagStatus
+      summary: Bật/tắt tag (Requires permission `masterdata:manage`)
       parameters:
         - name: code
           in: path
@@ -1854,7 +1903,8 @@ paths:
 
   /tags/batch-status:
     post:
-      summary: Bật/tắt nhiều tag (Admin only)
+      operationId: batchUpdateTagStatus
+      summary: Bật/tắt nhiều tag (Requires permission `masterdata:manage`)
       responses:
         '200':
           description: Kết quả cập nhật
@@ -1865,6 +1915,7 @@ paths:
 
   /config/notifications:
     get:
+      operationId: getNotificationConfig
       summary: Lấy cấu hình kênh thông báo (Admin only)
       responses:
         '200':
@@ -1893,12 +1944,13 @@ paths:
                       public_base_url:
                         type: string
         '403':
-          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          description: Requires the route-specific management permission
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
     put:
+      operationId: updateNotificationConfig
       summary: Cập nhật cấu hình kênh thông báo (Admin only)
       requestBody:
         required: true
@@ -1934,7 +1986,7 @@ paths:
                         type: boolean
                         example: true
         '403':
-          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          description: Requires the route-specific management permission
           content:
             application/json:
               schema:
@@ -1942,6 +1994,7 @@ paths:
 
   /config/notifications/test:
     post:
+      operationId: testNotificationConfig
       summary: Gửi tin nhắn test qua các kênh thông báo đang kích hoạt (Admin only)
       responses:
         '200':
@@ -1971,7 +2024,7 @@ paths:
                           message:
                             type: string
         '403':
-          description: Không đủ thẩm quyền (Yêu cầu ADMIN)
+          description: Requires the route-specific management permission
           content:
             application/json:
               schema:
@@ -1979,6 +2032,7 @@ paths:
 
   /health:
     get:
+      operationId: getHealth
       summary: Kiểm tra tình trạng server và DB (Liveness probe, không cần auth)
       security: []
       responses:
