@@ -79,6 +79,7 @@ type Store interface {
 	PatchIssue(ctx context.Context, arg db.PatchIssueParams) (db.Issue, error)
 	CreateOutboxEntry(ctx context.Context, arg db.CreateOutboxEntryParams) (db.NotificationOutbox, error)
 	InsertScoreLog(ctx context.Context, arg db.InsertScoreLogParams) error
+	GetScoringRuleByKey(ctx context.Context, ruleKey string) (db.ScoringRule, error)
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
 	GetLocationByCode(ctx context.Context, code string) (db.Location, error)
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
@@ -209,20 +210,36 @@ func (s *ServiceImpl) insertTags(ctx context.Context, issueID int64, tags []stri
 }
 
 func (s *ServiceImpl) recordSyncPenalty(ctx context.Context, issueID int64, category, locationCode string) {
-	penaltyKey := "penalty_normal"
-	points := int32(-2)
+	penaltyKey, fallback := "penalty_normal", int32(-2)
 	if category == Category6S.String() {
-		penaltyKey = "penalty_safety"
-		points = int32(-10)
+		penaltyKey, fallback = "penalty_safety", int32(-10)
+	}
+	s.recordConfiguredScore(ctx, issueID, "LOCATION", locationCode, penaltyKey, fallback, false)
+}
+
+// recordConfiguredScore awards a score from the admin-configured rule; a missing
+// rule falls back to the safe default and a sign-violating rule awards nothing.
+func (s *ServiceImpl) recordConfiguredScore(ctx context.Context, issueID int64, targetType, targetID, ruleKey string, fallback int32, award bool) {
+	rule, err := s.store.GetScoringRuleByKey(ctx, ruleKey)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("failed to load scoring rule %s: %v", ruleKey, err)
+			return
+		}
+		rule.Points = fallback
+	}
+	if (award && rule.Points <= 0) || (!award && rule.Points >= 0) {
+		log.Printf("skipping score for rule %s: invalid points %d", ruleKey, rule.Points)
+		return
 	}
 	if scErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
 		IssueID:    issueID,
-		TargetType: "LOCATION",
-		TargetID:   locationCode,
-		RuleKey:    penaltyKey,
-		Points:     points,
+		TargetType: targetType,
+		TargetID:   targetID,
+		RuleKey:    ruleKey,
+		Points:     rule.Points,
 	}); scErr != nil {
-		log.Printf("failed to log penalty score: %v", scErr)
+		log.Printf("failed to log score %s: %v", ruleKey, scErr)
 	}
 }
 
@@ -386,32 +403,13 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 }
 
 func (s *ServiceImpl) recordCloseReward(ctx context.Context, issue db.Issue, rating int16) {
-	rewardKey := "reward_reporter_normal"
-	rewardPoints := int32(2)
+	rewardKey, fallback := "reward_reporter_normal", int32(2)
 	if issue.Category == Category6S.String() {
-		rewardKey = "reward_reporter_safety"
-		rewardPoints = int32(5)
+		rewardKey, fallback = "reward_reporter_safety", int32(5)
 	}
-	if scErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
-		IssueID:    issue.ID,
-		TargetType: "USER",
-		TargetID:   strconv.FormatInt(issue.CreatorID, 10),
-		RuleKey:    rewardKey,
-		Points:     rewardPoints,
-	}); scErr != nil {
-		log.Printf("failed to insert reward score: %v", scErr)
-	}
-
+	s.recordConfiguredScore(ctx, issue.ID, "USER", strconv.FormatInt(issue.CreatorID, 10), rewardKey, fallback, true)
 	if rating >= 4 {
-		if bcErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
-			IssueID:    issue.ID,
-			TargetType: "LOCATION",
-			TargetID:   issue.LocationCode,
-			RuleKey:    "bonus_kaizen",
-			Points:     int32(1),
-		}); bcErr != nil {
-			log.Printf("failed to insert kaizen bonus: %v", bcErr)
-		}
+		s.recordConfiguredScore(ctx, issue.ID, "LOCATION", issue.LocationCode, "bonus_kaizen", int32(1), true)
 	}
 }
 
@@ -449,15 +447,7 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 		return nil, fmt.Errorf("%w: failed to reopen: %v", ErrIssueConflict, err)
 	}
 
-	if scErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
-		IssueID:    issue.ID,
-		TargetType: "LOCATION",
-		TargetID:   issue.LocationCode,
-		RuleKey:    "penalty_reopen",
-		Points:     -2,
-	}); scErr != nil {
-		log.Printf("failed to insert reopen penalty: %v", scErr)
-	}
+	s.recordConfiguredScore(ctx, issue.ID, "LOCATION", issue.LocationCode, "penalty_reopen", int32(-2), false)
 
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
@@ -502,16 +492,6 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 		return nil, fmt.Errorf("%w: failed to invalidate: %v", ErrIssueConflict, err)
 	}
 
-	if scErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
-		IssueID:    issue.ID,
-		TargetType: "USER",
-		TargetID:   strconv.FormatInt(issue.CreatorID, 10),
-		RuleKey:    "penalty_reporter_invalid",
-		Points:     -2,
-	}); scErr != nil {
-		log.Printf("failed to insert invalid penalty: %v", scErr)
-	}
-
 	oldVal, oErr := json.Marshal(map[string]string{"status": issue.Status})
 	if oErr != nil {
 		log.Printf("marshal oldVal failed: %v", oErr)
@@ -520,6 +500,7 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 	if nErr != nil {
 		log.Printf("marshal newVal failed: %v", nErr)
 	}
+	s.recordConfiguredScore(ctx, issue.ID, "USER", strconv.FormatInt(issue.CreatorID, 10), "penalty_reporter_invalid", int32(-5), false)
 	if alErr := s.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
 		UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
 		Action:      "INVALIDATE_ISSUE",

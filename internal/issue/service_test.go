@@ -48,6 +48,7 @@ type mockIssueStore struct {
 	scoreLogs    []db.InsertScoreLogParams
 	auditLogs    []db.InsertAuditLogParams
 	translations map[string]string
+	rules        map[string]int32
 }
 
 func newMockIssueStore() *mockIssueStore {
@@ -57,6 +58,7 @@ func newMockIssueStore() *mockIssueStore {
 		tags:         make(map[int64][]string),
 		users:        make(map[int64]db.User),
 		translations: make(map[string]string),
+		rules:        make(map[string]int32),
 	}
 }
 
@@ -328,6 +330,13 @@ func (m *mockIssueStore) InsertScoreLog(_ context.Context, arg db.InsertScoreLog
 	m.scoreLogs = append(m.scoreLogs, arg)
 	return nil
 }
+func (m *mockIssueStore) GetScoringRuleByKey(_ context.Context, key string) (db.ScoringRule, error) {
+	points, ok := m.rules[key]
+	if !ok {
+		return db.ScoringRule{}, sql.ErrNoRows
+	}
+	return db.ScoringRule{RuleKey: key, Points: points}, nil
+}
 
 func (m *mockIssueStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogParams) error {
 	m.auditLogs = append(m.auditLogs, arg)
@@ -459,6 +468,30 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	}
 	if closedResp.Status != StatusClosed.String() {
 		t.Errorf("expected status CLOSED, got %s", closedResp.Status)
+	}
+}
+func TestIssueService_ConfiguredScoringRules(t *testing.T) {
+	store := newMockIssueStore()
+	store.rules = map[string]int32{
+		"penalty_normal": -7,
+		"reward_reporter_normal": 9,
+		"bonus_kaizen": 4,
+		"penalty_reopen": 0,
+	}
+	svc := &ServiceImpl{store: store}
+	issue := db.Issue{ID: 1, CreatorID: 2, LocationCode: "LINE_A1", Category: "3S"}
+	svc.recordSyncPenalty(context.Background(), issue.ID, issue.Category, issue.LocationCode)
+	svc.recordCloseReward(context.Background(), issue, 5)
+	if len(store.scoreLogs) != 3 || store.scoreLogs[0].Points != -7 || store.scoreLogs[1].Points != 9 || store.scoreLogs[2].Points != 4 {
+		t.Fatalf("configured scores not applied: %+v", store.scoreLogs)
+	}
+	svc.recordConfiguredScore(context.Background(), issue.ID, "LOCATION", issue.LocationCode, "penalty_reopen", -2, false)
+	if len(store.scoreLogs) != 3 {
+		t.Fatalf("invalid penalty rule awarded points: %+v", store.scoreLogs)
+	}
+	svc.recordConfiguredScore(context.Background(), issue.ID, "LOCATION", issue.LocationCode, "missing_rule", -2, false)
+	if len(store.scoreLogs) != 4 || store.scoreLogs[3].Points != -2 {
+		t.Fatalf("missing rule did not use default: %+v", store.scoreLogs)
 	}
 }
 
