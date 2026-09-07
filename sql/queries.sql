@@ -592,7 +592,7 @@ SELECT photo_after AS photo_name FROM issues WHERE photo_after IS NOT NULL AND p
 
 -- name: CleanupOldAuditLogs :exec
 DELETE FROM system_audit_logs
-WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '12 months';
+WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 years';
 
 -- name: GetReportKPISummary :one
 SELECT 

@@ -83,7 +83,7 @@ func (q *Queries) ClaimOutboxTasks(ctx context.Context, limit int32) ([]Notifica
 
 const cleanupOldAuditLogs = `-- name: CleanupOldAuditLogs :exec
 DELETE FROM system_audit_logs
-WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '12 months'
+WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 years'
 `
 
 func (q *Queries) CleanupOldAuditLogs(ctx context.Context) error {

@@ -214,7 +214,7 @@ func (r *Runner) cleanupDirOrphans(dir string, activeSet map[string]bool) int {
 	return removed
 }
 
-// RunCleanupAuditLogs deletes audit logs older than 12 months (SPEC.md Section 10.2).
+// RunCleanupAuditLogs deletes audit logs older than 3 years (data-governance.md Section 3).
 func (r *Runner) RunCleanupAuditLogs(ctx context.Context) {
 	err := r.store.CleanupOldAuditLogs(ctx)
 	status := "SUCCESS"
