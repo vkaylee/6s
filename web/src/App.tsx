@@ -1449,15 +1449,6 @@ export function App() {
                   onClose={() => setConflictItem(null)}
                 />
               )}
-
-              <SetupSuperadminModal
-                isOpen={isSetupOpen}
-                onSuccess={() => {
-                  setIsSetupOpen(false);
-                  loadMasterData();
-                  loadIssues();
-                }}
-              />
             </div>
           </ProtectedRoute>
         </Route>
@@ -1465,6 +1456,14 @@ export function App() {
           <NotFoundPage />
         </Route>
       </Switch>
+      <SetupSuperadminModal
+        isOpen={isSetupOpen}
+        onSuccess={() => {
+          setIsSetupOpen(false);
+          loadMasterData();
+          loadIssues();
+        }}
+      />
       <GlobalDialog />
     </>
   );

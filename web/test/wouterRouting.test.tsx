@@ -91,6 +91,42 @@ describe("Wouter UX & Routing Verification", () => {
     expect(html).toContain('type="password"');
     expect(html).toContain("6S Workplace Security");
   });
+  it("renders initial superadmin setup before authentication", () => {
+    useAuthStore.setState({ user: null, accessToken: null, isLoading: false });
+    const html = renderToString(
+      <WithMockState
+        values={[
+          [],
+          [],
+          [],
+          [],
+          [],
+          "LOCATIONS",
+          "ALL",
+          "",
+          "URGENT",
+          false,
+          false,
+          1,
+          null,
+          false,
+          false,
+          { statuses: [], categories: [], locationCodes: [] },
+          false,
+          null,
+          null,
+          true,
+        ]}
+      >
+        <Router ssrPath="/">
+          <App />
+        </Router>
+      </WithMockState>,
+    );
+
+    expect(html).toContain("Thiết lập Superadmin");
+    expect(html).not.toContain("6S Workplace Security");
+  });
 
   it("renders /issues/new route within App", () => {
     const html = renderToString(
