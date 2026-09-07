@@ -21,13 +21,21 @@ interface I18nState {
 
 const STORAGE_KEY = "app_locale";
 
-function getInitialLocale(): SupportedLocale {
-  if (typeof window === "undefined") return "vi";
-  const stored = localStorage.getItem(STORAGE_KEY) as SupportedLocale | null;
-  if (stored && (stored === "vi" || stored === "en" || stored === "zh")) {
-    return stored;
+export function detectBrowserLocale(candidates: readonly string[]): SupportedLocale {
+  for (const candidate of candidates) {
+    const lang = candidate.split("-")[0].toLowerCase();
+    if (lang === "vi" || lang === "en" || lang === "zh") return lang;
   }
   return "vi";
+}
+
+function getInitialLocale(): SupportedLocale {
+  if (typeof window === "undefined") return "vi";
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === "vi" || stored === "en" || stored === "zh") return stored;
+  return detectBrowserLocale(
+    navigator.languages?.length ? navigator.languages : [navigator.language],
+  );
 }
 
 function resolvePath(obj: unknown, path: string): string | undefined {

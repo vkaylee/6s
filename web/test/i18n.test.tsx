@@ -6,7 +6,7 @@ import { GlobalDialog } from "../src/components/GlobalDialog.tsx";
 import { HealthGauge } from "../src/components/HealthGauge.tsx";
 import { IssueCard } from "../src/components/IssueCard.tsx";
 import { QuickFacets } from "../src/components/QuickFacets.tsx";
-import { useI18nStore } from "../src/i18n/index.ts";
+import { detectBrowserLocale, useI18nStore } from "../src/i18n/index.ts";
 import en from "../src/i18n/locales/en.json";
 import vi from "../src/i18n/locales/vi.json";
 import zh from "../src/i18n/locales/zh.json";
@@ -21,6 +21,16 @@ import {
   resolveLocationNameByCode,
 } from "../src/types/index.ts";
 
+describe("Browser locale detection", () => {
+  it("selects the first supported browser language", () => {
+    expect(detectBrowserLocale(["fr-FR", "en-US", "zh-CN"])).toBe("en");
+  });
+
+  it("matches regional language tags and falls back to Vietnamese", () => {
+    expect(detectBrowserLocale(["zh-TW"])).toBe("zh");
+    expect(detectBrowserLocale(["fr-FR", "de-DE"])).toBe("vi");
+  });
+});
 function extractKeys(obj: Record<string, unknown>, prefix = ""): string[] {
   let keys: string[] = [];
   for (const [key, value] of Object.entries(obj)) {
