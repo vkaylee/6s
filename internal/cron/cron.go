@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"6s/internal/db"
+	"6s/internal/observability"
 )
 
 // Task names.
@@ -110,13 +110,13 @@ func (r *Runner) CheckAndRunOverdueCatchup(ctx context.Context) {
 func (r *Runner) RunOverduePenaltyScan(ctx context.Context, penaltyDateStr string) {
 	issues, err := r.store.ListOpenOverdueIssues(ctx)
 	if err != nil {
-		log.Printf("Cron: failed to list open overdue issues: %v", err)
+		observability.Log("error", "cron overdue scan failed", map[string]any{"error": err.Error()})
 		if _, lErr := r.store.InsertCronTaskLog(ctx, db.InsertCronTaskLogParams{
 			TaskName: TaskOverduePenaltyScan,
 			Status:   "FAILED",
-			Details:  sql.NullString{String: err.Error(), Valid: true},
+			Details:  sql.NullString{String: "overdue penalty scan failed", Valid: true},
 		}); lErr != nil {
-			log.Printf("Cron: record failed task log err: %v", lErr)
+			observability.Log("error", "cron failure log write failed", map[string]any{"error": lErr.Error()})
 		}
 		return
 	}
@@ -154,7 +154,7 @@ func (r *Runner) RunOverduePenaltyScan(ctx context.Context, penaltyDateStr strin
 		Status:   "SUCCESS",
 		Details:  sql.NullString{String: details, Valid: true},
 	}); lErr != nil {
-		log.Printf("Cron: record success task log err: %v", lErr)
+		observability.Log("error", "cron success log write failed", map[string]any{"error": lErr.Error()})
 	}
 }
 
@@ -162,7 +162,7 @@ func (r *Runner) RunOverduePenaltyScan(ctx context.Context, penaltyDateStr strin
 func (r *Runner) RunCleanupOrphans(ctx context.Context) {
 	activePhotos, err := r.store.ListAllActivePhotoBasenames(ctx)
 	if err != nil {
-		log.Printf("Cron: failed to list active photos: %v", err)
+		observability.Log("error", "cron orphan scan failed", map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -184,7 +184,7 @@ func (r *Runner) RunCleanupOrphans(ctx context.Context) {
 		Status:   "SUCCESS",
 		Details:  sql.NullString{String: details, Valid: true},
 	}); lErr != nil {
-		log.Printf("Cron: record orphan cleanup log err: %v", lErr)
+		observability.Log("error", "cron orphan log write failed", map[string]any{"error": lErr.Error()})
 	}
 }
 
@@ -214,14 +214,15 @@ func (r *Runner) cleanupDirOrphans(dir string, activeSet map[string]bool) int {
 	return removed
 }
 
-// RunCleanupAuditLogs deletes audit logs older than 12 months (SPEC.md Section 10.2).
+// RunCleanupAuditLogs deletes audit logs older than 3 years (data-governance.md Section 3).
 func (r *Runner) RunCleanupAuditLogs(ctx context.Context) {
 	err := r.store.CleanupOldAuditLogs(ctx)
 	status := "SUCCESS"
 	var details sql.NullString
 	if err != nil {
 		status = "FAILED"
-		details = sql.NullString{String: err.Error(), Valid: true}
+		details = sql.NullString{String: "audit log cleanup failed", Valid: true}
+		observability.Log("error", "cron audit cleanup failed", map[string]any{"error": err.Error()})
 	}
 
 	if _, lErr := r.store.InsertCronTaskLog(ctx, db.InsertCronTaskLogParams{
@@ -229,6 +230,6 @@ func (r *Runner) RunCleanupAuditLogs(ctx context.Context) {
 		Status:   status,
 		Details:  details,
 	}); lErr != nil {
-		log.Printf("Cron: record cleanup audit log err: %v", lErr)
+		observability.Log("error", "cron audit log write failed", map[string]any{"error": lErr.Error()})
 	}
 }

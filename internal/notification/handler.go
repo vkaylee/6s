@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 
 	"6s/internal/apperror"
@@ -13,6 +12,7 @@ import (
 	"6s/internal/crypto"
 	"6s/internal/db"
 	"6s/internal/i18n"
+	"6s/internal/observability"
 	"6s/internal/response"
 )
 
@@ -156,7 +156,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		IpAddress:   sql.NullString{},
 		UserAgent:   sql.NullString{},
 	}); alErr != nil {
-		log.Printf("insert audit log err: %v", alErr)
+		observability.Log("error", "notification audit log write failed", map[string]any{"error": alErr.Error()})
 	}
 
 	response.JSON(w, http.StatusOK, map[string]string{
@@ -208,7 +208,7 @@ func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 		wErr := h.sender.Send(r.Context(), ChannelWxPusher, testPayload, decryptedCfg)
 		res := TestConfigResult{Channel: ChannelWxPusher, Success: (wErr == nil)}
 		if wErr != nil {
-			res.Error = wErr.Error()
+			res.Error = "notification delivery failed"
 		}
 		results = append(results, res)
 	}
@@ -218,7 +218,7 @@ func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 		lErr := h.sender.Send(r.Context(), ChannelLANWebhook, testPayload, decryptedCfg)
 		res := TestConfigResult{Channel: ChannelLANWebhook, Success: (lErr == nil)}
 		if lErr != nil {
-			res.Error = lErr.Error()
+			res.Error = "notification delivery failed"
 		}
 		results = append(results, res)
 	}

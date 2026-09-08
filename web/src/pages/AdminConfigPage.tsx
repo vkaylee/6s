@@ -521,9 +521,9 @@ export function AdminConfigPage() {
                 {isRetroactive && (
                   <div className="space-y-3 pt-2">
                     <div>
-                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                      <span className="block text-xs font-bold text-zinc-500 mb-1">
                         {t("admin.apply_from_label")}
-                      </label>
+                      </span>
                       <input
                         type="date"
                         value={applyFrom}
@@ -532,9 +532,9 @@ export function AdminConfigPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-zinc-500 mb-1">
+                      <span className="block text-xs font-bold text-zinc-500 mb-1">
                         {t("admin.reason_label")}
-                      </label>
+                      </span>
                       <input
                         type="text"
                         value={reason}
@@ -574,9 +574,9 @@ export function AdminConfigPage() {
               </label>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.server_host_label")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={adServer}
@@ -587,9 +587,9 @@ export function AdminConfigPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  <span className="block text-xs font-bold text-zinc-500 mb-1">
                     {t("admin.port_label")}
-                  </label>
+                  </span>
                   <input
                     type="number"
                     value={adPort}
@@ -598,9 +598,9 @@ export function AdminConfigPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  <span className="block text-xs font-bold text-zinc-500 mb-1">
                     {t("admin.tls_label")}
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setAdUseTls(!adUseTls)}
@@ -616,9 +616,9 @@ export function AdminConfigPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.base_dn_label")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={adBaseDn}
@@ -628,9 +628,9 @@ export function AdminConfigPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.bind_dn_label")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={adBindDn}
@@ -640,9 +640,9 @@ export function AdminConfigPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.bind_pw_label")}
-                </label>
+                </span>
                 <input
                   type="password"
                   value={adBindPassword}
@@ -695,9 +695,9 @@ export function AdminConfigPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-zinc-500">
+                  <span className="block text-xs font-bold text-zinc-500">
                     {t("admin.wxpusher_token_label")}
-                  </label>
+                  </span>
                   {notifHasToken && (
                     <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                       {t("admin.has_token_hint")}
@@ -716,9 +716,9 @@ export function AdminConfigPage() {
               {/* LAN Webhook */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-zinc-500">
+                  <span className="block text-xs font-bold text-zinc-500">
                     {t("admin.webhook_url_label")}
-                  </label>
+                  </span>
                   {notifHasWebhook && (
                     <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                       {t("admin.has_webhook_hint")}
@@ -736,9 +736,9 @@ export function AdminConfigPage() {
 
               {/* Public Base URL */}
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.base_url_label")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={notifBaseUrl}
@@ -807,9 +807,9 @@ export function AdminConfigPage() {
               {/* Base URL */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold uppercase text-zinc-500">
+                  <span className="block text-xs font-bold uppercase text-zinc-500">
                     {t("admin.ai_base_url_label")}
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={handleTestDNS}
@@ -847,9 +847,9 @@ export function AdminConfigPage() {
 
               {/* API Key */}
               <div>
-                <label className="block text-xs font-bold uppercase text-zinc-500 mb-1">
+                <span className="block text-xs font-bold uppercase text-zinc-500 mb-1">
                   {t("admin.ai_api_key_label")}
-                </label>
+                </span>
                 <input
                   type="password"
                   value={aiApiKey}
@@ -886,9 +886,9 @@ export function AdminConfigPage() {
               {/* Default Model */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold uppercase text-zinc-500">
+                  <span className="block text-xs font-bold uppercase text-zinc-500">
                     {t("admin.ai_default_model_label")}
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={() => handleTestAI("default")}
@@ -917,9 +917,9 @@ export function AdminConfigPage() {
                 {/* Translate Model */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold uppercase text-zinc-500">
+                    <span className="block text-xs font-bold uppercase text-zinc-500">
                       {t("admin.ai_model_translate_label")}
-                    </label>
+                    </span>
                     <button
                       type="button"
                       onClick={() => handleTestAI("translate")}
@@ -944,9 +944,9 @@ export function AdminConfigPage() {
                 {/* Vision Model */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold uppercase text-zinc-500">
+                    <span className="block text-xs font-bold uppercase text-zinc-500">
                       {t("admin.ai_model_vision_label")}
-                    </label>
+                    </span>
                     <button
                       type="button"
                       onClick={() => handleTestAI("vision")}
@@ -969,9 +969,9 @@ export function AdminConfigPage() {
                 {/* Summary Model */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold uppercase text-zinc-500">
+                    <span className="block text-xs font-bold uppercase text-zinc-500">
                       {t("admin.ai_model_summary_label")}
-                    </label>
+                    </span>
                     <button
                       type="button"
                       onClick={() => handleTestAI("summary")}

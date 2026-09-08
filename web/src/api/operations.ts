@@ -1,22 +1,18 @@
-import type { IssueItem } from "../types/index.ts";
-import { buildSdkTransport } from "./client.ts";
+import { sdkClient } from "./client.ts";
+import type { Issue } from "./generated/index.ts";
 import { closeIssue, invalidateIssue, reopenIssue } from "./generated/index.ts";
 
-/** Derived from openapi.yaml; transport/auth/error handling stays in apiClient. */
 export type IssueMutation = "close" | "reopen" | "invalid";
 
 export interface CloseIssueBody {
   score_rating?: number;
 }
-
 export interface ReopenIssueBody {
   reject_reason: string;
 }
-
 export interface InvalidIssueBody {
   reason: string;
 }
-
 export type IssueMutationBody = {
   close: CloseIssueBody;
   reopen: ReopenIssueBody;
@@ -33,33 +29,39 @@ export function issueMutationPath(operation: IssueMutation, id: number): string 
   return issueMutationPaths[operation].replace("{id}", String(id));
 }
 
-// The adapter's post() routes through apiClient, which already unwraps the
-// { data } envelope, so the SDK result's .data is the IssueItem itself.
-async function unwrap(result: Promise<unknown>): Promise<IssueItem> {
-  const response = (await result) as { data: IssueItem };
-  return response.data;
-}
-
-const sdkTransport = buildSdkTransport();
-
-export function mutateIssue<K extends IssueMutation>(
+export async function mutateIssue<K extends IssueMutation>(
   operation: K,
   id: number,
   body: IssueMutationBody[K],
-): Promise<IssueItem> {
+): Promise<Issue> {
   switch (operation) {
     case "close":
-      return unwrap(
-        closeIssue({ client: sdkTransport, path: { id }, body: body as CloseIssueBody }),
-      );
+      return (
+        await closeIssue({
+          client: sdkClient,
+          path: { id },
+          body: body as CloseIssueBody,
+          throwOnError: true,
+        })
+      ).data.data;
     case "reopen":
-      return unwrap(
-        reopenIssue({ client: sdkTransport, path: { id }, body: body as ReopenIssueBody }),
-      );
+      return (
+        await reopenIssue({
+          client: sdkClient,
+          path: { id },
+          body: body as ReopenIssueBody,
+          throwOnError: true,
+        })
+      ).data.data;
     case "invalid":
-      return unwrap(
-        invalidateIssue({ client: sdkTransport, path: { id }, body: body as InvalidIssueBody }),
-      );
+      return (
+        await invalidateIssue({
+          client: sdkClient,
+          path: { id },
+          body: body as InvalidIssueBody,
+          throwOnError: true,
+        })
+      ).data.data;
   }
   throw new Error(`Unsupported issue mutation: ${operation}`);
 }

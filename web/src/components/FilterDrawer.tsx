@@ -1,4 +1,5 @@
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import {
   IssueCategory,
@@ -31,6 +32,50 @@ export function FilterDrawer({
   onReset,
 }: FilterDrawerProps) {
   const { t, locale } = useI18nStore();
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Restore focus to the opener when the drawer unmounts.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    return () => previouslyFocused?.focus();
+  }, [isOpen]);
+
+  // Escape closes; Tab cycles inside the dialog.
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = () =>
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
+    focusables()[0]?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -76,12 +121,21 @@ export function FilterDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md bg-white dark:bg-zinc-900 h-full flex flex-col shadow-2xl border-l border-zinc-200 dark:border-zinc-800">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="filter-drawer-title"
+        className="w-full max-w-md bg-white dark:bg-zinc-900 h-full flex flex-col shadow-2xl border-l border-zinc-200 dark:border-zinc-800"
+      >
         {/* Header */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-5 h-5 text-rose-600" />
-            <h2 className="text-base font-black text-zinc-900 dark:text-zinc-100">
+            <h2
+              id="filter-drawer-title"
+              className="text-base font-black text-zinc-900 dark:text-zinc-100"
+            >
               {t("filters.title")}
             </h2>
             {activeCount > 0 && (
@@ -125,6 +179,7 @@ export function FilterDrawer({
                   <button
                     key={cat}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => toggleCategory(cat)}
                     className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition text-center min-h-[44px] flex items-center justify-center gap-1.5 ${
                       isSelected
@@ -165,6 +220,7 @@ export function FilterDrawer({
                   <button
                     key={st}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => toggleStatus(st)}
                     className={`py-2.5 px-3 rounded-xl border transition text-left min-h-[52px] flex flex-col justify-center ${
                       isSelected
@@ -210,6 +266,7 @@ export function FilterDrawer({
                   <button
                     key={loc.code}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => toggleLocation(loc.code)}
                     className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition text-left min-h-[36px] ${
                       isSelected

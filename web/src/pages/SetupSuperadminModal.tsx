@@ -102,10 +102,14 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
           )}
 
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+            <label
+              htmlFor="setup-username"
+              className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+            >
               {t("auth.username_label")}
             </label>
             <input
+              id="setup-username"
               type="text"
               autoCapitalize="none"
               value={username}
@@ -116,10 +120,14 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+            <label
+              htmlFor="setup-full-name"
+              className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+            >
               {t("auth.fullname_label")}
             </label>
             <input
+              id="setup-full-name"
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -129,10 +137,14 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+            <label
+              htmlFor="setup-email"
+              className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+            >
               {t("auth.email_label")}
             </label>
             <input
+              id="setup-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -143,10 +155,14 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+              <label
+                htmlFor="setup-password"
+                className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+              >
                 {t("auth.password_label")}
               </label>
               <input
+                id="setup-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -155,10 +171,14 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+              <label
+                htmlFor="setup-confirm-password"
+                className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+              >
                 {t("auth.confirm_password_label")}
               </label>
               <input
+                id="setup-confirm-password"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

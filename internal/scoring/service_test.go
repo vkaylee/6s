@@ -27,16 +27,12 @@ func (m *mockScoringStore) ListLocations(_ context.Context) ([]db.Location, erro
 	return m.locations, nil
 }
 
-func (m *mockScoringStore) GetLocationScoreSumInWeek(_ context.Context, arg db.GetLocationScoreSumInWeekParams) (int64, error) {
-	return m.sums[arg.TargetID], nil
-}
-
-func (m *mockScoringStore) CountOpenIssuesByLocation(_ context.Context, loc string) (int64, error) {
-	return m.openCount[loc], nil
-}
-
-func (m *mockScoringStore) CountOverdueIssuesByLocation(_ context.Context, loc string) (int64, error) {
-	return m.overdue[loc], nil
+func (m *mockScoringStore) GetLocationLeaderboardStats(_ context.Context, _ time.Time) ([]db.GetLocationLeaderboardStatsRow, error) {
+	rows := make([]db.GetLocationLeaderboardStatsRow, 0, len(m.locations))
+	for _, loc := range m.locations {
+		rows = append(rows, db.GetLocationLeaderboardStatsRow{LocationCode: loc.Code, LocationName: loc.NameVi, SumPoints: m.sums[loc.Code], OpenCount: m.openCount[loc.Code], OverdueCount: m.overdue[loc.Code]})
+	}
+	return rows, nil
 }
 
 func (m *mockScoringStore) GetReporterLeaderboardInMonth(_ context.Context, _ time.Time) ([]db.GetReporterLeaderboardInMonthRow, error) {

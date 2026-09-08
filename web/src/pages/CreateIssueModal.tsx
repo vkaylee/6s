@@ -213,9 +213,7 @@ export function CreateIssueModal({
       }
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert(
-        initialIssue ? "Không thể cập nhật báo cáo" : "Không thể lưu bản nháp vào IndexedDB",
-      );
+      modalDialog.alert(initialIssue ? t("issue.update_error") : t("issue.draft_save_error"));
       setIsSubmitting(false);
     }
   };
@@ -243,9 +241,9 @@ export function CreateIssueModal({
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {/* 1S - 6S Selection with Micro-hints (SPEC.md Section 4.5) */}
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+            <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
               {t("issue.step_category")}
-            </label>
+            </span>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {S_CATEGORIES.map((s) => {
                 const isSelected = category === s.key;
@@ -285,9 +283,9 @@ export function CreateIssueModal({
             {/* 6S Root Cause 1-Touch Selector: Condition vs Behavior */}
             <div className="space-y-1.5 mt-3">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                   {t("issue.root_cause_title")}
-                </label>
+                </span>
                 <span className="text-[10px] text-zinc-400 font-medium">
                   {t("issue.root_cause_hint")}
                 </span>
@@ -340,9 +338,9 @@ export function CreateIssueModal({
 
           {/* Location Selection */}
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+            <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
               {t("issue.step_location")}
-            </label>
+            </span>
             <LocationCombobox
               locations={locations}
               value={locationCode}
@@ -352,9 +350,9 @@ export function CreateIssueModal({
 
           {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+            <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
               {t("issue.step_photos")}
-            </label>
+            </span>
             <div className="grid grid-cols-2 gap-3">
               {/* Wide Shot (Mandatory) */}
               <div className="flex flex-col">
@@ -423,9 +421,9 @@ export function CreateIssueModal({
           {/* Cascade Tags */}
           {filteredTags.length > 0 && (
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+              <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
                 {t("issue.step_tags", { category: category || "" })}
-              </label>
+              </span>
               <div className="flex flex-wrap gap-1.5">
                 {filteredTags.map((tag) => {
                   const isChecked = selectedTags.includes(tag.tag_code);
@@ -450,9 +448,9 @@ export function CreateIssueModal({
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+            <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
               {t("issue.step_description")}
-            </label>
+            </span>
             <textarea
               rows={2}
               value={description}

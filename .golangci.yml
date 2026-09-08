@@ -72,7 +72,7 @@ linters:
     - unconvert
     - prealloc
     - nakedret
-    - exportloopref
+    - copyloopvar
 
 issues:
   exclude-use-default: false

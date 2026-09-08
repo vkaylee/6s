@@ -261,7 +261,11 @@
     "photo_before_hint_condition": "Chụp rõ vật tư thừa, điểm hư hỏng hoặc khu vực lộn xộn",
     "photo_before_hint_behavior": "Chụp rõ hành vi vi phạm hoặc vị trí thao tác sai",
     "photo_after_hint_condition": "Yêu cầu ảnh khắc phục: Chụp vật tư đã dọn sạch, thiết bị đã sửa hoặc phụ tùng đã thay mới.",
-    "photo_after_hint_behavior": "Yêu cầu ảnh khắc phục: Chụp công nhân đã chấn chỉnh (đã đeo đủ PPE, đứng đúng vị trí an toàn)."
+    "photo_after_hint_behavior": "Yêu cầu ảnh khắc phục: Chụp công nhân đã chấn chỉnh (đã đeo đủ PPE, đứng đúng vị trí an toàn).",
+    "update_error": "Không thể cập nhật báo cáo",
+    "draft_save_error": "Không thể lưu bản nháp vào IndexedDB",
+    "cancel_confirm_message": "Bạn có chắc muốn hủy bỏ nội dung đang nhập không?",
+    "cancel_confirm_title": "Hủy báo cáo"
   },
   "admin": {
     "title": "Cấu hình hệ thống",
@@ -275,6 +279,8 @@
     "score_6s_tab": "Điểm số 6S",
     "ad_tab": "Active Directory",
     "locations_tab": "Vị trí xưởng (Locations)",
+    "locations_page_title": "Vị trí xưởng",
+    "tags_page_title": "Thẻ sự cố",
     "location_code_label": "Mã vị trí (Code) *",
     "location_code_placeholder": "VD: LINE_A3, WAREHOUSE_2",
     "location_name_vi": "Tên tiếng Việt *",
@@ -455,7 +461,8 @@
     "current_server_version": "Phiên bản máy chủ hiện tại: v{version}",
     "server_updated_notice": "Đã bị cập nhật trước khi máy bạn đồng bộ",
     "overwrite_btn": "Ghi đè bản ghi (Nếu có thẩm quyền)",
-    "discard_btn": "Lưu ảnh về máy & Hủy bản nháp"
+    "discard_btn": "Lưu ảnh về máy & Hủy bản nháp",
+    "overwrite_requested": "Đã gửi yêu cầu ghi đè"
   },
   "issue_detail": {
     "quick_edit_category": "Chạm để sửa nhanh phân loại S (In-place Quick Edit)",
@@ -514,7 +521,15 @@
     "close_checklist_title": "Tiêu chí nghiệm thu 6S",
     "check_condition_resolved": "Vật tư thừa / thiết bị hỏng đã được xử lý triệt để",
     "check_behavior_corrected": "Công nhân vi phạm đã được nhắc nhở / đào tạo lại",
-    "check_recurrence_prevented": "Đã loại bỏ nguy cơ tái diễn tại khu vực"
+    "check_recurrence_prevented": "Đã loại bỏ nguy cơ tái diễn tại khu vực",
+    "update_category_error": "Không thể đổi phân loại issue",
+    "resolve_image_error": "Lỗi khi xử lý ảnh khắc phục",
+    "approve_failed": "Duyệt đạt thất bại",
+    "reopen_failed": "Mở lại issue thất bại",
+    "invalidate_failed": "Bác bỏ thất bại",
+    "default_reopen_reason": "Chưa đạt yêu cầu 6S",
+    "default_invalid_reason": "Báo cáo không đúng thực tế",
+    "photo_preview": "Xem trước ảnh"
   },
   "app": {
     "issues_list": "Danh sách vấn đề ({count})",

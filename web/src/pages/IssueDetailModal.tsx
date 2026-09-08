@@ -400,7 +400,7 @@ export function IssueDetailModal({
       onRefresh();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Không thể đổi phân loại issue");
+      modalDialog.alert(t("issue_detail.update_category_error"));
     }
   };
 
@@ -455,7 +455,7 @@ export function IssueDetailModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Lỗi khi xử lý ảnh khắc phục");
+      modalDialog.alert(t("issue_detail.resolve_image_error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -464,26 +464,23 @@ export function IssueDetailModal({
   const handleConfirmClose = async () => {
     setIsSubmitting(true);
     try {
-      await issueOperations.close(currentIssue.id, {
-        score_rating: scoreRating,
-      });
+      await issueOperations.close(currentIssue.id, { score_rating: scoreRating });
       haptics.success();
       setShowConfirmAction(null);
       onRefresh();
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Duyệt đạt thất bại");
+      modalDialog.alert(t("issue_detail.approve_failed"));
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleConfirmReopen = async () => {
     setIsSubmitting(true);
     try {
       await issueOperations.reopen(currentIssue.id, {
-        reject_reason: rejectReason.trim() || "Chưa đạt yêu cầu 6S",
+        reject_reason: rejectReason.trim() || t("issue_detail.default_reopen_reason"),
       });
       haptics.success();
       setShowConfirmAction(null);
@@ -491,7 +488,7 @@ export function IssueDetailModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Mở lại issue thất bại");
+      modalDialog.alert(t("issue_detail.reopen_failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -501,7 +498,7 @@ export function IssueDetailModal({
     setIsSubmitting(true);
     try {
       await issueOperations.invalid(currentIssue.id, {
-        reason: rejectReason.trim() || "Báo cáo không đúng thực tế",
+        reason: rejectReason.trim() || t("issue_detail.default_invalid_reason"),
       });
       haptics.success();
       setShowConfirmAction(null);
@@ -509,7 +506,7 @@ export function IssueDetailModal({
       onClose();
     } catch {
       haptics.errorOrConflict();
-      modalDialog.alert("Bác bỏ thất bại");
+      modalDialog.alert(t("issue_detail.invalidate_failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -679,9 +676,9 @@ export function IssueDetailModal({
             {currentIssue.photo_after ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.compare_slider_label")}
-                  </label>
+                  </span>
                   <span className="text-[11px] text-zinc-400">
                     🔍 {t("issue_detail.tap_to_zoom")}
                   </span>
@@ -708,9 +705,9 @@ export function IssueDetailModal({
             ) : (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.photo_before_label")}
-                  </label>
+                  </span>
                   <span className="text-[11px] text-zinc-400">
                     🔍 {t("issue_detail.tap_to_zoom")}
                   </span>
@@ -744,9 +741,9 @@ export function IssueDetailModal({
             {currentIssue.photo_detail && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.photo_detail_label")}
-                  </label>
+                  </span>
                   <span className="text-[11px] text-zinc-400">
                     🔍 {t("issue_detail.tap_to_zoom")}
                   </span>
@@ -1087,9 +1084,9 @@ export function IssueDetailModal({
                 </div>
 
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
-                  <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
+                  <span className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
                     {t("issue_detail.kaizen_rating_label")}
-                  </label>
+                  </span>
                   <div className="flex items-center space-x-2">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
@@ -1218,6 +1215,8 @@ export function IssueDetailModal({
 
             {/* Image Container with Zoom, Mouse Wheel, Two-Finger Pinch & Drag/Pan */}
             <div
+              role="application"
+              aria-label={t("issue_detail.photo_preview")}
               ref={imageContainerRef}
               className="flex-1 w-full flex items-center justify-center overflow-hidden p-2 touch-none select-none cursor-grab active:cursor-grabbing"
               onTouchStart={(e) => {

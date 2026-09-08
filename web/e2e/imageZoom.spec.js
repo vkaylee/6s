@@ -1,18 +1,20 @@
 import { chromium, expect, test } from "@playwright/test";
 
-test.describe("Image Preview and Zoom E2E", () => {
-  test("full screen preview overlay triggers, zooms and pans", async ({}, testInfo) => {
-    let browser;
-    try {
-      browser = await chromium.launch({ headless: true });
-    } catch {
-      testInfo.skip(true, "Playwright browser binary not installed in test environment");
-      return;
-    }
+test("full screen preview overlay triggers, zooms and pans", async ({}, testInfo) => {
+  testInfo.annotations.push({ type: "owner", description: "frontend-platform" });
+  testInfo.annotations.push({ type: "reason", description: "Requires Playwright Chromium binary" });
+  testInfo.annotations.push({ type: "expiry", description: "2026-10-31" });
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    testInfo.skip(true, `Playwright Chromium unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
 
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    try {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
     // Inject mock HTML rendering IssueDetailModal with image buttons
     await page.setContent(`
       <div id="root">
@@ -126,8 +128,7 @@ test.describe("Image Preview and Zoom E2E", () => {
 
     // 6. Close preview
     await page.click("#close-preview");
-    } finally {
-      await browser.close();
-    }
-  });
+  } finally {
+    await browser.close();
+  }
 });

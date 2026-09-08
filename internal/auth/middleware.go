@@ -68,15 +68,6 @@ func (m *Middleware) extractUserID(r *http.Request) (int64, error) {
 		return userID, nil
 	}
 
-	if qToken := strings.TrimSpace(r.URL.Query().Get("token")); qToken != "" {
-		// ponytail: backwards compatibility with legacy query token; remove when all clients use ticket
-		userID, err := m.tokenManager.ValidateAccessToken(qToken)
-		if err != nil {
-			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
-		}
-		return userID, nil
-	}
-
 	return 0, apperror.Unauthorized(i18n.ErrMissingAuth)
 }
 

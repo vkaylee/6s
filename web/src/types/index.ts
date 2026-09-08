@@ -60,66 +60,50 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
-export interface IssueItem {
-  id: number;
-  client_uuid: string;
-  version: number;
-  creator_id: number;
-  creator_name: string;
-  resolver_id?: number | null;
-  resolver_name?: string | null;
-  category: IssueCategory;
-  cause_type?: CauseType;
-  location_code: string;
-  location_name: string;
-  description: string;
-  translated_description?: string | null;
-  reject_reason?: string | null;
-  photo_before: string;
-  photo_detail?: string | null;
-  photo_after?: string | null;
-  score_deducted?: number;
-  score_rating?: number | null;
-  status: IssueStatus;
-  created_at: string;
-  resolved_at?: string | null;
-  closed_at?: string | null;
-  tags: string[];
-}
+import type {
+  Issue as OpenApiIssue,
+  PaginationMeta as OpenApiPaginationMeta,
+} from "../api/generated/index.ts";
 
-export interface PaginationMeta {
-  page: number;
-  limit: number;
-  total: number;
-}
+export type IssueItem = OpenApiIssue & {
+  cause_type?: CauseType;
+  location_name: string;
+  creator_name: string;
+  resolver_name?: string | null;
+  translated_description?: string | null;
+  score_deducted?: number;
+};
+
+export type PaginationMeta = OpenApiPaginationMeta;
 
 export interface PaginatedResult<T> {
   data: T;
   pagination?: PaginationMeta;
 }
 
-export interface LocationItem {
+export type LocationItem = {
   code: string;
   name_vi: string;
   name_zh: string;
   name_en: string;
   qr_code?: string;
   is_active: boolean;
-}
+};
 
-export interface TagItem {
+export type TagItem = {
   tag_code: string;
   category: string;
   label_vi: string;
   label_zh: string;
   label_en?: string;
-  use_count?: number;
+  target_kind?: "OBJECT" | "BEHAVIOR";
   code?: string;
   name_vi?: string;
   name_zh?: string;
   name_en?: string;
-  target_kind?: "OBJECT" | "BEHAVIOR";
-}
+  use_count?: number;
+  is_preset?: boolean;
+};
 
 export interface LocationHealthScore {
   location_code: string;

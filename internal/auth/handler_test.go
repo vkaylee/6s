@@ -393,6 +393,7 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 		Email:    "admin@factory.lan",
 	})
 	reqSetup := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodySetup))
+	reqSetup = reqSetup.WithContext(context.WithValue(reqSetup.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrSetup := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrSetup, reqSetup)
 	if rrSetup.Code != http.StatusOK {
@@ -411,6 +412,7 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 	}
 	rrSetupRepeat := httptest.NewRecorder()
 	reqSetupRepeat := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodySetup))
+	reqSetupRepeat = reqSetupRepeat.WithContext(context.WithValue(reqSetupRepeat.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	handler.SetupSuperadmin(rrSetupRepeat, reqSetupRepeat)
 	if rrSetupRepeat.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 on repeated setup, got %d", rrSetupRepeat.Code)
@@ -746,6 +748,7 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 
 	// 2. SetupSuperadmin with bad JSON
 	reqBad := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader([]byte("{bad")))
+	reqBad = reqBad.WithContext(context.WithValue(reqBad.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrBad := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrBad, reqBad)
 	if rrBad.Code != http.StatusBadRequest {
@@ -756,6 +759,7 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 	badSetup := SetupSuperadminRequest{Username: "superadmin", Password: ""}
 	bodyBad, _ := json.Marshal(badSetup)
 	reqMiss := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyBad))
+	reqMiss = reqMiss.WithContext(context.WithValue(reqMiss.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrMiss := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrMiss, reqMiss)
 	if rrMiss.Code != http.StatusBadRequest {
@@ -771,6 +775,7 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 	}
 	bodyValid, _ := json.Marshal(validSetup)
 	reqValid := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyValid))
+	reqValid = reqValid.WithContext(context.WithValue(reqValid.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrValid := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrValid, reqValid)
 	if rrValid.Code != http.StatusOK {
@@ -788,6 +793,7 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 
 	// 6. SetupSuperadmin when admin already exists (403)
 	reqDuplicate := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyValid))
+	reqDuplicate = reqDuplicate.WithContext(context.WithValue(reqDuplicate.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrDuplicate := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrDuplicate, reqDuplicate)
 	if rrDuplicate.Code != http.StatusForbidden {

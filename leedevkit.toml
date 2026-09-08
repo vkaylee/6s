@@ -37,3 +37,10 @@ default_model = "sonnet"
 
 [addons]
 skills = []
+
+[ci]
+server_lint = "./leedevkit test server --lint-only"
+server_unit = "./leedevkit test server --unit-only"
+web_lint = "./leedevkit test web --lint-only"
+web_unit = "./leedevkit test web --unit-only"
+security_scan = "./scripts/security-scan.sh"

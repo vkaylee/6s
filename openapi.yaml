@@ -5,10 +5,8 @@ info:
   description: API phục vụ ghi nhận, đồng bộ offline, giải quyết và tính điểm sức khỏe 6S trong môi trường nhà xưởng.
 
 servers:
-  - url: https://6s.factory.lan/api
-    description: Production On-Premise LAN Server
-  - url: http://localhost:8080/api
-    description: Local Dev Server
+  - url: /api
+    description: Runtime-configured API base path
 
 components:
   securitySchemes:

@@ -12,6 +12,10 @@ import (
 )
 
 var mockReturnEOF = false
+const (
+	category1S = "1S"
+	statusOpen = "OPEN"
+)
 
 type mockDBStmt struct {
 	query string
@@ -78,11 +82,11 @@ func init() {
 func rowValuesForQuery(query string) []driver.Value {
 	now := time.Now()
 	switch {
-	case strings.Contains(query, "listIssuesFiltered"):
+	case strings.Contains(query, "ListIssuesFiltered"):
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), nil, "1S", "CONDITION", "LOC1", nil, nil,
 			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
-			"Loc Vi", "Loc Zh", "Loc En", "Creator A", nil, []byte("{}"), int64(1),
+			int64(1), "LOC1", "creator", "Creator A", nil, nil,
 		}
 	case strings.Contains(query, "listIssuesForExport"):
 		return []driver.Value{
@@ -153,112 +157,78 @@ func rowValuesForQuery(query string) []driver.Value {
 		}
 	}
 }
-func execAll(ctx context.Context, q *Queries, now time.Time) {
-	// 1-10
-	_, _ = q.ClaimOutboxTasks(ctx, 10)
-	_ = q.CleanupOldAuditLogs(ctx)
-	_, _ = q.CloseIssue(ctx, CloseIssueParams{})
-	_, _ = q.CountAdmins(ctx)
-	_, _ = q.CountIssuesFiltered(ctx, CountIssuesFilteredParams{})
-	_, _ = q.CountOpenIssuesByLocation(ctx, "LINE_A1")
-	_, _ = q.CountOverdueIssuesByLocation(ctx, "LINE_A1")
-	_, _ = q.CreateIssue(ctx, CreateIssueParams{})
-	_, _ = q.CreateLocalAdmin(ctx, CreateLocalAdminParams{})
-	_, _ = q.CreateLocation(ctx, CreateLocationParams{})
-
-	// 11-20
-	_, _ = q.CreateOutboxEntry(ctx, CreateOutboxEntryParams{})
-	_, _ = q.CreateRefreshToken(ctx, CreateRefreshTokenParams{})
-	_, _ = q.CreateUserJIT(ctx, CreateUserJITParams{})
-	_ = q.DeleteIssueTags(ctx, 1)
-	_, _ = q.ForceResolveIssue(ctx, ForceResolveIssueParams{})
-	_, _ = q.GetADConfig(ctx)
-	_, _ = q.GetAIConfig(ctx)
-	_, _ = q.GetCategoryBreakdown(ctx)
-	_, _ = q.GetIssueByID(ctx, 1)
-	_, _ = q.GetIssueByUUID(ctx, "c0a80101-0000-4000-8000-000000000001")
-
-	// 21-30
-	_, _ = q.GetIssueTrends(ctx, 7)
-	_, _ = q.GetLastCronTaskLog(ctx, "OVERDUE_PENALTY_SCAN")
-	_, _ = q.GetLocationByCode(ctx, "LINE_A1")
-	_, _ = q.GetLocationScoreSumInWeek(ctx, GetLocationScoreSumInWeekParams{CreatedAt: now})
-	_, _ = q.GetNotificationConfig(ctx)
-	_, _ = q.GetRefreshTokenByHash(ctx, "mock_hash")
-	_, _ = q.GetReportKPISummary(ctx)
-	_, _ = q.GetReporterLeaderboardInMonth(ctx, now)
-	_, _ = q.GetScoringRuleByKey(ctx, "s1_penalty")
-	_, _ = q.GetScoringRules(ctx)
-
-	// 31-40
-	_, _ = q.GetTopViolatedTags(ctx, 5)
-	_, _ = q.GetUserByBadgeCode(ctx, sql.NullString{String: "B001", Valid: true})
-	_, _ = q.GetUserByID(ctx, 1)
-	_, _ = q.GetUserByUsername(ctx, "admin")
-	_ = q.IncrementTagUseCount(ctx, "tag1")
-	_ = q.InsertAuditLog(ctx, InsertAuditLogParams{})
-	_, _ = q.InsertCronTaskLog(ctx, InsertCronTaskLogParams{})
-	_ = q.InsertIssueTag(ctx, InsertIssueTagParams{})
-	_ = q.InsertScoreLog(ctx, InsertScoreLogParams{})
-	_, _ = q.InvalidateIssue(ctx, InvalidateIssueParams{})
-	// 41-50
-	_, _ = q.ListAllActivePhotoBasenames(ctx)
-	_, _ = q.ListAllLocations(ctx)
-	_, _ = q.ListAllTags(ctx)
-	_, _ = q.ListIssuesFiltered(ctx, ListIssuesFilteredParams{})
-	_, _ = q.ListIssuesForExport(ctx, ListIssuesForExportParams{})
-	_, _ = q.ListLocations(ctx)
-	_, _ = q.ListOpenOverdueIssues(ctx)
-	_, _ = q.ListScoreLogsByIssue(ctx, 1)
-	_, _ = q.ListScoreLogsByTargetSince(ctx, ListScoreLogsByTargetSinceParams{CreatedAt: now})
-	_, _ = q.ListScoreLogsSince(ctx, now)
-
-	// 51-60
-	_, _ = q.ListTags(ctx)
-	_, _ = q.ListTagsForIssue(ctx, 1)
-	_, _ = q.ListUserActiveSessions(ctx, 1)
-	_, _ = q.ListUsers(ctx, ListUsersParams{})
-	_ = q.MarkOutboxFailed(ctx, MarkOutboxFailedParams{})
-	_ = q.MarkOutboxSent(ctx, 1)
-	_, _ = q.PatchIssue(ctx, PatchIssueParams{})
-	_, _ = q.ReopenIssue(ctx, ReopenIssueParams{})
-	_, _ = q.ResolveIssue(ctx, ResolveIssueParams{})
-	_ = q.RetryOutboxTask(ctx, RetryOutboxTaskParams{})
-
-	// 61-74
-	_ = q.RevokeRefreshToken(ctx, 1)
-	_ = q.RevokeUserRefreshTokens(ctx, 1)
-	_ = q.SetAllTagsActiveStatus(ctx, true)
-	_, _ = q.UpdateLocation(ctx, UpdateLocationParams{})
-	_, _ = q.UpdateLocationActiveStatus(ctx, UpdateLocationActiveStatusParams{})
-	_, _ = q.UpdateTagActiveStatus(ctx, UpdateTagActiveStatusParams{})
-	_, _ = q.UpdateUserADLogin(ctx, UpdateUserADLoginParams{})
-	_, _ = q.UpdateUserAdmin(ctx, UpdateUserAdminParams{})
-	_ = q.UpdateUserLastLogin(ctx, 1)
-	_, _ = q.UpsertADConfig(ctx, UpsertADConfigParams{})
-	_, _ = q.UpsertAIConfig(ctx, UpsertAIConfigParams{})
-	_, _ = q.UpsertNotificationConfig(ctx, UpsertNotificationConfigParams{})
-	_, _ = q.UpsertScoringRule(ctx, UpsertScoringRuleParams{})
-	_, _ = q.UpsertTag(ctx, UpsertTagParams{})
-}
-
-func TestAllQueries(t *testing.T) {
+func TestQueries_ListIssuesFiltered(t *testing.T) {
 	sqlDB, err := sql.Open("mock_db_driver", "")
 	if err != nil {
-		t.Fatalf("failed to open mock db: %v", err)
+		t.Fatalf("open mock db: %v", err)
 	}
-	defer sqlDB.Close()
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close mock db: %v", err)
+		}
+	})
 
 	q := New(sqlDB)
-	_ = q.WithTx(nil)
+	rows, err := q.ListIssuesFiltered(context.Background(), ListIssuesFilteredParams{})
+	if len(rows) != 1 || rows[0].ID != 1 || rows[0].Category != category1S {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+}
 
-	ctx := context.Background()
-	now := time.Now()
-	// Pass 1: populated rows (covers scan + loop body)
-	mockReturnEOF = false
-	execAll(ctx, q, now)
+func TestQueries_GetIssueByID(t *testing.T) {
+	sqlDB, err := sql.Open("mock_db_driver", "")
+	if err != nil {
+		t.Fatalf("open mock db: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close mock db: %v", err)
+		}
+	})
 
-	// Pass 2: empty rows (covers loop exit + error checks)
+	issueRow, err := New(sqlDB).GetIssueByID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetIssueByID: %v", err)
+	}
+	if issueRow.ID != 1 || issueRow.Status != statusOpen {
+		t.Fatalf("unexpected issue: %+v", issueRow)
+	}
+}
+
+func TestQueries_EmptyList(t *testing.T) {
 	mockReturnEOF = true
-	execAll(ctx, q, now)
+	t.Cleanup(func() { mockReturnEOF = false })
+	sqlDB, err := sql.Open("mock_db_driver", "")
+	if err != nil {
+		t.Fatalf("open mock db: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close mock db: %v", err)
+		}
+	})
+
+	rows, err := New(sqlDB).ListTags(context.Background())
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected empty result, got %+v", rows)
+	}
+}
+
+func TestQueries_Write(t *testing.T) {
+	sqlDB, err := sql.Open("mock_db_driver", "")
+	if err != nil {
+		t.Fatalf("open mock db: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close mock db: %v", err)
+		}
+	})
+
+	if err := New(sqlDB).DeleteIssueTags(context.Background(), 1); err != nil {
+		t.Fatalf("DeleteIssueTags: %v", err)
+	}
 }

@@ -26,8 +26,8 @@
     "rules": {
       "preset": "recommended",
       "a11y": {
-        "noLabelWithoutControl": "off",
-        "noStaticElementInteractions": "off"
+        "noLabelWithoutControl": "warn",
+        "noStaticElementInteractions": "warn"
       },
       "suspicious": {
         "noUnknownAtRules": "off",

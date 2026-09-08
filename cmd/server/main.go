@@ -24,6 +24,7 @@ import (
 	"6s/internal/issue"
 	"6s/internal/masterdata"
 	"6s/internal/notification"
+	"6s/internal/observability"
 	"6s/internal/report"
 	"6s/internal/response"
 	"6s/internal/scoring"
@@ -33,14 +34,18 @@ import (
 func main() {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("invalid config: %v", err)
 	}
 
 	ctx := context.Background()
 	var dbConn *sql.DB
 	dbConn, err = database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
 	if err != nil {
-		log.Printf("warning: db connection failed (will retry or operate offline): %v", err)
+		if dbConn != nil {
+			_ = dbConn.Close()
+		}
+		dbConn = nil
+		log.Printf("warning: db connection failed: %v", err)
 	} else {
 		defer func() {
 			if err := dbConn.Close(); err != nil {
@@ -48,7 +53,7 @@ func main() {
 			}
 		}()
 		if err := database.RunMigrations(ctx, dbConn); err != nil {
-			log.Printf("warning: run migrations failed: %v", err)
+			log.Fatalf("database migrations failed: %v", err)
 		}
 	}
 
@@ -70,6 +75,14 @@ func main() {
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
+	if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		log.Printf("Server listening with TLS on :%s", cfg.Port)
+		if err := server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server terminated: %v", err)
+		}
+		return
+	}
+
 	log.Printf("Server listening on :%s", cfg.Port)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server terminated: %v", err)
@@ -81,18 +94,9 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
-	timeoutMw := middleware.Timeout(60 * time.Second)
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if req.URL.Path == "/api/issues/events" {
-				next.ServeHTTP(w, req)
-				return
-			}
-			timeoutMw(next).ServeHTTP(w, req)
-		})
-	})
+	r.Use(timeoutByRoute)
 	r.Use(i18n.Middleware)
 	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -110,9 +114,23 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 			"db":     dbStatus,
 		})
 	}
+	readinessHandler := func(w http.ResponseWriter, req *http.Request) {
+		if dbConn == nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(req.Context(), time.Second)
+		defer cancel()
+		if err := dbConn.PingContext(ctx); err != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
+			return
+		}
+		response.JSON(w, http.StatusOK, map[string]string{"status": "ok", "db": "ok"})
+	}
 	r.Get("/api/health", healthHandler)
 	r.Head("/api/health", healthHandler)
-
+	r.Get("/api/ready", readinessHandler)
+	r.Head("/api/ready", readinessHandler)
 	if dbConn != nil && cfg != nil {
 		registerAPIRoutes(r, dbConn, cfg, cipher, ldapClient)
 	}
@@ -128,9 +146,6 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) {
 	queries := db.New(dbConn)
 	jwtKey := []byte(cfg.JWTSecret)
-	if len(jwtKey) == 0 {
-		jwtKey = []byte("default-secret-key-32-bytes-secure")
-	}
 	tm := auth.NewTokenManager(jwtKey)
 
 	var trustedProxies []string
@@ -260,26 +275,26 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 	reportSvc := report.NewService(queries)
 	reportHandler := report.NewHandler(reportSvc)
 
-  r.Route("/api/reports", func(rr chi.Router) {
-    rr.Use(authMw.Authenticate)
-    rr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
-    rr.Get("/summary", reportHandler.GetSummary)
-  })
+	r.Route("/api/reports", func(rr chi.Router) {
+		rr.Use(authMw.Authenticate)
+		rr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+		rr.Get("/summary", reportHandler.GetSummary)
+	})
 
-  // Allow CSV export under /api/issues/export
-  r.With(authMw.Authenticate, auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader)).Get("/api/issues/export", reportHandler.ExportCSV)
+	// Allow CSV export under /api/issues/export
+	r.With(authMw.Authenticate, auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader)).Get("/api/issues/export", reportHandler.ExportCSV)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
 	scoringSvc := scoring.NewService(queries, nil)
 	scoringHandler := scoring.NewHandler(scoringSvc)
-  r.Route("/api/leaderboard", func(lbr chi.Router) {
-    lbr.Use(authMw.Authenticate)
-    lbr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
-    lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
-    lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
-    lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
-  })
+	r.Route("/api/leaderboard", func(lbr chi.Router) {
+		lbr.Use(authMw.Authenticate)
+		lbr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+		lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
+		lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
+		lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
+	})
 
 	r.Route("/api/issues/{id}/score-logs", func(ilr chi.Router) {
 		ilr.Use(authMw.Authenticate)
@@ -321,11 +336,40 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		air.Post("/review", aiHandler.Review)
 		air.Post("/review-follow-up", aiHandler.FollowUp)
 	})
-
-	// Launch background workers
+	backgroundCtx := context.Background()
 	outboxWorker := notification.NewWorker(queries, httpSender, cipher, notifyCh)
-	go outboxWorker.Start(context.Background())
+	go outboxWorker.Start(backgroundCtx)
 
 	cronRunner := cron.NewRunner(queries, nil, storageDir)
-	go cronRunner.Start(context.Background())
+	go cronRunner.Start(backgroundCtx)
+}
+
+func timeoutByRoute(next http.Handler) http.Handler {
+	timeout := middleware.Timeout(60 * time.Second)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		patterns := chi.RouteContext(r.Context()).RoutePatterns
+		for _, pattern := range patterns {
+			if pattern == "/api/issues/events" {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		timeout(next).ServeHTTP(w, r)
+	})
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := middleware.GetReqID(r.Context())
+		if requestID != "" {
+			w.Header().Set("X-Request-ID", requestID)
+		}
+		started := time.Now()
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		observability.Log("info", "http request", map[string]any{
+			"request_id": requestID, "route": r.URL.Path, "status": ww.Status(),
+			"duration_ms": time.Since(started).Seconds() * 1000,
+		})
+	})
 }

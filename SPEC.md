@@ -1182,7 +1182,7 @@ func StartOutboxWorker(ctx context.Context, db *sql.DB, notifyCh <-chan struct{}
 - **Trạng thái hiện tại — chưa triển khai trong Go runtime**: Chưa có job thực thi `pg_dump`, copy backup NAS hoặc `rsync` ảnh. Các yêu cầu dưới đây là mục tiêu vận hành, không phải tính năng đang chạy.
 - **Mục tiêu backup PostgreSQL 18** (RPO 6 giờ; không chạy WAL archiving/PITR ở quy mô 1 server nhà máy): Cron/sidecar vận hành chạy `pg_dump -Fc` tạo `./backups/6s_backup_YYYYMMDD_HH.dump`, sau đó copy sang NAS NFS/SMB.
 - **Mục tiêu RPO bằng chứng ảnh**: `pg_dump` chỉ phủ metadata, ảnh là bằng chứng bắt buộc của mọi issue. Đồng bộ `./uploads/` lên NAS bằng `rsync -a` (delta) mỗi giờ.
-- **Đã triển khai trong runtime**: dọn dẹp orphan uploads lúc 01:00 và dọn audit logs hằng tuần (`CLEANUP_AUDIT_LOGS` > 12 tháng) qua `internal/cron`; xem Mục 10.3.
+- **Đã triển khai trong runtime**: dọn dẹp orphan uploads lúc 01:00 và dọn audit logs hằng tuần (`CLEANUP_AUDIT_LOGS` > 3 năm) theo chính sách lưu trữ tại `.agent/rules/data-governance.md`; xem Mục 10.3.
 - **Lưu trữ ảnh cũ (Cold Data Archival - Zero CPU Penalty)**: 
   - File JPEG vốn đã được nén lossy tại client; việc chạy gzip ngốn 100% CPU của VPS 1 core mà tỷ lệ nén thu được < 2%.
   - Thay vào đó: Tự động gom archive theo định dạng uncompressed `tar` hoặc di chuyển trực tiếp cây thư mục `./uploads/YYYY/MM` của các issue `CLOSED` > 6 tháng sang ổ lưu trữ thứ cấp/NAS mà không tốn CPU nén lại.

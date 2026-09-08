@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
+import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import type { ScoreLogItem } from "../types/index.ts";
@@ -92,6 +93,7 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
             </p>
           </div>
         </div>
+        <NavActions />
       </PageContainer>
 
       {/* Main Content */}

@@ -67,6 +67,21 @@ describe("i18n Locale Parity & Consistency (vi, en, zh)", () => {
     }
   });
 
+  it("translates admin page titles in every locale", () => {
+    const { setLocale, t } = useI18nStore.getState();
+    const expected = {
+      vi: ["Vị trí xưởng", "Thẻ sự cố"],
+      en: ["Factory Locations", "Issue Tags"],
+      zh: ["车间位置", "问题标签"],
+    } as const;
+
+    for (const [locale, [locations, tags]] of Object.entries(expected)) {
+      setLocale(locale as keyof typeof expected);
+      expect(t("admin.locations_page_title")).toBe(locations);
+      expect(t("admin.tags_page_title")).toBe(tags);
+    }
+  });
+
   it("correctly translates and interpolates per locale", () => {
     const { t, setLocale } = useI18nStore.getState();
 
@@ -247,6 +262,26 @@ describe("Frontend i18n usage guard", () => {
     }
 
     expect(current).toEqual([]);
+  });
+
+  it("keeps runtime dialogs and errors locale-neutral", async () => {
+    const owned = [
+      "api/client.ts",
+      "App.tsx",
+      "pages/IssueDetailModal.tsx",
+      "pages/CreateIssueModal.tsx",
+      "pages/CreateIssuePage.tsx",
+    ];
+
+    const violations: string[] = [];
+    const runtimeLiteral =
+      /(?:alert|confirm|Error)\s*\(\s*["'][^"']*[\u00c0-\u024f\u1e00-\u1eff\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef][^"']*["']/u;
+    for (const file of owned) {
+      const source = await Bun.file(`${sourceRoot}${file}`).text();
+      if (runtimeLiteral.test(source)) violations.push(file);
+    }
+
+    expect(violations).toEqual([]);
   });
 
   it("resolves all static t() calls against all locales", async () => {

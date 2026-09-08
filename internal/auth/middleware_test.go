@@ -22,7 +22,7 @@ func (m *mockUserGetter) GetUserByID(_ context.Context, _ int64) (db.User, error
 }
 
 func TestMiddleware_Authenticate(t *testing.T) {
-	secret := []byte("secret-key-12345678901234567890")
+	secret := []byte("secret-key-123456789012345678901234")
 	tm := NewTokenManager(secret)
 	getter := &mockUserGetter{
 		user: db.User{
@@ -61,13 +61,6 @@ func TestMiddleware_Authenticate(t *testing.T) {
 	handler.ServeHTTP(rrValid, reqValid)
 	if rrValid.Code != http.StatusOK {
 		t.Errorf("expected 200 for valid token, got %d", rrValid.Code)
-	}
-	// 2b. Valid token via query param (used by SSE)
-	reqQuery := httptest.NewRequest("GET", "/protected?token="+token, nil)
-	rrQuery := httptest.NewRecorder()
-	handler.ServeHTTP(rrQuery, reqQuery)
-	if rrQuery.Code != http.StatusOK {
-		t.Errorf("expected 200 for valid token in query param, got %d", rrQuery.Code)
 	}
 	// 2c. Valid single-use ticket via query param
 	ticket, err := ticketMgr.Issue(1)

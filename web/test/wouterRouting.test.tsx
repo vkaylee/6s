@@ -3,6 +3,9 @@ import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { App } from "../src/App.tsx";
+import { normalizeTags } from "../src/hooks/useDashboardData.ts";
+import { FactoryLocationsPage } from "../src/pages/FactoryLocationsPage.tsx";
+import { IssueTagsPage } from "../src/pages/IssueTagsPage.tsx";
 import { NotFoundPage } from "../src/pages/NotFoundPage.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { IssueCategory, IssueStatus, UserRole } from "../src/types/index.ts";
@@ -171,6 +174,21 @@ describe("Wouter UX & Routing Verification", () => {
       </Router>,
     );
     expect(html).toContain("Hệ thống 6S");
+  });
+
+  it("admin page components render their translated titles", () => {
+    const locationsHtml = renderToString(
+      <Router ssrPath="/admin/locations">
+        <FactoryLocationsPage />
+      </Router>,
+    );
+    const tagsHtml = renderToString(
+      <Router ssrPath="/admin/tags">
+        <IssueTagsPage />
+      </Router>,
+    );
+    expect(locationsHtml).toContain("Vị trí xưởng");
+    expect(tagsHtml).toContain("Danh mục Thẻ");
   });
 
   it("renders /leaderboard/locations/:code route within App", () => {
@@ -643,5 +661,33 @@ describe("Wouter UX & Routing Verification", () => {
     );
 
     expect(html).toContain("Item 301");
+  });
+});
+
+describe("dashboard data boundary", () => {
+  it("normalizes generated server tags without client-side defaults", () => {
+    expect(
+      normalizeTags([
+        {
+          code: "oil_leak",
+          category: "3S",
+          name_vi: "Rò rỉ dầu",
+          name_zh: "设备漏油",
+          name_en: "Oil leak",
+          use_count: 4,
+          is_preset: true,
+        },
+      ]),
+    ).toEqual([
+      {
+        tag_code: "oil_leak",
+        category: "3S",
+        label_vi: "Rò rỉ dầu",
+        label_zh: "设备漏油",
+        label_en: "Oil leak",
+        use_count: 4,
+        is_preset: true,
+      },
+    ]);
   });
 });

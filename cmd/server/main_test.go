@@ -3,10 +3,8 @@ package main
 import (
 	"6s/internal/config"
 	"6s/internal/crypto"
-	"6s/internal/response"
 	"database/sql"
 	"database/sql/driver"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -53,31 +51,17 @@ func init() {
 
 func TestHealthEndpoint(t *testing.T) {
 	r := setupRouter(nil, nil, nil, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
-	rec := httptest.NewRecorder()
-
-	r.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-
-	var res response.Envelope
-	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	m, ok := res.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("expected data map, got %T", res.Data)
-	}
-
-	if m["status"] != "ok" {
-		t.Errorf("expected status ok, got %v", m["status"])
-	}
-	if m["db"] != "disconnected" {
-		t.Errorf("expected db disconnected without real db, got %v", m["db"])
+	for _, path := range []string{"/api/health", "/api/ready"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		want := http.StatusOK
+		if path == "/api/ready" {
+			want = http.StatusServiceUnavailable
+		}
+		if rec.Code != want {
+			t.Fatalf("GET %s: expected status %d, got %d", path, want, rec.Code)
+		}
 	}
 }
 

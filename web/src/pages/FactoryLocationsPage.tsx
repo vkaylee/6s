@@ -163,9 +163,9 @@ export function FactoryLocationsPage() {
           <form onSubmit={handleAddLocation} className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.location_code_label")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={newCode}
@@ -176,9 +176,9 @@ export function FactoryLocationsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.location_name_vi")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={newNameVi}
@@ -192,9 +192,9 @@ export function FactoryLocationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.location_name_zh")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={newNameZh}
@@ -204,9 +204,9 @@ export function FactoryLocationsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.location_name_en")}
-                </label>
+                </span>
                 <input
                   type="text"
                   value={newNameEn}
@@ -218,9 +218,9 @@ export function FactoryLocationsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-zinc-500 mb-1">
+              <span className="block text-xs font-bold text-zinc-500 mb-1">
                 {t("admin.location_qr_label")}
-              </label>
+              </span>
               <input
                 type="text"
                 value={newQr}
@@ -334,9 +334,9 @@ export function FactoryLocationsPage() {
 
               <form onSubmit={handleSaveEditLocation} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  <span className="block text-xs font-bold text-zinc-500 mb-1">
                     {t("admin.location_code_label")}
-                  </label>
+                  </span>
                   <input
                     type="text"
                     value={editingLocation.code}
@@ -346,9 +346,9 @@ export function FactoryLocationsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  <span className="block text-xs font-bold text-zinc-500 mb-1">
                     {t("admin.location_name_vi")}
-                  </label>
+                  </span>
                   <input
                     type="text"
                     value={editNameVi}
@@ -361,9 +361,9 @@ export function FactoryLocationsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 mb-1">
+                    <span className="block text-xs font-bold text-zinc-500 mb-1">
                       {t("admin.location_name_zh")}
-                    </label>
+                    </span>
                     <input
                       type="text"
                       value={editNameZh}
@@ -373,9 +373,9 @@ export function FactoryLocationsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 mb-1">
+                    <span className="block text-xs font-bold text-zinc-500 mb-1">
                       {t("admin.location_name_en")}
-                    </label>
+                    </span>
                     <input
                       type="text"
                       value={editNameEn}
@@ -387,9 +387,9 @@ export function FactoryLocationsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">
+                  <span className="block text-xs font-bold text-zinc-500 mb-1">
                     {t("admin.location_qr_label")}
-                  </label>
+                  </span>
                   <input
                     type="text"
                     value={editQr}

@@ -83,7 +83,7 @@ func (q *Queries) ClaimOutboxTasks(ctx context.Context, limit int32) ([]Notifica
 
 const cleanupOldAuditLogs = `-- name: CleanupOldAuditLogs :exec
 DELETE FROM system_audit_logs
-WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '12 months'
+WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 years'
 `
 
 func (q *Queries) CleanupOldAuditLogs(ctx context.Context) error {
@@ -757,6 +757,68 @@ func (q *Queries) GetLocationByCode(ctx context.Context, code string) (Location,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getLocationLeaderboardStats = `-- name: GetLocationLeaderboardStats :many
+WITH score_totals AS (
+    SELECT target_id AS location_code, COALESCE(SUM(points), 0)::bigint AS sum_points
+    FROM score_logs
+    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $1
+    GROUP BY target_id
+), issue_totals AS (
+    SELECT location_code,
+           COUNT(*) FILTER (WHERE status = 'OPEN')::bigint AS open_count,
+           COUNT(*) FILTER (WHERE status = 'OPEN' AND issues.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours')::bigint AS overdue_count
+    FROM issues
+    GROUP BY location_code
+)
+SELECT l.code AS location_code,
+       l.name_vi AS location_name,
+       COALESCE(st.sum_points, 0)::bigint AS sum_points,
+       COALESCE(it.open_count, 0)::bigint AS open_count,
+       COALESCE(it.overdue_count, 0)::bigint AS overdue_count
+FROM locations l
+LEFT JOIN score_totals st ON st.location_code = l.code
+LEFT JOIN issue_totals it ON it.location_code = l.code
+WHERE l.is_active = TRUE
+ORDER BY l.code
+`
+
+type GetLocationLeaderboardStatsRow struct {
+	LocationCode string
+	LocationName string
+	SumPoints    int64
+	OpenCount    int64
+	OverdueCount int64
+}
+
+func (q *Queries) GetLocationLeaderboardStats(ctx context.Context, createdAt time.Time) ([]GetLocationLeaderboardStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getLocationLeaderboardStats, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetLocationLeaderboardStatsRow
+	for rows.Next() {
+		var i GetLocationLeaderboardStatsRow
+		if err := rows.Scan(
+			&i.LocationCode,
+			&i.LocationName,
+			&i.SumPoints,
+			&i.OpenCount,
+			&i.OverdueCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getLocationScoreSumInWeek = `-- name: GetLocationScoreSumInWeek :one
@@ -1607,6 +1669,7 @@ WHERE ($1::varchar IS NULL OR i.status = $1)
   AND ($3::varchar IS NULL OR i.location_code = $3)
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id
 ORDER BY i.created_at DESC
+LIMIT 100000
 `
 
 type ListIssuesForExportParams struct {
@@ -2037,6 +2100,53 @@ func (q *Queries) ListTagsForIssue(ctx context.Context, issueID int64) ([]ListTa
 	for rows.Next() {
 		var i ListTagsForIssueRow
 		if err := rows.Scan(
+			&i.Code,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.Category,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagsForIssues = `-- name: ListTagsForIssues :many
+SELECT it.issue_id, t.code, t.name_vi, t.name_zh, t.name_en, t.category
+FROM tags t
+JOIN issue_tags it ON t.code = it.tag_code
+WHERE it.issue_id = ANY($1::bigint[])
+ORDER BY it.issue_id, t.code
+`
+
+type ListTagsForIssuesRow struct {
+	IssueID  int64
+	Code     string
+	NameVi   string
+	NameZh   string
+	NameEn   string
+	Category string
+}
+
+func (q *Queries) ListTagsForIssues(ctx context.Context, issueIds []int64) ([]ListTagsForIssuesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsForIssues, pq.Array(issueIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTagsForIssuesRow
+	for rows.Next() {
+		var i ListTagsForIssuesRow
+		if err := rows.Scan(
+			&i.IssueID,
 			&i.Code,
 			&i.NameVi,
 			&i.NameZh,

@@ -48,6 +48,7 @@ type mockIssueStore struct {
 	scoreLogs    []db.InsertScoreLogParams
 	auditLogs    []db.InsertAuditLogParams
 	translations map[string]string
+	rules        map[string]int32
 }
 
 func newMockIssueStore() *mockIssueStore {
@@ -57,6 +58,7 @@ func newMockIssueStore() *mockIssueStore {
 		tags:         make(map[int64][]string),
 		users:        make(map[int64]db.User),
 		translations: make(map[string]string),
+		rules:        make(map[string]int32),
 	}
 }
 
@@ -108,6 +110,58 @@ func (m *mockIssueStore) ListTagsForIssue(_ context.Context, issueID int64) ([]d
 		rows = append(rows, db.ListTagsForIssueRow{Code: t, NameVi: t})
 	}
 	return rows, nil
+}
+
+func (m *mockIssueStore) ListTagsForIssues(_ context.Context, issueIDs []int64) ([]db.ListTagsForIssuesRow, error) {
+	rows := make([]db.ListTagsForIssuesRow, 0)
+	for _, id := range issueIDs {
+		for _, code := range m.tags[id] {
+			rows = append(rows, db.ListTagsForIssuesRow{IssueID: id, Code: code, NameVi: code})
+		}
+	}
+	return rows, nil
+}
+
+type countingIssueStore struct {
+	*mockIssueStore
+	tagCalls int
+}
+
+func (c *countingIssueStore) ListTagsForIssues(_ context.Context, issueIDs []int64) ([]db.ListTagsForIssuesRow, error) {
+	c.tagCalls++
+	return c.mockIssueStore.ListTagsForIssues(context.Background(), issueIDs)
+}
+
+func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
+	store := &countingIssueStore{mockIssueStore: newMockIssueStore()}
+	store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 1, Category: "1S", CauseType: "MANUAL", LocationCode: "LINE_A1", PhotoBefore: "a.jpg", Status: "OPEN", CreatedAt: time.Now()}
+	store.issues[2] = db.Issue{ID: 2, ClientUuid: "u2", Version: 1, CreatorID: 1, Category: "2S", CauseType: "MANUAL", LocationCode: "LINE_A1", PhotoBefore: "b.jpg", Status: "OPEN", CreatedAt: time.Now()}
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền A1"}
+	store.users[1] = db.User{ID: 1, Username: "tin", FullName: "Tin"}
+	store.tags[1] = []string{"DIRT", "SCRAP"}
+	store.tags[2] = []string{"SCRAP"}
+
+	svc := NewService(store, nil, nil)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(store.users[1]), nil, nil, nil, 1, 20)
+	if err != nil {
+		t.Fatalf("ListIssuesFiltered error: %v", err)
+	}
+	if len(items) != 2 || total != 2 {
+		t.Fatalf("expected 2 items with total 2, got %d items / total %d", len(items), total)
+	}
+	if store.tagCalls != 1 {
+		t.Fatalf("expected exactly 1 batched tag query, got %d", store.tagCalls)
+	}
+	byID := make(map[int64]Response, len(items))
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	if got := byID[1].Tags; len(got) != 2 || got[0] != "DIRT" || got[1] != "SCRAP" {
+		t.Errorf("expected issue 1 tags [DIRT SCRAP], got %v", got)
+	}
+	if got := byID[2].Tags; len(got) != 1 || got[0] != "SCRAP" {
+		t.Errorf("expected issue 2 tags [SCRAP], got %v", got)
+	}
 }
 
 func (m *mockIssueStore) DeleteIssueTags(_ context.Context, issueID int64) error {
@@ -276,6 +330,13 @@ func (m *mockIssueStore) InsertScoreLog(_ context.Context, arg db.InsertScoreLog
 	m.scoreLogs = append(m.scoreLogs, arg)
 	return nil
 }
+func (m *mockIssueStore) GetScoringRuleByKey(_ context.Context, key string) (db.ScoringRule, error) {
+	points, ok := m.rules[key]
+	if !ok {
+		return db.ScoringRule{}, sql.ErrNoRows
+	}
+	return db.ScoringRule{RuleKey: key, Points: points}, nil
+}
 
 func (m *mockIssueStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogParams) error {
 	m.auditLogs = append(m.auditLogs, arg)
@@ -407,6 +468,30 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	}
 	if closedResp.Status != StatusClosed.String() {
 		t.Errorf("expected status CLOSED, got %s", closedResp.Status)
+	}
+}
+func TestIssueService_ConfiguredScoringRules(t *testing.T) {
+	store := newMockIssueStore()
+	store.rules = map[string]int32{
+		"penalty_normal": -7,
+		"reward_reporter_normal": 9,
+		"bonus_kaizen": 4,
+		"penalty_reopen": 0,
+	}
+	svc := &ServiceImpl{store: store}
+	issue := db.Issue{ID: 1, CreatorID: 2, LocationCode: "LINE_A1", Category: "3S"}
+	svc.recordSyncPenalty(context.Background(), issue.ID, issue.Category, issue.LocationCode)
+	svc.recordCloseReward(context.Background(), issue, 5)
+	if len(store.scoreLogs) != 3 || store.scoreLogs[0].Points != -7 || store.scoreLogs[1].Points != 9 || store.scoreLogs[2].Points != 4 {
+		t.Fatalf("configured scores not applied: %+v", store.scoreLogs)
+	}
+	svc.recordConfiguredScore(context.Background(), issue.ID, "LOCATION", issue.LocationCode, "penalty_reopen", -2, false)
+	if len(store.scoreLogs) != 3 {
+		t.Fatalf("invalid penalty rule awarded points: %+v", store.scoreLogs)
+	}
+	svc.recordConfiguredScore(context.Background(), issue.ID, "LOCATION", issue.LocationCode, "missing_rule", -2, false)
+	if len(store.scoreLogs) != 4 || store.scoreLogs[3].Points != -2 {
+		t.Fatalf("missing rule did not use default: %+v", store.scoreLogs)
 	}
 }
 

@@ -2,12 +2,16 @@ package database
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
 	"fmt"
-	"time"
-
 	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 )
 
 //go:embed migrations/*.up.sql
@@ -55,23 +59,86 @@ func Connect(ctx context.Context, dsn string, poolCfg PoolConfig) (*sql.DB, erro
 	return db, nil
 }
 
-// RunMigrations executes embedded .up.sql migration scripts in order.
+// RunMigrations applies each embedded up migration once, in version order.
+// Each migration and its tracking row commit atomically in one transaction;
+// a changed applied migration fails rather than being silently re-executed.
 func RunMigrations(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return fmt.Errorf("run migrations: nil database")
+	}
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read migrations dir: %w", err)
 	}
-
+	type migration struct {
+		version int64
+		name    string
+		body    []byte
+	}
+	migrations := make([]migration, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
 			continue
 		}
-		content, err := migrationsFS.ReadFile("migrations/" + entry.Name())
+		parts := strings.SplitN(entry.Name(), "_", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid migration filename %q", entry.Name())
+		}
+		version, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid migration version %q: %w", entry.Name(), err)
+		}
+		body, err := migrationsFS.ReadFile(filepath.Join("migrations", entry.Name()))
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
-		if _, err := db.ExecContext(ctx, string(content)); err != nil {
-			return fmt.Errorf("exec migration %s: %w", entry.Name(), err)
+		migrations = append(migrations, migration{version, entry.Name(), body})
+	}
+	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration connection: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version BIGINT PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtextextended('6s schema migrations', 0))`); err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`)
+	}()
+	for _, migration := range migrations {
+		var checksum string
+		err := conn.QueryRowContext(ctx, `SELECT checksum FROM schema_migrations WHERE version = $1`, migration.version).Scan(&checksum)
+		if err == nil {
+			if checksum != fmt.Sprintf("%x", sha256.Sum256(migration.body)) {
+				return fmt.Errorf("migration %s checksum mismatch: applied content differs from embedded asset", migration.name)
+			}
+			continue
+		}
+		if err != sql.ErrNoRows {
+			return fmt.Errorf("check migration %s: %w", migration.name, err)
+		}
+		tx, err := conn.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin migration %s: %w", migration.name, err)
+		}
+		if _, err = tx.ExecContext(ctx, string(migration.body)); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("exec migration %s: %w", migration.name, err)
+		}
+		checksum = fmt.Sprintf("%x", sha256.Sum256(migration.body))
+		if _, err = tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`, migration.version, migration.name, checksum); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("record migration %s: %w", migration.name, err)
+		}
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", migration.name, err)
 		}
 	}
 	return nil

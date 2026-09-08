@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"math"
 	"time"
 
 	"6s/internal/crypto"
 	"6s/internal/db"
+	"6s/internal/observability"
 )
 
 // Store defines database operations required by the Outbox Worker.
@@ -64,7 +64,7 @@ func (w *Worker) Start(ctx context.Context) {
 func (w *Worker) ProcessBatch(ctx context.Context) {
 	cfg, err := w.loadDecryptedConfig(ctx)
 	if err != nil {
-		log.Printf("OutboxWorker: failed to load notification config: %v", err)
+		observability.Log("error", "notification config load failed", map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -72,7 +72,7 @@ func (w *Worker) ProcessBatch(ctx context.Context) {
 		tasks, claimErr := w.store.ClaimOutboxTasks(ctx, 20)
 		if claimErr != nil {
 			if !errors.Is(claimErr, sql.ErrNoRows) {
-				log.Printf("OutboxWorker: claim error: %v", claimErr)
+				observability.Log("error", "notification task claim failed", map[string]any{"error": claimErr.Error()})
 			}
 			return
 		}
@@ -90,18 +90,18 @@ func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cf
 	sendErr := w.sender.Send(ctx, task.Channel, string(task.Payload), cfg)
 	if sendErr == nil {
 		if err := w.store.MarkOutboxSent(ctx, task.ID); err != nil {
-			log.Printf("OutboxWorker: mark sent err: %v", err)
+			observability.Log("error", "notification task completion failed", map[string]any{"error": err.Error()})
 		}
 		return
 	}
 
-	log.Printf("OutboxWorker: send failed for task %d (%s): %v", task.ID, task.Channel, sendErr)
+	observability.Log("error", "notification delivery failed", map[string]any{"task_id": task.ID, "channel": task.Channel, "error": sendErr.Error()})
 	if task.RetryCount+1 >= task.MaxRetries {
 		if err := w.store.MarkOutboxFailed(ctx, db.MarkOutboxFailedParams{
 			ID:        task.ID,
-			LastError: sql.NullString{String: sendErr.Error(), Valid: true},
+			LastError: sql.NullString{String: "notification delivery failed", Valid: true},
 		}); err != nil {
-			log.Printf("OutboxWorker: mark failed err: %v", err)
+			observability.Log("error", "notification task failure update failed", map[string]any{"error": err.Error()})
 		}
 
 		// Fallback to LAN Webhook if WxPusher fails completely (SPEC.md Section 8.1)
@@ -112,7 +112,7 @@ func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cf
 				Channel:   ChannelLANWebhook,
 				Payload:   task.Payload,
 			}); err != nil {
-				log.Printf("OutboxWorker: create fallback err: %v", err)
+				observability.Log("error", "notification fallback creation failed", map[string]any{"error": err.Error()})
 			}
 		}
 	} else {
@@ -120,10 +120,10 @@ func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cf
 		backoffSec := int32(math.Pow(3, float64(task.RetryCount+1)) * 5) //nolint:gosec
 		if err := w.store.RetryOutboxTask(ctx, db.RetryOutboxTaskParams{
 			ID:        task.ID,
-			LastError: sql.NullString{String: sendErr.Error(), Valid: true},
+			LastError: sql.NullString{String: "notification delivery failed", Valid: true},
 			Column2:   backoffSec,
 		}); err != nil {
-			log.Printf("OutboxWorker: retry task err: %v", err)
+			observability.Log("error", "notification retry update failed", map[string]any{"error": err.Error()})
 		}
 	}
 }

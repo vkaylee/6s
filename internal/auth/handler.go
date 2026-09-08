@@ -37,6 +37,14 @@ type Store interface {
 	CreateLocalAdmin(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error)
 }
 
+type refreshRotator interface {
+	RotateRefreshToken(ctx context.Context, oldID int64, arg db.CreateRefreshTokenParams) error
+}
+
+type revokedRefreshLookup interface {
+	GetRefreshTokenByHashAnyState(ctx context.Context, tokenHash string) (db.RefreshToken, error)
+}
+
 // Handler handles authentication endpoints.
 type Handler struct {
 	store         Store
@@ -61,6 +69,17 @@ func NewHandler(store Store, tokenManager *TokenManager, limiter *LoginLimiter, 
 		cipher:        cipher,
 		ldapClient:    ldapClient,
 	}
+}
+
+// maskAuditValue masks PII (usernames, IPs, user agents) for audit records: keeps 2-char head/tail.
+func maskAuditValue(value string) string {
+	if value == "" {
+		return ""
+	}
+	if len(value) <= 4 {
+		return "****"
+	}
+	return value[:2] + "****" + value[len(value)-2:]
 }
 
 // LoginRequest defines login payload.
@@ -173,9 +192,9 @@ func (h *Handler) authenticateUser(ctx context.Context, req LoginRequest, client
 		if aErr := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
 			Action:      "AD_UNREACHABLE_FALLBACK",
 			TargetTable: "users",
-			TargetID:    req.Username,
-			IpAddress:   sql.NullString{String: clientIP, Valid: true},
-			UserAgent:   sql.NullString{String: userAgent, Valid: true},
+			TargetID:    maskAuditValue(req.Username),
+			IpAddress:   sql.NullString{String: maskAuditValue(clientIP), Valid: clientIP != ""},
+			UserAgent:   sql.NullString{String: maskAuditValue(userAgent), Valid: userAgent != ""},
 		}); aErr != nil {
 			return db.User{}, false
 		}
@@ -308,9 +327,9 @@ func (h *Handler) recordFailureAndLock(ctx context.Context, clientIP, accountKey
 		if aErr := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
 			Action:      "LOGIN_LOCKED",
 			TargetTable: "users",
-			TargetID:    accountKey,
-			IpAddress:   sql.NullString{String: clientIP, Valid: true},
-			UserAgent:   sql.NullString{String: userAgent, Valid: true},
+			TargetID:    maskAuditValue(accountKey),
+			IpAddress:   sql.NullString{String: maskAuditValue(clientIP), Valid: clientIP != ""},
+			UserAgent:   sql.NullString{String: maskAuditValue(userAgent), Valid: userAgent != ""},
 		}); aErr != nil {
 			return
 		}
@@ -329,43 +348,49 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRefreshToken))
 		return
 	}
-
 	tokenHash := HashRefreshToken(req.RefreshToken)
 	oldToken, err := h.store.GetRefreshTokenByHash(r.Context(), tokenHash)
 	if err != nil {
+		if lookup, ok := h.store.(revokedRefreshLookup); ok {
+			if revokedToken, rErr := lookup.GetRefreshTokenByHashAnyState(r.Context(), tokenHash); rErr == nil && revokedToken.RevokedAt.Valid {
+				_ = h.store.RevokeUserRefreshTokens(r.Context(), revokedToken.UserID)
+			}
+		}
 		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken).WithCause(err))
 		return
 	}
-	// Revoke old token (Rotation)
-	if revErr := h.store.RevokeRefreshToken(r.Context(), oldToken.ID); revErr != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(revErr))
-		return
-	}
-	// Issue new token pair
 	newAccess, exp, err := h.tokenManager.GenerateAccessToken(oldToken.UserID)
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-
 	newRawRefresh, newHash, err := GenerateRefreshToken()
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-
 	deviceInfo := r.UserAgent()
-	_, err = h.store.CreateRefreshToken(r.Context(), db.CreateRefreshTokenParams{
+	newParams := db.CreateRefreshTokenParams{
 		UserID:     oldToken.UserID,
 		TokenHash:  newHash,
 		DeviceInfo: sql.NullString{String: deviceInfo, Valid: deviceInfo != ""},
 		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
-	})
-	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
-		return
 	}
-
+	if rotator, ok := h.store.(refreshRotator); ok {
+		if rotErr := rotator.RotateRefreshToken(r.Context(), oldToken.ID, newParams); rotErr != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(rotErr))
+			return
+		}
+	} else {
+		if revErr := h.store.RevokeRefreshToken(r.Context(), oldToken.ID); revErr != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(revErr))
+			return
+		}
+		if _, cErr := h.store.CreateRefreshToken(r.Context(), newParams); cErr != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(cErr))
+			return
+		}
+	}
 	response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       newAccess,
 		"expires_in":         exp,
@@ -419,9 +444,9 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 		UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
 		Action:      "TOKEN_REVOKED",
 		TargetTable: "refresh_tokens",
-		TargetID:    strconv.FormatInt(currentUser.ID, 10),
-		IpAddress:   sql.NullString{String: h.limiter.GetClientIP(r), Valid: true},
-		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
+		TargetID:    maskAuditValue(strconv.FormatInt(currentUser.ID, 10)),
+		IpAddress:   sql.NullString{String: maskAuditValue(h.limiter.GetClientIP(r)), Valid: true},
+		UserAgent:   sql.NullString{String: maskAuditValue(r.UserAgent()), Valid: true},
 	}); aErr != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(aErr))
 		return
@@ -508,6 +533,10 @@ type SetupSuperadminRequest struct {
 
 // SetupSuperadmin handles POST /api/auth/setup.
 func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
+	if _, ok := GetUserFromContext(r.Context()); !ok {
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
 	adminCount, err := h.store.CountAdmins(r.Context())
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
@@ -541,8 +570,7 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var hash string
-	hash, err = HashPassword(req.Password)
+	hash, err := HashPassword(req.Password)
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
@@ -553,8 +581,7 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 		emailVal = sql.NullString{String: req.Email, Valid: true}
 	}
 
-	var user db.User
-	user, err = h.store.CreateLocalAdmin(r.Context(), db.CreateLocalAdminParams{
+	user, err := h.store.CreateLocalAdmin(r.Context(), db.CreateLocalAdminParams{
 		Username:     req.Username,
 		PasswordHash: sql.NullString{String: hash, Valid: true},
 		FullName:     req.FullName,
@@ -570,9 +597,9 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 		UserID:      sql.NullInt64{Int64: user.ID, Valid: true},
 		Action:      "INITIAL_SUPERADMIN_SETUP",
 		TargetTable: "users",
-		TargetID:    user.Username,
-		IpAddress:   sql.NullString{String: clientIP, Valid: true},
-		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
+		TargetID:    maskAuditValue(user.Username),
+		IpAddress:   sql.NullString{String: maskAuditValue(clientIP), Valid: clientIP != ""},
+		UserAgent:   sql.NullString{String: maskAuditValue(r.UserAgent()), Valid: r.UserAgent() != ""},
 	}); logErr != nil {
 		return
 	}
