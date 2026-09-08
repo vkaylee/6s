@@ -238,10 +238,11 @@ export function IssueTagsPage() {
           <form onSubmit={handleAddTag} className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <label htmlFor="tag-code" className="block text-xs font-bold text-zinc-500 mb-1">
                   {t("admin.tag_code_label")}
                 </label>
                 <input
+                  id="tag-code"
                   type="text"
                   value={tagCode}
                   onChange={(e) => setTagCode(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
@@ -251,10 +252,14 @@ export function IssueTagsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">
+                <label
+                  htmlFor="tag-category"
+                  className="block text-xs font-bold text-zinc-500 mb-1"
+                >
                   {t("admin.tag_category_label")}
                 </label>
                 <select
+                  id="tag-category"
                   value={tagCategory}
                   onChange={(e) => setTagCategory(e.target.value)}
                   className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px]"

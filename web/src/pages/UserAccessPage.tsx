@@ -57,8 +57,10 @@ export function UserAccessPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await apiClient<AdminUserItem[]>("/api/admin/users");
-      setUsers(data || []);
+      const data = await apiClient<AdminUserItem[] | { users?: AdminUserItem[] }>(
+        "/api/admin/users",
+      );
+      setUsers(Array.isArray(data) ? data : (data?.users ?? []));
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : t("admin.users_load_error"));
     } finally {

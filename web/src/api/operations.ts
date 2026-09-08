@@ -1,5 +1,5 @@
-import type { Issue } from "./generated/index.ts";
 import { sdkClient } from "./client.ts";
+import type { Issue } from "./generated/index.ts";
 import { closeIssue, invalidateIssue, reopenIssue } from "./generated/index.ts";
 
 export type IssueMutation = "close" | "reopen" | "invalid";
@@ -36,11 +36,32 @@ export async function mutateIssue<K extends IssueMutation>(
 ): Promise<Issue> {
   switch (operation) {
     case "close":
-      return (await closeIssue({ client: sdkClient, path: { id }, body: body as CloseIssueBody, throwOnError: true })).data.data;
+      return (
+        await closeIssue({
+          client: sdkClient,
+          path: { id },
+          body: body as CloseIssueBody,
+          throwOnError: true,
+        })
+      ).data.data;
     case "reopen":
-      return (await reopenIssue({ client: sdkClient, path: { id }, body: body as ReopenIssueBody, throwOnError: true })).data.data;
+      return (
+        await reopenIssue({
+          client: sdkClient,
+          path: { id },
+          body: body as ReopenIssueBody,
+          throwOnError: true,
+        })
+      ).data.data;
     case "invalid":
-      return (await invalidateIssue({ client: sdkClient, path: { id }, body: body as InvalidIssueBody, throwOnError: true })).data.data;
+      return (
+        await invalidateIssue({
+          client: sdkClient,
+          path: { id },
+          body: body as InvalidIssueBody,
+          throwOnError: true,
+        })
+      ).data.data;
   }
   throw new Error(`Unsupported issue mutation: ${operation}`);
 }

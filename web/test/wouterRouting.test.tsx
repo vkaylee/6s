@@ -1,9 +1,9 @@
-import { normalizeTags } from "../src/hooks/useDashboardData.ts";
 import { beforeEach, describe, expect, it } from "bun:test";
 import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { App } from "../src/App.tsx";
+import { normalizeTags } from "../src/hooks/useDashboardData.ts";
 import { FactoryLocationsPage } from "../src/pages/FactoryLocationsPage.tsx";
 import { IssueTagsPage } from "../src/pages/IssueTagsPage.tsx";
 import { NotFoundPage } from "../src/pages/NotFoundPage.tsx";

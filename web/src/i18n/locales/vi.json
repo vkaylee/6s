@@ -269,8 +269,6 @@
   },
   "admin": {
     "title": "Cấu hình hệ thống",
-    "locations_page_title": "Vị trí xưởng",
-    "tags_page_title": "Thẻ sự cố",
     "scoring_rules": "Quy tắc tính điểm",
     "ad_ldap": "Cấu hình AD / LDAP",
     "save_rules": "Lưu quy tắc",
@@ -528,7 +526,8 @@
     "reopen_failed": "Mở lại issue thất bại",
     "invalidate_failed": "Bác bỏ thất bại",
     "default_reopen_reason": "Chưa đạt yêu cầu 6S",
-    "default_invalid_reason": "Báo cáo không đúng thực tế"
+    "default_invalid_reason": "Báo cáo không đúng thực tế",
+    "photo_preview": "Xem trước ảnh"
   },
   "app": {
     "issues_list": "Danh sách vấn đề ({count})",

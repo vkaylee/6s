@@ -148,10 +148,14 @@ export function LoginPage() {
               </div>
             ) : (
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                <label
+                  htmlFor="login-username"
+                  className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+                >
                   {t("auth.username")} *
                 </label>
                 <input
+                  id="login-username"
                   type="text"
                   autoCapitalize="none"
                   value={username}
@@ -162,10 +166,14 @@ export function LoginPage() {
               </div>
             )}
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1"
+              >
                 {t("auth.password")} *
               </label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

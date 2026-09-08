@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import type { Tag } from "../api/generated/index.ts";
-import { type FilterState } from "../components/FilterDrawer.tsx";
-import { type FacetKey } from "../components/QuickFacets.tsx";
+import type { FilterState } from "../components/FilterDrawer.tsx";
+import type { FacetKey } from "../components/QuickFacets.tsx";
 import type { UserProfile } from "../store/authStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
@@ -177,7 +177,9 @@ export function useDashboardData({
       setPaginationMeta(meta);
       if (reset) {
         setIssues(list);
-        setSelectedIssue((prev) => (prev ? list.find((issue) => issue.id === prev.id) || prev : null));
+        setSelectedIssue((prev) =>
+          prev ? list.find((issue) => issue.id === prev.id) || prev : null,
+        );
       } else {
         appendUniqueIssues(list);
       }
@@ -274,7 +276,9 @@ export function useDashboardData({
         .catch(() => {
           // ponytail: fallback if ticket endpoint unavailable
           if (!active) return;
-          eventSource = new EventSource(`/api/issues/events?token=${encodeURIComponent(accessToken)}`);
+          eventSource = new EventSource(
+            `/api/issues/events?token=${encodeURIComponent(accessToken)}`,
+          );
           eventSource.addEventListener("issue", () => {
             loadIssues(true);
             loadLeaderboards();
@@ -340,14 +344,22 @@ export function useDashboardData({
   });
 
   const sortedIssues = [...filteredIssues].sort((a, b) => {
-    if (sortOrder === "NEWEST") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    if (sortOrder === "OLDEST") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (sortOrder === "NEWEST")
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (sortOrder === "OLDEST")
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     const aIsSafety = a.category === IssueCategory.S6 && a.status === IssueStatus.OPEN ? 1 : 0;
     const bIsSafety = b.category === IssueCategory.S6 && b.status === IssueStatus.OPEN ? 1 : 0;
     if (aIsSafety !== bIsSafety) return bIsSafety - aIsSafety;
     const now = Date.now();
-    const aOverdue = a.status === IssueStatus.OPEN && now - new Date(a.created_at).getTime() > 48 * 3600 * 1000 ? 1 : 0;
-    const bOverdue = b.status === IssueStatus.OPEN && now - new Date(b.created_at).getTime() > 48 * 3600 * 1000 ? 1 : 0;
+    const aOverdue =
+      a.status === IssueStatus.OPEN && now - new Date(a.created_at).getTime() > 48 * 3600 * 1000
+        ? 1
+        : 0;
+    const bOverdue =
+      b.status === IssueStatus.OPEN && now - new Date(b.created_at).getTime() > 48 * 3600 * 1000
+        ? 1
+        : 0;
     if (aOverdue !== bOverdue) return bOverdue - aOverdue;
     const aPending = a.status === IssueStatus.PENDING_REVIEW ? 1 : 0;
     const bPending = b.status === IssueStatus.PENDING_REVIEW ? 1 : 0;
@@ -362,18 +374,27 @@ export function useDashboardData({
     MY_LINE: user?.assigned_location_code
       ? issues.filter((issue) => issue.location_code === user.assigned_location_code).length
       : issues.length,
-    SAFETY_6S: issues.filter((issue) => issue.category === IssueCategory.S6 && issue.status === IssueStatus.OPEN).length,
+    SAFETY_6S: issues.filter(
+      (issue) => issue.category === IssueCategory.S6 && issue.status === IssueStatus.OPEN,
+    ).length,
     OVERDUE_48H: issues.filter(
-      (issue) => issue.status === IssueStatus.OPEN && now - new Date(issue.created_at).getTime() > 48 * 3600 * 1000,
+      (issue) =>
+        issue.status === IssueStatus.OPEN &&
+        now - new Date(issue.created_at).getTime() > 48 * 3600 * 1000,
     ).length,
     WAITING_MY_REVIEW: issues.filter((issue) => issue.status === IssueStatus.PENDING_REVIEW).length,
   };
   const overallScore = locationHealth.length
-    ? Math.round(locationHealth.reduce((sum, location) => sum + location.health_score, 0) / locationHealth.length)
+    ? Math.round(
+        locationHealth.reduce((sum, location) => sum + location.health_score, 0) /
+          locationHealth.length,
+      )
     : 100;
   const totalOpen = issues.filter((issue) => issue.status === IssueStatus.OPEN).length;
   const totalOverdue = issues.filter(
-    (issue) => issue.status === IssueStatus.OPEN && now - new Date(issue.created_at).getTime() > 48 * 3600 * 1000,
+    (issue) =>
+      issue.status === IssueStatus.OPEN &&
+      now - new Date(issue.created_at).getTime() > 48 * 3600 * 1000,
   ).length;
 
   return {

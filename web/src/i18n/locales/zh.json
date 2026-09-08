@@ -269,8 +269,6 @@
   },
   "admin": {
     "title": "系统配置",
-    "locations_page_title": "车间位置",
-    "tags_page_title": "问题标签",
     "scoring_rules": "评分规则",
     "ad_ldap": "AD / LDAP 配置",
     "save_rules": "保存规则",
@@ -530,7 +528,8 @@
     "reopen_failed": "重新打开问题失败",
     "invalidate_failed": "作废失败",
     "default_reopen_reason": "未达到6S要求",
-    "default_invalid_reason": "报告与事实不符"
+    "default_invalid_reason": "报告与事实不符",
+    "photo_preview": "照片预览"
   },
   "app": {
     "issues_list": "问题列表 ({count})",

@@ -60,7 +60,10 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
-import type { Issue as OpenApiIssue, PaginationMeta as OpenApiPaginationMeta } from "../api/generated/index.ts";
+import type {
+  Issue as OpenApiIssue,
+  PaginationMeta as OpenApiPaginationMeta,
+} from "../api/generated/index.ts";
 
 export type IssueItem = OpenApiIssue & {
   cause_type?: CauseType;

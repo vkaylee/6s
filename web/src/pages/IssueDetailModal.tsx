@@ -676,9 +676,9 @@ export function IssueDetailModal({
             {currentIssue.photo_after ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.compare_slider_label")}
-                  </label>
+                  </span>
                   <span className="text-[11px] text-zinc-400">
                     🔍 {t("issue_detail.tap_to_zoom")}
                   </span>
@@ -705,9 +705,9 @@ export function IssueDetailModal({
             ) : (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.photo_before_label")}
-                  </label>
+                  </span>
                   <span className="text-[11px] text-zinc-400">
                     🔍 {t("issue_detail.tap_to_zoom")}
                   </span>
@@ -741,9 +741,9 @@ export function IssueDetailModal({
             {currentIssue.photo_detail && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.photo_detail_label")}
-                  </label>
+                  </span>
                   <span className="text-[11px] text-zinc-400">
                     🔍 {t("issue_detail.tap_to_zoom")}
                   </span>
@@ -1084,9 +1084,9 @@ export function IssueDetailModal({
                 </div>
 
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
-                  <label className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
+                  <span className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
                     {t("issue_detail.kaizen_rating_label")}
-                  </label>
+                  </span>
                   <div className="flex items-center space-x-2">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
@@ -1215,6 +1215,8 @@ export function IssueDetailModal({
 
             {/* Image Container with Zoom, Mouse Wheel, Two-Finger Pinch & Drag/Pan */}
             <div
+              role="application"
+              aria-label={t("issue_detail.photo_preview")}
               ref={imageContainerRef}
               className="flex-1 w-full flex items-center justify-center overflow-hidden p-2 touch-none select-none cursor-grab active:cursor-grabbing"
               onTouchStart={(e) => {

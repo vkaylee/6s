@@ -16,13 +16,13 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
-import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
-import { NavActions } from "../components/NavActions.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
+import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
+import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
@@ -461,9 +461,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue.step_photos")}
-                  </label>
+                  </span>
                   {touched && photoError && (
                     <span className="text-xs font-bold text-rose-600 animate-pulse">
                       * {t("issue.missing_photo")}
@@ -688,9 +688,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
 
               {/* Location Selector (Enterprise Combobox) */}
               <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                   {t("issue.step_location")}
-                </label>
+                </span>
                 <LocationCombobox
                   locations={locations}
                   value={locationCode}
@@ -770,9 +770,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue.step_category")}
-                  </label>
+                  </span>
                 </div>
 
                 {touched && categoryError && (
@@ -822,9 +822,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 {/* 6S Root Cause 1-Touch Selector: Condition vs Behavior */}
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                    <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                       {t("issue.root_cause_title")}
-                    </label>
+                    </span>
                     <span className="text-[10px] text-zinc-400 font-medium">
                       {t("issue.root_cause_hint")}
                     </span>
@@ -1074,9 +1074,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
 
               {/* Description */}
               <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                   {t("issue.step_description")}
-                </label>
+                </span>
                 <textarea
                   rows={4}
                   value={description}

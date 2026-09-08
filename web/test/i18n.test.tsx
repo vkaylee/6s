@@ -274,7 +274,8 @@ describe("Frontend i18n usage guard", () => {
     ];
 
     const violations: string[] = [];
-    const runtimeLiteral = /(?:alert|confirm|Error)\s*\(\s*["'][^"']*[\u00c0-\u024f\u1e00-\u1eff\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef][^"']*["']/u;
+    const runtimeLiteral =
+      /(?:alert|confirm|Error)\s*\(\s*["'][^"']*[\u00c0-\u024f\u1e00-\u1eff\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef][^"']*["']/u;
     for (const file of owned) {
       const source = await Bun.file(`${sourceRoot}${file}`).text();
       if (runtimeLiteral.test(source)) violations.push(file);
