@@ -12,6 +12,10 @@ import (
 )
 
 var mockReturnEOF = false
+const (
+	category1S = "1S"
+	statusOpen = "OPEN"
+)
 
 type mockDBStmt struct {
 	query string
@@ -78,11 +82,11 @@ func init() {
 func rowValuesForQuery(query string) []driver.Value {
 	now := time.Now()
 	switch {
-	case strings.Contains(query, "listIssuesFiltered"):
+	case strings.Contains(query, "ListIssuesFiltered"):
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), nil, "1S", "CONDITION", "LOC1", nil, nil,
 			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
-			"Loc Vi", "Loc Zh", "Loc En", "Creator A", nil, []byte("{}"), int64(1),
+			int64(1), "LOC1", "creator", "Creator A", nil, nil,
 		}
 	case strings.Contains(query, "listIssuesForExport"):
 		return []driver.Value{
@@ -166,10 +170,7 @@ func TestQueries_ListIssuesFiltered(t *testing.T) {
 
 	q := New(sqlDB)
 	rows, err := q.ListIssuesFiltered(context.Background(), ListIssuesFilteredParams{})
-	if err != nil {
-		t.Fatalf("ListIssuesFiltered: %v", err)
-	}
-	if len(rows) != 1 || rows[0].ID != 1 || rows[0].Category != "1S" {
+	if len(rows) != 1 || rows[0].ID != 1 || rows[0].Category != category1S {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 }
@@ -185,12 +186,12 @@ func TestQueries_GetIssueByID(t *testing.T) {
 		}
 	})
 
-	issue, err := New(sqlDB).GetIssueByID(context.Background(), 1)
+	issueRow, err := New(sqlDB).GetIssueByID(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetIssueByID: %v", err)
 	}
-	if issue.ID != 1 || issue.Status != "OPEN" {
-		t.Fatalf("unexpected issue: %+v", issue)
+	if issueRow.ID != 1 || issueRow.Status != statusOpen {
+		t.Fatalf("unexpected issue: %+v", issueRow)
 	}
 }
 
