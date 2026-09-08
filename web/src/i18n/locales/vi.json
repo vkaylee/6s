@@ -279,6 +279,8 @@
     "score_6s_tab": "Điểm số 6S",
     "ad_tab": "Active Directory",
     "locations_tab": "Vị trí xưởng (Locations)",
+    "locations_page_title": "Vị trí xưởng",
+    "tags_page_title": "Thẻ sự cố",
     "location_code_label": "Mã vị trí (Code) *",
     "location_code_placeholder": "VD: LINE_A3, WAREHOUSE_2",
     "location_name_vi": "Tên tiếng Việt *",
