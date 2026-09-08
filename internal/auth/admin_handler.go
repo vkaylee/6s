@@ -208,6 +208,14 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Role changes invalidate existing sessions so the user gets fresh authorization state.
+	if req.Role != nil && params.Role != target.Role {
+		if err := h.store.RevokeUserRefreshTokens(r.Context(), id); err != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
+			return
+		}
+	}
+
 	// Deactivation revokes all refresh tokens (session invalidation on sensitive action).
 	if req.IsActive != nil && !*req.IsActive && target.IsActive {
 		if err := h.store.RevokeUserRefreshTokens(r.Context(), id); err != nil {

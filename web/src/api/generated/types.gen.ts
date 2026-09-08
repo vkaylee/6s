@@ -183,6 +183,7 @@ export type RefreshResponses = {
             expires_in: number;
             refresh_token: string;
             refresh_expires_in: number;
+            user: UserSummary;
         };
     };
 };

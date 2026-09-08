@@ -2612,7 +2612,6 @@ const updateUserADLogin = `-- name: UpdateUserADLogin :one
 UPDATE users
 SET full_name = $2,
     email = $3,
-    role = $4,
     last_login_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
@@ -2622,16 +2621,10 @@ type UpdateUserADLoginParams struct {
 	ID       int64
 	FullName string
 	Email    sql.NullString
-	Role     string
 }
 
 func (q *Queries) UpdateUserADLogin(ctx context.Context, arg UpdateUserADLoginParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, updateUserADLogin,
-		arg.ID,
-		arg.FullName,
-		arg.Email,
-		arg.Role,
-	)
+	row := q.db.QueryRowContext(ctx, updateUserADLogin, arg.ID, arg.FullName, arg.Email)
 	var i User
 	err := row.Scan(
 		&i.ID,

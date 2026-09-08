@@ -262,7 +262,6 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 			ID:       existingUser.ID,
 			FullName: ldapUser.FullName,
 			Email:    emailVal,
-			Role:     ldapUser.MatchedRole,
 		})
 	}
 
@@ -391,12 +390,19 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	user, err := h.store.GetUserByID(r.Context(), oldToken.UserID)
+	if err != nil {
+		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		return
+	}
 	response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       newAccess,
 		"expires_in":         exp,
 		"refresh_token":      newRawRefresh,
 		"refresh_expires_in": int(RefreshTokenDuration.Seconds()),
+		"user":               toUserResponse(user),
 	})
+
 }
 
 // RevokeRequest defines payload to revoke tokens.

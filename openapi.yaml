@@ -462,6 +462,7 @@ paths:
                       - expires_in
                       - refresh_token
                       - refresh_expires_in
+                      - user
                     properties:
                       access_token:
                         type: string
@@ -473,6 +474,9 @@ paths:
                       refresh_expires_in:
                         type: integer
                         example: 2592000
+                      user:
+                        $ref: '#/components/schemas/UserSummary'
+
         '401':
           description: Refresh token đã hết hạn hoặc bị thu hồi
           content:

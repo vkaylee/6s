@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -138,6 +139,73 @@ func TestAdminHandler_UpdateUser_RoleAndLocationValidation(t *testing.T) {
 	// Deactivation should have revoked refresh tokens + audit log entry
 	if len(store.auditLogs) == 0 || store.auditLogs[0].Action != "ADMIN_UPDATE_USER" {
 		t.Fatal("expected audit log for admin update")
+	}
+}
+
+func TestAdminHandler_UpdateUser_RoleChangeRevokesSessions(t *testing.T) {
+	store := newMockFullStore()
+	store.users[1] = db.User{ID: 1, Username: "worker1", FullName: "Worker", Role: RoleUser.String(), IsActive: true}
+	store.users[2] = db.User{ID: 2, Username: "admin1", FullName: "Admin", Role: RoleAdmin.String(), IsActive: true}
+	// worker1 has an active refresh session.
+	store.tokens["hash1"] = db.RefreshToken{ID: 1, UserID: 1, TokenHash: "hash1", ExpiresAt: time.Now().Add(time.Hour)}
+	h := NewAdminHandler(adminStoreAdapter{store})
+
+	body, _ := json.Marshal(UpdateUserRequest{Role: strPtr("LINE_LEADER")})
+	req := patchUserRequest("1", body)
+	rr := httptest.NewRecorder()
+	h.UpdateUser(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	for _, tkn := range store.tokens {
+		if tkn.UserID == 1 && !tkn.RevokedAt.Valid {
+			t.Fatal("expected role change to revoke target user's refresh tokens")
+		}
+	}
+}
+
+func TestAdminHandler_UpdateUser_NoRoleChangePreservesSessions(t *testing.T) {
+	store := newMockFullStore()
+	store.users[1] = db.User{ID: 1, Username: "worker1", FullName: "Worker", Role: RoleUser.String(), IsActive: true}
+	store.users[2] = db.User{ID: 2, Username: "admin1", FullName: "Admin", Role: RoleAdmin.String(), IsActive: true}
+	store.tokens["hash1"] = db.RefreshToken{ID: 1, UserID: 1, TokenHash: "hash1", ExpiresAt: time.Now().Add(time.Hour)}
+	h := NewAdminHandler(adminStoreAdapter{store})
+
+	body, _ := json.Marshal(UpdateUserRequest{AssignedLocationCode: strPtr("LINE_A1")})
+	req := patchUserRequest("1", body)
+	rr := httptest.NewRecorder()
+	h.UpdateUser(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	for _, tkn := range store.tokens {
+		if tkn.UserID == 1 && tkn.RevokedAt.Valid {
+			t.Fatal("expected non-role update to keep refresh tokens valid")
+		}
+	}
+}
+
+func TestAdminHandler_UpdateUser_SameRoleDoesNotRevokeSessions(t *testing.T) {
+	store := newMockFullStore()
+	store.users[1] = db.User{ID: 1, Username: "worker1", FullName: "Worker", Role: RoleUser.String(), IsActive: true}
+	store.users[2] = db.User{ID: 2, Username: "admin1", FullName: "Admin", Role: RoleAdmin.String(), IsActive: true}
+	store.tokens["hash1"] = db.RefreshToken{ID: 1, UserID: 1, TokenHash: "hash1", ExpiresAt: time.Now().Add(time.Hour)}
+	h := NewAdminHandler(adminStoreAdapter{store})
+
+	body, _ := json.Marshal(UpdateUserRequest{Role: strPtr("USER")})
+	req := patchUserRequest("1", body)
+	rr := httptest.NewRecorder()
+	h.UpdateUser(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	for _, tkn := range store.tokens {
+		if tkn.UserID == 1 && tkn.RevokedAt.Valid {
+			t.Fatal("expected assigning same role to keep refresh tokens valid")
+		}
 	}
 }
 

@@ -86,7 +86,6 @@ func (m *mockFullStore) UpdateUserADLogin(_ context.Context, arg db.UpdateUserAD
 	u := m.users[arg.ID]
 	u.FullName = arg.FullName
 	u.Email = arg.Email
-	u.Role = arg.Role
 	m.users[u.ID] = u
 	m.usersByName[u.Username] = u
 	return u, nil
@@ -271,9 +270,40 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 
 	var refreshResp struct {
 		Data struct {
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
+			AccessToken  string       `json:"access_token"`
+			RefreshToken string       `json:"refresh_token"`
+			User         UserResponse `json:"user"`
 		} `json:"data"`
+	}
+	_ = json.NewDecoder(rrRefresh.Body).Decode(&refreshResp)
+	if refreshResp.Data.AccessToken == "" || refreshResp.Data.RefreshToken == "" {
+		t.Fatal("expected new tokens after rotation")
+	}
+	if refreshResp.Data.User.Role != RoleUser.String() {
+		t.Errorf("expected refresh response to include current user role, got %s", refreshResp.Data.User.Role)
+	}
+
+	// Simulate operator promoting the user to admin while session is active.
+	storedUser := store.users[1]
+	storedUser.Role = RoleAdmin.String()
+	store.users[1] = storedUser
+	store.usersByName[storedUser.Username] = storedUser
+
+	bodyRefresh2, _ := json.Marshal(RefreshRequest{RefreshToken: refreshResp.Data.RefreshToken})
+	reqRefresh2 := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(bodyRefresh2))
+	rrRefresh2 := httptest.NewRecorder()
+	handler.Refresh(rrRefresh2, reqRefresh2)
+	if rrRefresh2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for refresh after role change, got %d", rrRefresh2.Code)
+	}
+	var refreshResp2 struct {
+		Data struct {
+			User UserResponse `json:"user"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(rrRefresh2.Body).Decode(&refreshResp2)
+	if refreshResp2.Data.User.Role != RoleAdmin.String() {
+		t.Errorf("expected refresh response to reflect promoted ADMIN role, got %s", refreshResp2.Data.User.Role)
 	}
 	_ = json.NewDecoder(rrRefresh.Body).Decode(&refreshResp)
 	if refreshResp.Data.AccessToken == "" || refreshResp.Data.RefreshToken == "" {
@@ -515,6 +545,54 @@ func TestHandler_LoginAD_JITProvision(t *testing.T) {
 	}
 	if u.Role != RoleLineLeader.String() {
 		t.Errorf("expected role LINE_LEADER, got %s", u.Role)
+	}
+}
+
+func TestHandler_LoginAD_PreservesManuallyPromotedRole(t *testing.T) {
+	store := newMockFullStore()
+	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
+	limiter := NewLoginLimiter(nil)
+	cipher, _ := crypto.NewCipher("01234567890123456789012345678901")
+	// Existing AD user already promoted to admin by an operator.
+	promotedUser := db.User{
+		ID:         1,
+		Username:   "aduser",
+		AuthSource: "AD",
+		AdDn:       sql.NullString{String: "CN=AD User,DC=factory,DC=lan", Valid: true},
+		FullName:   "AD User",
+		Email:      sql.NullString{String: "aduser@factory.lan", Valid: true},
+		Role:       RoleAdmin.String(),
+		IsActive:   true,
+	}
+	store.users[promotedUser.ID] = promotedUser
+	store.usersByName[promotedUser.Username] = promotedUser
+	// AD still reports the user as a regular line leader.
+	mockLDAP := &MockLDAPClient{
+		UserToReturn: &LDAPUser{
+			Username:    "aduser",
+			DN:          "CN=AD User,DC=factory,DC=lan",
+			FullName:    "AD User",
+			Email:       "aduser@factory.lan",
+			MatchedRole: RoleLineLeader.String(),
+		},
+	}
+	handler := NewHandler(store, tm, limiter, cipher, mockLDAP)
+	store.adConfig = db.AdConfig{IsEnabled: true, Server: "ad.factory.lan", Port: 636}
+
+	body, _ := json.Marshal(LoginRequest{Username: "aduser", Password: "adpassword"})
+	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.Login(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for AD re-login, got %d", rr.Code)
+	}
+	u, err := store.GetUserByUsername(context.Background(), "aduser")
+	if err != nil {
+		t.Fatalf("expected user still present: %v", err)
+	}
+	if u.Role != RoleAdmin.String() {
+		t.Errorf("expected manually promoted ADMIN role preserved, got %s", u.Role)
 	}
 }
 

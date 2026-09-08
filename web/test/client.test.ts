@@ -54,7 +54,7 @@ describe("apiClient authentication", () => {
         id: 1,
         username: "admin",
         full_name: "Super Admin",
-        role: UserRole.ADMIN,
+        role: UserRole.USER,
       },
       accessToken: null,
       getRefreshToken: async () => "mock-refresh-token",
@@ -74,6 +74,12 @@ describe("apiClient authentication", () => {
             data: {
               access_token: "refreshed-jwt-token",
               refresh_token: "new-refresh-token",
+              user: {
+                id: 1,
+                username: "admin",
+                full_name: "Super Admin",
+                role: UserRole.ADMIN,
+              },
             },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -98,6 +104,7 @@ describe("apiClient authentication", () => {
       expect(calls[0].url).toBe("/api/auth/refresh");
       expect(calls[1].url).toBe("/api/locations");
       expect(calls[1].headers.get("Authorization")).toBe("Bearer refreshed-jwt-token");
+      expect(useAuthStore.getState().user?.role).toBe(UserRole.ADMIN);
     } finally {
       globalThis.fetch = originalFetch;
     }

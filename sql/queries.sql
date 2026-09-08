@@ -27,7 +27,6 @@ RETURNING *;
 UPDATE users
 SET full_name = $2,
     email = $3,
-    role = $4,
     last_login_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING *;
