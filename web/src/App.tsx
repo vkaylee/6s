@@ -122,7 +122,7 @@ export function App() {
     <>
       <ScrollToTop />
       <AppShell
-        showStatusBar={Boolean(user) && !currentPath.startsWith("/login") && currentPath !== "/"}
+        showStatusBar={Boolean(user) && !currentPath.startsWith("/login")}
         onOpenDrawer={() => setIsDrawerOpen(true)}
         onNavigate={(path) => setLocation(path)}
         globalOverlay={
