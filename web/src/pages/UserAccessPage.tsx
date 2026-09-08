@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
+import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
+import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
@@ -32,6 +34,7 @@ type RoleFilter = "ALL" | string;
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
 export function UserAccessPage() {
+  useHeaderVisibility();
   const { t } = useI18nStore();
   const currentUser = useAuthStore((s) => s.user);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
@@ -164,6 +167,7 @@ export function UserAccessPage() {
             ←
           </button>
           <h1 className="text-base font-black">{t("admin.users_tab")}</h1>
+          <NavActions />
         </div>
       </PageContainer>
 

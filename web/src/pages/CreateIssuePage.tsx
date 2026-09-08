@@ -16,6 +16,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
+import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
+import { NavActions } from "../components/NavActions.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
@@ -47,6 +49,7 @@ interface CreateIssuePageProps {
 }
 
 export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageProps) {
+  useHeaderVisibility();
   const { t, locale: storeLocale } = useI18nStore();
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const [, setLocation] = useLocation();
@@ -431,6 +434,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 <span>{t("issue.draft_saved_at", { time: lastDraftTime })}</span>
               </div>
             )}
+            <NavActions />
             <button
               type="button"
               onClick={handleBack}

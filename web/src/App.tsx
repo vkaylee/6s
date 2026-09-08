@@ -10,6 +10,7 @@ import {
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { AppShell } from "./components/AppShell.tsx";
+import { NavActions } from "./components/NavActions.tsx";
 import { ConflictModal } from "./components/ConflictModal.tsx";
 import { FilterDrawer } from "./components/FilterDrawer.tsx";
 import { GlobalDialog } from "./components/GlobalDialog.tsx";
@@ -260,6 +261,7 @@ export function App() {
           <Route path="/">
             <ProtectedRoute>
               <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+                <div className="flex items-center justify-between px-4 pt-2"><h1 className="text-lg font-black">{t("nav.title")}</h1><NavActions /></div>
                 <main className="pt-4">
                   <PageContainer className="space-y-4">
                     {/* Health Gauge Ring Widget (SPEC.md Section 9.8.A) */}
