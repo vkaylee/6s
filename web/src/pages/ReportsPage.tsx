@@ -18,6 +18,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -602,9 +603,9 @@ export function ReportsPage() {
                 </div>
 
                 {/* Toolbar: Location Select dropdown & Sort toggles (No manual search text needed) */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 bg-zinc-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-xs font-bold text-zinc-500 whitespace-nowrap">
+                <div className="flex flex-wrap items-stretch gap-2 mb-4 bg-zinc-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                  <div className="flex flex-col sm:flex-row basis-full min-w-0 gap-2 sm:items-center sm:basis-auto sm:flex-1">
+                    <span className="text-xs font-bold text-zinc-500">
                       {t("reports.select_location_filter")}
                     </span>
                     <select
@@ -615,7 +616,7 @@ export function ReportsPage() {
                       <option value="">{t("reports.all_locations_option")}</option>
                       {rawLocationReports.map((loc) => (
                         <option key={loc.location_code} value={loc.location_code}>
-                          {loc.location_name} ({loc.location_code}) — {loc.health_score} pts
+                          {loc.location_name}
                         </option>
                       ))}
                     </select>
@@ -670,27 +671,39 @@ export function ReportsPage() {
                             horizontal={false}
                           />
                           <XAxis type="number" stroke={textColor} fontSize={11} tickLine={false} />
-                          <YAxis
-                            type="category"
-                            dataKey="location_name"
-                            stroke={textColor}
-                            fontSize={11}
-                            tickLine={false}
-                            width={120}
-                          />
+                          <YAxis type="category" dataKey="location_code" hide />
                           <Tooltip
-                            contentStyle={{
-                              backgroundColor: tooltipBg,
-                              borderColor: tooltipBorder,
-                              borderRadius: 12,
-                              fontSize: 12,
-                              boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                            cursor={{ fill: "transparent" }}
+                            content={({ active, payload }) => {
+                              if (!active || !payload || payload.length === 0) return null;
+                              const item = payload[0].payload as LocationReportItem & {
+                                location_name: string;
+                              };
+                              return (
+                                <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg px-3 py-2 text-xs">
+                                  <div className="font-bold text-zinc-900 dark:text-zinc-100 mb-1">
+                                    {item.location_name}
+                                  </div>
+                                  {payload.map((entry) => (
+                                    <div
+                                      key={String(entry.dataKey)}
+                                      className="flex items-center gap-2"
+                                    >
+                                      <span
+                                        className="inline-block w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: entry.color || "#999" }}
+                                      />
+                                      <span className="text-zinc-600 dark:text-zinc-300">
+                                        {entry.name}:
+                                      </span>
+                                      <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                                        {entry.value}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
                             }}
-                          />
-                          <Legend
-                            verticalAlign="top"
-                            align="right"
-                            wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
                           />
                           <Bar
                             name={t("reports.legend_health_score")}
@@ -709,7 +722,24 @@ export function ReportsPage() {
                                 setDrilldownType("LOCATION");
                               }
                             }}
-                          />
+                          >
+                            <LabelList
+                              dataKey="location_name"
+                              position="top"
+                              fill={textColor}
+                              fontSize={11}
+                              fontWeight="bold"
+                              offset={4}
+                            />
+                            <LabelList
+                              dataKey="health_score"
+                              position="right"
+                              fill={textColor}
+                              fontSize={11}
+                              fontWeight="bold"
+                              offset={4}
+                            />
+                          </Bar>
                           <Bar
                             name={t("reports.legend_open_issues")}
                             dataKey="open_count"
@@ -727,7 +757,16 @@ export function ReportsPage() {
                                 setDrilldownType("LOCATION");
                               }
                             }}
-                          />
+                          >
+                            <LabelList
+                              dataKey="open_count"
+                              position="right"
+                              fill={textColor}
+                              fontSize={11}
+                              fontWeight="bold"
+                              offset={4}
+                            />
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
