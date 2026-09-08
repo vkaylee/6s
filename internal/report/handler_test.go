@@ -24,19 +24,19 @@ type mockReportStore struct {
 	err        error
 }
 
-func (m *mockReportStore) GetReportKPISummary(_ context.Context) (db.GetReportKPISummaryRow, error) {
+func (m *mockReportStore) GetReportKPISummary(_ context.Context, _ sql.NullString) (db.GetReportKPISummaryRow, error) {
 	return m.kpi, m.err
 }
 
-func (m *mockReportStore) GetCategoryBreakdown(_ context.Context) ([]db.GetCategoryBreakdownRow, error) {
+func (m *mockReportStore) GetCategoryBreakdown(_ context.Context, _ sql.NullString) ([]db.GetCategoryBreakdownRow, error) {
 	return m.categories, m.err
 }
 
-func (m *mockReportStore) GetIssueTrends(_ context.Context, _ int32) ([]db.GetIssueTrendsRow, error) {
+func (m *mockReportStore) GetIssueTrends(_ context.Context, _ db.GetIssueTrendsParams) ([]db.GetIssueTrendsRow, error) {
 	return m.trends, m.err
 }
 
-func (m *mockReportStore) GetTopViolatedTags(_ context.Context, _ int32) ([]db.GetTopViolatedTagsRow, error) {
+func (m *mockReportStore) GetTopViolatedTags(_ context.Context, _ db.GetTopViolatedTagsParams) ([]db.GetTopViolatedTagsRow, error) {
 	return m.tags, m.err
 }
 
@@ -69,7 +69,7 @@ func TestReportService_GetSummary(t *testing.T) {
 	}
 
 	svc := report.NewService(store)
-	res, err := svc.GetSummary(context.Background(), 14)
+	res, err := svc.GetSummary(context.Background(), 14, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestReport_ErrorAndFilterBranches(t *testing.T) {
 	}
 
 	// 5. Service days out of range (< 0 or > 90)
-	_, errOutOfRange := validSvc.GetSummary(context.Background(), 150)
+	_, errOutOfRange := validSvc.GetSummary(context.Background(), 150, "")
 	if errOutOfRange != nil {
 		t.Errorf("expected GetSummary to clamp days, got %v", errOutOfRange)
 	}

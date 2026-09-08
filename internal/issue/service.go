@@ -693,7 +693,7 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 }
 
 // ListIssuesFiltered lists issues with filter criteria.
-func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, page, limit int) ([]Response, int64, error) {
+func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, overdue bool, page, limit int) ([]Response, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -712,10 +712,16 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 		locationCodes = []string{}
 	}
 
-	rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
+	var overdueParam sql.NullBool
+	if overdue {
+		overdueParam = sql.NullBool{Bool: true, Valid: true}
+	}
+
+rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
 		Statuses:      statuses,
 		Categories:    categories,
 		LocationCodes: locationCodes,
+		Overdue:       overdueParam,
 		Limit:         int32(limit),  //nolint:gosec
 		Offset:        int32(offset), //nolint:gosec
 	})
@@ -727,6 +733,7 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 		Statuses:      statuses,
 		Categories:    categories,
 		LocationCodes: locationCodes,
+		Overdue:       overdueParam,
 	})
 	if err != nil {
 		total = int64(len(rows))

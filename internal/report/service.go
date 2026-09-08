@@ -54,16 +54,16 @@ type SummaryResponse struct {
 
 // Store defines database operations required by report service.
 type Store interface {
-	GetReportKPISummary(ctx context.Context) (db.GetReportKPISummaryRow, error)
-	GetCategoryBreakdown(ctx context.Context) ([]db.GetCategoryBreakdownRow, error)
-	GetIssueTrends(ctx context.Context, days int32) ([]db.GetIssueTrendsRow, error)
-	GetTopViolatedTags(ctx context.Context, limit int32) ([]db.GetTopViolatedTagsRow, error)
+	GetReportKPISummary(ctx context.Context, locationCode sql.NullString) (db.GetReportKPISummaryRow, error)
+	GetCategoryBreakdown(ctx context.Context, locationCode sql.NullString) ([]db.GetCategoryBreakdownRow, error)
+	GetIssueTrends(ctx context.Context, arg db.GetIssueTrendsParams) ([]db.GetIssueTrendsRow, error)
+	GetTopViolatedTags(ctx context.Context, arg db.GetTopViolatedTagsParams) ([]db.GetTopViolatedTagsRow, error)
 	ListIssuesForExport(ctx context.Context, arg db.ListIssuesForExportParams) ([]db.ListIssuesForExportRow, error)
 }
 
 // Service provides reporting and analytics aggregations.
 type Service interface {
-	GetSummary(ctx context.Context, days int) (*SummaryResponse, error)
+	GetSummary(ctx context.Context, days int, locationCode string) (*SummaryResponse, error)
 	GetExportData(ctx context.Context, status, category, locationCode string) ([]db.ListIssuesForExportRow, error)
 }
 
@@ -78,12 +78,17 @@ func NewService(store Store) *ServiceImpl {
 }
 
 // GetSummary aggregates all report charts and metrics in high-efficiency DB queries.
-func (s *ServiceImpl) GetSummary(ctx context.Context, days int) (*SummaryResponse, error) {
+func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode string) (*SummaryResponse, error) {
 	if days <= 0 || days > 90 {
 		days = 14
 	}
 
-	kpiRow, err := s.store.GetReportKPISummary(ctx)
+	var locParam sql.NullString
+	if locationCode != "" {
+		locParam = sql.NullString{String: locationCode, Valid: true}
+	}
+
+	kpiRow, err := s.store.GetReportKPISummary(ctx, locParam)
 	if err != nil {
 		return nil, fmt.Errorf("get kpi summary: %w", err)
 	}
@@ -105,8 +110,7 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int) (*SummaryRespons
 		ResolutionRate:      resRate,
 	}
 
-	// 2. Category Breakdown
-	catRows, err := s.store.GetCategoryBreakdown(ctx)
+	catRows, err := s.store.GetCategoryBreakdown(ctx, locParam)
 	if err != nil {
 		return nil, fmt.Errorf("get category breakdown: %w", err)
 	}
@@ -131,8 +135,10 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int) (*SummaryRespons
 		})
 	}
 
-	// 3. Trends
-	trendRows, err := s.store.GetIssueTrends(ctx, int32(days)) //nolint:gosec
+	trendRows, err := s.store.GetIssueTrends(ctx, db.GetIssueTrendsParams{
+		Column1:      int32(days), //nolint:gosec
+		LocationCode: locParam,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get issue trends: %w", err)
 	}
@@ -146,8 +152,10 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int) (*SummaryRespons
 		})
 	}
 
-	// 4. Top Tags
-	tagRows, err := s.store.GetTopViolatedTags(ctx, 10)
+	tagRows, err := s.store.GetTopViolatedTags(ctx, db.GetTopViolatedTagsParams{
+		Limit:        10,
+		LocationCode: locParam,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get top tags: %w", err)
 	}

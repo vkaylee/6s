@@ -22,8 +22,8 @@ var (
 // Store defines database operations required by the scoring service.
 type Store interface {
 	ListLocations(ctx context.Context) ([]db.Location, error)
-	GetLocationLeaderboardStats(ctx context.Context, createdAt time.Time) ([]db.GetLocationLeaderboardStatsRow, error)
-	GetReporterLeaderboardInMonth(ctx context.Context, createdAt time.Time) ([]db.GetReporterLeaderboardInMonthRow, error)
+	GetLocationLeaderboardStats(ctx context.Context, arg db.GetLocationLeaderboardStatsParams) ([]db.GetLocationLeaderboardStatsRow, error)
+	GetReporterLeaderboardInMonth(ctx context.Context, arg db.GetReporterLeaderboardInMonthParams) ([]db.GetReporterLeaderboardInMonthRow, error)
 	GetScoringRules(ctx context.Context) ([]db.ScoringRule, error)
 	GetScoringRuleByKey(ctx context.Context, ruleKey string) (db.ScoringRule, error)
 	UpsertScoringRule(ctx context.Context, arg db.UpsertScoringRuleParams) (db.ScoringRule, error)
@@ -103,14 +103,17 @@ func StartOfMonth(t time.Time, loc *time.Location) time.Time {
 	return time.Date(localTime.Year(), localTime.Month(), 1, 0, 0, 0, 0, loc)
 }
 
-// GetLocationLeaderboard calculates real-time weekly health scores for all active locations.
-func (s *Service) GetLocationLeaderboard(ctx context.Context) ([]LocationHealthItem, error) {
+// GetLocationLeaderboard calculates real-time weekly health scores for active locations.
+func (s *Service) GetLocationLeaderboard(ctx context.Context, locationCode string) ([]LocationHealthItem, error) {
 	baseScore := int64(100)
 	if baseRule, bErr := s.store.GetScoringRuleByKey(ctx, "base_weekly_score"); bErr == nil {
 		baseScore = int64(baseRule.Points)
 	}
 
-	stats, err := s.store.GetLocationLeaderboardStats(ctx, StartOfWeek(time.Now(), s.loc))
+	stats, err := s.store.GetLocationLeaderboardStats(ctx, db.GetLocationLeaderboardStatsParams{
+		LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
+		CreatedAt:    StartOfWeek(time.Now(), s.loc),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get location leaderboard stats: %w", err)
 	}
@@ -145,9 +148,11 @@ func (s *Service) GetLocationLeaderboard(ctx context.Context) ([]LocationHealthI
 }
 
 // GetReporterLeaderboard retrieves top 6S hunters for the current month.
-func (s *Service) GetReporterLeaderboard(ctx context.Context) ([]ReporterItem, error) {
-	startOfMonth := StartOfMonth(time.Now(), s.loc)
-	rows, err := s.store.GetReporterLeaderboardInMonth(ctx, startOfMonth)
+func (s *Service) GetReporterLeaderboard(ctx context.Context, locationCode string) ([]ReporterItem, error) {
+	rows, err := s.store.GetReporterLeaderboardInMonth(ctx, db.GetReporterLeaderboardInMonthParams{
+		CreatedAt:    StartOfMonth(time.Now(), s.loc),
+		LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get reporter leaderboard: %w", err)
 	}

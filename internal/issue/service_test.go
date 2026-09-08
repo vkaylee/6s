@@ -142,7 +142,7 @@ func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
 	store.tags[2] = []string{"SCRAP"}
 
 	svc := NewService(store, nil, nil)
-	items, total, err := svc.ListIssuesFiltered(ctxFor(store.users[1]), nil, nil, nil, 1, 20)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(store.users[1]), nil, nil, nil, false, 1, 20)
 	if err != nil {
 		t.Fatalf("ListIssuesFiltered error: %v", err)
 	}
@@ -653,7 +653,7 @@ func TestIssueService_ListIssuesFiltered(t *testing.T) {
 	storageMgr, _ := storage.NewManager(t.TempDir())
 	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
 
-	items, total, err := svc.ListIssuesFiltered(ctxFor(worker), []string{StatusOpen.String()}, []string{Category1S.String()}, []string{"LINE_A1"}, 1, 10)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(worker), []string{StatusOpen.String()}, []string{Category1S.String()}, []string{"LINE_A1"}, false, 1, 10)
 	if err != nil {
 		t.Fatalf("ListIssuesFiltered err: %v", err)
 	}
@@ -809,7 +809,7 @@ func TestListIssuesFiltered_AttachTranslationCache(t *testing.T) {
 		t.Errorf("expected translated description 'Cluttered storage area', got %v", resp.TranslatedDescription)
 	}
 
-	items, _, err := svc.ListIssuesFiltered(ctx, nil, nil, nil, 1, 10)
+	items, _, err := svc.ListIssuesFiltered(ctx, nil, nil, nil, false, 1, 10)
 	if err != nil {
 		t.Fatalf("unexpected list error: %v", err)
 	}

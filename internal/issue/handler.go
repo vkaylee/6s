@@ -30,7 +30,7 @@ type Service interface {
 	InvalidateIssue(ctx context.Context, req InvalidateIssueRequest, currentUser db.User) (*Response, error)
 	PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error)
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
-	ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, page, limit int) ([]Response, int64, error)
+	ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, overdue bool, page, limit int) ([]Response, int64, error)
 	SubscribeEvents() (<-chan Event, func())
 }
 
@@ -66,6 +66,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	categories := parseQueryValues(q, "category", "categories")
 	locationCodes := parseQueryValues(q, "location_code", "location_codes")
 
+	overdue := q.Get("overdue") == "true"
+
 	page := 1
 	if pStr := q.Get("page"); pStr != "" {
 		if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
@@ -80,7 +82,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, total, err := h.service.ListIssuesFiltered(r.Context(), statuses, categories, locationCodes, page, limit)
+	items, total, err := h.service.ListIssuesFiltered(r.Context(), statuses, categories, locationCodes, overdue, page, limit)
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrIssueListFailed).WithCause(err))
 		return

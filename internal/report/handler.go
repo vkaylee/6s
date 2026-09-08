@@ -22,7 +22,7 @@ func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
-// GetSummary handles GET /api/reports/summary?days=14.
+// GetSummary handles GET /api/reports/summary?days=14&location_code=...
 func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	days := 14
 	if dStr := r.URL.Query().Get("days"); dStr != "" {
@@ -31,7 +31,9 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	summary, err := h.service.GetSummary(r.Context(), days)
+	locationCode := r.URL.Query().Get("location_code")
+
+	summary, err := h.service.GetSummary(r.Context(), days, locationCode)
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return

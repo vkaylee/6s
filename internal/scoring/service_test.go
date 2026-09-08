@@ -11,31 +11,37 @@ import (
 )
 
 type mockScoringStore struct {
-	locations  []db.Location
-	sums       map[string]int64
-	openCount  map[string]int64
-	overdue    map[string]int64
-	reporters  []db.GetReporterLeaderboardInMonthRow
-	rules      map[string]int32
-	logs       []db.ScoreLog
-	auditLogs  []db.InsertAuditLogParams
-	issueLogs  []db.ListScoreLogsByIssueRow
-	targetLogs []db.ListScoreLogsByTargetSinceRow
+	locations             []db.Location
+	sums                  map[string]int64
+	openCount             map[string]int64
+	overdue               map[string]int64
+	reporters             []db.GetReporterLeaderboardInMonthRow
+	locationLeaderboardArg db.GetLocationLeaderboardStatsParams
+	reporterLeaderboardArg db.GetReporterLeaderboardInMonthParams
+	rules                 map[string]int32
+	logs                  []db.ScoreLog
+	auditLogs             []db.InsertAuditLogParams
+	issueLogs             []db.ListScoreLogsByIssueRow
+	targetLogs            []db.ListScoreLogsByTargetSinceRow
 }
 
 func (m *mockScoringStore) ListLocations(_ context.Context) ([]db.Location, error) {
 	return m.locations, nil
 }
-
-func (m *mockScoringStore) GetLocationLeaderboardStats(_ context.Context, _ time.Time) ([]db.GetLocationLeaderboardStatsRow, error) {
+func (m *mockScoringStore) GetLocationLeaderboardStats(_ context.Context, arg db.GetLocationLeaderboardStatsParams) ([]db.GetLocationLeaderboardStatsRow, error) {
+	m.locationLeaderboardArg = arg
 	rows := make([]db.GetLocationLeaderboardStatsRow, 0, len(m.locations))
 	for _, loc := range m.locations {
+		if arg.LocationCode.Valid && arg.LocationCode.String != loc.Code {
+			continue
+		}
 		rows = append(rows, db.GetLocationLeaderboardStatsRow{LocationCode: loc.Code, LocationName: loc.NameVi, SumPoints: m.sums[loc.Code], OpenCount: m.openCount[loc.Code], OverdueCount: m.overdue[loc.Code]})
 	}
 	return rows, nil
 }
 
-func (m *mockScoringStore) GetReporterLeaderboardInMonth(_ context.Context, _ time.Time) ([]db.GetReporterLeaderboardInMonthRow, error) {
+func (m *mockScoringStore) GetReporterLeaderboardInMonth(_ context.Context, arg db.GetReporterLeaderboardInMonthParams) ([]db.GetReporterLeaderboardInMonthRow, error) {
+	m.reporterLeaderboardArg = arg
 	return m.reporters, nil
 }
 
@@ -114,7 +120,7 @@ func TestScoringService_LocationLeaderboardFormula(t *testing.T) {
 	svc := NewService(store, time.UTC)
 	ctx := context.Background()
 
-	items, err := svc.GetLocationLeaderboard(ctx)
+	items, err := svc.GetLocationLeaderboard(ctx, "")
 	if err != nil {
 		t.Fatalf("GetLocationLeaderboard error: %v", err)
 	}
@@ -129,6 +135,25 @@ func TestScoringService_LocationLeaderboardFormula(t *testing.T) {
 	}
 	if items[1].LocationCode != "LINE_A2" || items[1].HealthScore != 120 {
 		t.Errorf("expected second item LINE_A2 capped at 120, got %+v", items[1])
+	}
+}
+
+// Filtered location results pass the selected code to the store.
+func TestScoringService_LocationLeaderboardFilter(t *testing.T) {
+	store := &mockScoringStore{
+		locations: []db.Location{{Code: "LINE_A1", NameVi: "A1"}, {Code: "LINE_A2", NameVi: "A2"}},
+		sums:      map[string]int64{}, openCount: map[string]int64{}, overdue: map[string]int64{},
+		rules: map[string]int32{"base_weekly_score": 100},
+	}
+	items, err := NewService(store, time.UTC).GetLocationLeaderboard(context.Background(), "LINE_A1")
+	if err != nil {
+		t.Fatalf("GetLocationLeaderboard error: %v", err)
+	}
+	if len(items) != 1 || items[0].LocationCode != "LINE_A1" {
+		t.Fatalf("expected only LINE_A1, got %+v", items)
+	}
+	if !store.locationLeaderboardArg.LocationCode.Valid || store.locationLeaderboardArg.LocationCode.String != "LINE_A1" {
+		t.Fatalf("expected LINE_A1 filter, got %+v", store.locationLeaderboardArg.LocationCode)
 	}
 }
 
@@ -195,16 +220,31 @@ func TestScoringService_ReporterLeaderboardAndRules(t *testing.T) {
 	svc := NewService(store, time.UTC)
 	ctx := context.Background()
 
-	// 1. Reporter leaderboard
-	items, err := svc.GetReporterLeaderboard(ctx)
+	// 1. Reporter leaderboard (no filter)
+	items, err := svc.GetReporterLeaderboard(ctx, "")
 	if err != nil {
 		t.Fatalf("GetReporterLeaderboard error: %v", err)
 	}
 	if len(items) != 1 || items[0].UserID != 10 {
 		t.Errorf("expected 1 reporter with ID 10, got %+v", items)
 	}
+	if store.reporterLeaderboardArg.LocationCode.Valid {
+		t.Errorf("expected empty reporter filter to be invalid, got %+v", store.reporterLeaderboardArg.LocationCode)
+	}
 
-	// 2. Get rules
+	// 2. Filtered reporter leaderboard
+	filtered, err := svc.GetReporterLeaderboard(ctx, "LINE_A1")
+	if err != nil {
+		t.Fatalf("GetReporterLeaderboard filtered error: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].UserID != 10 {
+		t.Errorf("expected 1 filtered reporter with ID 10, got %+v", filtered)
+	}
+	if !store.reporterLeaderboardArg.LocationCode.Valid || store.reporterLeaderboardArg.LocationCode.String != "LINE_A1" {
+		t.Errorf("expected reporter filter LINE_A1, got %+v", store.reporterLeaderboardArg.LocationCode)
+	}
+
+	// 3. Get rules
 	rules, err := svc.GetRules(ctx)
 	if err != nil {
 		t.Fatalf("GetRules error: %v", err)
@@ -213,7 +253,7 @@ func TestScoringService_ReporterLeaderboardAndRules(t *testing.T) {
 		t.Errorf("expected reward_valid rule, got %+v", rules)
 	}
 
-	// 3. StartOfMonth verification
+	// 4. StartOfMonth verification
 	now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	start := StartOfMonth(now, time.UTC)
 	if start.Day() != 1 || start.Month() != 9 || start.Year() != 2026 {
@@ -234,8 +274,8 @@ func TestScoringService_ScoreLogs(t *testing.T) {
 				Points:          -2,
 				CreatedAt:       time.Now(),
 			},
-		},
-		targetLogs: []db.ListScoreLogsByTargetSinceRow{
+	},
+	targetLogs: []db.ListScoreLogsByTargetSinceRow{
 			{
 				ID:               2,
 				IssueID:          100,

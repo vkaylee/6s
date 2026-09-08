@@ -152,16 +152,23 @@ SELECT COUNT(*) FROM issues
 WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR status = ANY($1::varchar[]))
   AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR category = ANY($2::varchar[]))
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR location_code = ANY($3::varchar[]))
+  AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
 `
 
 type CountIssuesFilteredParams struct {
 	Statuses      []string
 	Categories    []string
 	LocationCodes []string
+	Overdue       sql.NullBool
 }
 
 func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilteredParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countIssuesFiltered, pq.Array(arg.Statuses), pq.Array(arg.Categories), pq.Array(arg.LocationCodes))
+	row := q.db.QueryRowContext(ctx, countIssuesFiltered,
+		pq.Array(arg.Statuses),
+		pq.Array(arg.Categories),
+		pq.Array(arg.LocationCodes),
+		arg.Overdue,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -572,12 +579,10 @@ func (q *Queries) GetAIConfig(ctx context.Context) (AiConfig, error) {
 }
 
 const getCategoryBreakdown = `-- name: GetCategoryBreakdown :many
-SELECT 
-    category,
-    COUNT(*)::bigint AS count
+SELECT category, COUNT(*)::bigint AS count
 FROM issues
-GROUP BY category
-ORDER BY category ASC
+WHERE ($1::varchar IS NULL OR location_code = $1)
+GROUP BY category ORDER BY category ASC
 `
 
 type GetCategoryBreakdownRow struct {
@@ -585,8 +590,8 @@ type GetCategoryBreakdownRow struct {
 	Count    int64
 }
 
-func (q *Queries) GetCategoryBreakdown(ctx context.Context) ([]GetCategoryBreakdownRow, error) {
-	rows, err := q.db.QueryContext(ctx, getCategoryBreakdown)
+func (q *Queries) GetCategoryBreakdown(ctx context.Context, locationCode sql.NullString) ([]GetCategoryBreakdownRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCategoryBreakdown, locationCode)
 	if err != nil {
 		return nil, err
 	}
@@ -671,23 +676,19 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 }
 
 const getIssueTrends = `-- name: GetIssueTrends :many
-SELECT 
-    d.day::date AS date_key,
-    COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
-    COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
-FROM generate_series(
-    CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day',
-    CURRENT_DATE,
-    INTERVAL '1 day'
-) AS d(day)
-LEFT JOIN issues i ON (
-    i.created_at::date = d.day::date 
-    OR i.closed_at::date = d.day::date 
-    OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)
-)
-GROUP BY d.day
-ORDER BY d.day ASC
+SELECT d.day::date AS date_key,
+       COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
+       COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
+FROM generate_series(CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day', CURRENT_DATE, INTERVAL '1 day') AS d(day)
+LEFT JOIN issues i ON (i.created_at::date = d.day::date OR i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date))
+  AND ($2::varchar IS NULL OR i.location_code = $2)
+GROUP BY d.day ORDER BY d.day ASC
 `
+
+type GetIssueTrendsParams struct {
+	Column1      int32
+	LocationCode sql.NullString
+}
 
 type GetIssueTrendsRow struct {
 	DateKey       time.Time
@@ -695,8 +696,8 @@ type GetIssueTrendsRow struct {
 	ResolvedCount int64
 }
 
-func (q *Queries) GetIssueTrends(ctx context.Context, dollar_1 int32) ([]GetIssueTrendsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getIssueTrends, dollar_1)
+func (q *Queries) GetIssueTrends(ctx context.Context, arg GetIssueTrendsParams) ([]GetIssueTrendsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getIssueTrends, arg.Column1, arg.LocationCode)
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +764,8 @@ const getLocationLeaderboardStats = `-- name: GetLocationLeaderboardStats :many
 WITH score_totals AS (
     SELECT target_id AS location_code, COALESCE(SUM(points), 0)::bigint AS sum_points
     FROM score_logs
-    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $1
+    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $2
+      AND ($1::varchar IS NULL OR score_logs.target_id = $1)
     GROUP BY target_id
 ), issue_totals AS (
     SELECT location_code,
@@ -781,8 +783,14 @@ FROM locations l
 LEFT JOIN score_totals st ON st.location_code = l.code
 LEFT JOIN issue_totals it ON it.location_code = l.code
 WHERE l.is_active = TRUE
+  AND ($1::varchar IS NULL OR l.code = $1)
 ORDER BY l.code
 `
+
+type GetLocationLeaderboardStatsParams struct {
+	LocationCode sql.NullString
+	CreatedAt    time.Time
+}
 
 type GetLocationLeaderboardStatsRow struct {
 	LocationCode string
@@ -792,8 +800,8 @@ type GetLocationLeaderboardStatsRow struct {
 	OverdueCount int64
 }
 
-func (q *Queries) GetLocationLeaderboardStats(ctx context.Context, createdAt time.Time) ([]GetLocationLeaderboardStatsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getLocationLeaderboardStats, createdAt)
+func (q *Queries) GetLocationLeaderboardStats(ctx context.Context, arg GetLocationLeaderboardStatsParams) ([]GetLocationLeaderboardStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getLocationLeaderboardStats, arg.LocationCode, arg.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -885,7 +893,7 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 }
 
 const getReportKPISummary = `-- name: GetReportKPISummary :one
-SELECT 
+SELECT
     COUNT(*)::bigint AS total_issues,
     COUNT(CASE WHEN status = 'OPEN' THEN 1 END)::bigint AS open_issues,
     COUNT(CASE WHEN status = 'PENDING_REVIEW' THEN 1 END)::bigint AS pending_review_issues,
@@ -894,6 +902,7 @@ SELECT
     COUNT(CASE WHEN category = '6S' AND status != 'CLOSED' THEN 1 END)::bigint AS safety_issues,
     COUNT(CASE WHEN status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours' THEN 1 END)::bigint AS overdue_issues
 FROM issues
+WHERE ($1::varchar IS NULL OR location_code = $1)
 `
 
 type GetReportKPISummaryRow struct {
@@ -906,8 +915,8 @@ type GetReportKPISummaryRow struct {
 	OverdueIssues       int64
 }
 
-func (q *Queries) GetReportKPISummary(ctx context.Context) (GetReportKPISummaryRow, error) {
-	row := q.db.QueryRowContext(ctx, getReportKPISummary)
+func (q *Queries) GetReportKPISummary(ctx context.Context, locationCode sql.NullString) (GetReportKPISummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getReportKPISummary, locationCode)
 	var i GetReportKPISummaryRow
 	err := row.Scan(
 		&i.TotalIssues,
@@ -925,16 +934,25 @@ const getReporterLeaderboardInMonth = `-- name: GetReporterLeaderboardInMonth :m
 SELECT u.id AS user_id,
        u.full_name,
        COALESCE(SUM(sl.points), 0)::bigint AS points,
-       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' THEN i.id END)::bigint AS valid_count,
-       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' AND i.category = '6S' THEN i.id END)::bigint AS safety_count
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED'
+             AND ($1::varchar IS NULL OR i.location_code = $1)
+             THEN i.id END)::bigint AS valid_count,
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' AND i.category = '6S'
+             AND ($1::varchar IS NULL OR i.location_code = $1)
+             THEN i.id END)::bigint AS safety_count
 FROM users u
 JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
 LEFT JOIN issues i ON i.id = sl.issue_id
-WHERE sl.created_at >= $1
+WHERE sl.created_at >= $2
 GROUP BY u.id, u.full_name
 ORDER BY points DESC, valid_count DESC, u.id ASC
 LIMIT 50
 `
+
+type GetReporterLeaderboardInMonthParams struct {
+	LocationCode sql.NullString
+	CreatedAt    time.Time
+}
 
 type GetReporterLeaderboardInMonthRow struct {
 	UserID      int64
@@ -944,8 +962,8 @@ type GetReporterLeaderboardInMonthRow struct {
 	SafetyCount int64
 }
 
-func (q *Queries) GetReporterLeaderboardInMonth(ctx context.Context, createdAt time.Time) ([]GetReporterLeaderboardInMonthRow, error) {
-	rows, err := q.db.QueryContext(ctx, getReporterLeaderboardInMonth, createdAt)
+func (q *Queries) GetReporterLeaderboardInMonth(ctx context.Context, arg GetReporterLeaderboardInMonthParams) ([]GetReporterLeaderboardInMonthRow, error) {
+	rows, err := q.db.QueryContext(ctx, getReporterLeaderboardInMonth, arg.LocationCode, arg.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1024,19 +1042,17 @@ func (q *Queries) GetScoringRules(ctx context.Context) ([]ScoringRule, error) {
 }
 
 const getTopViolatedTags = `-- name: GetTopViolatedTags :many
-SELECT 
-    t.code AS tag_code,
-    t.category,
-    t.name_vi,
-    t.name_zh,
-    t.name_en,
-    COUNT(it.issue_id)::bigint AS violation_count
-FROM issue_tags it
-JOIN tags t ON it.tag_code = t.code
+SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
+FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
+WHERE ($2::varchar IS NULL OR i.location_code = $2)
 GROUP BY t.code, t.category, t.name_vi, t.name_zh, t.name_en
-ORDER BY violation_count DESC, t.code ASC
-LIMIT $1
+ORDER BY violation_count DESC, t.code ASC LIMIT $1
 `
+
+type GetTopViolatedTagsParams struct {
+	Limit        int32
+	LocationCode sql.NullString
+}
 
 type GetTopViolatedTagsRow struct {
 	TagCode        string
@@ -1047,8 +1063,8 @@ type GetTopViolatedTagsRow struct {
 	ViolationCount int64
 }
 
-func (q *Queries) GetTopViolatedTags(ctx context.Context, limit int32) ([]GetTopViolatedTagsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getTopViolatedTags, limit)
+func (q *Queries) GetTopViolatedTags(ctx context.Context, arg GetTopViolatedTagsParams) ([]GetTopViolatedTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTopViolatedTags, arg.Limit, arg.LocationCode)
 	if err != nil {
 		return nil, err
 	}
@@ -1543,16 +1559,18 @@ LEFT JOIN users res ON i.resolver_id = res.id
 WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar[]))
   AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR i.category = ANY($2::varchar[]))
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
-ORDER BY 
+  AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
+ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListIssuesFilteredParams struct {
 	Statuses      []string
 	Categories    []string
 	LocationCodes []string
+	Overdue       sql.NullBool
 	Offset        int32
 	Limit         int32
 }
@@ -1589,6 +1607,7 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 		pq.Array(arg.Statuses),
 		pq.Array(arg.Categories),
 		pq.Array(arg.LocationCodes),
+		arg.Overdue,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -1639,37 +1658,10 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 }
 
 const listIssuesForExport = `-- name: ListIssuesForExport :many
-SELECT 
-    i.id,
-    i.client_uuid,
-    i.category,
-    i.location_code,
-    loc.name_vi AS location_name_vi,
-    loc.name_zh AS location_name_zh,
-    loc.name_en AS location_name_en,
-    i.status,
-    i.description,
-    i.reject_reason,
-    u.username AS creator_username,
-    u.full_name AS creator_full_name,
-    res.username AS resolver_username,
-    res.full_name AS resolver_full_name,
-    i.score_rating,
-    i.created_at,
-    i.resolved_at,
-    i.closed_at,
-    COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
-FROM issues i
-JOIN locations loc ON i.location_code = loc.code
-JOIN users u ON i.creator_id = u.id
-LEFT JOIN users res ON i.resolver_id = res.id
-LEFT JOIN issue_tags it ON it.issue_id = i.id
-WHERE ($1::varchar IS NULL OR i.status = $1)
-  AND ($2::varchar IS NULL OR i.category = $2)
-  AND ($3::varchar IS NULL OR i.location_code = $3)
-GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id
-ORDER BY i.created_at DESC
-LIMIT 100000
+SELECT i.id, i.client_uuid, i.category, i.location_code, loc.name_vi AS location_name_vi, loc.name_zh AS location_name_zh, loc.name_en AS location_name_en, i.status, i.description, i.reject_reason, u.username AS creator_username, u.full_name AS creator_full_name, res.username AS resolver_username, res.full_name AS resolver_full_name, i.score_rating, i.created_at, i.resolved_at, i.closed_at, COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
+FROM issues i JOIN locations loc ON i.location_code = loc.code JOIN users u ON i.creator_id = u.id LEFT JOIN users res ON i.resolver_id = res.id LEFT JOIN issue_tags it ON it.issue_id = i.id
+WHERE ($1::varchar IS NULL OR i.status = $1) AND ($2::varchar IS NULL OR i.category = $2) AND ($3::varchar IS NULL OR i.location_code = $3)
+GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000
 `
 
 type ListIssuesForExportParams struct {

@@ -295,7 +295,8 @@ LEFT JOIN users res ON i.resolver_id = res.id
 WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.status = ANY(sqlc.narg('statuses')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR i.category = ANY(sqlc.narg('categories')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
-ORDER BY 
+  AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
+ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
@@ -304,7 +305,8 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 SELECT COUNT(*) FROM issues
 WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR status = ANY(sqlc.narg('statuses')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR category = ANY(sqlc.narg('categories')::varchar[]))
-  AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR location_code = ANY(sqlc.narg('location_codes')::varchar[]));
+  AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR location_code = ANY(sqlc.narg('location_codes')::varchar[]))
+  AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'));
 
 -- name: ResolveIssue :one
 UPDATE issues
@@ -427,7 +429,8 @@ WHERE location_code = $1
 WITH score_totals AS (
     SELECT target_id AS location_code, COALESCE(SUM(points), 0)::bigint AS sum_points
     FROM score_logs
-    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $1
+    WHERE target_type = 'LOCATION' AND score_logs.created_at >= sqlc.arg('created_at')
+      AND (sqlc.narg('location_code')::varchar IS NULL OR score_logs.target_id = sqlc.narg('location_code'))
     GROUP BY target_id
 ), issue_totals AS (
     SELECT location_code,
@@ -445,21 +448,27 @@ FROM locations l
 LEFT JOIN score_totals st ON st.location_code = l.code
 LEFT JOIN issue_totals it ON it.location_code = l.code
 WHERE l.is_active = TRUE
+  AND (sqlc.narg('location_code')::varchar IS NULL OR l.code = sqlc.narg('location_code'))
 ORDER BY l.code;
 
 -- name: GetReporterLeaderboardInMonth :many
 SELECT u.id AS user_id,
        u.full_name,
        COALESCE(SUM(sl.points), 0)::bigint AS points,
-       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' THEN i.id END)::bigint AS valid_count,
-       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' AND i.category = '6S' THEN i.id END)::bigint AS safety_count
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED'
+             AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+             THEN i.id END)::bigint AS valid_count,
+       COUNT(DISTINCT CASE WHEN i.status = 'CLOSED' AND i.category = '6S'
+             AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+             THEN i.id END)::bigint AS safety_count
 FROM users u
 JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
 LEFT JOIN issues i ON i.id = sl.issue_id
-WHERE sl.created_at >= $1
+WHERE sl.created_at >= sqlc.arg('created_at')
 GROUP BY u.id, u.full_name
 ORDER BY points DESC, valid_count DESC, u.id ASC
 LIMIT 50;
+
 
 -- name: ListScoreLogsSince :many
 SELECT * FROM score_logs
@@ -594,7 +603,7 @@ DELETE FROM system_audit_logs
 WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 years';
 
 -- name: GetReportKPISummary :one
-SELECT 
+SELECT
     COUNT(*)::bigint AS total_issues,
     COUNT(CASE WHEN status = 'OPEN' THEN 1 END)::bigint AS open_issues,
     COUNT(CASE WHEN status = 'PENDING_REVIEW' THEN 1 END)::bigint AS pending_review_issues,
@@ -602,80 +611,38 @@ SELECT
     COUNT(CASE WHEN status = 'INVALID' THEN 1 END)::bigint AS invalid_issues,
     COUNT(CASE WHEN category = '6S' AND status != 'CLOSED' THEN 1 END)::bigint AS safety_issues,
     COUNT(CASE WHEN status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours' THEN 1 END)::bigint AS overdue_issues
-FROM issues;
+FROM issues
+WHERE (sqlc.narg('location_code')::varchar IS NULL OR location_code = sqlc.narg('location_code'));
 
 -- name: GetCategoryBreakdown :many
-SELECT 
-    category,
-    COUNT(*)::bigint AS count
+SELECT category, COUNT(*)::bigint AS count
 FROM issues
-GROUP BY category
-ORDER BY category ASC;
+WHERE (sqlc.narg('location_code')::varchar IS NULL OR location_code = sqlc.narg('location_code'))
+GROUP BY category ORDER BY category ASC;
 
 -- name: GetIssueTrends :many
-SELECT 
-    d.day::date AS date_key,
-    COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
-    COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
-FROM generate_series(
-    CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day',
-    CURRENT_DATE,
-    INTERVAL '1 day'
-) AS d(day)
-LEFT JOIN issues i ON (
-    i.created_at::date = d.day::date 
-    OR i.closed_at::date = d.day::date 
-    OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)
-)
-GROUP BY d.day
-ORDER BY d.day ASC;
+SELECT d.day::date AS date_key,
+       COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
+       COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
+FROM generate_series(CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day', CURRENT_DATE, INTERVAL '1 day') AS d(day)
+LEFT JOIN issues i ON (i.created_at::date = d.day::date OR i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date))
+  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+GROUP BY d.day ORDER BY d.day ASC;
 
 -- name: GetTopViolatedTags :many
-SELECT 
-    t.code AS tag_code,
-    t.category,
-    t.name_vi,
-    t.name_zh,
-    t.name_en,
-    COUNT(it.issue_id)::bigint AS violation_count
-FROM issue_tags it
-JOIN tags t ON it.tag_code = t.code
+SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
+FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
+WHERE (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
 GROUP BY t.code, t.category, t.name_vi, t.name_zh, t.name_en
-ORDER BY violation_count DESC, t.code ASC
-LIMIT $1;
+ORDER BY violation_count DESC, t.code ASC LIMIT $1;
 
 -- name: ListIssuesForExport :many
-SELECT 
-    i.id,
-    i.client_uuid,
-    i.category,
-    i.location_code,
-    loc.name_vi AS location_name_vi,
-    loc.name_zh AS location_name_zh,
-    loc.name_en AS location_name_en,
-    i.status,
-    i.description,
-    i.reject_reason,
-    u.username AS creator_username,
-    u.full_name AS creator_full_name,
-    res.username AS resolver_username,
-    res.full_name AS resolver_full_name,
-    i.score_rating,
-    i.created_at,
-    i.resolved_at,
-    i.closed_at,
-    COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
-FROM issues i
-JOIN locations loc ON i.location_code = loc.code
-JOIN users u ON i.creator_id = u.id
-LEFT JOIN users res ON i.resolver_id = res.id
-LEFT JOIN issue_tags it ON it.issue_id = i.id
-WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
-  AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category'))
-  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
-GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id
-ORDER BY i.created_at DESC
-LIMIT 100000;
+SELECT i.id, i.client_uuid, i.category, i.location_code, loc.name_vi AS location_name_vi, loc.name_zh AS location_name_zh, loc.name_en AS location_name_en, i.status, i.description, i.reject_reason, u.username AS creator_username, u.full_name AS creator_full_name, res.username AS resolver_username, res.full_name AS resolver_full_name, i.score_rating, i.created_at, i.resolved_at, i.closed_at, COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
+FROM issues i JOIN locations loc ON i.location_code = loc.code JOIN users u ON i.creator_id = u.id LEFT JOIN users res ON i.resolver_id = res.id LEFT JOIN issue_tags it ON it.issue_id = i.id
+WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status')) AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category')) AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000;
+
+
 
 -- name: GetTranslationCache :one
 SELECT content_hash, target_lang, source_text, translated_text, created_at

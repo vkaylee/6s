@@ -19,8 +19,8 @@ import (
 
 // BusinessService defines operations exposed by scoring HTTP handler.
 type BusinessService interface {
-	GetLocationLeaderboard(ctx context.Context) ([]LocationHealthItem, error)
-	GetReporterLeaderboard(ctx context.Context) ([]ReporterItem, error)
+	GetLocationLeaderboard(ctx context.Context, locationCode string) ([]LocationHealthItem, error)
+	GetReporterLeaderboard(ctx context.Context, locationCode string) ([]ReporterItem, error)
 	GetRules(ctx context.Context) ([]db.ScoringRule, error)
 	UpdateRules(ctx context.Context, req UpdateRulesRequest, adminUserID int64) error
 	GetIssueScoreLogs(ctx context.Context, issueID int64) ([]ScoreLogItem, error)
@@ -39,7 +39,7 @@ func NewHandler(service BusinessService) *Handler {
 
 // GetLocationLeaderboard handles GET /api/leaderboard/locations.
 func (h *Handler) GetLocationLeaderboard(w http.ResponseWriter, r *http.Request) {
-	items, err := h.service.GetLocationLeaderboard(r.Context())
+	items, err := h.service.GetLocationLeaderboard(r.Context(), r.URL.Query().Get("location_code"))
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrLeaderboardFailed).WithCause(err))
 		return
@@ -49,7 +49,7 @@ func (h *Handler) GetLocationLeaderboard(w http.ResponseWriter, r *http.Request)
 
 // GetReporterLeaderboard handles GET /api/leaderboard/reporters.
 func (h *Handler) GetReporterLeaderboard(w http.ResponseWriter, r *http.Request) {
-	items, err := h.service.GetReporterLeaderboard(r.Context())
+	items, err := h.service.GetReporterLeaderboard(r.Context(), r.URL.Query().Get("location_code"))
 	if err != nil {
 		response.AppError(w, r, apperror.Internal(i18n.ErrLeaderboardFailed).WithCause(err))
 		return
