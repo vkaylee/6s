@@ -17,7 +17,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
@@ -434,7 +433,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 <span>{t("issue.draft_saved_at", { time: lastDraftTime })}</span>
               </div>
             )}
-            <NavActions />
             <button
               type="button"
               onClick={handleBack}

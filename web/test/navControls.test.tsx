@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
-import { App } from "../src/App.tsx";
 import { NavActions } from "../src/components/NavActions.tsx";
+import { StatusBar } from "../src/components/StatusBar.tsx";
 import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
 import { LoginPage } from "../src/pages/LoginPage.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
@@ -28,7 +28,7 @@ describe("NavActions (Language & Theme toggle controls)", () => {
   });
 });
 
-describe("Page level Language & Theme Controls presence", () => {
+describe("Page-level headers", () => {
   beforeEach(() => {
     useAuthStore.setState({
       isLoading: false,
@@ -43,7 +43,7 @@ describe("Page level Language & Theme Controls presence", () => {
     });
   });
 
-  it("LoginPage contains language and theme toggle buttons", () => {
+  it("LoginPage keeps its own language and theme controls", () => {
     const html = renderToString(
       <Router ssrPath="/login">
         <LoginPage />
@@ -53,33 +53,19 @@ describe("Page level Language & Theme Controls presence", () => {
     expect(html).toContain('data-testid="theme-toggle"');
   });
 
-  it("CreateIssuePage contains language and theme toggle buttons", () => {
+  it("does not duplicate language and theme controls on CreateIssuePage", () => {
     const html = renderToString(
       <Router ssrPath="/issues/new">
         <CreateIssuePage locations={[]} tags={[]} onSuccess={() => {}} />
       </Router>,
     );
-    expect(html).toContain('data-testid="lang-toggle"');
-    expect(html).toContain('data-testid="theme-toggle"');
+    expect(html).not.toContain('data-testid="lang-toggle"');
+    expect(html).not.toContain('data-testid="theme-toggle"');
   });
 
-  it("All registered routes in App render language and theme toggle buttons", () => {
-    const routes = [
-      "/",
-      "/login",
-      "/issues/new",
-      "/leaderboard/locations/LINE_A1",
-      "/leaderboard/reporters/1",
-    ];
-
-    for (const route of routes) {
-      const html = renderToString(
-        <Router ssrPath={route}>
-          <App />
-        </Router>,
-      );
-      expect(html).toContain('data-testid="lang-toggle"');
-      expect(html).toContain('data-testid="theme-toggle"');
-    }
+  it("keeps exactly one control set in the shared status bar", () => {
+    const html = renderToString(<StatusBar onOpenDrawer={() => {}} />);
+    expect(html.match(/data-testid="lang-toggle"/g)).toHaveLength(1);
+    expect(html.match(/data-testid="theme-toggle"/g)).toHaveLength(1);
   });
 });

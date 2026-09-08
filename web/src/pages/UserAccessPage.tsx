@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -169,7 +168,6 @@ export function UserAccessPage() {
             ←
           </button>
           <h1 className="text-base font-black">{t("admin.users_tab")}</h1>
-          <NavActions />
         </div>
       </PageContainer>
 

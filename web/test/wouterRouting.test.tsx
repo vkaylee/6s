@@ -57,7 +57,6 @@ describe("Wouter UX & Routing Verification", () => {
     expect(html).toContain("404");
     expect(html).toContain("Hệ thống 6S");
     expect(html).toContain('href="/"');
-    expect(html).toContain('data-testid="lang-toggle"');
   });
 
   it("App catch-all route renders 404 NotFoundPage for unknown path", () => {

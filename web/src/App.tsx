@@ -16,7 +16,6 @@ import { GlobalDialog } from "./components/GlobalDialog.tsx";
 import { HealthGauge } from "./components/HealthGauge.tsx";
 import { IssueCard } from "./components/IssueCard.tsx";
 import { IssueCardSkeleton } from "./components/IssueCardSkeleton.tsx";
-import { NavActions } from "./components/NavActions.tsx";
 import { OfflineOutboxDrawer } from "./components/OfflineOutboxDrawer.tsx";
 import { PageContainer } from "./components/PageContainer.tsx";
 import { ProtectedRoute } from "./components/ProtectedRoute.tsx";
@@ -263,7 +262,6 @@ export function App() {
               <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
                 <div className="flex items-center justify-between px-4 pt-2">
                   <h1 className="text-lg font-black">{t("nav.title")}</h1>
-                  <NavActions />
                 </div>
                 <main className="pt-4">
                   <PageContainer className="space-y-4">

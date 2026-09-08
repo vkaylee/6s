@@ -1,5 +1,4 @@
 import { Link } from "wouter";
-import { NavActions } from "../components/NavActions.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 
@@ -13,7 +12,6 @@ export function NotFoundPage() {
           <span className="text-sm font-black text-zinc-800 dark:text-zinc-200">
             {t("nav.title")}
           </span>
-          <NavActions />
         </PageContainer>
       </header>
 

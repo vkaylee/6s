@@ -36,8 +36,8 @@ describe("ScoreLedgerPage", () => {
     );
 
     expect(html).toContain("LINE_A1");
-    expect(html).toContain('data-testid="lang-toggle"');
-    expect(html).toContain('data-testid="theme-toggle"');
+    expect(html).not.toContain('data-testid="lang-toggle"');
+    expect(html).not.toContain('data-testid="theme-toggle"');
     expect(html).toContain("Sổ cái biến động điểm");
     expect(html).toContain("Chu kỳ tuần (từ Thứ Hai)");
   });
@@ -50,8 +50,8 @@ describe("ScoreLedgerPage", () => {
     );
 
     expect(html).toContain("10");
-    expect(html).toContain('data-testid="lang-toggle"');
-    expect(html).toContain('data-testid="theme-toggle"');
+    expect(html).not.toContain('data-testid="lang-toggle"');
+    expect(html).not.toContain('data-testid="theme-toggle"');
     expect(html).toContain("Chu kỳ tháng (từ mùng 1)");
   });
 
