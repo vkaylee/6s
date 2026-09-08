@@ -131,22 +131,22 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                 aria-expanded={isProfileOpen}
                 aria-haspopup="true"
                 aria-label={user.full_name}
-                className="flex items-center space-x-1.5 p-1 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-h-[36px]"
+                className="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-h-[40px]"
                 title={user.full_name}
               >
                 {/* Avatar Badge */}
-                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                <div className="w-9 h-9 rounded-lg bg-blue-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
                   {user.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}
                 </div>
                 <div className="text-left hidden sm:block leading-tight pr-1">
-                  <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate max-w-[100px]">
+                  <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate max-w-[200px] lg:max-w-[260px]">
                     {user.full_name}
                   </div>
-                  <div className="text-[10px] text-zinc-400 font-medium truncate max-w-[100px]">
+                  <div className="text-[11px] text-zinc-400 font-medium truncate max-w-[200px] lg:max-w-[260px]">
                     {user.role}
                   </div>
                 </div>
-                <span className="text-[10px] text-zinc-400">▾</span>
+                <span className="text-xs text-zinc-400">▾</span>
               </button>
 
               {/* Profile Dropdown Popover */}
