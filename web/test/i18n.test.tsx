@@ -382,6 +382,8 @@ describe("Component Props I18n Enforcement Guard", () => {
     locationCode: true,
     selectedTags: true,
     code: true,
+    initialInput: true,
+    initialCode: true,
     allowedRoles: true,
   };
 
