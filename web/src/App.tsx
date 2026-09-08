@@ -7,7 +7,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { AppShell } from "./components/AppShell.tsx";
 import { ConflictModal } from "./components/ConflictModal.tsx";
@@ -22,6 +22,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute.tsx";
 import { QuickFacets } from "./components/QuickFacets.tsx";
 import type { DraftResolve } from "./db/indexeddb.ts";
 import { useDashboardData } from "./hooks/useDashboardData.ts";
+import { useEdgeSwipeBack } from "./hooks/useEdgeSwipeBack.ts";
 import { useSetupStatus } from "./hooks/useSetupStatus.ts";
 import { useI18nStore } from "./i18n/index.ts";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
@@ -33,6 +34,7 @@ import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 
 import { useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
+import { useRouteHistoryStore } from "./store/routeHistoryStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
 import { resolveLocationNameByCode, UserRole } from "./types/index.ts";
 
@@ -74,6 +76,7 @@ export function App() {
   const dashboard = useDashboardData({ accessToken, locale, searchString, user });
   const [conflictItem, setConflictItem] = useState<DraftResolve | null>(null);
   const { isSetupOpen, setIsSetupOpen } = useSetupStatus();
+  const pushRoute = useRouteHistoryStore((state) => state.push);
   const {
     issues,
     locations,
@@ -118,6 +121,30 @@ export function App() {
     initTheme();
     restoreSession();
   }, [initTheme, restoreSession]);
+
+  useEffect(() => {
+    const current = currentPath.split("?")[0];
+    const stack = useRouteHistoryStore.getState().stack;
+    const last = stack[stack.length - 1]?.split("?")[0];
+    if (last !== current) {
+      pushRoute(currentPath);
+    }
+  }, [currentPath, pushRoute]);
+
+  const handleBack = useCallback(() => {
+    const previous = useRouteHistoryStore.getState().pop();
+    if (previous) {
+      setLocation(previous.split("?")[0]);
+    }
+  }, [setLocation]);
+
+  useEdgeSwipeBack({
+    onBack: handleBack,
+    enabled: Boolean(user) && !isSetupOpen,
+    blocked: () =>
+      isDrawerOpen || isFilterDrawerOpen || selectedIssue != null || conflictItem != null,
+  });
+
   return (
     <>
       <ScrollToTop />

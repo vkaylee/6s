@@ -36,7 +36,6 @@ import { useThemeStore } from "../store/themeStore.ts";
 import {
   IssueCategory,
   type IssueItem,
-  IssueStatus,
   type LocationHealthScore,
   type LocationItem,
   type PaginatedResult,
@@ -100,10 +99,18 @@ export function ReportsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      const locationQuery = selectedLocationFilter
+        ? `&location_code=${encodeURIComponent(selectedLocationFilter)}`
+        : "";
+      const leaderboardLocationQuery = selectedLocationFilter
+        ? `?location_code=${encodeURIComponent(selectedLocationFilter)}`
+        : "";
       const [summaryRes, locationsRes, repRes, mLocRes, mTagRes] = await Promise.all([
-        apiClient<ReportSummaryResponse>(`/api/reports/summary?days=${daysRange}`),
-        apiClient<LocationHealthScore[]>("/api/leaderboard/locations"),
-        apiClient<ReporterLeaderboard[]>("/api/leaderboard/reporters").catch(() => []),
+        apiClient<ReportSummaryResponse>(`/api/reports/summary?days=${daysRange}${locationQuery}`),
+        apiClient<LocationHealthScore[]>(`/api/leaderboard/locations${leaderboardLocationQuery}`),
+        apiClient<ReporterLeaderboard[]>(
+          `/api/leaderboard/reporters${leaderboardLocationQuery}`,
+        ).catch(() => []),
         apiClient<LocationItem[]>("/api/locations").catch(() => []),
         apiClient<TagItem[]>("/api/tags").catch(() => []),
       ]);
@@ -121,8 +128,7 @@ export function ReportsPage() {
 
   useEffect(() => {
     loadData();
-  }, [daysRange]);
-
+  }, [daysRange, selectedLocationFilter]);
   // Fetch drilldown issues from backend whenever drilldown filter or page changes
   useEffect(() => {
     if (!drilldownType) {
@@ -141,12 +147,15 @@ export function ReportsPage() {
         });
         if (drilldownType === "LOCATION" && selectedLocationDrill) {
           params.set("location_code", selectedLocationDrill);
-        } else if (drilldownType === "CATEGORY" && selectedCategoryDrill) {
+        } else if (selectedLocationFilter) {
+          params.set("location_code", selectedLocationFilter);
+        }
+        if (drilldownType === "CATEGORY" && selectedCategoryDrill) {
           params.set("category", selectedCategoryDrill);
         } else if (drilldownType === "SAFETY") {
           params.set("category", IssueCategory.S6);
         } else if (drilldownType === "OVERDUE") {
-          params.set("status", IssueStatus.OPEN);
+          params.set("overdue", "true");
         }
 
         const res = await apiClient<PaginatedResult<IssueItem[]>>(
@@ -174,6 +183,7 @@ export function ReportsPage() {
     selectedLocationDrill,
     selectedCategoryDrill,
     selectedTagDrill,
+    selectedLocationFilter,
     drilldownPage,
   ]);
 
@@ -412,6 +422,24 @@ export function ReportsPage() {
       {/* Main Content Area */}
       <main className="pt-4">
         <PageContainer className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <label htmlFor="reports-location-filter" className="text-xs font-bold text-zinc-500">
+              {t("reports.select_location_filter")}
+            </label>
+            <select
+              id="reports-location-filter"
+              value={selectedLocationFilter}
+              onChange={(e) => setSelectedLocationFilter(e.target.value)}
+              className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-72"
+            >
+              <option value="">{t("reports.all_locations_option")}</option>
+              {masterLocations.map((location) => (
+                <option key={location.code} value={location.code}>
+                  {location.name_vi || location.code}
+                </option>
+              ))}
+            </select>
+          </div>
           {/* Tầng 1: Executive KPI Cards (Sticky Strategic Reality) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* KPI 1: Total & Resolution */}
@@ -558,10 +586,7 @@ export function ReportsPage() {
                     <div className="flex bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-xl text-[11px] font-bold border border-zinc-200 dark:border-zinc-700">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedLocationFilter("");
-                          setLocationLimit(5);
-                        }}
+                        onClick={() => setLocationLimit(5)}
                         className={`px-2.5 py-1 rounded-lg transition-all ${
                           locationLimit === 5 && !selectedLocationFilter
                             ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
@@ -572,10 +597,7 @@ export function ReportsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedLocationFilter("");
-                          setLocationLimit(10);
-                        }}
+                        onClick={() => setLocationLimit(10)}
                         className={`px-2.5 py-1 rounded-lg transition-all ${
                           locationLimit === 10 && !selectedLocationFilter
                             ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
@@ -586,10 +608,7 @@ export function ReportsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedLocationFilter("");
-                          setLocationLimit(0);
-                        }}
+                        onClick={() => setLocationLimit(0)}
                         className={`px-2.5 py-1 rounded-lg transition-all ${
                           locationLimit === 0 && !selectedLocationFilter
                             ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
@@ -602,27 +621,9 @@ export function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Toolbar: Location Select dropdown & Sort toggles (No manual search text needed) */}
+                {/* Toolbar: Sort toggles (location filter is global above KPIs) */}
                 <div className="flex flex-wrap items-stretch gap-2 mb-4 bg-zinc-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                  <div className="flex flex-col sm:flex-row basis-full min-w-0 gap-2 sm:items-center sm:basis-auto sm:flex-1">
-                    <span className="text-xs font-bold text-zinc-500">
-                      {t("reports.select_location_filter")}
-                    </span>
-                    <select
-                      value={selectedLocationFilter}
-                      onChange={(e) => setSelectedLocationFilter(e.target.value)}
-                      className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-xs font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1"
-                    >
-                      <option value="">{t("reports.all_locations_option")}</option>
-                      {rawLocationReports.map((loc) => (
-                        <option key={loc.location_code} value={loc.location_code}>
-                          {loc.location_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-xl text-[11px] font-bold border border-zinc-200 dark:border-zinc-700 shrink-0 self-end sm:self-auto">
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-xl text-[11px] font-bold border border-zinc-200 dark:border-zinc-700 shrink-0 ml-auto">
                     <button
                       type="button"
                       onClick={() => setLocationSort("HEALTH_ASC")}
