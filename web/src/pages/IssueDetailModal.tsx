@@ -356,6 +356,12 @@ export function IssueDetailModal({
 
   const role = user?.role || UserRole.USER;
   const isSafetyIssue = currentIssue.category === IssueCategory.S6;
+  const resolvedLocationName = resolveLocationNameByCode(
+    locations,
+    currentIssue.location_code,
+    currentIssue.location_name,
+    locale,
+  );
 
   // Edit Permission: Creator, Resolver, Admin, Safety Officer
   const canEdit =
@@ -537,7 +543,7 @@ export function IssueDetailModal({
   const dateLocale = locale === "zh" ? "zh-CN" : locale === "en" ? "en-US" : "vi-VN";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 2xl:p-8 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 2xl:p-8 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
       {/* Backdrop overlay button for a11y click-outside */}
       <button
         type="button"
@@ -546,99 +552,51 @@ export function IssueDetailModal({
         className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-hidden"
         tabIndex={-1}
       />
-      <div className="w-full max-w-lg lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden sm:my-auto flex flex-col max-h-[95vh] lg:max-h-[90vh] 2xl:max-h-[85vh]">
+      <div className="w-full max-w-lg lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto sm:my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] lg:max-h-[90vh] 2xl:max-h-[85vh]">
         {/* Header */}
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center space-x-2 min-w-0">
-            {canEdit ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditingCategory(!isEditingCategory);
-                  setIsEditingLocation(false);
-                }}
-                className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 flex items-center space-x-1 shrink-0"
-                title={t("issue_detail.quick_edit_category")}
-              >
-                <span>{currentIssue.category}</span>
-                <span className="text-xs opacity-50">✎</span>
-              </button>
-            ) : (
-              <span className="px-2.5 py-1 rounded-lg font-black text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shrink-0">
-                {currentIssue.category}
-              </span>
-            )}
-            <div className="min-w-0">
-              <div className="flex items-center space-x-1.5 min-w-0">
-                <h2 className="font-bold text-base text-zinc-900 dark:text-zinc-100 truncate">
-                  #{currentIssue.id} -{" "}
-                  {resolveLocationNameByCode(
-                    locations,
-                    currentIssue.location_code,
-                    currentIssue.location_name,
-                    locale,
-                  )}
-                </h2>
-                {canEdit && locations && locations.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditingLocation(!isEditingLocation);
-                      setIsEditingCategory(false);
-                    }}
-                    className="text-xs text-zinc-400 hover:text-blue-600 p-0.5 shrink-0"
-                    title={t("issue_detail.quick_edit_location")}
-                  >
-                    ✎
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center space-x-2 text-xs text-zinc-400">
-                <span>{currentIssue.location_code}</span>
-                <span>•</span>
-                <span>v{currentIssue.version}</span>
-                <span>•</span>
-                <span
-                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-bold text-[10px] border ${
-                    causeType === "BEHAVIOR"
-                      ? "bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
-                      : "bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800"
-                  }`}
-                >
-                  <span>{causeType === "BEHAVIOR" ? "👤" : "📦"}</span>
-                  <span>
-                    {causeType === "BEHAVIOR"
-                      ? t("issue.badge_behavior")
-                      : t("issue.badge_condition")}
-                  </span>
-                </span>
-              </div>
-            </div>
+        <div className="p-4 pt-5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="px-2 py-0.5 rounded-md font-black text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shrink-0">
+              {currentIssue.category}
+            </span>
+            <span
+              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-[10px] border shrink-0 ${
+                causeType === "BEHAVIOR"
+                  ? "bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                  : "bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+              }`}
+            >
+              {causeType === "BEHAVIOR" ? "👤" : "📦"}
+              {causeType === "BEHAVIOR" ? t("issue.badge_behavior") : t("issue.badge_condition")}
+            </span>
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 px-1">
+              v{currentIssue.version}
+            </span>
           </div>
-          <div className="flex items-center space-x-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {statusBadge}
             {canEdit && (
               <button
                 type="button"
                 onClick={() => setIsEditingFull(true)}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 hover:bg-blue-100 transition-colors flex items-center space-x-1"
+                className="p-2 rounded-lg text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 hover:bg-blue-100 transition-colors flex items-center justify-center min-w-[40px] min-h-[40px]"
                 title={t("issue.edit")}
+                aria-label={t("issue.edit")}
               >
                 <span>✏️</span>
-                <span className="hidden xs:inline">{t("issue.edit")}</span>
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-zinc-600 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              aria-label={t("common.close")}
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* In-place quick edit category drawer */}
         {isEditingCategory && (
           <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700 grid grid-cols-3 gap-2">
             {S_CATEGORIES.map((s) => (
@@ -778,13 +736,19 @@ export function IssueDetailModal({
           <div className="lg:col-span-5 xl:col-span-5 2xl:col-span-4 p-4 lg:p-6 space-y-4 lg:overflow-y-auto bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col justify-between">
             <div className="space-y-4">
               {/* Description & Tags */}
+              <h2 className="font-bold text-base leading-6 text-zinc-900 dark:text-zinc-100 break-words">
+                #{currentIssue.id} - {resolvedLocationName}
+              </h2>
               <div className="p-4 bg-white dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs space-y-2.5">
                 <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <span>
-                    {t("issue_detail.reporter_label")} <strong>{currentIssue.creator_name}</strong>
-                  </span>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span>
+                      {t("issue_detail.reporter_label")}{" "}
+                      <strong>{currentIssue.creator_name}</strong>
+                    </span>
                     <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
                     {aiEnabled && (
                       <button
                         type="button"

@@ -102,7 +102,30 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("Dịch AI");
   });
 
-  it("renders quick location edit button when user can edit and locations are provided", () => {
+  it("shows the localized location name instead of its code in the header metadata", () => {
+    const html = renderToString(
+      <IssueDetailModal
+        issue={mockIssue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+        locations={[
+          {
+            code: "LINE_A1",
+            name_vi: "Chuyền May A1",
+            name_zh: "一号线",
+            name_en: "Sewing Line A1",
+            is_active: true,
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Chuyền May A1");
+    expect(html).not.toContain('class="truncate">LINE_A1</span>');
+  });
+
+  it("renders one full issue edit action instead of inline edit pencils", () => {
     useAuthStore.setState({
       user: {
         id: 10,
@@ -125,17 +148,11 @@ describe("IssueDetailModal Component", () => {
             name_en: "Sewing Line A1",
             is_active: true,
           },
-          {
-            code: "LINE_B2",
-            name_vi: "Chuyền May B2",
-            name_zh: "二号线",
-            name_en: "Sewing Line B2",
-            is_active: true,
-          },
         ]}
       />,
     );
-    expect(html).toContain("Chạm để sửa nhanh vị trí (In-place Quick Edit)");
+    expect(html).toContain('aria-label="Chỉnh sửa"');
+    expect(html).not.toContain("Chạm để sửa nhanh vị trí (In-place Quick Edit)");
   });
 
   it("renders localized location name in score breakdown logs", () => {
