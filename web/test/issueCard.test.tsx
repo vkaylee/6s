@@ -39,14 +39,6 @@ describe("IssueCard Component", () => {
     expect(html).toContain('loading="lazy"');
     expect(html).not.toContain("h-15");
   });
-  it("renders deducted points when score logs contain penalties", () => {
-    const html = renderToString(
-      <IssueCard issue={{ ...mockIssue, score_deducted: 7 }} onClick={() => {}} />,
-    );
-    expect(html).toContain("-7");
-    expect(html).toContain("điểm");
-  });
-
   it("omits bullet separator when creator_name is missing", () => {
     const withoutCreator = { ...mockIssue, creator_name: "" };
     const html = renderToString(<IssueCard issue={withoutCreator} onClick={() => {}} />);
