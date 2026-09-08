@@ -110,12 +110,17 @@ export async function refreshAccessToken(): Promise<string | null> {
     }
     const envelope = parseEnvelope(body);
     const data = envelope.data;
-    if (typeof data !== "object" || data === null || typeof (data as Record<string, unknown>).access_token !== "string" || typeof (data as Record<string, unknown>).refresh_token !== "string" || typeof (data as Record<string, unknown>).user !== "object" || (data as Record<string, unknown>).user === null) {
+    if (typeof data !== "object" || data === null || typeof (data as Record<string, unknown>).access_token !== "string" || typeof (data as Record<string, unknown>).refresh_token !== "string") {
       onRefreshed(null);
       return null;
     }
     const accessToken = (data as Record<string, unknown>).access_token as string;
-    await setAuth((data as Record<string, unknown>).user as typeof user, accessToken, (data as Record<string, unknown>).refresh_token as string);
+    const refreshedUser = (data as Record<string, unknown>).user;
+    await setAuth(
+      (typeof refreshedUser === "object" && refreshedUser !== null ? refreshedUser : user) as typeof user,
+      accessToken,
+      (data as Record<string, unknown>).refresh_token as string,
+    );
     onRefreshed(accessToken);
     return accessToken;
   } catch {
