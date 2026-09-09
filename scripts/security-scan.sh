@@ -2,6 +2,7 @@
 set -euo pipefail
 
 mode=${1:?usage: $0 {go|web|sbom|secrets}}
+mode=${mode%\}}
 mkdir -p artifacts/security
 case "$mode" in
   go)
