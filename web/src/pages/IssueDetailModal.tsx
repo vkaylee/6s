@@ -859,33 +859,12 @@ export function IssueDetailModal({
                   <div className="space-y-2">
                     {(issueScoreLogs || []).map((log) => {
                       const isPositive = log.points > 0;
-                      const isLocation = log.target_type === "LOCATION";
                       return (
                         <div
                           key={log.id}
                           className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 text-xs"
                         >
                           <div className="space-y-0.5">
-                            <div className="flex items-center space-x-1.5">
-                              <span
-                                className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
-                                  isLocation
-                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                                    : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
-                                }`}
-                              >
-                                {isLocation
-                                  ? resolveLocationNameByCode(
-                                      locations,
-                                      log.target_id,
-                                      log.target_id === currentIssue.location_code
-                                        ? currentIssue.location_name
-                                        : "",
-                                      locale,
-                                    )
-                                  : log.target_id}
-                              </span>
-                            </div>
                             <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
                               {log.rule_description || log.rule_key}
                               {log.penalty_date && ` (${log.penalty_date})`}
