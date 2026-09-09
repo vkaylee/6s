@@ -17,4 +17,14 @@ describe("AdminConfigPage", () => {
     expect(html).not.toContain("Vị trí xưởng");
     expect(html).not.toContain("Thẻ sự cố");
   });
+
+  it("renders localized scoring rule names without technical keys", () => {
+    const html = renderToString(
+      <Router ssrPath="/admin">
+        <AdminConfigPage />
+      </Router>,
+    );
+    expect(html).toContain("Điểm nền hàng tuần");
+    expect(html).not.toContain("base_weekly_score");
+  });
 });

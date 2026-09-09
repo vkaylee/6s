@@ -7,6 +7,18 @@ import type { AIConfigData, AIDNSTestResponse, AITestResponse } from "../types/i
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
 
+const DEFAULT_SCORING_RULES: Record<string, number> = {
+  base_weekly_score: 100,
+  penalty_normal: -2,
+  penalty_safety: -10,
+  penalty_overdue: -5,
+  penalty_reopen: -2,
+  bonus_kaizen: 1,
+  reward_reporter_normal: 2,
+  reward_reporter_safety: 5,
+  penalty_reporter_invalid: -5,
+};
+
 interface ScoringRuleItem {
   rule_key: string;
   points: number;
@@ -60,7 +72,7 @@ export function AdminConfigPage() {
   const [activeTab, setActiveTab] = useState<"SCORING" | "AD" | "NOTIFICATIONS" | "AI">("SCORING");
 
   // Scoring config state
-  const [rules, setRules] = useState<Record<string, number>>({});
+  const [rules, setRules] = useState<Record<string, number>>(DEFAULT_SCORING_RULES);
   const [applyFrom, setApplyFrom] = useState("");
   const [reason, setReason] = useState("");
   const [isRetroactive, setIsRetroactive] = useState(false);
@@ -478,8 +490,10 @@ export function AdminConfigPage() {
                     key={ruleKey}
                     className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 min-h-[56px]"
                   >
-                    <div className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      {ruleKey}
+                    <div>
+                      <div className="font-bold text-sm text-zinc-800 dark:text-zinc-200">
+                        {t(`admin.scoring_rule_${ruleKey}`)}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <button

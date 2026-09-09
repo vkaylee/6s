@@ -3,9 +3,11 @@ package scoring
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -91,6 +93,23 @@ func TestScoringHandler(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Errorf("GET %s: expected 200, got %d", path, rr.Code)
 		}
+	}
+}
+func TestGetRulesUsesPublicJSONFieldNames(t *testing.T) {
+	handler := NewHandler(&mockHandlerService{rules: []db.ScoringRule{{
+		RuleKey: "penalty_normal",
+		Points: -2,
+		Description: sql.NullString{String: "Normal issue penalty", Valid: true},
+	}}})
+	rr := httptest.NewRecorder()
+	handler.GetRules(rr, httptest.NewRequest("GET", "/api/config/scoring", nil))
+
+	body := rr.Body.String()
+	if !strings.Contains(body, `"rule_key":"penalty_normal"`) || !strings.Contains(body, `"points":-2`) {
+		t.Fatalf("scoring rules response lost snake_case fields: %s", body)
+	}
+	if strings.Contains(body, `"RuleKey"`) {
+		t.Fatalf("scoring rules response exposes Go field names: %s", body)
 	}
 }
 

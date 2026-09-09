@@ -96,6 +96,13 @@ func (h *Handler) GetTargetScoreLogs(w http.ResponseWriter, r *http.Request) {
 	_ = response.JSON(w, http.StatusOK, items)
 }
 
+// scoringRuleItem is the public JSON shape for a scoring rule.
+type scoringRuleItem struct {
+	RuleKey     string  `json:"rule_key"`
+	Points      int32   `json:"points"`
+	Description string  `json:"description"`
+}
+
 // GetRules handles GET /api/config/scoring.
 func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 	rules, err := h.service.GetRules(r.Context())
@@ -103,7 +110,15 @@ func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrRulesLoadFailed).WithCause(err))
 		return
 	}
-	_ = response.JSON(w, http.StatusOK, rules)
+	items := make([]scoringRuleItem, 0, len(rules))
+	for _, rule := range rules {
+		items = append(items, scoringRuleItem{
+			RuleKey: rule.RuleKey,
+			Points: rule.Points,
+			Description: rule.Description.String,
+		})
+	}
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // UpdateRulesPayload defines payload for PUT /api/config/scoring.
