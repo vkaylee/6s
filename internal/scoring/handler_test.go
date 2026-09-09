@@ -97,8 +97,8 @@ func TestScoringHandler(t *testing.T) {
 }
 func TestGetRulesUsesPublicJSONFieldNames(t *testing.T) {
 	handler := NewHandler(&mockHandlerService{rules: []db.ScoringRule{{
-		RuleKey: "penalty_normal",
-		Points: -2,
+		RuleKey:     "penalty_normal",
+		Points:      -2,
 		Description: sql.NullString{String: "Normal issue penalty", Valid: true},
 	}}})
 	rr := httptest.NewRecorder()

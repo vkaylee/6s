@@ -61,6 +61,16 @@ func (a adminStoreAdapter) CountAdmins(ctx context.Context) (int64, error) {
 	return a.m.CountAdmins(ctx)
 }
 
+func (a adminStoreAdapter) CountSuperadmins(_ context.Context) (int64, error) {
+	var count int64
+	for _, u := range a.m.users {
+		if u.Role == RoleSuperadmin.String() && u.IsActive {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (a adminStoreAdapter) GetUserByID(ctx context.Context, id int64) (db.User, error) {
 	return a.m.GetUserByID(ctx, id)
 }
@@ -257,17 +267,46 @@ func TestAdminHandler_UpdateUser_PrivilegedBoundaries(t *testing.T) {
 			t.Fatalf("expected 403 for privileged target %s, got %d", id, rr.Code)
 		}
 	}
-
-	body, _ := json.Marshal(UpdateUserRequest{IsActive: boolPtr(false)})
+}
+func TestAdminHandler_UpdateUser_SuperadminBoundaries(t *testing.T) {
+	store := newMockFullStore()
+	store.users[1] = db.User{ID: 1, Role: RoleSuperadmin.String(), IsActive: true}
+	h := NewAdminHandler(adminStoreAdapter{store})
+	body, _ := json.Marshal(UpdateUserRequest{Role: strPtr(RoleUser.String())})
 	req := patchUserRequest("1", body)
 	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, store.users[1]))
 	rr := httptest.NewRecorder()
 	h.UpdateUser(rr, req)
 	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for self-change, got %d", rr.Code)
+		t.Fatalf("expected 403 for superadmin self-demote, got %d", rr.Code)
 	}
 }
 
+func TestAdminHandler_UpdateUser_LastSuperadminProtection(t *testing.T) {
+	store := newMockFullStore()
+	store.users[1] = db.User{ID: 1, Role: RoleSuperadmin.String(), IsActive: true}
+	store.users[2] = db.User{ID: 2, Role: RoleSuperadmin.String(), IsActive: true}
+	h := NewAdminHandler(adminStoreAdapter{store})
+
+	// Có 2 superadmin -> hạ quyền id=2 bởi id=1 thành công
+	body, _ := json.Marshal(UpdateUserRequest{Role: strPtr(RoleAdmin.String())})
+	req := patchUserRequest("2", body)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, store.users[1]))
+	rr := httptest.NewRecorder()
+	h.UpdateUser(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 when demoting non-last superadmin, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Còn 1 superadmin -> hạ quyền id=1 bởi chính mình bị 403 (self-demote)
+	reqSelf := patchUserRequest("1", body)
+	reqSelf = reqSelf.WithContext(context.WithValue(reqSelf.Context(), UserContextKey, store.users[1]))
+	rrSelf := httptest.NewRecorder()
+	h.UpdateUser(rrSelf, reqSelf)
+	if rrSelf.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 on self-demote, got %d", rrSelf.Code)
+	}
+}
 func TestAdminHandler_UpdateUser_NotFound(t *testing.T) {
 	store := newMockFullStore()
 	h := NewAdminHandler(adminStoreAdapter{store})

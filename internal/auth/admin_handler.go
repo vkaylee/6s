@@ -158,15 +158,33 @@ func (h *AdminHandler) ensureAdminCount(ctx context.Context) *apperror.AppError 
 	return nil
 }
 
-func (h *AdminHandler) ensureAdminCanChange(ctx context.Context, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) *apperror.AppError {
-	if target.Role == RoleAdmin.String() && target.IsActive &&
-		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && params.Role != RoleAdmin.String())) {
-		if appErr := h.ensureAdminCount(ctx); appErr != nil {
-			return appErr
+func (h *AdminHandler) ensureSuperadminCount(ctx context.Context) *apperror.AppError {
+	users, err := h.store.ListUsers(ctx, db.ListUsersParams{})
+	if err != nil {
+		return apperror.Internal(i18n.ErrUserQuery).WithCause(err)
+	}
+	count := 0
+	for _, user := range users {
+		if user.Role == RoleSuperadmin.String() && user.IsActive {
+			count++
 		}
 	}
+	if count <= 1 {
+		return apperror.Conflict("LAST_SUPERADMIN", i18n.ErrLastAdmin)
+	}
 	return nil
+}
 
+func (h *AdminHandler) ensureAdminCanChange(ctx context.Context, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) *apperror.AppError {
+	if target.Role == RoleSuperadmin.String() && target.IsActive &&
+		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && params.Role != RoleSuperadmin.String())) {
+		return h.ensureSuperadminCount(ctx)
+	}
+	if target.Role == RoleAdmin.String() && target.IsActive &&
+		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && params.Role != RoleAdmin.String())) {
+		return h.ensureAdminCount(ctx)
+	}
+	return nil
 }
 
 func (h *AdminHandler) authorizeUserChange(actor db.User, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) *apperror.AppError {
@@ -176,8 +194,8 @@ func (h *AdminHandler) authorizeUserChange(actor db.User, target db.User, req Up
 	if actor.ID == target.ID {
 		return apperror.Forbidden(i18n.ErrForbidden)
 	}
-	if target.Role == RoleSuperadmin.String() ||
-		(target.Role == RoleAdmin.String() && actor.Role != RoleSuperadmin.String()) {
+	if actor.Role != RoleSuperadmin.String() &&
+		(target.Role == RoleAdmin.String() || target.Role == RoleSuperadmin.String()) {
 		return apperror.Forbidden(i18n.ErrForbidden)
 	}
 	if actor.Role != RoleSuperadmin.String() && params.Role == RoleSuperadmin.String() {
@@ -188,7 +206,6 @@ func (h *AdminHandler) authorizeUserChange(actor db.User, target db.User, req Up
 	}
 	return nil
 }
-
 func (h *AdminHandler) revokeChangedSessions(ctx context.Context, id int64, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) error {
 	if req.Role != nil && params.Role != target.Role {
 		if err := h.store.RevokeUserRefreshTokens(ctx, id); err != nil {

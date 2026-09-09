@@ -95,8 +95,8 @@ describe("UserAccessPage UI", () => {
         </Router>
       </WithMockState>,
     );
-    // worker row (USER) should not show last-admin warning; admin row is active+single => shows warning
-    expect(html).toContain("Không thể vô hiệu hóa");
+    // Self-management is hidden; the last-admin warning must not be shown for that row.
+    expect(html).not.toContain("Không thể vô hiệu hóa");
   });
 
   it("renders filter selects with associated labels", () => {

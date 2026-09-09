@@ -89,12 +89,6 @@ export function UserAccessPage() {
     return true;
   });
 
-  const openEdit = (u: AdminUserItem) => {
-    setEditingId(u.id);
-    setEditRole(u.role);
-    setEditLocation(u.assigned_location_code || "");
-  };
-
   const handleSaveEdit = async (target: AdminUserItem) => {
     setSavingId(target.id);
     try {
@@ -254,12 +248,19 @@ export function UserAccessPage() {
                 const isSelf = currentUser?.id === u.id;
                 const isEditing = editingId === u.id;
                 const canManage =
-                  currentUser?.role !== UserRole.ADMIN ||
-                  (u.role !== UserRole.ADMIN && u.role !== UserRole.SUPERADMIN);
+                  !isSelf &&
+                  (currentUser?.role === UserRole.SUPERADMIN ||
+                    (currentUser?.role === UserRole.ADMIN &&
+                      u.role !== UserRole.ADMIN &&
+                      u.role !== UserRole.SUPERADMIN));
                 const isLastActiveAdmin =
                   u.role === UserRole.ADMIN &&
                   u.is_active &&
                   users.filter((x) => x.role === UserRole.ADMIN && x.is_active).length <= 1;
+                const isLastActiveSuperadmin =
+                  u.role === UserRole.SUPERADMIN &&
+                  u.is_active &&
+                  users.filter((x) => x.role === UserRole.SUPERADMIN && x.is_active).length <= 1;
                 return (
                   <li key={u.id} className="p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -372,7 +373,11 @@ export function UserAccessPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => openEdit(u)}
+                          onClick={() => {
+                            setEditingId(u.id);
+                            setEditRole(u.role);
+                            setEditLocation(u.assigned_location_code || "");
+                          }}
                           className="flex-1 text-xs font-bold px-3 py-2.5 rounded-xl min-h-[44px] transition-colors border bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 focus-visible:ring-2 focus-visible:ring-blue-600"
                         >
                           ✏️ {t("common.edit")}
@@ -380,9 +385,14 @@ export function UserAccessPage() {
                         <button
                           type="button"
                           onClick={() => handleToggleActive(u)}
-                          disabled={savingId === u.id || isLastActiveAdmin || isSelf}
+                          disabled={
+                            savingId === u.id ||
+                            isLastActiveAdmin ||
+                            isLastActiveSuperadmin ||
+                            isSelf
+                          }
                           title={
-                            isLastActiveAdmin
+                            isLastActiveAdmin || isLastActiveSuperadmin
                               ? t("admin.users_last_admin_hint")
                               : isSelf
                                 ? t("admin.users_self_hint")
@@ -410,14 +420,16 @@ export function UserAccessPage() {
                       </p>
                     )}
 
-                    {canManage && (isLastActiveAdmin || isSelf) && !isEditing && (
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
-                        <span aria-hidden="true">⚠️</span>
-                        {isLastActiveAdmin
-                          ? t("admin.users_last_admin_hint")
-                          : t("admin.users_self_hint")}
-                      </p>
-                    )}
+                    {canManage &&
+                      (isLastActiveAdmin || isLastActiveSuperadmin || isSelf) &&
+                      !isEditing && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                          <span aria-hidden="true">⚠️</span>
+                          {isLastActiveAdmin || isLastActiveSuperadmin
+                            ? t("admin.users_last_admin_hint")
+                            : t("admin.users_self_hint")}
+                        </p>
+                      )}
                   </li>
                 );
               })}

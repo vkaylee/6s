@@ -98,9 +98,9 @@ func (h *Handler) GetTargetScoreLogs(w http.ResponseWriter, r *http.Request) {
 
 // scoringRuleItem is the public JSON shape for a scoring rule.
 type scoringRuleItem struct {
-	RuleKey     string  `json:"rule_key"`
-	Points      int32   `json:"points"`
-	Description string  `json:"description"`
+	RuleKey     string `json:"rule_key"`
+	Points      int32  `json:"points"`
+	Description string `json:"description"`
 }
 
 // GetRules handles GET /api/config/scoring.
@@ -113,8 +113,8 @@ func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 	items := make([]scoringRuleItem, 0, len(rules))
 	for _, rule := range rules {
 		items = append(items, scoringRuleItem{
-			RuleKey: rule.RuleKey,
-			Points: rule.Points,
+			RuleKey:     rule.RuleKey,
+			Points:      rule.Points,
 			Description: rule.Description.String,
 		})
 	}

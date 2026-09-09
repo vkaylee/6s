@@ -49,6 +49,10 @@ ORDER BY id ASC;
 SELECT COUNT(*) FROM users
 WHERE role IN ('ADMIN', 'SUPERADMIN') AND is_active = TRUE;
 
+-- name: CountSuperadmins :one
+SELECT COUNT(*) FROM users
+WHERE role = 'SUPERADMIN' AND is_active = TRUE;
+
 -- name: CreateLocalAdmin :one
 INSERT INTO users (
     username, password_hash, auth_source, full_name, email, role, is_active
