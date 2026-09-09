@@ -26,7 +26,7 @@ export type UserSummary = {
     id: number;
     username: string;
     auth_source: 'LOCAL' | 'AD';
-    role: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN';
+    role: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN' | 'SUPERADMIN';
     assigned_location_code?: string;
     full_name: string;
     email?: string;
@@ -824,7 +824,7 @@ export type ListAdminUsersResponse = ListAdminUsersResponses[keyof ListAdminUser
 
 export type UpdateAdminUserData = {
     body: {
-        role?: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN';
+        role?: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN' | 'SUPERADMIN';
         assigned_location_code?: string;
         is_active?: boolean;
     };
@@ -1269,7 +1269,7 @@ export type UpdateRolePermissionsData = {
         permissions: Array<string>;
     };
     path: {
-        role: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN';
+        role: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN' | 'SUPERADMIN';
     };
     query?: never;
     url: '/admin/roles/{role}/permissions';

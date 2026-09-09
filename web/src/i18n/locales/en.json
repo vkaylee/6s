@@ -438,6 +438,7 @@
     "users_edit_title": "Edit permissions: {name}",
     "users_last_admin_hint": "Cannot deactivate the last active administrator",
     "users_self_hint": "You cannot deactivate your own account",
+    "users_privileged_hint": "Only Superadmin can manage Admin or Superadmin accounts",
     "user_activate_confirm": "Reactivate account {name}?",
     "user_deactivate_confirm": "Deactivate account {name}? All sessions will be revoked.",
     "permissions_tab": "Permission Matrix",

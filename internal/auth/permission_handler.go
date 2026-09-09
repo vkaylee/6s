@@ -45,7 +45,7 @@ type permissionsResponse struct {
 	Roles       []permissionRoleResponse `json:"roles"`
 }
 
-var permissionRoles = []string{RoleUser.String(), RoleLineLeader.String(), RoleSafetyOfficer.String(), RoleAdmin.String()}
+var permissionRoles = []string{RoleUser.String(), RoleLineLeader.String(), RoleSafetyOfficer.String(), RoleAdmin.String(), RoleSuperadmin.String()}
 
 // List returns the permission catalog and role assignments.
 func (h *PermissionHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -111,6 +111,15 @@ func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		}
 		seen[code] = true
 	}
+	actor, ok := GetUserFromContext(r.Context())
+	if !ok || actor.Role != RoleSuperadmin.String() {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
+	if role == RoleSuperadmin.String() {
+		_ = response.AppError(w, r, apperror.Conflict("SUPERADMIN_LOCKED", i18n.ErrPermissionLockout))
+		return
+	}
 	if role == RoleAdmin.String() {
 		if !seen[PermissionManage] || !seen[PermissionUserManage] {
 			_ = response.AppError(w, r, apperror.Conflict("ADMIN_LOCKOUT", i18n.ErrPermissionLockout))
@@ -135,7 +144,6 @@ func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(old)
-	actor, _ := GetUserFromContext(r.Context())
 	oldJSON, _ := json.Marshal(permissionRoleResponse{Role: role, Permissions: old})
 	newJSON, _ := json.Marshal(permissionRoleResponse{Role: role, Permissions: req.Permissions})
 	audit := db.InsertAuditLogParams{

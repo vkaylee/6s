@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS permissions (
 );
 
 CREATE TABLE IF NOT EXISTS role_permissions (
-    role VARCHAR(30) NOT NULL CHECK (role IN ('USER','LINE_LEADER','SAFETY_OFFICER','ADMIN')),
+    role VARCHAR(30) NOT NULL CHECK (role IN ('USER','LINE_LEADER','SAFETY_OFFICER','ADMIN','SUPERADMIN')),
     permission_code VARCHAR(100) NOT NULL REFERENCES permissions(code) ON DELETE CASCADE,
     PRIMARY KEY (role, permission_code)
 );
@@ -206,6 +206,7 @@ CREATE INDEX IF NOT EXISTS idx_issues_created_at ON issues(created_at);
 CREATE INDEX IF NOT EXISTS idx_issues_cause_type ON issues(cause_type);
 CREATE INDEX IF NOT EXISTS idx_issues_composite ON issues(location_code, status, category);
 CREATE INDEX IF NOT EXISTS idx_issue_tags_tag ON issue_tags(tag_code);
+-- Active privileged accounts must remain available.
 CREATE INDEX IF NOT EXISTS idx_tags_use_count ON tags(use_count DESC);
 CREATE INDEX IF NOT EXISTS idx_score_logs_target ON score_logs(target_type, target_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_score_logs_rule ON score_logs(rule_key, created_at);

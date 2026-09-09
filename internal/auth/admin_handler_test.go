@@ -240,6 +240,34 @@ func TestAdminHandler_UpdateUser_LastAdminProtection(t *testing.T) {
 	}
 }
 
+func TestAdminHandler_UpdateUser_PrivilegedBoundaries(t *testing.T) {
+	store := newMockFullStore()
+	store.users[1] = db.User{ID: 1, Role: RoleAdmin.String(), IsActive: true}
+	store.users[2] = db.User{ID: 2, Role: RoleAdmin.String(), IsActive: true}
+	store.users[3] = db.User{ID: 3, Role: RoleSuperadmin.String(), IsActive: true}
+	h := NewAdminHandler(adminStoreAdapter{store})
+
+	for _, id := range []string{"2", "3"} {
+		body, _ := json.Marshal(UpdateUserRequest{IsActive: boolPtr(false)})
+		req := patchUserRequest(id, body)
+		req = req.WithContext(context.WithValue(req.Context(), UserContextKey, store.users[1]))
+		rr := httptest.NewRecorder()
+		h.UpdateUser(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 for privileged target %s, got %d", id, rr.Code)
+		}
+	}
+
+	body, _ := json.Marshal(UpdateUserRequest{IsActive: boolPtr(false)})
+	req := patchUserRequest("1", body)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, store.users[1]))
+	rr := httptest.NewRecorder()
+	h.UpdateUser(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for self-change, got %d", rr.Code)
+	}
+}
+
 func TestAdminHandler_UpdateUser_NotFound(t *testing.T) {
 	store := newMockFullStore()
 	h := NewAdminHandler(adminStoreAdapter{store})

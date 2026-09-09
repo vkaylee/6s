@@ -161,11 +161,26 @@ func (h *AdminHandler) ensureAdminCanChange(ctx context.Context, target db.User,
 			return appErr
 		}
 	}
-	if req.Role != nil && req.IsActive == nil && target.Role == RoleAdmin.String() &&
-		target.IsActive && params.Role != RoleAdmin.String() {
-		if appErr := h.ensureAdminCount(ctx); appErr != nil {
-			return appErr
-		}
+	return nil
+
+}
+
+func (h *AdminHandler) authorizeUserChange(actor db.User, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) *apperror.AppError {
+	if actor.ID == 0 {
+		return nil
+	}
+	if actor.ID == target.ID {
+		return apperror.Forbidden(i18n.ErrForbidden)
+	}
+	if target.Role == RoleSuperadmin.String() ||
+		(target.Role == RoleAdmin.String() && actor.Role != RoleSuperadmin.String()) {
+		return apperror.Forbidden(i18n.ErrForbidden)
+	}
+	if actor.Role != RoleSuperadmin.String() && params.Role == RoleSuperadmin.String() {
+		return apperror.Forbidden(i18n.ErrForbidden)
+	}
+	if actor.Role != RoleSuperadmin.String() && req.Role != nil && params.Role == RoleAdmin.String() {
+		return apperror.Forbidden(i18n.ErrForbidden)
 	}
 	return nil
 }
@@ -236,6 +251,10 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	params, appErr := h.updateParams(r.Context(), target, req)
 	if appErr != nil {
+		_ = response.AppError(w, r, appErr)
+		return
+	}
+	if appErr := h.authorizeUserChange(actor, target, req, params); appErr != nil {
 		_ = response.AppError(w, r, appErr)
 		return
 	}

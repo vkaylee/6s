@@ -137,7 +137,7 @@ func (q *Queries) CloseIssue(ctx context.Context, arg CloseIssueParams) (Issue, 
 
 const countAdmins = `-- name: CountAdmins :one
 SELECT COUNT(*) FROM users
-WHERE role = 'ADMIN' AND is_active = TRUE
+WHERE role IN ('ADMIN', 'SUPERADMIN') AND is_active = TRUE
 `
 
 func (q *Queries) CountAdmins(ctx context.Context) (int64, error) {

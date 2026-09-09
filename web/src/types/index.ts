@@ -57,6 +57,7 @@ export const UserRole = {
   LINE_LEADER: "LINE_LEADER",
   SAFETY_OFFICER: "SAFETY_OFFICER",
   ADMIN: "ADMIN",
+  SUPERADMIN: "SUPERADMIN",
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 

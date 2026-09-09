@@ -438,6 +438,7 @@
     "users_edit_title": "编辑权限: {name}",
     "users_last_admin_hint": "无法停用最后一位在职管理员",
     "users_self_hint": "无法停用您自己的账号",
+    "users_privileged_hint": "仅超级管理员可管理管理员或超级管理员账号",
     "user_activate_confirm": "重新激活账号 {name}？",
     "user_deactivate_confirm": "停用账号 {name}？其所有登录会话将被吊销。",
     "permissions_tab": "权限矩阵",

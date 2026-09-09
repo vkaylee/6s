@@ -27,6 +27,7 @@ const ALL_ROLES: string[] = [
   UserRole.LINE_LEADER,
   UserRole.SAFETY_OFFICER,
   UserRole.ADMIN,
+  UserRole.SUPERADMIN,
 ];
 
 type RoleFilter = "ALL" | string;
@@ -143,6 +144,8 @@ export function UserAccessPage() {
 
   const roleBadgeClass = (role: string) => {
     switch (role) {
+      case UserRole.SUPERADMIN:
+        return "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300";
       case UserRole.ADMIN:
         return "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300";
       case UserRole.SAFETY_OFFICER:
@@ -250,6 +253,9 @@ export function UserAccessPage() {
               {filteredUsers.map((u) => {
                 const isSelf = currentUser?.id === u.id;
                 const isEditing = editingId === u.id;
+                const canManage =
+                  currentUser?.role !== UserRole.ADMIN ||
+                  (u.role !== UserRole.ADMIN && u.role !== UserRole.SUPERADMIN);
                 const isLastActiveAdmin =
                   u.role === UserRole.ADMIN &&
                   u.is_active &&
@@ -291,7 +297,7 @@ export function UserAccessPage() {
                       </div>
                     </div>
 
-                    {isEditing ? (
+                    {isEditing && canManage ? (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -362,7 +368,7 @@ export function UserAccessPage() {
                           </button>
                         </div>
                       </form>
-                    ) : (
+                    ) : canManage ? (
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -395,9 +401,16 @@ export function UserAccessPage() {
                               : t("admin.active_status")}
                         </button>
                       </div>
+                    ) : null}
+
+                    {!canManage && !isEditing && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                        <span aria-hidden="true">⚠️</span>
+                        {t("admin.users_privileged_hint")}
+                      </p>
                     )}
 
-                    {(isLastActiveAdmin || isSelf) && !isEditing && (
+                    {canManage && (isLastActiveAdmin || isSelf) && !isEditing && (
                       <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
                         <span aria-hidden="true">⚠️</span>
                         {isLastActiveAdmin
