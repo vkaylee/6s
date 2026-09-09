@@ -253,22 +253,48 @@ func (c *LiveLDAPClient) Authenticate(username, password string) (*LDAPUser, err
 	}, nil
 }
 
-// MapRoleFromGroups resolves user role by matching group DNs.
+// MapRoleFromGroups resolves user role by matching group DNs. SUPERADMIN is
+// intentionally excluded: directory membership must never grant that role.
 func MapRoleFromGroups(userGroups []string, adminDN, safetyDN, leaderDN string) string {
+	// Treat a configured SUPERADMIN group as invalid rather than allowing it to
+	// become an implicit administrative mapping.
+	if strings.EqualFold(strings.TrimSpace(adminDN), RoleSuperadmin.String()) {
+		adminDN = ""
+	}
 	for _, g := range userGroups {
+		if strings.EqualFold(strings.TrimSpace(g), RoleSuperadmin.String()) {
+			continue
+		}
 		if adminDN != "" && strings.EqualFold(strings.TrimSpace(g), strings.TrimSpace(adminDN)) {
 			return RoleAdmin.String()
 		}
 	}
 	for _, g := range userGroups {
+		if strings.EqualFold(strings.TrimSpace(g), RoleSuperadmin.String()) {
+			continue
+		}
 		if safetyDN != "" && strings.EqualFold(strings.TrimSpace(g), strings.TrimSpace(safetyDN)) {
 			return RoleSafetyOfficer.String()
 		}
 	}
 	for _, g := range userGroups {
+		if strings.EqualFold(strings.TrimSpace(g), RoleSuperadmin.String()) {
+			continue
+		}
 		if leaderDN != "" && strings.EqualFold(strings.TrimSpace(g), strings.TrimSpace(leaderDN)) {
 			return RoleLineLeader.String()
 		}
 	}
 	return RoleUser.String()
+}
+
+// ldapProvisioningRole prevents LDAP data from assigning roles outside the
+// directory mapping contract, especially the manually controlled SUPERADMIN.
+func ldapProvisioningRole(role string) string {
+	switch strings.TrimSpace(role) {
+	case RoleAdmin.String(), RoleSafetyOfficer.String(), RoleLineLeader.String(), RoleUser.String():
+		return strings.TrimSpace(role)
+	default:
+		return RoleUser.String()
+	}
 }

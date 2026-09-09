@@ -108,7 +108,7 @@ func permissionRequest(t *testing.T, method, target string, body []byte, role st
 }
 
 func TestPermissionHandler_List(t *testing.T) {
- 	rr, _ := permissionRequest(t, http.MethodGet, "/api/admin/permissions", nil, RoleSuperadmin.String())
+	rr, _ := permissionRequest(t, http.MethodGet, "/api/admin/permissions", nil, RoleSuperadmin.String())
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -118,9 +118,9 @@ func TestPermissionHandler_List(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
- 	if len(body.Data.Permissions) != 4 || len(body.Data.Roles) != 5 {
- 		t.Fatalf("unexpected catalog size: %d permissions, %d roles", len(body.Data.Permissions), len(body.Data.Roles))
- 	}
+	if len(body.Data.Permissions) != 4 || len(body.Data.Roles) != 5 {
+		t.Fatalf("unexpected catalog size: %d permissions, %d roles", len(body.Data.Permissions), len(body.Data.Roles))
+	}
 	if body.Data.Permissions[0].Code == "" || body.Data.Permissions[0].Description == "" {
 		t.Fatalf("permission projection missing code/description: %+v", body.Data.Permissions[0])
 	}
@@ -136,7 +136,7 @@ func TestPermissionHandler_List(t *testing.T) {
 
 func TestPermissionHandler_UpdateRole(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{"permissions": []string{PermissionIssueCloseOwn, PermissionIssueViewAll}})
- 	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/USER/permissions", payload, RoleSuperadmin.String())
+	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/USER/permissions", payload, RoleSuperadmin.String())
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -161,7 +161,7 @@ func TestPermissionHandler_AuditFailureRollsBack(t *testing.T) {
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("role", "USER")
 	req := httptest.NewRequest(http.MethodPut, "/api/admin/roles/USER/permissions", bytes.NewReader(payload))
- 	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), UserContextKey, db.User{ID: 7, Role: RoleSuperadmin.String()}), chi.RouteCtxKey, ctx))
+	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), UserContextKey, db.User{ID: 7, Role: RoleSuperadmin.String()}), chi.RouteCtxKey, ctx))
 	rr := httptest.NewRecorder()
 	handler.UpdateRole(rr, req)
 	if rr.Code != http.StatusInternalServerError {
@@ -200,7 +200,7 @@ func TestPermissionHandler_AdminLockoutGuard(t *testing.T) {
 			}
 		}
 		payload, _ := json.Marshal(map[string]any{"permissions": remaining})
- 		rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/ADMIN/permissions", payload, RoleSuperadmin.String())
+		rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/ADMIN/permissions", payload, RoleSuperadmin.String())
 		if rr.Code != http.StatusConflict {
 			t.Fatalf("expected 409 for missing %s, got %d", missing, rr.Code)
 		}
@@ -212,7 +212,7 @@ func TestPermissionHandler_AdminLockoutGuard(t *testing.T) {
 
 func TestPermissionHandler_SystemPermissionsProtected(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{"permissions": []string{PermissionManage, PermissionUserManage}})
- 	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/ADMIN/permissions", payload, RoleSuperadmin.String())
+	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/ADMIN/permissions", payload, RoleSuperadmin.String())
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409 when system permissions are dropped, got %d", rr.Code)
 	}

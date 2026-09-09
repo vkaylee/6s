@@ -16,7 +16,7 @@ import (
 	"6s/internal/response"
 )
 
-// AdminStore defines database operations required by the user administration handler.
+// AdminStore defines persistence operations for user administration.
 type AdminStore interface {
 	ListUsers(ctx context.Context, arg db.ListUsersParams) ([]db.User, error)
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
@@ -25,6 +25,10 @@ type AdminStore interface {
 	CountAdmins(ctx context.Context) (int64, error)
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
 	RevokeUserRefreshTokens(ctx context.Context, userID int64) error
+}
+
+type atomicAdminStore interface {
+	UpdateUserAdminAtomic(ctx context.Context, update db.UpdateUserAdminParams, revoke bool, audit db.InsertAuditLogParams) (db.User, error)
 }
 
 // AdminHandler manages user role/location/status administration (Admin only).
@@ -198,29 +202,30 @@ func (h *AdminHandler) revokeChangedSessions(ctx context.Context, id int64, targ
 	}
 	return nil
 }
-
-func (h *AdminHandler) auditUserUpdate(ctx context.Context, r *http.Request, actor db.User, id int64, target, updated db.User) error {
+func (h *AdminHandler) userAuditParams(r *http.Request, actor db.User, id int64, target, updated db.User) (db.InsertAuditLogParams, error) {
 	oldJSON, err := json.Marshal(toAdminUserResponse(target))
 	if err != nil {
-		return err
+		return db.InsertAuditLogParams{}, err
 	}
 	newJSON, err := json.Marshal(toAdminUserResponse(updated))
 	if err != nil {
-		return err
+		return db.InsertAuditLogParams{}, err
 	}
-	return h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-		UserID:      sql.NullInt64{Int64: actor.ID, Valid: actor.ID != 0},
-		Action:      "ADMIN_UPDATE_USER",
-		TargetTable: "users",
-		TargetID:    fmt.Sprintf("%d", id),
-		OldValue:    oldJSON,
-		NewValue:    newJSON,
-		IpAddress:   sql.NullString{String: h.clientIP(r), Valid: true},
-		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
-	})
+	return db.InsertAuditLogParams{
+		UserID: sql.NullInt64{Int64: actor.ID, Valid: actor.ID != 0}, Action: "ADMIN_UPDATE_USER", TargetTable: "users", TargetID: fmt.Sprintf("%d", id),
+		OldValue: oldJSON, NewValue: newJSON, IpAddress: sql.NullString{String: h.clientIP(r), Valid: true}, UserAgent: sql.NullString{String: r.UserAgent(), Valid: true},
+	}, nil
 }
 
-// UpdateUser handles PATCH /api/admin/users/{id} (Admin only).
+func (h *AdminHandler) auditUserUpdate(ctx context.Context, r *http.Request, actor db.User, id int64, target, updated db.User) error {
+	audit, err := h.userAuditParams(r, actor, id, target, updated)
+	if err != nil {
+		return err
+	}
+	return h.store.InsertAuditLog(ctx, audit)
+}
+
+// UpdateUser handles PATCH /api/admin/users/{id}.
 func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -265,22 +270,39 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.IsActive != nil {
 		params.IsActive = *req.IsActive
 	}
-
-	updated, err := h.store.UpdateUserAdmin(r.Context(), params)
+	shouldRevoke := (req.Role != nil && params.Role != target.Role) || (req.IsActive != nil && !*req.IsActive && target.IsActive)
+	predicted := target
+	predicted.Role = params.Role
+	predicted.IsActive = params.IsActive
+	if params.AssignedLocationCode.Valid {
+		predicted.AssignedLocationCode = params.AssignedLocationCode
+	}
+	audit, auditErr := h.userAuditParams(r, actor, id, target, predicted)
+	if auditErr != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(auditErr))
+		return
+	}
+	var updated db.User
+	if atomicStore, ok := h.store.(atomicAdminStore); ok {
+		updated, err = atomicStore.UpdateUserAdminAtomic(r.Context(), params, shouldRevoke, audit)
+	} else {
+		updated, err = h.store.UpdateUserAdmin(r.Context(), params)
+	}
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
 		return
 	}
-
+	if _, atomic := h.store.(atomicAdminStore); atomic {
+		_ = response.JSON(w, http.StatusOK, toAdminUserResponse(updated))
+		return
+	}
 	if err := h.revokeChangedSessions(r.Context(), id, target, req, params); err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
 		return
 	}
-
 	if err := h.auditUserUpdate(r.Context(), r, actor, id, target, updated); err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
 		return
 	}
-
 	_ = response.JSON(w, http.StatusOK, toAdminUserResponse(updated))
 }

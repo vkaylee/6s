@@ -253,7 +253,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 			AdDn:     sql.NullString{String: ldapUser.DN, Valid: true},
 			FullName: ldapUser.FullName,
 			Email:    emailVal,
-			Role:     ldapUser.MatchedRole,
+			Role:     ldapProvisioningRole(ldapUser.MatchedRole),
 		})
 	}
 

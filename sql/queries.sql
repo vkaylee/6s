@@ -53,7 +53,7 @@ WHERE role IN ('ADMIN', 'SUPERADMIN') AND is_active = TRUE;
 INSERT INTO users (
     username, password_hash, auth_source, full_name, email, role, is_active
 ) VALUES (
-    $1, $2, 'LOCAL', $3, $4, 'ADMIN', TRUE
+    $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', TRUE
 )
 RETURNING *;
 

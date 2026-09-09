@@ -262,7 +262,7 @@ const createLocalAdmin = `-- name: CreateLocalAdmin :one
 INSERT INTO users (
     username, password_hash, auth_source, full_name, email, role, is_active
 ) VALUES (
-    $1, $2, 'LOCAL', $3, $4, 'ADMIN', TRUE
+    $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', TRUE
 )
 RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
 `

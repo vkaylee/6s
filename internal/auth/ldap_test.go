@@ -53,6 +53,31 @@ func TestMapRoleFromGroups(t *testing.T) {
 			expected: RoleLineLeader.String(),
 		},
 		{
+			name:     "SUPERADMIN group is never mapped",
+			groups:   []string{"SUPERADMIN"},
+			expected: RoleUser.String(),
+		},
+		{
+			name:     "SUPERADMIN configured as admin group is rejected",
+			groups:   []string{"SUPERADMIN"},
+			expected: RoleUser.String(),
+		},
+		{
+			name:     "SUPERADMIN input does not override ADMIN mapping",
+			groups:   []string{"SUPERADMIN", adminDN},
+			expected: RoleAdmin.String(),
+		},
+		{
+			name:     "Safety mapping preserved with SUPERADMIN input",
+			groups:   []string{"SUPERADMIN", safetyDN},
+			expected: RoleSafetyOfficer.String(),
+		},
+		{
+			name:     "Leader mapping preserved with SUPERADMIN input",
+			groups:   []string{"SUPERADMIN", leaderDN},
+			expected: RoleLineLeader.String(),
+		},
+		{
 			name:     "Normal User",
 			groups:   []string{"CN=Users,OU=Groups,DC=factory,DC=lan"},
 			expected: RoleUser.String(),
@@ -66,8 +91,30 @@ func TestMapRoleFromGroups(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := MapRoleFromGroups(tc.groups, adminDN, safetyDN, leaderDN)
+			adminGroup := adminDN
+			if tc.name == "SUPERADMIN configured as admin group is rejected" {
+				adminGroup = RoleSuperadmin.String()
+			}
+			got := MapRoleFromGroups(tc.groups, adminGroup, safetyDN, leaderDN)
 			if got != tc.expected {
+				t.Errorf("expected %s, got %s", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestLDAPProvisioningRole(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, expected string
+	}{
+		{name: "ADMIN preserved", input: RoleAdmin.String(), expected: RoleAdmin.String()},
+		{name: "Safety preserved", input: RoleSafetyOfficer.String(), expected: RoleSafetyOfficer.String()},
+		{name: "Leader preserved", input: RoleLineLeader.String(), expected: RoleLineLeader.String()},
+		{name: "SUPERADMIN downgraded", input: RoleSuperadmin.String(), expected: RoleUser.String()},
+		{name: "unknown downgraded", input: "ROOT", expected: RoleUser.String()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ldapProvisioningRole(tc.input); got != tc.expected {
 				t.Errorf("expected %s, got %s", tc.expected, got)
 			}
 		})
