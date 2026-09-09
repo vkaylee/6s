@@ -1,16 +1,14 @@
 import { type ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useAuthStore } from "../store/authStore.ts";
-import type { UserRole } from "../types/index.ts";
+import { hasCapability, useAuthStore } from "../store/authStore.ts";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowedRoles?: UserRole[];
+  allowedCapability?: string;
 }
 
-export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, allowedCapability }: ProtectedRouteProps) {
   const storeState = useAuthStore();
-  // Support both SSR/test renderToString where React useSyncExternalStore passes getServerSnapshot (initialState)
   const user = storeState.user ?? useAuthStore.getState().user;
   const isLoading =
     typeof window === "undefined" ? useAuthStore.getState().isLoading : storeState.isLoading;
@@ -32,7 +30,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     );
   }
 
-  if (!user || (allowedRoles && !allowedRoles.includes(user.role))) {
+  if (!user || (allowedCapability && !hasCapability(user, allowedCapability))) {
     return null;
   }
 

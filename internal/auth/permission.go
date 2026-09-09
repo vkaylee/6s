@@ -25,7 +25,27 @@ const (
 	PermissionUserManage       = "user:manage"
 	PermissionManage           = "permission:manage"
 	PermissionMasterdataManage = "masterdata:manage"
+	PermissionReportsView      = "reports:view"
+	PermissionSettingsManage   = "settings:manage"
 )
+
+// CatalogCapabilities is the stable capability catalog exposed to clients.
+// SUPERADMIN receives every entry regardless of mutable role_permissions rows.
+var CatalogCapabilities = []string{
+	PermissionIssueCreate, PermissionIssueViewAll, PermissionIssueResolve,
+	PermissionIssueCloseOwn, PermissionIssueCloseLine, PermissionIssueCloseAny,
+	PermissionIssueCloseSafety, PermissionIssueReopen, PermissionIssueInvalidate,
+	PermissionScoringManage, PermissionADManage, PermissionUserManage,
+	PermissionManage, PermissionMasterdataManage, PermissionReportsView,
+	PermissionSettingsManage,
+}
+
+func ResolveCapabilities(role string, permissions []string) []string {
+	if role == RoleSuperadmin.String() {
+		return append([]string(nil), CatalogCapabilities...)
+	}
+	return append([]string(nil), permissions...)
+}
 
 type permissionContextKey struct{}
 
@@ -47,10 +67,10 @@ func WithPermissions(ctx context.Context, permissions []string) context.Context 
 // HasPermission reports whether the authenticated request carries an exact permission.
 // Missing context fails closed.
 func HasPermission(ctx context.Context, code string) bool {
-	if code == "" {
-		return false
-	}
-	permissions, ok := ctx.Value(permissionContextKey{}).(map[string]struct{})
+  if ctx == nil || code == "" {
+    return false
+  }
+  permissions, ok := ctx.Value(permissionContextKey{}).(map[string]struct{})
 	if !ok {
 		return false
 	}

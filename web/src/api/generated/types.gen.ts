@@ -27,6 +27,10 @@ export type UserSummary = {
     username: string;
     auth_source: 'LOCAL' | 'AD';
     role: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN' | 'SUPERADMIN';
+    /**
+     * Effective resource:action capabilities. Missing capabilities deny UI access.
+     */
+    capabilities: Array<string>;
     assigned_location_code?: string;
     full_name: string;
     email?: string;

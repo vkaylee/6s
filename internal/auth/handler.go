@@ -22,6 +22,7 @@ type Store interface {
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
 	GetUserByUsername(ctx context.Context, username string) (db.User, error)
 	GetUserByBadgeCode(ctx context.Context, badgeCode sql.NullString) (db.User, error)
+	GetUserPermissions(ctx context.Context, id int64) ([]string, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error
 	CreateUserJIT(ctx context.Context, arg db.CreateUserJITParams) (db.User, error)
 	UpdateUserADLogin(ctx context.Context, arg db.UpdateUserADLoginParams) (db.User, error)
@@ -91,22 +92,27 @@ type LoginRequest struct {
 
 // UserResponse defines user data returned in auth responses.
 type UserResponse struct {
-	ID                   int64   `json:"id"`
-	Username             string  `json:"username"`
-	AuthSource           string  `json:"auth_source"`
-	Role                 string  `json:"role"`
-	AssignedLocationCode *string `json:"assigned_location_code"`
-	FullName             string  `json:"full_name"`
-	Email                *string `json:"email"`
+	ID                   int64    `json:"id"`
+	Username             string   `json:"username"`
+	AuthSource           string   `json:"auth_source"`
+	Role                 string   `json:"role"`
+	Capabilities         []string `json:"capabilities"`
+	AssignedLocationCode *string  `json:"assigned_location_code"`
+	FullName             string   `json:"full_name"`
+	Email                *string  `json:"email"`
 }
 
-func toUserResponse(u db.User) UserResponse {
+func toUserResponse(u db.User, capabilities []string) UserResponse {
 	resp := UserResponse{
-		ID:         u.ID,
-		Username:   u.Username,
-		AuthSource: u.AuthSource,
-		Role:       u.Role,
-		FullName:   u.FullName,
+		ID:           u.ID,
+		Username:     u.Username,
+		AuthSource:   u.AuthSource,
+		Role:         u.Role,
+		Capabilities: append([]string(nil), capabilities...),
+		FullName:     u.FullName,
+	}
+	if resp.Capabilities == nil {
+		resp.Capabilities = []string{}
 	}
 	if u.AssignedLocationCode.Valid {
 		resp.AssignedLocationCode = &u.AssignedLocationCode.String
@@ -117,6 +123,13 @@ func toUserResponse(u db.User) UserResponse {
 	return resp
 }
 
+func (h *Handler) userCapabilities(ctx context.Context, userID int64) ([]string, error) {
+  capabilities, err := h.store.GetUserPermissions(ctx, userID)
+  if err != nil {
+    return nil, err
+  }
+  return capabilities, nil
+}
 // Login handles POST /api/auth/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
@@ -286,6 +299,11 @@ func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.U
 }
 
 func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, user db.User) {
+	capabilities, err := h.userCapabilities(r.Context(), user.ID)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		return
+	}
 	accessToken, exp, err := h.tokenManager.GenerateAccessToken(user.ID)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
@@ -316,7 +334,7 @@ func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, 
 		"expires_in":         exp,
 		"refresh_token":      rawRefresh,
 		"refresh_expires_in": int(RefreshTokenDuration.Seconds()),
-		"user":               toUserResponse(user),
+		"user":               toUserResponse(user, capabilities),
 	})
 }
 
@@ -403,7 +421,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		DeviceInfo: sql.NullString{String: r.UserAgent(), Valid: r.UserAgent() != ""},
 		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
 	})
-	if rotationErr != nil {
+if rotationErr != nil {
 		if errors.Is(rotationErr, sql.ErrNoRows) {
 			// Another request won the compare-and-revoke race. Treat this as
 			// replay and revoke every session for the affected user.
@@ -418,12 +436,17 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	capabilities, err := h.userCapabilities(ctx, user.ID)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		return
+	}
 	_ = response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       newAccess,
 		"expires_in":         exp,
 		"refresh_token":      newRawRefresh,
 		"refresh_expires_in": int(RefreshTokenDuration.Seconds()),
-		"user":               toUserResponse(user),
+		"user":               toUserResponse(user, capabilities),
 	})
 }
 

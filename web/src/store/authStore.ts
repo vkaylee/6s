@@ -12,7 +12,12 @@ export interface UserProfile {
   username: string;
   full_name: string;
   role: UserRole;
+  capabilities?: string[];
   assigned_location_code?: string;
+}
+
+export function hasCapability(user: UserProfile | null | undefined, capability: string): boolean {
+  return Array.isArray(user?.capabilities) && user.capabilities.includes(capability);
 }
 
 export interface RememberedUser {
@@ -69,6 +74,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         username: user.username,
         full_name: user.full_name,
         role: user.role,
+        capabilities: user.capabilities,
         assigned_location_code: user.assigned_location_code,
       },
       updated_at: Date.now(),

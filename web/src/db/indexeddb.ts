@@ -30,6 +30,7 @@ export interface AuthSession {
     username: string;
     full_name: string;
     role: string;
+    capabilities?: string[];
     assigned_location_code?: string;
   };
   updated_at: number;

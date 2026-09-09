@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
-import { useAuthStore } from "../store/authStore.ts";
+import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
-import { UserRole } from "../types/index.ts";
 import { NavActions } from "./NavActions.tsx";
 import { PageContainer } from "./PageContainer.tsx";
 
@@ -166,10 +165,7 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
                     )}
                   </div>
 
-                  {/* Reports: management roles only */}
-                  {(user.role === UserRole.ADMIN ||
-                    user.role === UserRole.SAFETY_OFFICER ||
-                    user.role === UserRole.LINE_LEADER) && (
+                  {hasCapability(user, "reports:view") && (
                     <Link
                       href="/reports"
                       onClick={() => setIsProfileOpen(false)}
@@ -180,50 +176,55 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
                     </Link>
                   )}
 
-                  {/* Action 1: Admin Settings (if admin) */}
-                  {user.role === UserRole.ADMIN && (
-                    <>
-                      <Link
-                        href="/admin/locations"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                      >
-                        <span>📍</span>
-                        <span>{t("admin.locations_page_title")}</span>
-                      </Link>
-                      <Link
-                        href="/admin/tags"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                      >
-                        <span>🏷️</span>
-                        <span>{t("admin.tags_page_title")}</span>
-                      </Link>
-                      <Link
-                        href="/admin"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                      >
-                        <span>⚙️</span>
-                        <span>{t("admin.title")}</span>
-                      </Link>
-                      <Link
-                        href="/admin/users"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                      >
-                        <span>👥</span>
-                        <span>{t("admin.users_tab")}</span>
-                      </Link>
-                      <Link
-                        href="/admin/permissions"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
-                      >
-                        <span>🔑</span>
-                        <span>{t("admin.permissions_tab")}</span>
-                      </Link>
-                    </>
+                  {hasCapability(user, "masterdata:manage") && (
+                    <Link
+                      href="/admin/locations"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>📍</span>
+                      <span>{t("admin.locations_page_title")}</span>
+                    </Link>
+                  )}
+                  {hasCapability(user, "masterdata:manage") && (
+                    <Link
+                      href="/admin/tags"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>🏷️</span>
+                      <span>{t("admin.tags_page_title")}</span>
+                    </Link>
+                  )}
+                  {hasCapability(user, "settings:manage") && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>⚙️</span>
+                      <span>{t("admin.title")}</span>
+                    </Link>
+                  )}
+                  {hasCapability(user, "user:manage") && (
+                    <Link
+                      href="/admin/users"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>👥</span>
+                      <span>{t("admin.users_tab")}</span>
+                    </Link>
+                  )}
+                  {hasCapability(user, "permission:manage") && (
+                    <Link
+                      href="/admin/permissions"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>🔑</span>
+                      <span>{t("admin.permissions_tab")}</span>
+                    </Link>
                   )}
 
                   {/* Action 2: Logout */}

@@ -65,6 +65,7 @@ describe("IssueDetailModal Component", () => {
         username: "van_a",
         full_name: "Nguyễn Văn A",
         role: UserRole.USER,
+        capabilities: ["issue:resolve", "issue:close_own"],
       },
     });
     const html = renderToString(
@@ -132,6 +133,7 @@ describe("IssueDetailModal Component", () => {
         username: "van_a",
         full_name: "Nguyễn Văn A",
         role: UserRole.USER,
+        capabilities: ["issue:close_own"],
       },
     });
     const html = renderToString(
@@ -154,7 +156,6 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain('aria-label="Chỉnh sửa"');
     expect(html).not.toContain("Chạm để sửa nhanh vị trí (In-place Quick Edit)");
   });
-
   it("renders localized location name in score breakdown logs", () => {
     useAuthStore.setState({
       user: {
@@ -162,6 +163,7 @@ describe("IssueDetailModal Component", () => {
         username: "van_a",
         full_name: "Nguyễn Văn A",
         role: UserRole.USER,
+        capabilities: [],
       },
     });
     const scoreLog: ScoreLogItem = {
@@ -258,6 +260,7 @@ describe("IssueDetailModal Component", () => {
         username: "van_a",
         full_name: "Nguyễn Văn A",
         role: UserRole.USER,
+        capabilities: ["issue:resolve"],
       },
     });
     const html = renderToString(
@@ -321,7 +324,6 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("2xl:col-span-8");
     expect(html).toContain("2xl:col-span-4");
   });
-
   it("renders review and approve action buttons for line leaders when status is PENDING_REVIEW", () => {
     useAuthStore.setState({
       user: {
@@ -329,6 +331,7 @@ describe("IssueDetailModal Component", () => {
         username: "leader",
         full_name: "Chuyền Trưởng",
         role: UserRole.LINE_LEADER,
+        capabilities: ["issue:close_line"],
         assigned_location_code: "LINE_A1",
       },
     });
@@ -348,7 +351,6 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("DUYỆT ĐẠT");
     expect(html).toContain("Mở lại");
   });
-
   it("renders invalidate action button for admins when status is OPEN", () => {
     useAuthStore.setState({
       user: {
@@ -356,6 +358,7 @@ describe("IssueDetailModal Component", () => {
         username: "admin",
         full_name: "Quản trị viên",
         role: UserRole.ADMIN,
+        capabilities: ["issue:invalidate"],
       },
     });
     const html = renderToString(

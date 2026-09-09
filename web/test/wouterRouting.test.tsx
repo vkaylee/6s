@@ -146,6 +146,7 @@ describe("Wouter UX & Routing Verification", () => {
         username: "admin",
         full_name: "Admin User",
         role: UserRole.ADMIN,
+        capabilities: ["reports:view"],
       },
       accessToken: "admin-token",
     });

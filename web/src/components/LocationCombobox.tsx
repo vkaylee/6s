@@ -57,7 +57,7 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
     );
   });
   const visibleRecent = recentLocations.filter((location) => filteredLocations.includes(location));
-  const showSearch = locations.length > 20;
+  const showSearch = true;
 
   useEffect(() => {
     if (!isOpen) return;

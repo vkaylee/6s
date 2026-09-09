@@ -203,6 +203,18 @@ func (q *Queries) CountOverdueIssuesByLocation(ctx context.Context, locationCode
 	return overdue_count, err
 }
 
+const countSuperadmins = `-- name: CountSuperadmins :one
+SELECT COUNT(*) FROM users
+WHERE role = 'SUPERADMIN' AND is_active = TRUE
+`
+
+func (q *Queries) CountSuperadmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSuperadmins)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createIssue = `-- name: CreateIssue :one
 INSERT INTO issues (
     client_uuid, version, creator_id, category, cause_type, location_code, description, photo_before, photo_detail, status
@@ -1241,11 +1253,17 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const getUserPermissions = `-- name: GetUserPermissions :many
-SELECT rp.permission_code
-FROM role_permissions rp
-JOIN users u ON u.role = rp.role
-WHERE u.id = $1
-ORDER BY rp.permission_code ASC
+SELECT p.code
+FROM permissions p
+JOIN users u ON u.id = $1
+WHERE u.role = 'SUPERADMIN'
+   OR EXISTS (
+       SELECT 1
+       FROM role_permissions rp
+       WHERE rp.role = u.role
+         AND rp.permission_code = p.code
+   )
+ORDER BY p.code ASC
 `
 
 func (q *Queries) GetUserPermissions(ctx context.Context, id int64) ([]string, error) {
@@ -1256,11 +1274,11 @@ func (q *Queries) GetUserPermissions(ctx context.Context, id int64) ([]string, e
 	defer rows.Close()
 	var items []string
 	for rows.Next() {
-		var permission_code string
-		if err := rows.Scan(&permission_code); err != nil {
+		var code string
+		if err := rows.Scan(&code); err != nil {
 			return nil, err
 		}
-		items = append(items, permission_code)
+		items = append(items, code)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

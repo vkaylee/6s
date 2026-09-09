@@ -3,7 +3,7 @@ import { ApiError, apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
-import { useAuthStore } from "../store/authStore.ts";
+import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { type LocationItem, UserRole } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
@@ -247,12 +247,7 @@ export function UserAccessPage() {
               {filteredUsers.map((u) => {
                 const isSelf = currentUser?.id === u.id;
                 const isEditing = editingId === u.id;
-                const canManage =
-                  !isSelf &&
-                  (currentUser?.role === UserRole.SUPERADMIN ||
-                    (currentUser?.role === UserRole.ADMIN &&
-                      u.role !== UserRole.ADMIN &&
-                      u.role !== UserRole.SUPERADMIN));
+                const canManage = !isSelf && hasCapability(currentUser, "user:manage");
                 const isLastActiveAdmin =
                   u.role === UserRole.ADMIN &&
                   u.is_active &&

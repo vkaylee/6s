@@ -64,6 +64,7 @@ components:
         - username
         - auth_source
         - role
+        - capabilities
         - full_name
       properties:
         id:
@@ -80,6 +81,12 @@ components:
           type: string
           enum: [USER, LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN]
           example: LINE_LEADER
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Effective resource:action capabilities. Missing capabilities deny UI access.
+          example: [reports:view, issue:close_line]
         assigned_location_code:
           type: string
           nullable: true

@@ -50,6 +50,7 @@ describe("StatusBar Component", () => {
         username: "admin_user",
         full_name: "Quản trị viên",
         role: UserRole.ADMIN,
+        capabilities: ["settings:manage"],
         assigned_location_code: "LINE_A1",
       },
     });
@@ -63,6 +64,42 @@ describe("StatusBar Component", () => {
     expect(html).toContain('data-testid="lang-toggle"');
     expect(html).toContain('data-testid="theme-toggle"');
   });
+  it("renders only menu entries granted by capabilities", () => {
+    useAuthStore.setState({
+      user: {
+        id: 100,
+        username: "operator",
+        full_name: "Operator",
+        role: UserRole.USER,
+        capabilities: ["user:manage"],
+      },
+    });
+    const html = renderToString(
+      <WithMockState
+        values={[
+          true,
+          {
+            total: 0,
+            completed: 0,
+            currentName: "",
+            percent: 100,
+            isSyncing: false,
+            conflictCount: 0,
+          },
+          true,
+          true,
+        ]}
+      >
+        <Router ssrPath="/">
+          <StatusBar onOpenDrawer={() => {}} />
+        </Router>
+      </WithMockState>,
+    );
+    expect(html).toContain('href="/admin/users"');
+    expect(html).not.toContain('href="/admin/permissions"');
+    expect(html).not.toContain('href="/admin"');
+    expect(html).not.toContain('href="/reports"');
+  });
 
   it("renders open user profile dropdown menu and syncing status", () => {
     useAuthStore.setState({
@@ -71,10 +108,10 @@ describe("StatusBar Component", () => {
         username: "admin_user",
         full_name: "Quản trị viên",
         role: UserRole.ADMIN,
+        capabilities: ["settings:manage"],
         assigned_location_code: "LINE_A1",
       },
     });
-
     const html = renderToString(
       <WithMockState
         values={[
@@ -100,5 +137,43 @@ describe("StatusBar Component", () => {
     expect(html).toContain("Đăng xuất");
     expect(html).toContain("Cấu hình hệ thống");
     expect(html).toContain("LINE_A1");
+  });
+
+  it("hides privileged menu items for old session without capabilities", () => {
+    useAuthStore.setState({
+      user: {
+        id: 99,
+        username: "admin_user",
+        full_name: "Quản trị viên",
+        role: UserRole.ADMIN,
+      },
+    });
+
+    const html = renderToString(
+      <WithMockState
+        values={[
+          true,
+          {
+            total: 0,
+            completed: 0,
+            currentName: "",
+            percent: 100,
+            isSyncing: false,
+            conflictCount: 0,
+          },
+          true,
+          true,
+        ]}
+      >
+        <Router ssrPath="/">
+          <StatusBar onOpenDrawer={() => {}} />
+        </Router>
+      </WithMockState>,
+    );
+
+    expect(html).not.toContain('href="/admin"');
+    expect(html).not.toContain('href="/admin/users"');
+    expect(html).not.toContain('href="/admin/permissions"');
+    expect(html).not.toContain('href="/reports"');
   });
 });

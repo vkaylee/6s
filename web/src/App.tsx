@@ -36,7 +36,7 @@ import { useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
 import { useRouteHistoryStore } from "./store/routeHistoryStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
-import { resolveLocationNameByCode, UserRole } from "./types/index.ts";
+import { resolveLocationNameByCode } from "./types/index.ts";
 
 const AdminConfigPage = lazy(() =>
   import("./pages/AdminConfigPage.tsx").then((m) => ({ default: m.AdminConfigPage })),
@@ -164,7 +164,7 @@ export function App() {
             <LoginPage />
           </Route>
           <Route path="/admin">
-            <ProtectedRoute>
+            <ProtectedRoute allowedCapability="settings:manage">
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
@@ -177,7 +177,7 @@ export function App() {
             </ProtectedRoute>
           </Route>
           <Route path="/admin/users">
-            <ProtectedRoute>
+            <ProtectedRoute allowedCapability="user:manage">
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
@@ -190,7 +190,7 @@ export function App() {
             </ProtectedRoute>
           </Route>
           <Route path="/admin/permissions">
-            <ProtectedRoute>
+            <ProtectedRoute allowedCapability="permission:manage">
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
@@ -203,7 +203,7 @@ export function App() {
             </ProtectedRoute>
           </Route>
           <Route path="/admin/locations">
-            <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <ProtectedRoute allowedCapability="masterdata:manage">
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
@@ -216,7 +216,7 @@ export function App() {
             </ProtectedRoute>
           </Route>
           <Route path="/admin/tags">
-            <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <ProtectedRoute allowedCapability="masterdata:manage">
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
@@ -229,9 +229,7 @@ export function App() {
             </ProtectedRoute>
           </Route>
           <Route path="/reports">
-            <ProtectedRoute
-              allowedRoles={[UserRole.ADMIN, UserRole.SAFETY_OFFICER, UserRole.LINE_LEADER]}
-            >
+            <ProtectedRoute allowedCapability="reports:view">
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">

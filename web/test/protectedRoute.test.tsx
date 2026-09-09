@@ -66,7 +66,7 @@ describe("ProtectedRoute component", () => {
     expect(html).toContain("dashboard");
   });
 
-  it("blocks authenticated non-admin users from admin-only routes", () => {
+  it("blocks authenticated users without required capability", () => {
     useAuthStore.setState({
       isLoading: false,
       user: {
@@ -74,18 +74,74 @@ describe("ProtectedRoute component", () => {
         username: "worker",
         full_name: "Worker User",
         role: UserRole.USER,
+        capabilities: [],
       },
       accessToken: "worker-token",
     });
 
     const html = renderToString(
       <Router ssrPath="/admin/locations">
-        <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+        <ProtectedRoute allowedCapability="masterdata:manage">
           <div>Admin Only</div>
         </ProtectedRoute>
       </Router>,
     );
 
+    expect(html).toBe("");
+  });
+
+  it("allows user with required capability and blocks user without it", () => {
+    useAuthStore.setState({
+      isLoading: false,
+      user: {
+        id: 1,
+        username: "admin",
+        full_name: "Admin",
+        role: UserRole.ADMIN,
+        capabilities: ["settings:manage"],
+      },
+      accessToken: "token",
+    });
+
+    const allowedHtml = renderToString(
+      <Router ssrPath="/admin">
+        <ProtectedRoute allowedCapability="settings:manage">
+          <div>Admin Settings</div>
+        </ProtectedRoute>
+      </Router>,
+    );
+    expect(allowedHtml).toContain("Admin Settings");
+
+    const blockedHtml = renderToString(
+      <Router ssrPath="/admin/users">
+        <ProtectedRoute allowedCapability="user:manage">
+          <div>User Management</div>
+        </ProtectedRoute>
+      </Router>,
+    );
+    expect(blockedHtml).toBe("");
+  });
+
+  it("fails closed on old session without capabilities even if role is ADMIN", () => {
+    useAuthStore.setState({
+      isLoading: false,
+      user: {
+        id: 1,
+        username: "oldadmin",
+        full_name: "Old Admin",
+        role: UserRole.ADMIN,
+        // capabilities missing (old session)
+      },
+      accessToken: "token",
+    });
+
+    const html = renderToString(
+      <Router ssrPath="/admin">
+        <ProtectedRoute allowedCapability="settings:manage">
+          <div>Admin Settings</div>
+        </ProtectedRoute>
+      </Router>,
+    );
     expect(html).toBe("");
   });
 });

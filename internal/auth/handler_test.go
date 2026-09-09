@@ -23,6 +23,7 @@ type mockFullStore struct {
 	users        map[int64]db.User
 	usersByName  map[string]db.User
 	usersByBadge map[string]db.User
+	capabilities map[int64][]string
 	tokens       map[string]db.RefreshToken
 	adConfig     db.AdConfig
 	auditLogs    []db.InsertAuditLogParams
@@ -33,8 +34,32 @@ func newMockFullStore() *mockFullStore {
 		users:        make(map[int64]db.User),
 		usersByName:  make(map[string]db.User),
 		usersByBadge: make(map[string]db.User),
+		capabilities: make(map[int64][]string),
 		tokens:       make(map[string]db.RefreshToken),
 	}
+}
+
+func (m *mockFullStore) GetUserPermissions(_ context.Context, id int64) ([]string, error) {
+  m.mu.Lock()
+  defer m.mu.Unlock()
+  caps, ok := m.capabilities[id]
+  if ok {
+    return append([]string(nil), caps...), nil
+  }
+  u, okUser := m.users[id]
+  if !okUser {
+    for _, candidate := range m.usersByName {
+      if candidate.ID == id {
+        u, okUser = candidate, true
+        break
+      }
+    }
+  }
+  if okUser && u.Role == RoleSuperadmin.String() {
+    return append([]string(nil), CatalogCapabilities...), nil
+  }
+  return []string{}, nil
+
 }
 
 func (m *mockFullStore) GetUserByID(_ context.Context, id int64) (db.User, error) {

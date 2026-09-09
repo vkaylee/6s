@@ -141,11 +141,17 @@ FROM role_permissions
 ORDER BY role ASC, permission_code ASC;
 
 -- name: GetUserPermissions :many
-SELECT rp.permission_code
-FROM role_permissions rp
-JOIN users u ON u.role = rp.role
-WHERE u.id = $1
-ORDER BY rp.permission_code ASC;
+SELECT p.code
+FROM permissions p
+JOIN users u ON u.id = $1
+WHERE u.role = 'SUPERADMIN'
+   OR EXISTS (
+       SELECT 1
+       FROM role_permissions rp
+       WHERE rp.role = u.role
+         AND rp.permission_code = p.code
+   )
+ORDER BY p.code ASC;
 
 -- name: DeleteRolePermissions :exec
 DELETE FROM role_permissions

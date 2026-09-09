@@ -8,7 +8,7 @@ import { SplitSlider } from "../components/SplitSlider.tsx";
 import { TagLabel } from "../components/TagLabel.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
-import { useAuthStore } from "../store/authStore.ts";
+import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
@@ -22,7 +22,6 @@ import {
   S_CATEGORIES,
   type ScoreLogItem,
   type TagItem,
-  UserRole,
 } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
@@ -354,7 +353,6 @@ export function IssueDetailModal({
     return null;
   }
 
-  const role = user?.role || UserRole.USER;
   const isSafetyIssue = currentIssue.category === IssueCategory.S6;
   const resolvedLocationName = resolveLocationNameByCode(
     locations,
@@ -363,32 +361,27 @@ export function IssueDetailModal({
     locale,
   );
 
-  // Edit Permission: Creator, Resolver, Admin, Safety Officer
   const canEdit =
     currentIssue.status === IssueStatus.OPEN &&
-    (user?.id === currentIssue.creator_id ||
-      (currentIssue.resolver_id && user?.id === currentIssue.resolver_id) ||
-      role === UserRole.ADMIN ||
-      role === UserRole.SAFETY_OFFICER);
+    (user?.id === currentIssue.creator_id || user?.id === currentIssue.resolver_id
+      ? hasCapability(user, "issue:close_own")
+      : hasCapability(user, "issue:close_any"));
 
-  // RBAC Permission Check (SPEC.md Section 3.2 & 9.9.F)
-  // Resolve: Anyone
-  // Close: Admin or Safety (for 6S); Admin, Safety, or matching Line Leader (for 1S-5S)
   const canClose =
-    role === UserRole.ADMIN ||
-    role === UserRole.SAFETY_OFFICER ||
-    (role === UserRole.LINE_LEADER &&
-      !isSafetyIssue &&
-      (!user?.assigned_location_code ||
-        user.assigned_location_code === currentIssue.location_code));
+    (isSafetyIssue && hasCapability(user, "issue:close_safety")) ||
+    (!isSafetyIssue &&
+      (hasCapability(user, "issue:close_any") ||
+        (user?.id === currentIssue.creator_id && hasCapability(user, "issue:close_own")) ||
+        (hasCapability(user, "issue:close_line") &&
+          user?.assigned_location_code === currentIssue.location_code)));
   const closeDisabledReason =
-    isSafetyIssue && role !== UserRole.ADMIN && role !== UserRole.SAFETY_OFFICER
+    isSafetyIssue && !hasCapability(user, "issue:close_safety")
       ? t("issue_detail.need_safety_officer")
-      : role === UserRole.LINE_LEADER &&
+      : hasCapability(user, "issue:close_line") &&
           user?.assigned_location_code &&
           user.assigned_location_code !== currentIssue.location_code
         ? t("issue_detail.only_assigned_line")
-        : role === UserRole.USER
+        : !canClose
           ? t("issue_detail.need_line_leader")
           : null;
   const handleQuickChangeCategory = async (newCat: IssueCategory) => {
@@ -918,7 +911,7 @@ export function IssueDetailModal({
             {/* Bottom Actions Bar (Integrated in sidebar for desktop, sticky/accessible) */}
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-2 shrink-0">
               {/* Action: Resolve (Upload after photo) */}
-              {currentIssue.status === IssueStatus.OPEN && (
+              {currentIssue.status === IssueStatus.OPEN && hasCapability(user, "issue:resolve") && (
                 <div className="space-y-1.5">
                   <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
                     <input
@@ -985,7 +978,7 @@ export function IssueDetailModal({
 
               {/* Action: Invalidate (Bác bỏ) */}
               {currentIssue.status === IssueStatus.OPEN &&
-                (role === UserRole.ADMIN || role === UserRole.SAFETY_OFFICER) && (
+                hasCapability(user, "issue:invalidate") && (
                   <button
                     type="button"
                     onClick={() => setShowConfirmAction(IssueStatus.INVALID)}

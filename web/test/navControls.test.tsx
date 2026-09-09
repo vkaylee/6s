@@ -87,7 +87,19 @@ describe("Page-level headers", () => {
 
   it("keeps shared navigation as semantic links without duplicate navigation callbacks", () => {
     useAuthStore.setState({
-      user: { id: 1, username: "admin", full_name: "Admin", role: UserRole.ADMIN },
+      user: {
+        id: 1,
+        username: "admin",
+        full_name: "Admin",
+        role: UserRole.ADMIN,
+        capabilities: [
+          "reports:view",
+          "masterdata:manage",
+          "settings:manage",
+          "user:manage",
+          "permission:manage",
+        ],
+      },
     });
     const html = renderToString(
       <WithMockState
