@@ -1,12 +1,4 @@
-import {
-  ArrowUpDown,
-  ChevronDown,
-  Loader2,
-  RotateCw,
-  Search,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
+import { ArrowUpDown, ChevronDown, Loader2, RotateCw, SlidersHorizontal, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link, Route, Switch, useLocation, useSearch } from "wouter";
 import { AppShell } from "./components/AppShell.tsx";
@@ -150,6 +142,8 @@ export function App() {
       <AppShell
         showStatusBar={Boolean(user) && !currentPath.startsWith("/login")}
         onOpenDrawer={() => setIsDrawerOpen(true)}
+        searchQuery={currentPath === "/" ? searchQuery : undefined}
+        onSearchChange={currentPath === "/" ? setSearchQuery : undefined}
         globalOverlay={
           <OfflineOutboxDrawer
             isOpen={isDrawerOpen}
@@ -455,30 +449,8 @@ export function App() {
                       onSelectFacet={(f) => setActiveFacet(f)}
                       counts={facetCounts}
                     />
-                    {/* Search and Advanced Filter Row */}
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                          <Search className="w-4 h-4" />
-                        </div>
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder={t("app.search_placeholder")}
-                          className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
-                        />
-                        {searchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setSearchQuery("")}
-                            aria-label={t("app.search_clear")}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                    {/* Search lives in the global header */}
+                    <div className="flex items-center justify-end gap-2">
                       {/* Filter Button */}
                       <button
                         type="button"

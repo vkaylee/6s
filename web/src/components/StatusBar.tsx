@@ -1,3 +1,4 @@
+import { Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
@@ -10,9 +11,11 @@ import { PageContainer } from "./PageContainer.tsx";
 
 interface StatusBarProps {
   onOpenDrawer: () => void;
+  searchQuery?: string;
+  onSearchChange?: (value: string) => void;
 }
 
-export function StatusBar({ onOpenDrawer }: StatusBarProps) {
+export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusBarProps) {
   const { t } = useI18nStore();
   const storeUser = useAuthStore((s) => s.user);
   const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
@@ -31,11 +34,23 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
   const isVisible = useHeaderVisibility();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setIsProfileOpen(false);
-      }
+      if (event.key === "Escape") setIsProfileOpen(false);
     }
     function handleClickOutside(event: MouseEvent) {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
@@ -120,7 +135,42 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
             </button>
           )}
         </div>
-        <div className="flex items-center space-x-2">
+        {typeof onSearchChange === "function" && (
+          <div className="order-3 w-full md:order-2 md:w-auto md:flex-1 md:max-w-md mx-0 md:mx-4">
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery ?? ""}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder={t("app.search_placeholder")}
+                aria-label={t("app.search_placeholder")}
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-1.5 pl-9 pr-14 text-xs text-zinc-900 placeholder:text-zinc-400 transition-colors focus:border-rose-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-rose-400 dark:focus:bg-zinc-900"
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => onSearchChange("")}
+                    aria-label={t("app.search_clear")}
+                    className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <kbd className="hidden sm:inline-flex items-center rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+                    Ctrl K
+                  </kbd>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="order-2 md:order-3 flex items-center space-x-2">
           <NavActions />
           {user ? (
             <div className="relative" ref={profileMenuRef}>
