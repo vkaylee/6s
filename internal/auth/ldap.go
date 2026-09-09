@@ -128,7 +128,11 @@ func (c *LiveLDAPClient) TestSearchPermission() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Printf("ldap: error closing connection: %v", closeErr)
+		}
+	}()
 	if c.cfg.BindDN != "" {
 		if err := conn.Bind(c.cfg.BindDN, c.cfg.BindPassword); err != nil {
 			if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {

@@ -243,6 +243,7 @@
     "photo_annotate_btn": "Annotate",
     "photo_retake_btn": "Retake",
     "photo_remove_btn": "Remove",
+    "remove_tag": "Remove tag",
     "search_location_placeholder": "Search by code, English, Chinese name...",
     "no_locations_found": "No matching locations found",
     "recent_locations": "Recent locations:",
@@ -542,7 +543,9 @@
     "invalidate_failed": "Invalidation failed",
     "default_reopen_reason": "Does not meet 6S requirements",
     "default_invalid_reason": "Report is not factual",
-    "photo_preview": "Photo preview"
+    "photo_preview": "Photo preview",
+    "previous_photo": "Previous photo",
+    "next_photo": "Next photo"
   },
   "app": {
     "issues_list": "Issues List ({count})",

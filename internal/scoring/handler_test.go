@@ -94,7 +94,6 @@ func TestScoringHandler(t *testing.T) {
 	}
 }
 
-
 func TestScoringHandler_ErrorBranches(t *testing.T) {
 	errSvc := &mockHandlerService{err: errors.New("service failure")}
 	handler := NewHandler(errSvc)

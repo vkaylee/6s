@@ -8,16 +8,18 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"6s/internal/crypto"
 	"6s/internal/db"
 	"6s/internal/i18n"
-	"strings"
 )
 
 type mockFullStore struct {
+	mu           sync.Mutex
 	users        map[int64]db.User
 	usersByName  map[string]db.User
 	usersByBadge map[string]db.User
@@ -92,6 +94,8 @@ func (m *mockFullStore) UpdateUserADLogin(_ context.Context, arg db.UpdateUserAD
 }
 
 func (m *mockFullStore) CreateRefreshToken(_ context.Context, arg db.CreateRefreshTokenParams) (db.RefreshToken, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	t := db.RefreshToken{
 		ID:         int64(len(m.tokens) + 1),
 		UserID:     arg.UserID,
@@ -105,11 +109,48 @@ func (m *mockFullStore) CreateRefreshToken(_ context.Context, arg db.CreateRefre
 }
 
 func (m *mockFullStore) GetRefreshTokenByHash(_ context.Context, tokenHash string) (db.RefreshToken, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	t, ok := m.tokens[tokenHash]
 	if !ok || t.RevokedAt.Valid || time.Now().After(t.ExpiresAt) {
 		return db.RefreshToken{}, sql.ErrNoRows
 	}
 	return t, nil
+}
+
+func (m *mockFullStore) GetRefreshTokenByHashAnyState(_ context.Context, tokenHash string) (db.RefreshToken, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tokens[tokenHash]
+	if !ok {
+		return db.RefreshToken{}, sql.ErrNoRows
+	}
+	return t, nil
+}
+
+func (m *mockFullStore) RotateRefreshToken(_ context.Context, oldID int64, arg db.CreateRefreshTokenParams) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for key, old := range m.tokens {
+		if old.ID != oldID {
+			continue
+		}
+		if old.RevokedAt.Valid {
+			return sql.ErrNoRows
+		}
+		old.RevokedAt = sql.NullTime{Time: time.Now(), Valid: true}
+		m.tokens[key] = old
+		m.tokens[arg.TokenHash] = db.RefreshToken{
+			ID:         int64(len(m.tokens) + 1),
+			UserID:     arg.UserID,
+			TokenHash:  arg.TokenHash,
+			DeviceInfo: arg.DeviceInfo,
+			ExpiresAt:  arg.ExpiresAt,
+			CreatedAt:  time.Now(),
+		}
+		return nil
+	}
+	return sql.ErrNoRows
 }
 
 func (m *mockFullStore) RevokeRefreshToken(_ context.Context, id int64) error {

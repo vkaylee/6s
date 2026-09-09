@@ -12,6 +12,7 @@ import (
 )
 
 var mockReturnEOF = false
+
 const (
 	category1S = "1S"
 	statusOpen = "OPEN"

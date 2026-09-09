@@ -243,6 +243,7 @@
     "photo_annotate_btn": "圈选标注",
     "photo_retake_btn": "重拍",
     "photo_remove_btn": "删除",
+    "remove_tag": "删除标签",
     "search_location_placeholder": "按车间代码、中文名、越南文搜索...",
     "no_locations_found": "未找到匹配位置",
     "recent_locations": "最近使用位置:",
@@ -542,7 +543,9 @@
     "invalidate_failed": "作废失败",
     "default_reopen_reason": "未达到6S要求",
     "default_invalid_reason": "报告与事实不符",
-    "photo_preview": "照片预览"
+    "photo_preview": "照片预览",
+    "previous_photo": "上一张照片",
+    "next_photo": "下一张照片"
   },
   "app": {
     "issues_list": "问题列表 ({count})",

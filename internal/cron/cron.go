@@ -52,6 +52,9 @@ func NewRunner(store Store, loc *time.Location, storageDir string) *Runner {
 
 // Start launches cron ticker routines and runs bootstrap catch-up scans.
 func (r *Runner) Start(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	// Bootstrap catch-up check on server boot (SPEC.md Section 10.3)
 	r.CheckAndRunOverdueCatchup(ctx)
 
@@ -70,6 +73,9 @@ func (r *Runner) Start(ctx context.Context) {
 }
 
 func (r *Runner) tick(ctx context.Context, t time.Time) {
+	if ctx.Err() != nil {
+		return
+	}
 	localTime := t.In(r.loc)
 	hour := localTime.Hour()
 
@@ -91,6 +97,9 @@ func (r *Runner) tick(ctx context.Context, t time.Time) {
 
 // CheckAndRunOverdueCatchup runs overdue penalty scan if not run today (or > 24h ago).
 func (r *Runner) CheckAndRunOverdueCatchup(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	lastLog, err := r.store.GetLastCronTaskLog(ctx, TaskOverduePenaltyScan)
 	nowLocal := time.Now().In(r.loc)
 	todayStr := nowLocal.Format("2006-01-02")

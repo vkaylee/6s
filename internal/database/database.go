@@ -6,12 +6,13 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 )
 
 //go:embed migrations/*.up.sql
@@ -62,7 +63,7 @@ func Connect(ctx context.Context, dsn string, poolCfg PoolConfig) (*sql.DB, erro
 // RunMigrations applies each embedded up migration once, in version order.
 // Each migration and its tracking row commit atomically in one transaction;
 // a changed applied migration fails rather than being silently re-executed.
-func RunMigrations(ctx context.Context, db *sql.DB) error {
+func RunMigrations(ctx context.Context, db *sql.DB) (retErr error) {
 	if db == nil {
 		return fmt.Errorf("run migrations: nil database")
 	}
@@ -99,7 +100,11 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("acquire migration connection: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("close migration connection: %w", closeErr)
+		}
+	}()
 	if _, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version BIGINT PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
 		applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -110,7 +115,9 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("acquire migration lock: %w", err)
 	}
 	defer func() {
-		_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`)
+		if _, unlockErr := conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`); unlockErr != nil && retErr == nil {
+			retErr = fmt.Errorf("release migration lock: %w", unlockErr)
+		}
 	}()
 	for _, migration := range migrations {
 		var checksum string
@@ -128,14 +135,18 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("begin migration %s: %w", migration.name, err)
 		}
+		rollback := func(cause error) error {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				return fmt.Errorf("%w; rollback migration %s: %v", cause, migration.name, rollbackErr)
+			}
+			return cause
+		}
 		if _, err = tx.ExecContext(ctx, string(migration.body)); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("exec migration %s: %w", migration.name, err)
+			return rollback(fmt.Errorf("exec migration %s: %w", migration.name, err))
 		}
 		checksum = fmt.Sprintf("%x", sha256.Sum256(migration.body))
 		if _, err = tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`, migration.version, migration.name, checksum); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("record migration %s: %w", migration.name, err)
+			return rollback(fmt.Errorf("record migration %s: %w", migration.name, err))
 		}
 		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration %s: %w", migration.name, err)

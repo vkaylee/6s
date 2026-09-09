@@ -314,6 +314,24 @@ describe("Frontend i18n usage guard", () => {
 
     expect(violations).toEqual([]);
   });
+  it("keeps owned user-facing attributes translated", async () => {
+    const owned = [
+      "App.tsx",
+      "pages/IssueDetailModal.tsx",
+      "pages/CreateIssueModal.tsx",
+      "pages/CreateIssuePage.tsx",
+    ];
+    const violations: string[] = [];
+    const rawAttribute = /(?:alt|title|placeholder|aria-label)="[^"]+"/u;
+    const rawFallback = /\bt\(["'][^"']+["']\)\s*\|\|\s*["'][^"']+["']/u;
+
+    for (const file of owned) {
+      const source = await Bun.file(`${sourceRoot}${file}`).text();
+      if (rawAttribute.test(source) || rawFallback.test(source)) violations.push(file);
+    }
+
+    expect(violations).toEqual([]);
+  });
 });
 
 describe("I18nObject resolution", () => {

@@ -54,17 +54,17 @@ func TestDefaultPoolConfig(t *testing.T) {
 }
 
 func TestDatabase_ConnectError(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
 	cfg := DefaultPoolConfig()
-	// Connection to non-existent DB should fail ping gracefully and return error
+	// A canceled context makes PingContext fail before any network I/O.
 	db, err := Connect(ctx, "postgres://invalid:user@127.0.0.1:54329/nonexistent?sslmode=disable", cfg)
 	if db != nil {
-		_ = db.Close()
+		defer db.Close()
 	}
 	if err == nil {
-		t.Log("Note: Ping succeeded or skipped")
+		t.Fatal("expected Connect to return an error for a canceled context")
 	}
 }
 

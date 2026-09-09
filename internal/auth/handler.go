@@ -340,61 +340,84 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// Refresh handles POST /api/auth/refresh with token rotation.
+// Refresh handles POST /api/auth/refresh with one-time atomic token rotation.
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.RefreshToken) == "" {
 		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRefreshToken))
 		return
 	}
+
+	ctx := r.Context()
 	tokenHash := HashRefreshToken(req.RefreshToken)
-	oldToken, err := h.store.GetRefreshTokenByHash(r.Context(), tokenHash)
+	oldToken, err := h.store.GetRefreshTokenByHash(ctx, tokenHash)
 	if err != nil {
-		if lookup, ok := h.store.(revokedRefreshLookup); ok {
-			if revokedToken, rErr := lookup.GetRefreshTokenByHashAnyState(r.Context(), tokenHash); rErr == nil && revokedToken.RevokedAt.Valid {
-				_ = h.store.RevokeUserRefreshTokens(r.Context(), revokedToken.UserID)
-			}
+		if reuseErr := h.handleRefreshReuse(ctx, r, tokenHash); reuseErr != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+			return
 		}
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken).WithCause(err))
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 		return
 	}
+
+	// Refreshing an inactive or deleted account must not mint new credentials.
+	user, err := h.store.GetUserByID(ctx, oldToken.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
+			return
+		}
+		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery))
+		return
+	}
+	if !user.IsActive {
+		if revokeErr := h.store.RevokeUserRefreshTokens(ctx, oldToken.UserID); revokeErr != nil {
+			response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+			return
+		}
+		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
+		return
+	}
+
 	newAccess, exp, err := h.tokenManager.GenerateAccessToken(oldToken.UserID)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 	newRawRefresh, newHash, err := GenerateRefreshToken()
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
-	deviceInfo := r.UserAgent()
-	newParams := db.CreateRefreshTokenParams{
+
+	rotator, ok := h.store.(refreshRotator)
+	if !ok {
+		// A non-transactional revoke-then-insert fallback can leave a session
+		// permanently unusable. Refuse rotation unless the store is atomic.
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		return
+	}
+	rotationErr := rotator.RotateRefreshToken(ctx, oldToken.ID, db.CreateRefreshTokenParams{
 		UserID:     oldToken.UserID,
 		TokenHash:  newHash,
-		DeviceInfo: sql.NullString{String: deviceInfo, Valid: deviceInfo != ""},
+		DeviceInfo: sql.NullString{String: r.UserAgent(), Valid: r.UserAgent() != ""},
 		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
-	}
-	if rotator, ok := h.store.(refreshRotator); ok {
-		if rotErr := rotator.RotateRefreshToken(r.Context(), oldToken.ID, newParams); rotErr != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(rotErr))
+	})
+	if rotationErr != nil {
+		if errors.Is(rotationErr, sql.ErrNoRows) {
+			// Another request won the compare-and-revoke race. Treat this as
+			// replay and revoke every session for the affected user.
+			if familyErr := h.revokeRefreshFamily(ctx, r, oldToken.UserID); familyErr != nil {
+				response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+				return
+			}
+			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 			return
 		}
-	} else {
-		if revErr := h.store.RevokeRefreshToken(r.Context(), oldToken.ID); revErr != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(revErr))
-			return
-		}
-		if _, cErr := h.store.CreateRefreshToken(r.Context(), newParams); cErr != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(cErr))
-			return
-		}
-	}
-	user, err := h.store.GetUserByID(r.Context(), oldToken.UserID)
-	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
+
 	response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       newAccess,
 		"expires_in":         exp,
@@ -402,7 +425,41 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		"refresh_expires_in": int(RefreshTokenDuration.Seconds()),
 		"user":               toUserResponse(user),
 	})
+}
 
+func (h *Handler) handleRefreshReuse(ctx context.Context, r *http.Request, tokenHash string) error {
+	lookup, ok := h.store.(revokedRefreshLookup)
+	if !ok {
+		return nil
+	}
+	token, err := lookup.GetRefreshTokenByHashAnyState(ctx, tokenHash)
+	if err != nil || !token.RevokedAt.Valid || token.UserID <= 0 {
+		return nil
+	}
+	return h.revokeRefreshFamily(ctx, r, token.UserID)
+}
+
+func (h *Handler) revokeRefreshFamily(ctx context.Context, r *http.Request, userID int64) error {
+	if err := h.store.RevokeUserRefreshTokens(ctx, userID); err != nil {
+		return err
+	}
+	if err := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
+		Action:      "REFRESH_TOKEN_REUSE",
+		TargetTable: "refresh_tokens",
+		TargetID:    maskAuditValue(strconv.FormatInt(userID, 10)),
+		IpAddress:   sql.NullString{String: maskAuditValue(h.clientIP(r)), Valid: h.clientIP(r) != ""},
+		UserAgent:   sql.NullString{String: maskAuditValue(r.UserAgent()), Valid: r.UserAgent() != ""},
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *Handler) clientIP(r *http.Request) string {
+	if h.limiter == nil {
+		return ""
+	}
+	return h.limiter.GetClientIP(r)
 }
 
 // RevokeRequest defines payload to revoke tokens.

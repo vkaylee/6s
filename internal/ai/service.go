@@ -835,6 +835,7 @@ type FollowUpRequest struct {
 	Question string `json:"question"`
 }
 
+// FollowUpResponse contains the AI answer to a review follow-up question.
 type FollowUpResponse struct {
 	Answer string `json:"answer"`
 }
@@ -1165,50 +1166,52 @@ const reviewCategoryGuide = `6S category definitions:
 // buildReviewPrompt assembles the audit instructions, including the tag vocabulary
 // so the model can only suggest codes that exist in the system.
 func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, langName string, hasPhotos bool) string {
-	var b strings.Builder
-	b.WriteString("You are a strict 6S (Sort, Set in Order, Shine, Standardize, Sustain, Safety) workplace audit assistant covering production floors and office areas alike. ")
-	b.WriteString("An employee submitted the issue report below. Judge whether category, cause type, tags and description are accurate and consistent with the evidence, and propose corrections.\n\n")
-	b.WriteString("REPORT UNDER REVIEW\n")
-	fmt.Fprintf(&b, "- Category: %s\n", issue.Category)
-	fmt.Fprintf(&b, "- Location: %s\n", issue.LocationCode)
+	parts := []string{
+		"You are a strict 6S (Sort, Set in Order, Shine, Standardize, Sustain, Safety) workplace audit assistant covering production floors and office areas alike. ",
+		"An employee submitted the issue report below. Judge whether category, cause type, tags and description are accurate and consistent with the evidence, and propose corrections.\n\n",
+		"REPORT UNDER REVIEW\n",
+		fmt.Sprintf("- Category: %s\n", issue.Category),
+		fmt.Sprintf("- Location: %s\n", issue.LocationCode),
+	}
 	desc := []rune(strings.TrimSpace(issue.Description.String))
 	if len(desc) > reviewDescriptionMaxRunes {
 		desc = desc[:reviewDescriptionMaxRunes]
 	}
-	fmt.Fprintf(&b, "- Description: %q\n", string(desc))
+	parts = append(parts, fmt.Sprintf("- Description: %q\n", string(desc)))
 	if len(selected) == 0 {
-		b.WriteString("- Selected tags: (none)\n")
+		parts = append(parts, "- Selected tags: (none)\n")
 	} else {
-		b.WriteString("- Selected tags: ")
+		parts = append(parts, "- Selected tags: ")
 		for i, t := range selected {
 			if i > 0 {
-				b.WriteString(", ")
+				parts = append(parts, ", ")
 			}
-			fmt.Fprintf(&b, "%s(%s)", t.Code, t.NameVi)
+			parts = append(parts, fmt.Sprintf("%s(%s)", t.Code, t.NameVi))
 		}
-		b.WriteString("\n")
+		parts = append(parts, "\n")
 	}
-	b.WriteString("\n" + reviewCategoryGuide + "\n\n")
-	b.WriteString("TAG CATALOG (use ONLY these codes in suggestions):\n")
+	parts = append(parts, "\n", reviewCategoryGuide, "\n\n", "TAG CATALOG (use ONLY these codes in suggestions):\n")
 	for i, t := range catalog {
 		if i >= reviewTagCatalogLimit {
 			break
 		}
-		fmt.Fprintf(&b, "- %s | %s | %s | %s | %s\n", t.Code, t.NameVi, t.NameZh, t.NameEn, t.Category)
+		parts = append(parts, fmt.Sprintf("- %s | %s | %s | %s | %s\n", t.Code, t.NameVi, t.NameZh, t.NameEn, t.Category))
 	}
-	b.WriteString("\nEVIDENCE: ")
+	parts = append(parts, "\nEVIDENCE: ")
 	if hasPhotos {
-		b.WriteString("the user message attaches the report's evidence photos (overview first, then close-up). Inspect them.")
+		parts = append(parts, "the user message attaches the report's evidence photos (overview first, then close-up). Inspect them.")
 	} else {
-		b.WriteString("no photos could be loaded; judge text and classification consistency only, and set verdict REVIEW unless the text alone is clearly correct.")
+		parts = append(parts, "no photos could be loaded; judge text and classification consistency only, and set verdict REVIEW unless the text alone is clearly correct.")
 	}
-	b.WriteString("\n\nReturn ONLY a JSON object:\n")
-	b.WriteString(`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...],"suggested_questions":["contextual question 1",...]}`)
-	b.WriteString("\nRules:\n")
-	b.WriteString("- OK: everything matches the evidence. REVIEW: plausible but uncertain or incomplete. MISMATCH: classification or report clearly contradicts the evidence.\n")
-	b.WriteString("- suggested_* fields: fill ONLY when the correction clearly improves the report; leave empty or [] otherwise.\n")
-	b.WriteString("- suggested_tags: at most 3 codes from the TAG CATALOG, not already selected.\n")
-	b.WriteString("- suggested_questions: return 3 to 5 concise follow-up questions tailored to this report, its location, evidence, verdict and suggestions; return [] only if no useful question exists. Do not repeat the report verbatim.\n")
-	b.WriteString("- feedback: at most 3 sentences addressed to the reporter; state what matches or what is wrong and why; write entirely in " + langName + ".")
-	return b.String()
+	parts = append(parts,
+		"\n\nReturn ONLY a JSON object:\n",
+		`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...],"suggested_questions":["contextual question 1",...]}`,
+		"\nRules:\n",
+		"- OK: everything matches the evidence. REVIEW: plausible but uncertain or incomplete. MISMATCH: classification or report clearly contradicts the evidence.\n",
+		"- suggested_* fields: fill ONLY when the correction clearly improves the report; leave empty or [] otherwise.\n",
+		"- suggested_tags: at most 3 codes from the TAG CATALOG, not already selected.\n",
+		"- suggested_questions: return 3 to 5 concise follow-up questions tailored to this report, its location, evidence, verdict and suggestions; return [] only if no useful question exists. Do not repeat the report verbatim.\n",
+		"- feedback: at most 3 sentences addressed to the reporter; state what matches or what is wrong and why; write entirely in "+langName+".",
+	)
+	return strings.Join(parts, "")
 }

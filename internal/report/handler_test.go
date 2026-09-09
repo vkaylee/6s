@@ -222,3 +222,22 @@ func TestReport_ErrorAndFilterBranches(t *testing.T) {
 		t.Errorf("expected GetSummary to clamp days, got %v", errOutOfRange)
 	}
 }
+
+func TestReportService_GetExportDataBoundsRows(t *testing.T) {
+	rows := make([]db.ListIssuesForExportRow, 100_001)
+	for i := range rows {
+		rows[i].ID = int64(i + 1)
+	}
+	service := report.NewService(&mockReportStore{exports: rows})
+
+	got, err := service.GetExportData(context.Background(), "", "", "")
+	if err != nil {
+		t.Fatalf("GetExportData error: %v", err)
+	}
+	if len(got) != 100_000 {
+		t.Fatalf("expected export bound of 100000 rows, got %d", len(got))
+	}
+	if got[0].ID != 1 || got[len(got)-1].ID != 100_000 {
+		t.Fatalf("unexpected rows after export bound: first=%d last=%d", got[0].ID, got[len(got)-1].ID)
+	}
+}

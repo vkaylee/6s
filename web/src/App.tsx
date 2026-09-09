@@ -659,13 +659,11 @@ export function App() {
                             {paginationMeta && paginationMeta.total > 0 && (
                               <p className="text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                                 {issues.length < paginationMeta.total
-                                  ? t("common.showing_count")
-                                      .replace("{current}", String(issues.length))
-                                      .replace("{total}", String(paginationMeta.total))
-                                  : t("common.all_loaded").replace(
-                                      "{total}",
-                                      String(paginationMeta.total),
-                                    )}
+                                  ? t("common.showing_count", {
+                                      current: issues.length,
+                                      total: paginationMeta.total,
+                                    })
+                                  : t("common.all_loaded", { total: paginationMeta.total })}
                               </p>
                             )}
                             {paginationMeta && issues.length < paginationMeta.total && (

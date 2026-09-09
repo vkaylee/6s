@@ -913,7 +913,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                         <div className="space-y-1.5 pl-6">
                           <div>
                             <span className="font-bold text-zinc-500 dark:text-zinc-400 mr-1.5 uppercase text-[10px] tracking-wider">
-                              {t("issue.category_signs_label") || "Dấu hiệu"}:
+                              {t("issue.category_signs_label")}:
                             </span>
                             <span className="font-medium text-zinc-800 dark:text-zinc-200">
                               {signs}
@@ -922,7 +922,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                           {action && (
                             <div>
                               <span className="font-bold text-zinc-500 dark:text-zinc-400 mr-1.5 uppercase text-[10px] tracking-wider">
-                                {t("issue.category_action_label") || "Hành động"}:
+                                {t("issue.category_action_label")}:
                               </span>
                               <span
                                 className={`font-semibold ${
@@ -941,7 +941,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                         {categoryTags.length > 0 && (
                           <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-700/60 flex flex-wrap items-center gap-1.5 pl-1">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mr-1">
-                              {t("issue.category_quick_tags_label") || "Gợi ý thẻ"}:
+                              {t("issue.category_quick_tags_label")}:
                             </span>
                             {categoryTags.map((tg) => {
                               const isChecked = selectedTags.includes(tg.tag_code);
@@ -987,12 +987,10 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                     <Info className="w-4 h-4 text-zinc-500 dark:text-zinc-400 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0 space-y-1">
                       <p className="text-zinc-600 dark:text-zinc-300 font-semibold">
-                        {t("issue.select_category_placeholder") ||
-                          "Chưa rõ chọn mục nào? Xem nhanh gợi ý:"}
+                        {t("issue.select_category_placeholder")}
                       </p>
                       <p className="text-zinc-400 font-medium text-[11px] leading-relaxed">
-                        {t("issue.category_guide_summary") ||
-                          "1S: Đồ thừa/Rác • 2S: Sai chỗ/Thiếu vạch • 3S: Bẩn/Rò rỉ • 4S: Hỏng chuẩn • 5S: Tác phong • 6S: Nguy hiểm/Cháy nổ"}
+                        {t("issue.category_guide_summary")}
                       </p>
                     </div>
                   </div>
@@ -1022,15 +1020,14 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                       onClick={() => setIsTaxonomyOpen(true)}
                       className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/80 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center gap-1.5 min-h-[36px]"
                     >
-                      <Tag className="w-3.5 h-3.5" />
-                      <span>{t("issue.add_tags_button") || "Thêm thẻ sự cố"}</span>
+                      <span>{t("issue.add_tags_button")}</span>
                     </button>
                   </div>
 
                   {/* Selected Tags Chips or Empty Placeholder */}
                   {selectedTags.length === 0 ? (
                     <p className="text-xs text-zinc-400 italic py-1">
-                      {t("issue.no_tags_selected") || "Chưa chọn thẻ lỗi nào"}
+                      {t("issue.no_tags_selected")}
                     </p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5 pt-1">
@@ -1056,8 +1053,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                             )}
                             <button
                               type="button"
-                              onClick={() => handleToggleTag(tagCode)}
-                              aria-label="Remove tag"
+                              aria-label={t("issue.remove_tag")}
                               className="ml-0.5 text-zinc-400 hover:text-rose-500 font-bold text-xs"
                             >
                               <X className="w-3 h-3" />

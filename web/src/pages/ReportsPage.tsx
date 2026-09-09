@@ -38,7 +38,6 @@ import {
   type IssueItem,
   type LocationHealthScore,
   type LocationItem,
-  type PaginatedResult,
   type ReporterLeaderboard,
   type ReportSummaryResponse,
   type TagItem,
@@ -158,10 +157,9 @@ export function ReportsPage() {
           params.set("overdue", "true");
         }
 
-        const res = await apiClient<PaginatedResult<IssueItem[]>>(
-          `/api/issues?${params.toString()}`,
-          { includeMeta: true },
-        );
+        const res = await apiClient<IssueItem[]>(`/api/issues?${params.toString()}`, {
+          includeMeta: true,
+        });
         if (isCancelled) return;
         const list = res?.data || [];
         const metaTotal = res?.pagination?.total ?? list.length;

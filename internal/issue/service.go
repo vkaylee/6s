@@ -717,7 +717,7 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 		overdueParam = sql.NullBool{Bool: true, Valid: true}
 	}
 
-rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
+	rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
 		Statuses:      statuses,
 		Categories:    categories,
 		LocationCodes: locationCodes,

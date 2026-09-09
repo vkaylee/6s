@@ -626,7 +626,7 @@ describe("IssueDetailModal Component", () => {
 
     expect(html).toContain("Sau khi khắc phục");
     expect(html).toContain("scale(1.25)");
-    expect(html).toContain("Previous photo");
+    expect(html).toContain('aria-label="Ảnh trước"');
   });
 
   it("renders CreateIssueModal when isEditingFull is true", () => {

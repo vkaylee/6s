@@ -1339,8 +1339,7 @@ export function IssueDetailModal({
                         prev !== null && prev > 0 ? prev - 1 : photoList.length - 1,
                       );
                     }}
-                    className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition-all cursor-pointer"
-                    aria-label="Previous photo"
+                    aria-label={t("issue_detail.previous_photo")}
                   >
                     ◀
                   </button>
@@ -1351,8 +1350,7 @@ export function IssueDetailModal({
                         prev !== null && prev < photoList.length - 1 ? prev + 1 : 0,
                       );
                     }}
-                    className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition-all cursor-pointer"
-                    aria-label="Next photo"
+                    aria-label={t("issue_detail.next_photo")}
                   >
                     ▶
                   </button>

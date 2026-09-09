@@ -98,20 +98,11 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r.Use(middleware.Recoverer)
 	r.Use(timeoutByRoute)
 	r.Use(i18n.Middleware)
-	// Health check (unauthenticated) - supports GET and HEAD (for wget --spider)
-	healthHandler := func(w http.ResponseWriter, r *http.Request) {
-		dbStatus := "disconnected"
-		if dbConn != nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-			defer cancel()
-			if err := dbConn.PingContext(ctx); err == nil {
-				dbStatus = "ok"
-			}
-		}
-
+	// Liveness is dependency-free so orchestrators restart only stopped processes.
+	healthHandler := func(w http.ResponseWriter, _ *http.Request) {
 		response.JSON(w, http.StatusOK, map[string]string{
 			"status": "ok",
-			"db":     dbStatus,
+			"db":     "not_checked",
 		})
 	}
 	readinessHandler := func(w http.ResponseWriter, req *http.Request) {

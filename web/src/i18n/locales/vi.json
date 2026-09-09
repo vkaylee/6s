@@ -243,6 +243,7 @@
     "photo_annotate_btn": "Khoanh lỗi",
     "photo_retake_btn": "Chụp lại",
     "photo_remove_btn": "Xóa",
+    "remove_tag": "Xóa thẻ",
     "search_location_placeholder": "Tìm theo mã, tên tiếng Việt, tiếng Trung...",
     "no_locations_found": "Không tìm thấy vị trí phù hợp",
     "recent_locations": "Vị trí gần đây:",
@@ -542,7 +543,9 @@
     "invalidate_failed": "Bác bỏ thất bại",
     "default_reopen_reason": "Chưa đạt yêu cầu 6S",
     "default_invalid_reason": "Báo cáo không đúng thực tế",
-    "photo_preview": "Xem trước ảnh"
+    "photo_preview": "Xem trước ảnh",
+    "previous_photo": "Ảnh trước",
+    "next_photo": "Ảnh tiếp theo"
   },
   "app": {
     "issues_list": "Danh sách vấn đề ({count})",

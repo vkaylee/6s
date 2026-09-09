@@ -223,10 +223,13 @@ describe("apiClient authentication", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const res = await apiClient<{
-        data: { id: number; description: string }[];
-        pagination: { total: number };
-      }>("/api/issues?page=1&limit=20", { includeMeta: true, skipAuth: true });
+      const res = await apiClient<{ id: number; description: string }[]>(
+        "/api/issues?page=1&limit=20",
+        {
+          includeMeta: true,
+          skipAuth: true,
+        },
+      );
       expect(res.data).toEqual([{ id: 1, description: "Test" }]);
       expect(res.pagination?.total).toBe(42);
     } finally {

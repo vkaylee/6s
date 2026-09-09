@@ -4,15 +4,15 @@ import { closeIssue, invalidateIssue, reopenIssue } from "./generated/index.ts";
 
 export type IssueMutation = "close" | "reopen" | "invalid";
 
-export interface CloseIssueBody {
+export type CloseIssueBody = {
   score_rating?: number;
-}
-export interface ReopenIssueBody {
+};
+export type ReopenIssueBody = {
   reject_reason: string;
-}
-export interface InvalidIssueBody {
+};
+export type InvalidIssueBody = {
   reason: string;
-}
+};
 export type IssueMutationBody = {
   close: CloseIssueBody;
   reopen: ReopenIssueBody;
@@ -24,7 +24,6 @@ const issueMutationPaths: Record<IssueMutation, string> = {
   reopen: "/api/issues/{id}/reopen",
   invalid: "/api/issues/{id}/invalid",
 };
-
 export function issueMutationPath(operation: IssueMutation, id: number): string {
   return issueMutationPaths[operation].replace("{id}", String(id));
 }
@@ -34,38 +33,32 @@ export async function mutateIssue<K extends IssueMutation>(
   id: number,
   body: IssueMutationBody[K],
 ): Promise<Issue> {
-  switch (operation) {
-    case "close":
-      return (
-        await closeIssue({
-          client: sdkClient,
-          path: { id },
-          body: body as CloseIssueBody,
-          throwOnError: true,
-        })
-      ).data.data;
-    case "reopen":
-      return (
-        await reopenIssue({
-          client: sdkClient,
-          path: { id },
-          body: body as ReopenIssueBody,
-          throwOnError: true,
-        })
-      ).data.data;
-    case "invalid":
-      return (
-        await invalidateIssue({
-          client: sdkClient,
-          path: { id },
-          body: body as InvalidIssueBody,
-          throwOnError: true,
-        })
-      ).data.data;
+  if (operation === "close") {
+    const result = await closeIssue({
+      client: sdkClient,
+      path: { id },
+      body: body as CloseIssueBody,
+      throwOnError: true,
+    });
+    return result.data.data;
   }
-  throw new Error(`Unsupported issue mutation: ${operation}`);
+  if (operation === "reopen") {
+    const result = await reopenIssue({
+      client: sdkClient,
+      path: { id },
+      body: body as ReopenIssueBody,
+      throwOnError: true,
+    });
+    return result.data.data;
+  }
+  const result = await invalidateIssue({
+    client: sdkClient,
+    path: { id },
+    body: body as InvalidIssueBody,
+    throwOnError: true,
+  });
+  return result.data.data;
 }
-
 export const issueOperations = {
   close: (id: number, body: CloseIssueBody) => mutateIssue("close", id, body),
   reopen: (id: number, body: ReopenIssueBody) => mutateIssue("reopen", id, body),

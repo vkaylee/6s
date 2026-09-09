@@ -26,6 +26,7 @@
     "rules": {
       "preset": "recommended",
       "a11y": {
+        "recommended": true,
         "noLabelWithoutControl": "warn",
         "noStaticElementInteractions": "warn"
       },

@@ -8,6 +8,8 @@ import (
 	"6s/internal/db"
 )
 
+const maxExportRows = 100_000
+
 // KPISummary matches the executive dashboard summary requirements.
 type KPISummary struct {
 	TotalIssues         int64 `json:"totalIssues"`
@@ -180,7 +182,8 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 	}, nil
 }
 
-// GetExportData fetches issues with associated tag codes for streaming CSV export.
+// GetExportData fetches at most maxExportRows issues with associated tag codes.
+// The SQL query applies the same limit; the service cap protects alternate stores.
 func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locationCode string) ([]db.ListIssuesForExportRow, error) {
 	var statusParam, catParam, locParam sql.NullString
 	if status != "" {
@@ -193,9 +196,16 @@ func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locat
 		locParam = sql.NullString{String: locationCode, Valid: true}
 	}
 
-	return s.store.ListIssuesForExport(ctx, db.ListIssuesForExportParams{
+	rows, err := s.store.ListIssuesForExport(ctx, db.ListIssuesForExportParams{
 		Status:       statusParam,
 		Category:     catParam,
 		LocationCode: locParam,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > maxExportRows {
+		rows = rows[:maxExportRows]
+	}
+	return rows, nil
 }

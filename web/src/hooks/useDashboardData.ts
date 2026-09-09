@@ -11,7 +11,6 @@ import {
   IssueStatus,
   type LocationHealthScore,
   type LocationItem,
-  type PaginatedResult,
   type PaginationMeta,
   type ReporterLeaderboard,
   type TagItem,
@@ -168,10 +167,9 @@ export function useDashboardData({
       queryParams.set("location_codes", filters.locationCodes.join(","));
     }
     try {
-      const res = await apiClient<PaginatedResult<IssueItem[]>>(
-        `/api/issues?${queryParams.toString()}`,
-        { includeMeta: true },
-      );
+      const res = await apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
+        includeMeta: true,
+      });
       const list = res?.data || [];
       const meta = res?.pagination || { page: targetPage, limit: 20, total: list.length };
       setPaginationMeta(meta);
@@ -213,7 +211,7 @@ export function useDashboardData({
       queryParams.set("location_codes", advancedFilters.locationCodes.join(","));
     }
     setIsLoadingMore(true);
-    apiClient<PaginatedResult<IssueItem[]>>(`/api/issues?${queryParams.toString()}`, {
+    apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
       includeMeta: true,
     })
       .then((res) => {

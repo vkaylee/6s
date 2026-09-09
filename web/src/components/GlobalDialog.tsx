@@ -20,12 +20,16 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
   const handleCancel = props.onCancel || store.handleCancel;
 
   const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef(handleCancel);
+  cancelRef.current = handleCancel;
 
   // Restore focus to the opener when the dialog closes or unmounts.
   useEffect(() => {
     if (!isOpen) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    return () => previouslyFocused?.focus();
+    return () => {
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
   }, [isOpen]);
 
   // Escape cancels; Tab cycles inside the dialog.
@@ -34,35 +38,43 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
     const dialog = dialogRef.current;
     if (!dialog) return;
     const focusables = () =>
-      dialog.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
-      );
-    focusables()[0]?.focus();
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("aria-hidden"));
+    const first = focusables()[0];
+    first?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         e.stopPropagation();
-        handleCancel();
+        cancelRef.current();
         return;
       }
       if (e.key !== "Tab") return;
       const list = focusables();
-      if (list.length === 0) return;
-      const first = list[0];
-      const last = list[list.length - 1];
+      if (list.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const firstElement = list[0];
+      const lastElement = list[list.length - 1];
       const active = document.activeElement;
       if (e.shiftKey) {
-        if (active === first || !dialog.contains(active)) {
+        if (active === firstElement || !dialog.contains(active)) {
           e.preventDefault();
-          last.focus();
+          lastElement.focus();
         }
-      } else if (active === last || !dialog.contains(active)) {
+      } else if (active === lastElement || !dialog.contains(active)) {
         e.preventDefault();
-        first.focus();
+        firstElement.focus();
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, handleCancel]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -88,6 +100,8 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="global-dialog-title"
+      aria-describedby="global-dialog-message"
+      tabIndex={-1}
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
     >
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
@@ -102,7 +116,10 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
           </h3>
         </div>
 
-        <div className="p-5 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
+        <div
+          id="global-dialog-message"
+          className="p-5 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line"
+        >
           {messageText}
         </div>
 

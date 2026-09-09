@@ -1,7 +1,9 @@
 package response
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"6s/internal/apperror"
@@ -30,38 +32,48 @@ type ErrorBody struct {
 	Details any    `json:"details,omitempty"`
 }
 
-func JSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(Envelope{Data: data})
+func JSON(w http.ResponseWriter, status int, data any) error {
+	return writeJSON(w, status, Envelope{Data: data})
 }
 
-func Paginated(w http.ResponseWriter, status int, data any, page, limit, total int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(Envelope{
+func Paginated(w http.ResponseWriter, status int, data any, page, limit, total int) error {
+	return writeJSON(w, status, Envelope{
 		Data:       data,
 		Pagination: &Pagination{Page: page, Limit: limit, Total: total},
 	})
 }
 
+func writeJSON(w http.ResponseWriter, status int, payload Envelope) error {
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	n, err := w.Write(body.Bytes())
+	if err != nil {
+		return err
+	}
+	if n != body.Len() {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
 // (Deprecated direct error helpers removed to enforce AppError with i18n)
 
-func AppError(w http.ResponseWriter, r *http.Request, appErr *apperror.AppError) {
+func AppError(w http.ResponseWriter, r *http.Request, appErr *apperror.AppError) error {
 	locale := i18n.FromContext(r.Context())
 	msg := i18n.Translate(locale, appErr.Key, appErr.Args...)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(appErr.HTTPStatus)
-	_ = json.NewEncoder(w).Encode(Envelope{Error: &ErrorBody{
+	return writeJSON(w, appErr.HTTPStatus, Envelope{Error: &ErrorBody{
 		Code: appErr.Code, Key: string(appErr.Key), Message: msg,
 	}})
 }
 
 // RenderError handles generic errors, extracting *apperror.AppError if present or falling back to internal server error.
-func RenderError(w http.ResponseWriter, r *http.Request, err error) {
+func RenderError(w http.ResponseWriter, r *http.Request, err error) error {
 	if appErr, ok := apperror.As(err); ok {
-		AppError(w, r, appErr)
-		return
+		return AppError(w, r, appErr)
 	}
-	AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+	return AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 }

@@ -3,6 +3,7 @@ package scoring
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,18 +12,18 @@ import (
 )
 
 type mockScoringStore struct {
-	locations             []db.Location
-	sums                  map[string]int64
-	openCount             map[string]int64
-	overdue               map[string]int64
-	reporters             []db.GetReporterLeaderboardInMonthRow
+	locations              []db.Location
+	sums                   map[string]int64
+	openCount              map[string]int64
+	overdue                map[string]int64
+	reporters              []db.GetReporterLeaderboardInMonthRow
 	locationLeaderboardArg db.GetLocationLeaderboardStatsParams
 	reporterLeaderboardArg db.GetReporterLeaderboardInMonthParams
-	rules                 map[string]int32
-	logs                  []db.ScoreLog
-	auditLogs             []db.InsertAuditLogParams
-	issueLogs             []db.ListScoreLogsByIssueRow
-	targetLogs            []db.ListScoreLogsByTargetSinceRow
+	rules                  map[string]int32
+	logs                   []db.ScoreLog
+	auditLogs              []db.InsertAuditLogParams
+	issueLogs              []db.ListScoreLogsByIssueRow
+	targetLogs             []db.ListScoreLogsByTargetSinceRow
 }
 
 func (m *mockScoringStore) ListLocations(_ context.Context) ([]db.Location, error) {
@@ -157,6 +158,33 @@ func TestScoringService_LocationLeaderboardFilter(t *testing.T) {
 	}
 }
 
+func TestScoringService_BaseScoreConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		rules    map[string]int32
+		expected int64
+	}{
+		{name: "configured", rules: map[string]int32{"base_weekly_score": 80}, expected: 80},
+		{name: "missing uses default", rules: map[string]int32{}, expected: 100},
+		{name: "invalid uses default", rules: map[string]int32{"base_weekly_score": -1}, expected: 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &mockScoringStore{
+				locations: []db.Location{{Code: "LINE_A1", NameVi: "A1"}},
+				sums:      map[string]int64{"LINE_A1": 0},
+				rules:     tc.rules,
+			}
+			items, err := NewService(store, time.UTC).GetLocationLeaderboard(context.Background(), "LINE_A1")
+			if err != nil {
+				t.Fatalf("GetLocationLeaderboard error: %v", err)
+			}
+			if len(items) != 1 || items[0].HealthScore != tc.expected {
+				t.Fatalf("expected health score %d, got %+v", tc.expected, items)
+			}
+		})
+	}
+}
+
 func TestScoringService_RetroactiveRecalculate(t *testing.T) {
 	store := &mockScoringStore{
 		rules: map[string]int32{
@@ -274,8 +302,8 @@ func TestScoringService_ScoreLogs(t *testing.T) {
 				Points:          -2,
 				CreatedAt:       time.Now(),
 			},
-	},
-	targetLogs: []db.ListScoreLogsByTargetSinceRow{
+		},
+		targetLogs: []db.ListScoreLogsByTargetSinceRow{
 			{
 				ID:               2,
 				IssueID:          100,
@@ -347,7 +375,6 @@ func TestScoringService_UpdateRulesRetroactive(t *testing.T) {
 		t.Errorf("expected ErrMissingReason, got %v", errNoReason)
 	}
 
-	// Empty rules error
 	errEmpty := svc.UpdateRules(ctx, UpdateRulesRequest{Rules: nil}, 1)
 	if errEmpty != ErrInvalidRules {
 		t.Errorf("expected ErrInvalidRules, got %v", errEmpty)
@@ -373,5 +400,25 @@ func TestScoringService_UpdateRulesRetroactive(t *testing.T) {
 	}
 	if !foundRetro {
 		t.Errorf("expected retro_adjust log with -3 points, logs: %+v", store.logs)
+	}
+}
+
+func TestScoringService_UpdateRulesRejectsInvalidValues(t *testing.T) {
+	store := &mockScoringStore{rules: map[string]int32{"penalty_normal": -2}}
+	svc := NewService(store, time.UTC)
+	for _, tc := range []struct {
+		name  string
+		rules map[string]int32
+	}{
+		{name: "unknown key", rules: map[string]int32{"not_a_rule": -1}},
+		{name: "penalty wrong sign", rules: map[string]int32{"penalty_normal": 1}},
+		{name: "reward wrong sign", rules: map[string]int32{"reward_reporter_normal": -1}},
+		{name: "base wrong sign", rules: map[string]int32{"base_weekly_score": 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := svc.UpdateRules(context.Background(), UpdateRulesRequest{Rules: tc.rules}, 1); !errors.Is(err, ErrInvalidRules) {
+				t.Fatalf("expected ErrInvalidRules, got %v", err)
+			}
+		})
 	}
 }

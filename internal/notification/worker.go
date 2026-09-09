@@ -45,7 +45,9 @@ func (w *Worker) Start(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	// Initial sweep on start
+	if ctx.Err() != nil {
+		return
+	}
 	w.ProcessBatch(ctx)
 
 	for {
@@ -62,6 +64,9 @@ func (w *Worker) Start(ctx context.Context) {
 
 // ProcessBatch claims pending/expired-lease tasks and processes them sequentially.
 func (w *Worker) ProcessBatch(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	cfg, err := w.loadDecryptedConfig(ctx)
 	if err != nil {
 		observability.Log("error", "notification config load failed", map[string]any{"error": err.Error()})
@@ -69,9 +74,12 @@ func (w *Worker) ProcessBatch(ctx context.Context) {
 	}
 
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		tasks, claimErr := w.store.ClaimOutboxTasks(ctx, 20)
 		if claimErr != nil {
-			if !errors.Is(claimErr, sql.ErrNoRows) {
+			if !errors.Is(claimErr, sql.ErrNoRows) && ctx.Err() == nil {
 				observability.Log("error", "notification task claim failed", map[string]any{"error": claimErr.Error()})
 			}
 			return
@@ -81,6 +89,9 @@ func (w *Worker) ProcessBatch(ctx context.Context) {
 		}
 
 		for _, task := range tasks {
+			if ctx.Err() != nil {
+				return
+			}
 			w.processTask(ctx, task, cfg)
 		}
 	}

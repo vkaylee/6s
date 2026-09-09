@@ -87,7 +87,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, err := h.store.ListUsers(r.Context(), params)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		items = append(items, toAdminUserResponse(u))
 	}
-	response.JSON(w, http.StatusOK, items)
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // UpdateUserRequest payload to update role, assigned location, active status.
@@ -117,116 +117,83 @@ func (h *AdminHandler) clientIP(r *http.Request) string {
 	return ip
 }
 
-// UpdateUser handles PATCH /api/admin/users/{id} (Admin only).
-func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || id <= 0 {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
-		return
-	}
-
-	var req UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
-		return
-	}
-	if req.Role == nil && req.AssignedLocationCode == nil && req.IsActive == nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "no fields to update"))
-		return
-	}
-
-	actor, _ := GetUserFromContext(r.Context())
-
-	target, err := h.store.GetUserByID(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrUserNotFound))
-			return
-		}
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
-		return
-	}
-
-	params := db.UpdateUserAdminParams{ID: id, Role: target.Role, IsActive: target.IsActive}
+func (h *AdminHandler) updateParams(ctx context.Context, target db.User, req UpdateUserRequest) (db.UpdateUserAdminParams, *apperror.AppError) {
+	params := db.UpdateUserAdminParams{ID: target.ID, Role: target.Role, IsActive: target.IsActive}
 	if req.Role != nil {
 		role := Role(*req.Role)
 		if !role.IsValid() {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "invalid role"))
-			return
+			return params, apperror.BadRequest(i18n.ErrInvalidInput, "invalid role")
 		}
 		params.Role = role.String()
 	}
-	if req.AssignedLocationCode != nil {
-		if *req.AssignedLocationCode == "" {
-			params.AssignedLocationCode = sql.NullString{Valid: false}
-		} else {
-			if _, err := h.store.GetLocationByCode(r.Context(), *req.AssignedLocationCode); err != nil {
-				if err == sql.ErrNoRows {
-					response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "unknown location code"))
-					return
-				}
-				response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
-				return
-			}
-			params.AssignedLocationCode = sql.NullString{String: *req.AssignedLocationCode, Valid: true}
-		}
+	if req.AssignedLocationCode == nil {
+		return params, nil
 	}
-	// Last-active-admin protection: deactivating or demoting the final active admin is forbidden.
+	if *req.AssignedLocationCode == "" {
+		params.AssignedLocationCode = sql.NullString{Valid: false}
+		return params, nil
+	}
+	if _, err := h.store.GetLocationByCode(ctx, *req.AssignedLocationCode); err != nil {
+		if err == sql.ErrNoRows {
+			return params, apperror.BadRequest(i18n.ErrInvalidInput, "unknown location code")
+		}
+		return params, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err)
+	}
+	params.AssignedLocationCode = sql.NullString{String: *req.AssignedLocationCode, Valid: true}
+	return params, nil
+}
+
+func (h *AdminHandler) ensureAdminCount(ctx context.Context) *apperror.AppError {
+	count, err := h.store.CountAdmins(ctx)
+	if err != nil {
+		return apperror.Internal(i18n.ErrUserQuery).WithCause(err)
+	}
+	if count <= 1 {
+		return apperror.Conflict("LAST_ADMIN", i18n.ErrLastAdmin)
+	}
+	return nil
+}
+
+func (h *AdminHandler) ensureAdminCanChange(ctx context.Context, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) *apperror.AppError {
 	if target.Role == RoleAdmin.String() && target.IsActive &&
 		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && params.Role != RoleAdmin.String())) {
-		count, err := h.store.CountAdmins(r.Context())
-		if err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
-			return
-		}
-		if count <= 1 {
-			response.AppError(w, r, apperror.Conflict("LAST_ADMIN", i18n.ErrLastAdmin))
-			return
+		if appErr := h.ensureAdminCount(ctx); appErr != nil {
+			return appErr
 		}
 	}
-	if req.IsActive != nil {
-		params.IsActive = *req.IsActive
-	}
-
-	// Demotion to non-admin also checked when role changes on an active admin.
 	if req.Role != nil && req.IsActive == nil && target.Role == RoleAdmin.String() &&
 		target.IsActive && params.Role != RoleAdmin.String() {
-		count, err := h.store.CountAdmins(r.Context())
-		if err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
-			return
-		}
-		if count <= 1 {
-			response.AppError(w, r, apperror.Conflict("LAST_ADMIN", i18n.ErrLastAdmin))
-			return
+		if appErr := h.ensureAdminCount(ctx); appErr != nil {
+			return appErr
 		}
 	}
+	return nil
+}
 
-	updated, err := h.store.UpdateUserAdmin(r.Context(), params)
-	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
-		return
-	}
-
-	// Role changes invalidate existing sessions so the user gets fresh authorization state.
+func (h *AdminHandler) revokeChangedSessions(ctx context.Context, id int64, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) error {
 	if req.Role != nil && params.Role != target.Role {
-		if err := h.store.RevokeUserRefreshTokens(r.Context(), id); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
-			return
+		if err := h.store.RevokeUserRefreshTokens(ctx, id); err != nil {
+			return err
 		}
 	}
-
-	// Deactivation revokes all refresh tokens (session invalidation on sensitive action).
 	if req.IsActive != nil && !*req.IsActive && target.IsActive {
-		if err := h.store.RevokeUserRefreshTokens(r.Context(), id); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
-			return
+		if err := h.store.RevokeUserRefreshTokens(ctx, id); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	oldJSON, _ := json.Marshal(toAdminUserResponse(target))
-	newJSON, _ := json.Marshal(toAdminUserResponse(updated))
-	_ = h.store.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
+func (h *AdminHandler) auditUserUpdate(ctx context.Context, r *http.Request, actor db.User, id int64, target, updated db.User) error {
+	oldJSON, err := json.Marshal(toAdminUserResponse(target))
+	if err != nil {
+		return err
+	}
+	newJSON, err := json.Marshal(toAdminUserResponse(updated))
+	if err != nil {
+		return err
+	}
+	return h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
 		UserID:      sql.NullInt64{Int64: actor.ID, Valid: actor.ID != 0},
 		Action:      "ADMIN_UPDATE_USER",
 		TargetTable: "users",
@@ -236,6 +203,65 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		IpAddress:   sql.NullString{String: h.clientIP(r), Valid: true},
 		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
 	})
+}
 
-	response.JSON(w, http.StatusOK, toAdminUserResponse(updated))
+// UpdateUser handles PATCH /api/admin/users/{id} (Admin only).
+func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
+		return
+	}
+
+	var req UpdateUserRequest
+	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decodeErr))
+		return
+	}
+	if req.Role == nil && req.AssignedLocationCode == nil && req.IsActive == nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "no fields to update"))
+		return
+	}
+
+	actor, _ := GetUserFromContext(r.Context())
+	target, err := h.store.GetUserByID(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrUserNotFound))
+			return
+		}
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		return
+	}
+
+	params, appErr := h.updateParams(r.Context(), target, req)
+	if appErr != nil {
+		_ = response.AppError(w, r, appErr)
+		return
+	}
+	if appErr := h.ensureAdminCanChange(r.Context(), target, req, params); appErr != nil {
+		_ = response.AppError(w, r, appErr)
+		return
+	}
+	if req.IsActive != nil {
+		params.IsActive = *req.IsActive
+	}
+
+	updated, err := h.store.UpdateUserAdmin(r.Context(), params)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
+		return
+	}
+
+	if err := h.revokeChangedSessions(r.Context(), id, target, req, params); err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
+		return
+	}
+
+	if err := h.auditUserUpdate(r.Context(), r, actor, id, target, updated); err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
+		return
+	}
+
+	_ = response.JSON(w, http.StatusOK, toAdminUserResponse(updated))
 }

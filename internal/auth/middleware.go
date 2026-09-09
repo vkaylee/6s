@@ -39,7 +39,10 @@ func NewMiddleware(tokenManager *TokenManager, userGetter UserGetter, ticketMana
 	if len(ticketManager) > 0 {
 		tm = ticketManager[0]
 	}
-	permissionGetter, _ := userGetter.(PermissionGetter)
+	var permissionGetter PermissionGetter
+	if getter, ok := userGetter.(PermissionGetter); ok {
+		permissionGetter = getter
+	}
 	return &Middleware{
 		tokenManager: tokenManager, ticketManager: tm, userGetter: userGetter,
 		permissionGetter: permissionGetter,

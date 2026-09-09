@@ -103,12 +103,50 @@ func StartOfMonth(t time.Time, loc *time.Location) time.Time {
 	return time.Date(localTime.Year(), localTime.Month(), 1, 0, 0, 0, 0, loc)
 }
 
+// Default scoring values keep health calculations safe when configuration is
+// missing or invalid.
+const defaultBaseWeeklyScore int32 = 100
+
+var defaultScoringRules = map[string]int32{
+	"base_weekly_score":        defaultBaseWeeklyScore,
+	"penalty_normal":           -2,
+	"penalty_safety":           -10,
+	"penalty_overdue":          -5,
+	"penalty_reopen":           -2,
+	"bonus_kaizen":             1,
+	"reward_reporter_normal":   2,
+	"reward_reporter_safety":   5,
+	"penalty_reporter_invalid": -5,
+}
+
+func validScoringRule(key string, points int32) bool {
+	if _, ok := defaultScoringRules[key]; !ok {
+		return false
+	}
+	if key == "base_weekly_score" || key == "bonus_kaizen" || key == "reward_reporter_normal" || key == "reward_reporter_safety" {
+		return points > 0
+	}
+	return points < 0
+}
+
+func (s *Service) baseWeeklyScore(ctx context.Context) int64 {
+	rule, err := s.store.GetScoringRuleByKey(ctx, "base_weekly_score")
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("failed to load base weekly scoring rule: %v", err)
+		}
+		return int64(defaultBaseWeeklyScore)
+	}
+	if !validScoringRule("base_weekly_score", rule.Points) {
+		log.Printf("invalid base weekly scoring rule points: %d; using default %d", rule.Points, defaultBaseWeeklyScore)
+		return int64(defaultBaseWeeklyScore)
+	}
+	return int64(rule.Points)
+}
+
 // GetLocationLeaderboard calculates real-time weekly health scores for active locations.
 func (s *Service) GetLocationLeaderboard(ctx context.Context, locationCode string) ([]LocationHealthItem, error) {
-	baseScore := int64(100)
-	if baseRule, bErr := s.store.GetScoringRuleByKey(ctx, "base_weekly_score"); bErr == nil {
-		baseScore = int64(baseRule.Points)
-	}
+	baseScore := s.baseWeeklyScore(ctx)
 
 	stats, err := s.store.GetLocationLeaderboardStats(ctx, db.GetLocationLeaderboardStatsParams{
 		LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
@@ -262,7 +300,11 @@ func (s *Service) UpdateRules(ctx context.Context, req UpdateRulesRequest, admin
 	if req.ApplyFrom != nil && req.Reason == "" {
 		return ErrMissingReason
 	}
-
+	for key, points := range req.Rules {
+		if !validScoringRule(key, points) {
+			return fmt.Errorf("%w: %s=%d", ErrInvalidRules, key, points)
+		}
+	}
 	oldRules, err := s.store.GetScoringRules(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to fetch existing rules: %w", err)

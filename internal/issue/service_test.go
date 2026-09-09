@@ -473,10 +473,10 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 func TestIssueService_ConfiguredScoringRules(t *testing.T) {
 	store := newMockIssueStore()
 	store.rules = map[string]int32{
-		"penalty_normal": -7,
+		"penalty_normal":         -7,
 		"reward_reporter_normal": 9,
-		"bonus_kaizen": 4,
-		"penalty_reopen": 0,
+		"bonus_kaizen":           4,
+		"penalty_reopen":         0,
 	}
 	svc := &ServiceImpl{store: store}
 	issue := db.Issue{ID: 1, CreatorID: 2, LocationCode: "LINE_A1", Category: "3S"}

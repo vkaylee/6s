@@ -25,23 +25,30 @@ func (q *Queries) RotateRefreshToken(ctx context.Context, oldID int64, arg Creat
 	}
 	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin refresh token rotation: %w", err)
 	}
-	rollback := func(e error) error { _ = tx.Rollback(); return e }
+	rollback := func(cause error) error {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("%w; rollback refresh token rotation: %v", cause, rollbackErr)
+		}
+		return cause
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND revoked_at IS NULL`, oldID)
 	if err != nil {
-		return rollback(err)
+		return rollback(fmt.Errorf("revoke refresh token: %w", err))
 	}
 	changed, err := result.RowsAffected()
 	if err != nil {
-		return rollback(err)
+		return rollback(fmt.Errorf("check revoked refresh token: %w", err))
 	}
 	if changed != 1 {
 		return rollback(sql.ErrNoRows)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO refresh_tokens (user_id, token_hash, device_info, expires_at) VALUES ($1, $2, $3, $4)`, arg.UserID, arg.TokenHash, arg.DeviceInfo, arg.ExpiresAt)
-	if err != nil {
-		return rollback(err)
+	if _, err = tx.ExecContext(ctx, `INSERT INTO refresh_tokens (user_id, token_hash, device_info, expires_at) VALUES ($1, $2, $3, $4)`, arg.UserID, arg.TokenHash, arg.DeviceInfo, arg.ExpiresAt); err != nil {
+		return rollback(fmt.Errorf("create refresh token: %w", err))
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit refresh token rotation: %w", err)
+	}
+	return nil
 }

@@ -15,10 +15,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+          check-latest: false
       - name: Server lint
         run: ./leedevkit test server --lint-only
       - name: Server unit tests
@@ -30,9 +33,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.1'
+          bun-version: '1.4.1'
       - name: Install web dependencies
         working-directory: web
         run: bun install --frozen-lockfile
@@ -43,6 +48,9 @@ jobs:
       - name: Web E2E
         working-directory: web
         run: bunx playwright install --with-deps chromium && bunx playwright test
+      - name: OpenAPI drift
+        working-directory: web
+        run: bun run openapi:drift
       - name: Web vulnerability scan
         run: ./scripts/security-scan.sh web
 
@@ -50,6 +58,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Generate SBOM
         run: ./scripts/security-scan.sh sbom
       - name: Secret scan
