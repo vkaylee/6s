@@ -46,6 +46,7 @@ const SAMPLE_MATRIX = [
     role: "ADMIN",
     permissions: ["issue:create", "issue:close_any", "user:manage", "permission:manage"],
   },
+  { role: "SUPERADMIN", permissions: SAMPLE_PERMISSIONS.map((p) => p.code) },
 ];
 
 const CLEAN = [
@@ -101,13 +102,13 @@ describe("PermissionMatrixPage UI", () => {
     );
     expect(html).toContain("issue:close_any");
     expect(html).toContain("SAFETY_OFFICER");
-    // 4 permissions × 4 roles = 16 checkboxes
-    expect(html.match(/type="checkbox"/g)?.length).toBe(16);
+    // 4 permissions × 5 roles = 20 checkboxes
+    expect(html.match(/type="checkbox"/g)?.length).toBe(20);
     // aria-label pairs role with code for screen readers
     expect(html).toContain('aria-label="ADMIN • user:manage"');
   });
 
-  it("locks ADMIN self-lockout cells (user:manage, permission:manage disabled)", () => {
+  it("locks ADMIN safeguards and the immutable SUPERADMIN column", () => {
     const html = renderToString(
       <WithMockState values={CLEAN}>
         <Router ssrPath="/admin/permissions">
@@ -116,9 +117,10 @@ describe("PermissionMatrixPage UI", () => {
       </WithMockState>,
     );
     const disabled =
-      html.match(/disabled="" aria-label="ADMIN • (?:user:manage|permission:manage)"/g)?.length ??
-      0;
-    expect(disabled).toBe(2);
+      html.match(/disabled="" aria-label="ADMIN • (?:user:manage|permission:manage)"/g) ?? [];
+    expect(disabled).toHaveLength(2);
+    expect(html.match(/disabled="" aria-label="SUPERADMIN • /g)).toHaveLength(4);
+    expect(html).toContain("SUPERADMIN luôn có toàn bộ quyền hệ thống và không thể chỉnh sửa");
   });
 
   it("marks dirty roles and enables save/discard when drafts diverge", () => {

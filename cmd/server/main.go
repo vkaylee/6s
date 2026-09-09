@@ -183,15 +183,11 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 		cr.Post("/ad/test", adHandler.TestADConfig)
 	})
 
-	// Permission administration routes (permission:manage only).
+	// Permission administration is reserved for SUPERADMIN; permission:manage is not delegable.
 	r.Route("/api/admin/permissions", func(pr chi.Router) {
-		pr.Use(authMw.Authenticate)
-		pr.Use(auth.RequirePermission(auth.PermissionManage))
-		pr.Get("/", permissionHandler.List)
-		pr.Get("/", permissionHandler.List)
+		pr.With(authMw.Authenticate, auth.RequireRole(auth.RoleSuperadmin)).Get("/", permissionHandler.List)
 	})
-	// The PUT route requires authentication and permission management.
-	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionManage)).Put("/api/admin/roles/{role}/permissions", permissionHandler.UpdateRole)
+	r.With(authMw.Authenticate, auth.RequireRole(auth.RoleSuperadmin)).Put("/api/admin/roles/{role}/permissions", permissionHandler.UpdateRole)
 
 	// User administration routes (Admin only).
 	r.Route("/api/admin/users", func(ur chi.Router) {

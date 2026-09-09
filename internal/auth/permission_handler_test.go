@@ -134,6 +134,35 @@ func TestPermissionHandler_List(t *testing.T) {
 	}
 }
 
+func TestPermissionHandler_RejectsAdminList(t *testing.T) {
+	rr, _ := permissionRequest(t, http.MethodGet, "/api/admin/permissions", nil, RoleAdmin.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected ADMIN list 403, got %d", rr.Code)
+	}
+}
+
+func TestPermissionHandler_RejectsAdminUpdate(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{"permissions": []string{PermissionIssueCloseOwn}})
+	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/USER/permissions", payload, RoleAdmin.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected ADMIN update 403, got %d", rr.Code)
+	}
+	if len(store.pairs) != 3 {
+		t.Fatalf("expected untouched store, got %+v", store.pairs)
+	}
+}
+
+func TestPermissionHandler_RejectsSuperadminUpdate(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{"permissions": []string{PermissionIssueCloseOwn}})
+	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/SUPERADMIN/permissions", payload, RoleSuperadmin.String())
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected SUPERADMIN update 409, got %d", rr.Code)
+	}
+	if len(store.pairs) != 3 {
+		t.Fatalf("expected untouched store, got %+v", store.pairs)
+	}
+}
+
 func TestPermissionHandler_UpdateRole(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{"permissions": []string{PermissionIssueCloseOwn, PermissionIssueViewAll}})
 	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/USER/permissions", payload, RoleSuperadmin.String())
@@ -147,7 +176,7 @@ func TestPermissionHandler_UpdateRole(t *testing.T) {
 		}
 	}
 	if updated != 2 {
-		t.Fatalf("expected USER to have 2 permissions, got %d", updated)
+		t.Fatalf("expected 2 USER permissions, got %d", updated)
 	}
 	if len(store.auditLogs) != 1 || store.auditLogs[0].Action != "ADMIN_UPDATE_ROLE_PERMISSIONS" {
 		t.Fatalf("expected audit log for mutation, got %+v", store.auditLogs)
@@ -174,7 +203,7 @@ func TestPermissionHandler_AuditFailureRollsBack(t *testing.T) {
 
 func TestPermissionHandler_RejectsInvalidPermission(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{"permissions": []string{"issue:nonexistent"}})
-	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/USER/permissions", payload, "ADMIN")
+	rr, store := permissionRequest(t, http.MethodPut, "/api/admin/roles/USER/permissions", payload, RoleSuperadmin.String())
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -185,7 +214,7 @@ func TestPermissionHandler_RejectsInvalidPermission(t *testing.T) {
 
 func TestPermissionHandler_RejectsInvalidRole(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{"permissions": []string{}})
-	rr, _ := permissionRequest(t, http.MethodPut, "/api/admin/roles/SUPERUSER/permissions", payload, "ADMIN")
+	rr, _ := permissionRequest(t, http.MethodPut, "/api/admin/roles/SUPERUSER/permissions", payload, RoleSuperadmin.String())
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}

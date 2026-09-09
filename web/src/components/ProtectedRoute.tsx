@@ -1,13 +1,15 @@
 import { type ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
+import type { UserRole } from "../types/index.ts";
 
 interface ProtectedRouteProps {
   children: ReactNode;
   allowedCapability?: string;
+  allowedRole?: UserRole;
 }
 
-export function ProtectedRoute({ children, allowedCapability }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, allowedCapability, allowedRole }: ProtectedRouteProps) {
   const storeState = useAuthStore();
   const user = storeState.user ?? useAuthStore.getState().user;
   const isLoading =
@@ -30,7 +32,11 @@ export function ProtectedRoute({ children, allowedCapability }: ProtectedRoutePr
     );
   }
 
-  if (!user || (allowedCapability && !hasCapability(user, allowedCapability))) {
+  if (
+    !user ||
+    (allowedCapability && !hasCapability(user, allowedCapability)) ||
+    (allowedRole && user.role !== allowedRole)
+  ) {
     return null;
   }
 

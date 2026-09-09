@@ -49,6 +49,11 @@ var permissionRoles = []string{RoleUser.String(), RoleLineLeader.String(), RoleS
 
 // List returns the permission catalog and role assignments.
 func (h *PermissionHandler) List(w http.ResponseWriter, r *http.Request) {
+	actor, ok := GetUserFromContext(r.Context())
+	if !ok || actor.Role != RoleSuperadmin.String() {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
 	permissions, err := h.store.ListPermissions(r.Context())
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
@@ -80,6 +85,11 @@ func (h *PermissionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // UpdateRole replaces one role's permission assignments.
 func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
+	actor, ok := GetUserFromContext(r.Context())
+	if !ok || actor.Role != RoleSuperadmin.String() {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
 	role := chi.URLParam(r, "role")
 	if !Role(role).IsValid() {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "invalid role"))
@@ -110,11 +120,6 @@ func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seen[code] = true
-	}
-	actor, ok := GetUserFromContext(r.Context())
-	if !ok || actor.Role != RoleSuperadmin.String() {
-		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
-		return
 	}
 	if role == RoleSuperadmin.String() {
 		_ = response.AppError(w, r, apperror.Conflict("SUPERADMIN_LOCKED", i18n.ErrPermissionLockout))

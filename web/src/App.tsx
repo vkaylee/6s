@@ -31,12 +31,11 @@ import { LoginPage } from "./pages/LoginPage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
 import { ScoreLedgerPage } from "./pages/ScoreLedgerPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
-
 import { useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
 import { useRouteHistoryStore } from "./store/routeHistoryStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
-import { resolveLocationNameByCode } from "./types/index.ts";
+import { resolveLocationNameByCode, UserRole } from "./types/index.ts";
 
 const AdminConfigPage = lazy(() =>
   import("./pages/AdminConfigPage.tsx").then((m) => ({ default: m.AdminConfigPage })),
@@ -190,7 +189,7 @@ export function App() {
             </ProtectedRoute>
           </Route>
           <Route path="/admin/permissions">
-            <ProtectedRoute allowedCapability="permission:manage">
+            <ProtectedRoute allowedRole={UserRole.SUPERADMIN}>
               <Suspense
                 fallback={
                   <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">

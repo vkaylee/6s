@@ -122,6 +122,22 @@ describe("ProtectedRoute component", () => {
     expect(blockedHtml).toBe("");
   });
 
+  it("blocks ADMIN from SUPERADMIN-only routes", () => {
+    useAuthStore.setState({
+      isLoading: false,
+      user: { id: 1, username: "admin", full_name: "Admin", role: UserRole.ADMIN },
+      accessToken: "token",
+    });
+    const html = renderToString(
+      <Router ssrPath="/admin/permissions">
+        <ProtectedRoute allowedRole={UserRole.SUPERADMIN}>
+          <div>Permission Matrix</div>
+        </ProtectedRoute>
+      </Router>,
+    );
+    expect(html).toBe("");
+  });
+
   it("fails closed on old session without capabilities even if role is ADMIN", () => {
     useAuthStore.setState({
       isLoading: false,

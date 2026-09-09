@@ -122,16 +122,10 @@ describe("Page-level headers", () => {
         </Router>
       </WithMockState>,
     );
-    for (const href of [
-      "/reports",
-      "/admin/locations",
-      "/admin/tags",
-      "/admin",
-      "/admin/users",
-      "/admin/permissions",
-    ]) {
+    for (const href of ["/reports", "/admin/locations", "/admin/tags", "/admin", "/admin/users"]) {
       expect(html).toContain(`href="${href}"`);
     }
+    expect(html).not.toContain('href="/admin/permissions"');
     expect(html).not.toContain("onNavigate");
   });
 

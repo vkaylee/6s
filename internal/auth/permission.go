@@ -40,6 +40,7 @@ var CatalogCapabilities = []string{
 	PermissionSettingsManage,
 }
 
+// ResolveCapabilities expands effective capabilities for a role.
 func ResolveCapabilities(role string, permissions []string) []string {
 	if role == RoleSuperadmin.String() {
 		return append([]string(nil), CatalogCapabilities...)
@@ -67,10 +68,10 @@ func WithPermissions(ctx context.Context, permissions []string) context.Context 
 // HasPermission reports whether the authenticated request carries an exact permission.
 // Missing context fails closed.
 func HasPermission(ctx context.Context, code string) bool {
-  if ctx == nil || code == "" {
-    return false
-  }
-  permissions, ok := ctx.Value(permissionContextKey{}).(map[string]struct{})
+	if ctx == nil || code == "" {
+		return false
+	}
+	permissions, ok := ctx.Value(permissionContextKey{}).(map[string]struct{})
 	if !ok {
 		return false
 	}

@@ -18,7 +18,7 @@ interface RolePermissions {
   permissions: string[];
 }
 
-// ADMIN self-lockout guard mirrors backend last-admin-guard: these two codes must stay on.
+// ADMIN must retain management safeguards; SUPERADMIN is immutable and always effective.
 const LOCKED_ADMIN: Record<string, true> = { "user:manage": true, "permission:manage": true };
 
 function eqSet(a: string[] | undefined, b: string[]): boolean {
@@ -208,21 +208,25 @@ export function PermissionMatrixPage() {
                           </div>
                         </th>
                         {matrix.map((m) => {
-                          const locked = m.role === UserRole.ADMIN && LOCKED_ADMIN[p.code] === true;
+                          const locked =
+                            m.role === UserRole.SUPERADMIN ||
+                            (m.role === UserRole.ADMIN && LOCKED_ADMIN[p.code] === true);
                           return (
                             <td key={m.role} className="text-center px-2 py-3">
                               <input
                                 type="checkbox"
                                 checked={(drafts[m.role] ?? []).includes(p.code)}
                                 disabled={locked || savingRole !== null}
-                                onChange={() => toggle(m.role, p.code)}
                                 aria-label={`${m.role} • ${p.code}`}
+                                onChange={() => toggle(m.role, p.code)}
                                 title={
                                   locked
-                                    ? t("admin.permissions_locked_hint", {
-                                        role: m.role,
-                                        code: p.code,
-                                      })
+                                    ? m.role === UserRole.SUPERADMIN
+                                      ? t("admin.permissions_superadmin_locked_hint")
+                                      : t("admin.permissions_locked_hint", {
+                                          role: m.role,
+                                          code: p.code,
+                                        })
                                     : undefined
                                 }
                                 className="h-5 w-5 accent-blue-600 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-blue-600"

@@ -1,6 +1,9 @@
 package auth
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestResolveCapabilities(t *testing.T) {
 	if got := ResolveCapabilities(RoleUser.String(), []string{PermissionIssueCreate}); len(got) != 1 || got[0] != PermissionIssueCreate {
@@ -25,7 +28,7 @@ func TestResolveCapabilities(t *testing.T) {
 }
 
 func TestHasPermissionFailsClosedWithoutContext(t *testing.T) {
-	if HasPermission(nil, PermissionUserManage) {
+	if HasPermission(context.TODO(), PermissionUserManage) {
 		t.Fatal("missing permission context must deny")
 	}
 }

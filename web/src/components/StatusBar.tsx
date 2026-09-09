@@ -4,6 +4,7 @@ import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { type SyncProgress, syncEngine } from "../sync/syncEngine.ts";
+import { UserRole } from "../types/index.ts";
 import { NavActions } from "./NavActions.tsx";
 import { PageContainer } from "./PageContainer.tsx";
 
@@ -216,7 +217,7 @@ export function StatusBar({ onOpenDrawer }: StatusBarProps) {
                       <span>{t("admin.users_tab")}</span>
                     </Link>
                   )}
-                  {hasCapability(user, "permission:manage") && (
+                  {user?.role === UserRole.SUPERADMIN && (
                     <Link
                       href="/admin/permissions"
                       onClick={() => setIsProfileOpen(false)}
