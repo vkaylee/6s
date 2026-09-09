@@ -23,6 +23,33 @@ describe("apiClient request contract", () => {
     ).rejects.toThrow("apiClient mutation requests require an explicit HTTP method");
   });
 
+  it("serializes JSON mutation bodies for the server", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedBody = "";
+    let capturedContentType = "";
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? "");
+      capturedContentType = new Headers(init?.headers).get("Content-Type") ?? "";
+      return new Response(JSON.stringify({ data: { ok: true } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      await apiClient<{ ok: boolean }>("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "worker1", password: "secret" }),
+        skipAuth: true,
+      });
+      expect(capturedBody).toBe('{"username":"worker1","password":"secret"}');
+      expect(capturedContentType).toBe("application/json");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("preserves explicit POST methods for mutation requests", async () => {
     const originalFetch = globalThis.fetch;
     let capturedMethod = "";

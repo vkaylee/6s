@@ -1,6 +1,11 @@
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
-import { type Client, createClient, createConfig } from "./generated/client/index.ts";
+import {
+  type Client,
+  createClient,
+  createConfig,
+  jsonBodySerializer,
+} from "./generated/client/index.ts";
 import type { HttpMethod } from "./generated/core/types.gen.ts";
 import { refresh } from "./generated/index.ts";
 
@@ -220,7 +225,7 @@ export async function apiClient<T>(
     method: normalizeMethod(options.method ?? "GET"),
     body: isFormData || typeof options.body !== "string" ? options.body : JSON.parse(options.body),
     headers,
-    bodySerializer: isFormData ? (body: unknown) => body : undefined,
+    bodySerializer: isFormData ? (body: unknown) => body : jsonBodySerializer.bodySerializer,
     parseAs: "json" as const,
     responseStyle: "fields" as const,
     throwOnError: true as const,
