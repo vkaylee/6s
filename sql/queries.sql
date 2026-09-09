@@ -1,3 +1,12 @@
+-- name: GetSystemSettings :one
+SELECT * FROM system_settings WHERE id = 1;
+
+-- name: UpdateSystemTimezone :one
+UPDATE system_settings
+SET timezone = $1, updated_at = CURRENT_TIMESTAMP, updated_by = $2
+WHERE id = 1
+RETURNING *;
+
 -- name: GetUserByID :one
 SELECT * FROM users
 WHERE id = $1 LIMIT 1;
@@ -35,7 +44,9 @@ RETURNING *;
 UPDATE users
 SET role = COALESCE($2, role),
     assigned_location_code = COALESCE($3, assigned_location_code),
-    is_active = COALESCE($4, is_active)
+    is_active = COALESCE($4, is_active),
+    timezone = COALESCE(sqlc.narg('timezone'), timezone),
+    locale = COALESCE(sqlc.narg('locale'), locale)
 WHERE id = $1
 RETURNING *;
 

@@ -39,10 +39,10 @@ type Runner struct {
 	storageDir string
 }
 
-// NewRunner creates a new Cron Runner.
+// NewRunner creates a new Cron Runner. Callers must provide an IANA location.
 func NewRunner(store Store, loc *time.Location, storageDir string) *Runner {
 	if loc == nil {
-		loc = time.FixedZone("ICT", 7*3600)
+		loc = time.UTC
 	}
 	return &Runner{
 		store:      store,

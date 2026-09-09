@@ -1,0 +1,3 @@
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_timezone_iana_length;
+ALTER TABLE users DROP COLUMN IF EXISTS locale;
+ALTER TABLE users DROP COLUMN IF EXISTS timezone;

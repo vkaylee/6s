@@ -276,7 +276,7 @@ INSERT INTO users (
 ) VALUES (
     $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', TRUE
 )
-RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at
 `
 
 type CreateLocalAdminParams struct {
@@ -307,6 +307,8 @@ func (q *Queries) CreateLocalAdmin(ctx context.Context, arg CreateLocalAdminPara
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,
@@ -436,7 +438,7 @@ INSERT INTO users (
 ) VALUES (
     $1, 'AD', $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP
 )
-RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at
 `
 
 type CreateUserJITParams struct {
@@ -469,6 +471,8 @@ func (q *Queries) CreateUserJIT(ctx context.Context, arg CreateUserJITParams) (U
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,
@@ -1053,6 +1057,22 @@ func (q *Queries) GetScoringRules(ctx context.Context) ([]ScoringRule, error) {
 	return items, nil
 }
 
+const getSystemSettings = `-- name: GetSystemSettings :one
+SELECT id, timezone, updated_at, updated_by FROM system_settings WHERE id = 1
+`
+
+func (q *Queries) GetSystemSettings(ctx context.Context) (SystemSetting, error) {
+	row := q.db.QueryRowContext(ctx, getSystemSettings)
+	var i SystemSetting
+	err := row.Scan(
+		&i.ID,
+		&i.Timezone,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
 const getTopViolatedTags = `-- name: GetTopViolatedTags :many
 SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
 FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
@@ -1169,7 +1189,7 @@ func (q *Queries) GetTranslationCacheBatch(ctx context.Context, arg GetTranslati
 }
 
 const getUserByBadgeCode = `-- name: GetUserByBadgeCode :one
-SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at FROM users
 WHERE badge_code = $1 LIMIT 1
 `
 
@@ -1189,6 +1209,8 @@ func (q *Queries) GetUserByBadgeCode(ctx context.Context, badgeCode sql.NullStri
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,
@@ -1197,7 +1219,7 @@ func (q *Queries) GetUserByBadgeCode(ctx context.Context, badgeCode sql.NullStri
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -1217,6 +1239,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,
@@ -1225,7 +1249,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at FROM users
 WHERE username = $1 LIMIT 1
 `
 
@@ -1245,6 +1269,8 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,
@@ -2221,7 +2247,7 @@ func (q *Queries) ListUserActiveSessions(ctx context.Context, userID int64) ([]L
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at FROM users
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at FROM users
 WHERE ($1::varchar IS NULL OR assigned_location_code = $1)
   AND ($2::boolean IS NULL OR is_active = $2)
 ORDER BY id ASC
@@ -2254,6 +2280,8 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.Role,
 			&i.AssignedLocationCode,
 			&i.WxUid,
+			&i.Timezone,
+			&i.Locale,
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.LastLoginAt,
@@ -2589,6 +2617,30 @@ func (q *Queries) UpdateLocationActiveStatus(ctx context.Context, arg UpdateLoca
 	return i, err
 }
 
+const updateSystemTimezone = `-- name: UpdateSystemTimezone :one
+UPDATE system_settings
+SET timezone = $1, updated_at = CURRENT_TIMESTAMP, updated_by = $2
+WHERE id = 1
+RETURNING id, timezone, updated_at, updated_by
+`
+
+type UpdateSystemTimezoneParams struct {
+	Timezone  string
+	UpdatedBy sql.NullInt64
+}
+
+func (q *Queries) UpdateSystemTimezone(ctx context.Context, arg UpdateSystemTimezoneParams) (SystemSetting, error) {
+	row := q.db.QueryRowContext(ctx, updateSystemTimezone, arg.Timezone, arg.UpdatedBy)
+	var i SystemSetting
+	err := row.Scan(
+		&i.ID,
+		&i.Timezone,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
 const updateTagActiveStatus = `-- name: UpdateTagActiveStatus :one
 UPDATE tags
 SET is_active = $2
@@ -2624,7 +2676,7 @@ SET full_name = $2,
     email = $3,
     last_login_at = CURRENT_TIMESTAMP
 WHERE id = $1
-RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at
 `
 
 type UpdateUserADLoginParams struct {
@@ -2649,6 +2701,8 @@ func (q *Queries) UpdateUserADLogin(ctx context.Context, arg UpdateUserADLoginPa
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,
@@ -2660,9 +2714,11 @@ const updateUserAdmin = `-- name: UpdateUserAdmin :one
 UPDATE users
 SET role = COALESCE($2, role),
     assigned_location_code = COALESCE($3, assigned_location_code),
-    is_active = COALESCE($4, is_active)
+    is_active = COALESCE($4, is_active),
+    timezone = COALESCE($5, timezone),
+    locale = COALESCE($6, locale)
 WHERE id = $1
-RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, is_active, created_at, last_login_at
+RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at
 `
 
 type UpdateUserAdminParams struct {
@@ -2670,6 +2726,8 @@ type UpdateUserAdminParams struct {
 	Role                 string
 	AssignedLocationCode sql.NullString
 	IsActive             bool
+	Timezone             sql.NullString
+	Locale               sql.NullString
 }
 
 func (q *Queries) UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams) (User, error) {
@@ -2678,6 +2736,8 @@ func (q *Queries) UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams
 		arg.Role,
 		arg.AssignedLocationCode,
 		arg.IsActive,
+		arg.Timezone,
+		arg.Locale,
 	)
 	var i User
 	err := row.Scan(
@@ -2693,6 +2753,8 @@ func (q *Queries) UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams
 		&i.Role,
 		&i.AssignedLocationCode,
 		&i.WxUid,
+		&i.Timezone,
+		&i.Locale,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.LastLoginAt,

@@ -69,7 +69,12 @@ function AIResultBox({ result, t }: AIResultBoxProps) {
 
 export function AdminConfigPage() {
   const { t } = useI18nStore();
-  const [activeTab, setActiveTab] = useState<"SCORING" | "AD" | "NOTIFICATIONS" | "AI">("SCORING");
+  const [activeTab, setActiveTab] = useState<"SCORING" | "AD" | "NOTIFICATIONS" | "AI" | "FACTORY">(
+    "SCORING",
+  );
+
+  const [factoryTimezone, setFactoryTimezone] = useState("Asia/Ho_Chi_Minh");
+  const [isSavingFactoryTimezone, setIsSavingFactoryTimezone] = useState(false);
 
   // Scoring config state
   const [rules, setRules] = useState<Record<string, number>>(DEFAULT_SCORING_RULES);
@@ -110,13 +115,39 @@ export function AdminConfigPage() {
   const [testingTarget, setTestingTarget] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, AITestResponse>>({});
   const [dnsTestResult, setDnsTestResult] = useState<AIDNSTestResponse | null>(null);
-
   useEffect(() => {
     loadScoringRules();
     loadADConfig();
     loadNotificationConfig();
     loadAIConfig();
+    loadFactoryTimezone();
   }, []);
+
+  const loadFactoryTimezone = async () => {
+    try {
+      const data = await apiClient<{ timezone: string }>("/api/admin/settings/timezone");
+      if (data?.timezone) setFactoryTimezone(data.timezone);
+    } catch {
+      // retain safe default
+    }
+  };
+
+  const handleSaveFactoryTimezone = async () => {
+    setIsSavingFactoryTimezone(true);
+    try {
+      await apiClient("/api/admin/settings/timezone", {
+        method: "PATCH",
+        body: JSON.stringify({ timezone: factoryTimezone }),
+      });
+      haptics.success();
+      await modalDialog.alert(t("admin.factory_timezone_save_success"));
+    } catch {
+      haptics.errorOrConflict();
+      await modalDialog.alert(t("admin.factory_timezone_save_error"));
+    } finally {
+      setIsSavingFactoryTimezone(false);
+    }
+  };
 
   const loadScoringRules = async () => {
     try {
@@ -407,7 +438,7 @@ export function AdminConfigPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-28">
       {/* Page Heading */}
       <PageContainer className="pt-4">
         <div className="flex items-center space-x-3">
@@ -430,7 +461,7 @@ export function AdminConfigPage() {
       <main className="py-4">
         <PageContainer className="space-y-6">
           {/* Tab Navigation */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-zinc-200 dark:bg-zinc-800 p-1.5 rounded-2xl">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-zinc-200 dark:bg-zinc-800 p-1.5 rounded-2xl">
             <button
               type="button"
               onClick={() => setActiveTab("SCORING")}
@@ -478,7 +509,59 @@ export function AdminConfigPage() {
             >
               {t("admin.ai_tab")}
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("FACTORY")}
+              className={`py-2.5 px-2 rounded-xl font-bold text-xs min-h-[44px] transition-colors ${
+                activeTab === "FACTORY"
+                  ? "bg-white dark:bg-zinc-900 text-blue-600 shadow-sm"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.factory_timezone_tab")}
+            </button>
           </div>
+          {activeTab === "FACTORY" && (
+            <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              <div>
+                <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
+                  {t("admin.factory_timezone_title")}
+                </h2>
+                <p className="text-sm text-zinc-500 mt-1">
+                  {t("admin.factory_timezone_description")}
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="factory-timezone"
+                  className="block text-xs font-bold text-zinc-500 mb-1"
+                >
+                  {t("admin.factory_timezone_label")}
+                </label>
+                <select
+                  id="factory-timezone"
+                  value={factoryTimezone}
+                  onChange={(e) => setFactoryTimezone(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[48px] focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (UTC+07:00)</option>
+                  <option value="Asia/Shanghai">Asia/Shanghai (UTC+08:00)</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo (UTC+09:00)</option>
+                  <option value="Europe/Berlin">Europe/Berlin</option>
+                  <option value="America/Los_Angeles">America/Los_Angeles</option>
+                  <option value="UTC">UTC</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveFactoryTimezone}
+                disabled={isSavingFactoryTimezone}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl min-h-[48px] transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-blue-800"
+              >
+                {isSavingFactoryTimezone ? t("admin.factory_timezone_saving") : t("common.save")}
+              </button>
+            </section>
+          )}
           {/* TAB: SCORING RULES */}
           {activeTab === "SCORING" && (
             <div className="space-y-4">

@@ -8,7 +8,7 @@ import { modalDialog } from "../store/dialogStore.ts";
 import { type LocationItem, UserRole } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
-
+import { formatTime } from "../utils/time.ts";
 export interface AdminUserItem {
   id: number;
   username: string;
@@ -17,6 +17,8 @@ export interface AdminUserItem {
   email: string | null;
   role: string;
   assigned_location_code: string | null;
+  timezone?: string | null;
+  locale?: string;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
@@ -47,7 +49,8 @@ export function UserAccessPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRole, setEditRole] = useState<string>(UserRole.USER);
   const [editLocation, setEditLocation] = useState<string>("");
-
+  const [editTimezone, setEditTimezone] = useState<string>("");
+  const [editLocale, setEditLocale] = useState<string>("vi-VN");
   useEffect(() => {
     loadUsers();
     loadLocations();
@@ -88,7 +91,6 @@ export function UserAccessPage() {
     if (statusFilter === "INACTIVE" && u.is_active) return false;
     return true;
   });
-
   const handleSaveEdit = async (target: AdminUserItem) => {
     setSavingId(target.id);
     try {
@@ -97,6 +99,8 @@ export function UserAccessPage() {
         body: JSON.stringify({
           role: editRole,
           assigned_location_code: editLocation || null,
+          timezone: editTimezone || null,
+          locale: editLocale,
         }),
       });
       haptics.success();
@@ -152,7 +156,7 @@ export function UserAccessPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-28">
       {/* Page Heading */}
       <PageContainer className="pt-4 pb-3">
         <div className="flex items-center space-x-3">
@@ -288,7 +292,16 @@ export function UserAccessPage() {
                               📍 {u.assigned_location_code}
                             </div>
                           )}
-                          {u.last_login_at && <div>🕒 {u.last_login_at}</div>}
+                          {u.last_login_at && (
+                            <div>
+                              🕒{" "}
+                              {formatTime(
+                                u.last_login_at,
+                                u.locale ?? "vi-VN",
+                                u.timezone ?? "Asia/Ho_Chi_Minh",
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -347,6 +360,51 @@ export function UserAccessPage() {
                             </select>
                           </div>
                         </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label
+                              htmlFor={`timezone-${u.id}`}
+                              className="block text-xs font-bold text-zinc-500 mb-1"
+                            >
+                              {t("admin.users_timezone_label")}
+                            </label>
+                            <select
+                              id={`timezone-${u.id}`}
+                              value={editTimezone}
+                              onChange={(e) => setEditTimezone(e.target.value)}
+                              className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-600"
+                            >
+                              <option value="">{t("admin.users_timezone_inherit")}</option>
+                              <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (UTC+07:00)</option>
+                              <option value="Asia/Shanghai">Asia/Shanghai (UTC+08:00)</option>
+                              <option value="Asia/Tokyo">Asia/Tokyo (UTC+09:00)</option>
+                              <option value="Europe/Berlin">Europe/Berlin</option>
+                              <option value="America/Los_Angeles">America/Los_Angeles</option>
+                              <option value="UTC">UTC</option>
+                            </select>
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                              {t("admin.users_timezone_hint")}
+                            </p>
+                          </div>
+                          <div>
+                            <label
+                              htmlFor={`locale-${u.id}`}
+                              className="block text-xs font-bold text-zinc-500 mb-1"
+                            >
+                              {t("admin.users_locale_label")}
+                            </label>
+                            <select
+                              id={`locale-${u.id}`}
+                              value={editLocale}
+                              onChange={(e) => setEditLocale(e.target.value)}
+                              className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-600"
+                            >
+                              <option value="vi-VN">{t("admin.users_locale_vi")}</option>
+                              <option value="en-US">{t("admin.users_locale_en")}</option>
+                              <option value="zh-CN">{t("admin.users_locale_zh")}</option>
+                            </select>
+                          </div>
+                        </div>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -372,6 +430,8 @@ export function UserAccessPage() {
                             setEditingId(u.id);
                             setEditRole(u.role);
                             setEditLocation(u.assigned_location_code || "");
+                            setEditTimezone(u.timezone || "");
+                            setEditLocale(u.locale || "vi-VN");
                           }}
                           className="flex-1 text-xs font-bold px-3 py-2.5 rounded-xl min-h-[44px] transition-colors border bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 focus-visible:ring-2 focus-visible:ring-blue-600"
                         >
@@ -402,12 +462,11 @@ export function UserAccessPage() {
                           {savingId === u.id
                             ? t("admin.users_saving")
                             : u.is_active
-                              ? t("admin.inactive_status")
-                              : t("admin.active_status")}
+                              ? t("admin.active_status")
+                              : t("admin.inactive_status")}
                         </button>
                       </div>
                     ) : null}
-
                     {!canManage && !isEditing && (
                       <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
                         <span aria-hidden="true">⚠️</span>

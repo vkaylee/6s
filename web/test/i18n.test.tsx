@@ -404,6 +404,7 @@ describe("Component Props I18n Enforcement Guard", () => {
     initialCode: true,
     allowedRoles: true,
     allowedCapability: true,
+    searchQuery: true,
   };
 
   it("forbids raw string props for UI text across all components and pages, requiring I18nObject", async () => {

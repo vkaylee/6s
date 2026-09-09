@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +15,7 @@ import (
 	"6s/internal/db"
 	"6s/internal/i18n"
 	"6s/internal/response"
+	"6s/internal/timezone"
 )
 
 // AdminStore defines persistence operations for user administration.
@@ -51,6 +53,8 @@ type AdminUserResponse struct {
 	Email                *string `json:"email"`
 	Role                 string  `json:"role"`
 	AssignedLocationCode *string `json:"assigned_location_code"`
+	Timezone             *string `json:"timezone"`
+	Locale               string  `json:"locale"`
 	IsActive             bool    `json:"is_active"`
 	CreatedAt            string  `json:"created_at"`
 	LastLoginAt          *string `json:"last_login_at"`
@@ -63,8 +67,12 @@ func toAdminUserResponse(u db.User) AdminUserResponse {
 		AuthSource: u.AuthSource,
 		FullName:   u.FullName,
 		Role:       u.Role,
+		Locale:     u.Locale,
 		IsActive:   u.IsActive,
-		CreatedAt:  u.CreatedAt.Format("2006-01-02 15:04"),
+		CreatedAt:  u.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if u.Timezone.Valid {
+		resp.Timezone = &u.Timezone.String
 	}
 	if u.Email.Valid {
 		resp.Email = &u.Email.String
@@ -73,7 +81,7 @@ func toAdminUserResponse(u db.User) AdminUserResponse {
 		resp.AssignedLocationCode = &u.AssignedLocationCode.String
 	}
 	if u.LastLoginAt.Valid {
-		s := u.LastLoginAt.Time.Format("2006-01-02 15:04")
+		s := u.LastLoginAt.Time.UTC().Format(time.RFC3339Nano)
 		resp.LastLoginAt = &s
 	}
 	return resp
@@ -102,11 +110,13 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	_ = response.JSON(w, http.StatusOK, items)
 }
 
-// UpdateUserRequest payload to update role, assigned location, active status.
+// UpdateUserRequest payload to update role, location, timezone, locale, and status.
 // Pointer fields: nil = keep current value.
 type UpdateUserRequest struct {
 	Role                 *string `json:"role,omitempty"`
 	AssignedLocationCode *string `json:"assigned_location_code,omitempty"`
+	Timezone             *string `json:"timezone,omitempty"`
+	Locale               *string `json:"locale,omitempty"`
 	IsActive             *bool   `json:"is_active,omitempty"`
 }
 
@@ -129,6 +139,18 @@ func (h *AdminHandler) updateParams(ctx context.Context, target db.User, req Upd
 			return params, apperror.BadRequest(i18n.ErrInvalidInput, "invalid role")
 		}
 		params.Role = role.String()
+	}
+	if req.Timezone != nil {
+		if err := timezone.Validate(*req.Timezone); err != nil {
+			return params, apperror.BadRequest(i18n.ErrInvalidInput, "invalid IANA timezone")
+		}
+		params.Timezone = sql.NullString{String: *req.Timezone, Valid: *req.Timezone != ""}
+	}
+	if req.Locale != nil {
+		if len(*req.Locale) < 2 || len(*req.Locale) > 16 {
+			return params, apperror.BadRequest(i18n.ErrInvalidInput, "invalid locale")
+		}
+		params.Locale = sql.NullString{String: *req.Locale, Valid: true}
 	}
 	if req.AssignedLocationCode == nil {
 		return params, nil
@@ -255,7 +277,7 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decodeErr))
 		return
 	}
-	if req.Role == nil && req.AssignedLocationCode == nil && req.IsActive == nil {
+	if req.Role == nil && req.AssignedLocationCode == nil && req.IsActive == nil && req.Timezone == nil && req.Locale == nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "no fields to update"))
 		return
 	}

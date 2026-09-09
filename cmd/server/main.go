@@ -29,6 +29,7 @@ import (
 	"6s/internal/report"
 	"6s/internal/response"
 	"6s/internal/scoring"
+	"6s/internal/settings"
 	"6s/internal/storage"
 )
 
@@ -156,7 +157,7 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
 	permissionHandler := auth.NewPermissionHandler(queries)
 	userAdminHandler := auth.NewAdminHandler(queries)
-
+	settingsHandler := settings.NewHandler(queries)
 	// Public auth routes
 	r.Route("/api/auth", func(ar chi.Router) {
 		ar.Post("/login", authHandler.Login)
@@ -196,6 +197,12 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 
 		ur.Get("/", userAdminHandler.ListUsers)
 		ur.Patch("/{id}", userAdminHandler.UpdateUser)
+	})
+	r.Route("/api/admin/settings", func(sr chi.Router) {
+		sr.Use(authMw.Authenticate)
+		sr.Use(auth.RequirePermission(auth.PermissionUserManage))
+		sr.Get("/timezone", settingsHandler.GetTimezone)
+		sr.Patch("/timezone", settingsHandler.UpdateTimezone)
 	})
 
 	registerBusinessRoutes(r, queries, authMw, cipher, cfg)
@@ -320,15 +327,21 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		air.Use(authMw.Authenticate)
 		air.Get("/status", aiHandler.Status)
 		air.Post("/translate", aiHandler.Translate)
-		air.Post("/cached", aiHandler.GetCached)
-		air.Post("/review", aiHandler.Review)
-		air.Post("/review-follow-up", aiHandler.FollowUp)
+		air.Get("/cached", aiHandler.GetCached)
 	})
 	backgroundCtx := context.Background()
 	outboxWorker := notification.NewWorker(queries, httpSender, cipher, notifyCh)
 	go outboxWorker.Start(backgroundCtx)
 
-	cronRunner := cron.NewRunner(queries, nil, storageDir)
+	factoryLoc := time.UTC
+	if settings, err := queries.GetSystemSettings(backgroundCtx); err == nil {
+		if loaded, loadErr := time.LoadLocation(settings.Timezone); loadErr == nil {
+			factoryLoc = loaded
+		} else {
+			log.Printf("Warning: invalid factory timezone %q; using UTC: %v", settings.Timezone, loadErr)
+		}
+	}
+	cronRunner := cron.NewRunner(queries, factoryLoc, storageDir)
 	go cronRunner.Start(backgroundCtx)
 }
 

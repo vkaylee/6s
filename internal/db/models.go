@@ -163,6 +163,13 @@ type SystemAuditLog struct {
 	CreatedAt   time.Time
 }
 
+type SystemSetting struct {
+	ID        int32
+	Timezone  string
+	UpdatedAt time.Time
+	UpdatedBy sql.NullInt64
+}
+
 type Tag struct {
 	ID       int64
 	Code     string
@@ -196,6 +203,8 @@ type User struct {
 	Role                 string
 	AssignedLocationCode sql.NullString
 	WxUid                sql.NullString
+	Timezone             sql.NullString
+	Locale               string
 	IsActive             bool
 	CreatedAt            time.Time
 	LastLoginAt          sql.NullTime

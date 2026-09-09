@@ -1,3 +1,5 @@
+-- Canonical time contract: persist TIMESTAMPTZ instants in UTC; timezone fields use IANA names.
+-- PostgreSQL session timezone MUST be UTC in production connections.
 -- PostgreSQL Schema for 6S System (from SPEC.md)
 
 CREATE TABLE IF NOT EXISTS locations (
@@ -25,10 +27,13 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(30) NOT NULL DEFAULT 'USER',
     assigned_location_code VARCHAR(50) REFERENCES locations(code),
     wx_uid VARCHAR(100),
+    timezone VARCHAR(64),
+    locale VARCHAR(16) NOT NULL DEFAULT 'vi-VN',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMPTZ
 );
+
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id BIGSERIAL PRIMARY KEY,
@@ -172,6 +177,12 @@ CREATE TABLE IF NOT EXISTS ai_configs (
     model_translate VARCHAR(100) NOT NULL DEFAULT '',
     model_vision VARCHAR(100) NOT NULL DEFAULT '',
     model_summary VARCHAR(100) NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS system_settings (
+    id INT PRIMARY KEY CHECK (id = 1),
+    timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_by BIGINT REFERENCES users(id)
 );
