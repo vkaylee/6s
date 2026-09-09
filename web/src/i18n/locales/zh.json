@@ -77,12 +77,30 @@
     "QUALITY": "品质"
   },
   "s_categories": {
-    "1S": { "name": "整理", "hint": "整理 / 废弃物" },
-    "2S": { "name": "整顿", "hint": "整顿 / 缺标线" },
-    "3S": { "name": "清扫", "hint": "清扫 / 漏油灰尘" },
-    "4S": { "name": "清洁", "hint": "清洁 / 标准失效" },
-    "5S": { "name": "素养", "hint": "素养 / 违规违纪" },
-    "6S": { "name": "安全", "hint": "安全 / 紧急危险" }
+    "1S": {
+      "name": "整理",
+      "hint": "整理 / 废弃物"
+    },
+    "2S": {
+      "name": "整顿",
+      "hint": "整顿 / 缺标线"
+    },
+    "3S": {
+      "name": "清扫",
+      "hint": "清扫 / 漏油灰尘"
+    },
+    "4S": {
+      "name": "清洁",
+      "hint": "清洁 / 标准失效"
+    },
+    "5S": {
+      "name": "素养",
+      "hint": "素养 / 违规违纪"
+    },
+    "6S": {
+      "name": "安全",
+      "hint": "安全 / 紧急危险"
+    }
   },
   "nav": {
     "title": "6S车间管理系统",
@@ -438,6 +456,7 @@
     "users_edit_title": "编辑权限: {name}",
     "users_last_admin_hint": "无法停用最后一位在职管理员",
     "users_self_hint": "无法停用您自己的账号",
+    "permissions_superadmin_locked_hint": "SUPERADMIN 始终拥有全部系统权限，无法编辑",
     "users_privileged_hint": "仅超级管理员可管理管理员或超级管理员账号",
     "user_activate_confirm": "重新激活账号 {name}？",
     "user_deactivate_confirm": "停用账号 {name}？其所有登录会话将被吊销。",
@@ -450,7 +469,10 @@
     "permissions_save_confirm": "保存 {count} 个角色的更改？",
     "permissions_reset": "放弃更改",
     "permissions_dirty_hint": "{count} 个角色有未保存的更改",
-    "permissions_locked_hint": "为避免失去访问权限，{role} 的 {code} 已锁定"
+    "permissions_locked_hint": "为避免失去访问权限，{role} 的 {code} 已锁定",
+    "tag_edit_modal_title": "编辑标签",
+    "tag_update_btn": "更新标签",
+    "tag_update_success": "标签更新成功！"
   },
   "outbox": {
     "title": "离线发件箱 ({total})",

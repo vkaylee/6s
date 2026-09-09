@@ -107,11 +107,13 @@ function TagCard({
   compact = false,
   showToggle = false,
   onToggle,
+  onEdit,
 }: {
   tag: TagItemData;
   compact?: boolean;
   showToggle?: boolean;
   onToggle?: (code: string, active: boolean) => void;
+  onEdit?: (tag: TagItemData) => void;
 }) {
   const { t } = useI18nStore();
   const active = tag.is_active ?? true;
@@ -149,15 +151,26 @@ function TagCard({
           </div>
         )}
       </div>
-      {showToggle && onToggle && (
-        <button
-          type="button"
-          onClick={() => onToggle(tag.code, active)}
-          className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border shrink-0"
-        >
-          {active ? t("admin.tag_btn_disable") : t("admin.tag_btn_enable")}
-        </button>
-      )}
+      <div className="flex items-center gap-2 shrink-0">
+        {onEdit && (
+          <button
+            type="button"
+            onClick={() => onEdit(tag)}
+            className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border"
+          >
+            {t("common.edit")}
+          </button>
+        )}
+        {showToggle && onToggle && (
+          <button
+            type="button"
+            onClick={() => onToggle(tag.code, active)}
+            className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border"
+          >
+            {active ? t("admin.tag_btn_disable") : t("admin.tag_btn_enable")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -178,18 +191,31 @@ function normalizeCode(value: string) {
 interface CreateTagModalProps {
   initialInput: string;
   initialCode: string;
+  editingTag?: TagItemData;
   onClose: () => void;
   onCreated: (tag: TagItemData) => void;
 }
 
-function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: CreateTagModalProps) {
+function CreateTagModal({
+  initialInput,
+  initialCode,
+  editingTag,
+  onClose,
+  onCreated,
+}: CreateTagModalProps) {
   const { t, locale } = useI18nStore();
   const source = locale as TagLocale;
 
-  const [code, setCode] = useState(initialCode);
-  const [category, setCategory] = useState<string>(IssueCategory.S1);
-  const [names, setNames] = useState<Record<TagLocale, string> | null>(null);
-  const [editable, setEditable] = useState<Partial<Record<TagLocale, boolean>>>({});
+  const [code, setCode] = useState(editingTag?.code ?? initialCode);
+  const [category, setCategory] = useState<string>(editingTag?.category ?? IssueCategory.S1);
+  const [names, setNames] = useState<Record<TagLocale, string> | null>(
+    editingTag
+      ? { vi: editingTag.name_vi, zh: editingTag.name_zh ?? "", en: editingTag.name_en ?? "" }
+      : null,
+  );
+  const [editable, setEditable] = useState<Partial<Record<TagLocale, boolean>>>(
+    editingTag ? { vi: true, zh: true, en: true } : {},
+  );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiFailed, setAiFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -233,8 +259,10 @@ function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: Creat
   };
 
   useEffect(() => {
-    void translateNames();
-  }, []);
+    if (!editingTag) {
+      void translateNames();
+    }
+  }, [editingTag]);
 
   const editName = async (lang: TagLocale) => {
     if (editable[lang] || aiFailed) return;
@@ -255,12 +283,15 @@ function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: Creat
           name_vi: names.vi.trim(),
           name_zh: names.zh.trim(),
           name_en: names.en.trim(),
-          is_preset: false,
+          is_preset: editingTag?.is_preset ?? false,
         }),
       });
       haptics.success();
       onCreated(saved);
-      await modalDialog.alert(t("admin.tag_add_success"), t("common.success"));
+      await modalDialog.alert(
+        t(editingTag ? "admin.tag_update_success" : "admin.tag_add_success"),
+        t("common.success"),
+      );
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("admin.tag_add_error"));
@@ -292,7 +323,9 @@ function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: Creat
       <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl max-h-[90dvh] overflow-y-auto">
         <div className="p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-black">{t("admin.tag_create_modal_title")}</h2>
+            <h2 className="text-base font-black">
+              {t(editingTag ? "admin.tag_edit_modal_title" : "admin.tag_create_modal_title")}
+            </h2>
             <button
               type="button"
               onClick={onClose}
@@ -304,12 +337,14 @@ function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: Creat
           </div>
 
           {/* Source name */}
-          <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-800 px-4 py-3">
-            <div className="text-xs font-bold text-zinc-400 mb-1">
-              {t(`admin.tag_name_${source}`)}
+          {!editingTag && (
+            <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-800 px-4 py-3">
+              <div className="text-xs font-bold text-zinc-400 mb-1">
+                {t(`admin.tag_name_${source}`)}
+              </div>
+              <div className="text-sm font-bold">{initialInput}</div>
             </div>
-            <div className="text-sm font-bold">{initialInput}</div>
-          </div>
+          )}
           <form onSubmit={handleSave} className="space-y-3">
             {/* Code + Category */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -323,10 +358,11 @@ function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: Creat
                 <input
                   id="modal-tag-code"
                   value={code}
+                  readOnly={Boolean(editingTag)}
                   onChange={(e) => setCode(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
                   placeholder={t("admin.tag_code_placeholder")}
                   required
-                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-mono min-h-[44px]"
+                  className={`w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-mono min-h-[44px] ${editingTag ? "opacity-75 cursor-not-allowed" : ""}`}
                 />
               </div>
               <div>
@@ -408,7 +444,9 @@ function CreateTagModal({ initialInput, initialCode, onClose, onCreated }: Creat
                 disabled={saving || aiLoading || !names}
                 className="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-xl min-h-[48px] disabled:opacity-50"
               >
-                {saving ? t("admin.adding_tag_btn") : t("admin.tag_save_btn")}
+                {saving
+                  ? t("admin.adding_tag_btn")
+                  : t(editingTag ? "admin.tag_update_btn" : "admin.tag_save_btn")}
               </button>
             </div>
           </form>
@@ -430,6 +468,7 @@ export function IssueTagsPage() {
   const [similarTags, setSimilarTags] = useState<TagItemData[]>([]);
   const [suggestedCode, setSuggestedCode] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<TagItemData | null>(null);
 
   const loadTags = async () => {
     setLoading(true);
@@ -523,8 +562,15 @@ export function IssueTagsPage() {
   };
 
   const handleCreated = (tag: TagItemData) => {
-    setTags((prev) => [tag, ...prev.filter((item) => item.code !== tag.code)]);
+    setTags((prev) => {
+      const exists = prev.some((item) => item.code === tag.code);
+      if (exists) {
+        return prev.map((item) => (item.code === tag.code ? tag : item));
+      }
+      return [tag, ...prev];
+    });
     setModalOpen(false);
+    setEditingTag(null);
     setInput("");
     setSimilarTags([]);
     setSuggestedCode("");
@@ -580,14 +626,25 @@ export function IssueTagsPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {similarTags.map((tag) => (
-                      <TagCard key={tag.code} tag={tag} compact />
+                      <TagCard
+                        key={tag.code}
+                        tag={tag}
+                        compact
+                        onEdit={(t) => {
+                          setEditingTag(t);
+                          setModalOpen(true);
+                        }}
+                      />
                     ))}
                   </div>
                 </div>
               )}
               <button
                 type="button"
-                onClick={() => setModalOpen(true)}
+                onClick={() => {
+                  setEditingTag(null);
+                  setModalOpen(true);
+                }}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl min-h-[48px]"
               >
                 {t("admin.add_tag_btn")}
@@ -641,7 +698,16 @@ export function IssueTagsPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {tags.map((tag) => (
-                <TagCard key={tag.code} tag={tag} showToggle onToggle={toggleStatus} />
+                <TagCard
+                  key={tag.code}
+                  tag={tag}
+                  showToggle
+                  onToggle={toggleStatus}
+                  onEdit={(t) => {
+                    setEditingTag(t);
+                    setModalOpen(true);
+                  }}
+                />
               ))}
             </div>
           )}
@@ -652,7 +718,11 @@ export function IssueTagsPage() {
         <CreateTagModal
           initialInput={input}
           initialCode={suggestedCode}
-          onClose={() => setModalOpen(false)}
+          editingTag={editingTag ?? undefined}
+          onClose={() => {
+            setModalOpen(false);
+            setEditingTag(null);
+          }}
           onCreated={handleCreated}
         />
       )}

@@ -77,12 +77,30 @@
     "QUALITY": "Chất lượng"
   },
   "s_categories": {
-    "1S": { "name": "Sàng lọc", "hint": "Đồ thừa / Phế phẩm" },
-    "2S": { "name": "Sắp xếp", "hint": "Sai chỗ / Thiếu vạch" },
-    "3S": { "name": "Sạch sẽ", "hint": "Bẩn / Rò rỉ dầu" },
-    "4S": { "name": "Săn sóc", "hint": "Hỏng chuẩn / Bảng tin" },
-    "5S": { "name": "Sẵn sàng", "hint": "Sai tác phong / Nội quy" },
-    "6S": { "name": "An toàn", "hint": "Nguy hiểm / Cháy nổ" }
+    "1S": {
+      "name": "Sàng lọc",
+      "hint": "Đồ thừa / Phế phẩm"
+    },
+    "2S": {
+      "name": "Sắp xếp",
+      "hint": "Sai chỗ / Thiếu vạch"
+    },
+    "3S": {
+      "name": "Sạch sẽ",
+      "hint": "Bẩn / Rò rỉ dầu"
+    },
+    "4S": {
+      "name": "Săn sóc",
+      "hint": "Hỏng chuẩn / Bảng tin"
+    },
+    "5S": {
+      "name": "Sẵn sàng",
+      "hint": "Sai tác phong / Nội quy"
+    },
+    "6S": {
+      "name": "An toàn",
+      "hint": "Nguy hiểm / Cháy nổ"
+    }
   },
   "nav": {
     "title": "Hệ thống 6S",
@@ -438,6 +456,7 @@
     "users_edit_title": "Chỉnh sửa quyền: {name}",
     "users_last_admin_hint": "Không thể vô hiệu hóa quản trị viên hoạt động cuối cùng",
     "users_self_hint": "Không thể tự vô hiệu hóa tài khoản của bạn",
+    "permissions_superadmin_locked_hint": "SUPERADMIN luôn có toàn bộ quyền hệ thống và không thể chỉnh sửa",
     "users_privileged_hint": "Chỉ Superadmin mới có thể quản lý tài khoản Admin hoặc Superadmin",
     "user_activate_confirm": "Kích hoạt lại tài khoản {name}?",
     "user_deactivate_confirm": "Vô hiệu hóa tài khoản {name}? Tất cả phiên đăng nhập sẽ bị thu hồi.",
@@ -450,7 +469,10 @@
     "permissions_save_confirm": "Lưu thay đổi cho {count} vai trò?",
     "permissions_reset": "Bỏ thay đổi",
     "permissions_dirty_hint": "{count} vai trò có thay đổi chưa lưu",
-    "permissions_locked_hint": "{code} bị khóa cho {role} để tránh mất quyền truy cập"
+    "permissions_locked_hint": "{code} bị khóa cho {role} để tránh mất quyền truy cập",
+    "tag_edit_modal_title": "Chỉnh sửa thẻ",
+    "tag_update_btn": "Cập nhật thẻ",
+    "tag_update_success": "Đã cập nhật thẻ thành công!"
   },
   "outbox": {
     "title": "Hàng đợi ngoại tuyến ({total})",

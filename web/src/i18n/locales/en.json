@@ -77,12 +77,30 @@
     "QUALITY": "Quality"
   },
   "s_categories": {
-    "1S": { "name": "Sort", "hint": "Clutter / Scrap" },
-    "2S": { "name": "Set in Order", "hint": "Wrong place / Missing line" },
-    "3S": { "name": "Shine", "hint": "Dirty / Oil leak" },
-    "4S": { "name": "Standardize", "hint": "Broken standard / Notice board" },
-    "5S": { "name": "Sustain", "hint": "Discipline / Rules" },
-    "6S": { "name": "Safety", "hint": "Danger / Fire hazard" }
+    "1S": {
+      "name": "Sort",
+      "hint": "Clutter / Scrap"
+    },
+    "2S": {
+      "name": "Set in Order",
+      "hint": "Wrong place / Missing line"
+    },
+    "3S": {
+      "name": "Shine",
+      "hint": "Dirty / Oil leak"
+    },
+    "4S": {
+      "name": "Standardize",
+      "hint": "Broken standard / Notice board"
+    },
+    "5S": {
+      "name": "Sustain",
+      "hint": "Discipline / Rules"
+    },
+    "6S": {
+      "name": "Safety",
+      "hint": "Danger / Fire hazard"
+    }
   },
   "nav": {
     "title": "6S Issue Tracker",
@@ -438,6 +456,7 @@
     "users_edit_title": "Edit permissions: {name}",
     "users_last_admin_hint": "Cannot deactivate the last active administrator",
     "users_self_hint": "You cannot deactivate your own account",
+    "permissions_superadmin_locked_hint": "SUPERADMIN always has all system permissions and cannot be edited",
     "users_privileged_hint": "Only Superadmin can manage Admin or Superadmin accounts",
     "user_activate_confirm": "Reactivate account {name}?",
     "user_deactivate_confirm": "Deactivate account {name}? All sessions will be revoked.",
@@ -450,7 +469,10 @@
     "permissions_save_confirm": "Save changes for {count} role(s)?",
     "permissions_reset": "Discard changes",
     "permissions_dirty_hint": "{count} role(s) have unsaved changes",
-    "permissions_locked_hint": "{code} is locked for {role} to prevent losing access"
+    "permissions_locked_hint": "{code} is locked for {role} to prevent losing access",
+    "tag_edit_modal_title": "Edit Tag",
+    "tag_update_btn": "Update Tag",
+    "tag_update_success": "Tag updated successfully!"
   },
   "outbox": {
     "title": "Offline Outbox ({total})",
