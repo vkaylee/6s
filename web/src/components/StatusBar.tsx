@@ -10,10 +10,9 @@ import { PageContainer } from "./PageContainer.tsx";
 
 interface StatusBarProps {
   onOpenDrawer: () => void;
-  onNavigate?: (path: string) => void;
 }
 
-export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
+export function StatusBar({ onOpenDrawer }: StatusBarProps) {
   const { t } = useI18nStore();
   const storeUser = useAuthStore((s) => s.user);
   const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
@@ -173,10 +172,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                     user.role === UserRole.LINE_LEADER) && (
                     <Link
                       href="/reports"
-                      onClick={() => {
-                        setIsProfileOpen(false);
-                        onNavigate?.("/reports");
-                      }}
+                      onClick={() => setIsProfileOpen(false)}
                       className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
                     >
                       <span>📊</span>
@@ -189,10 +185,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                     <>
                       <Link
                         href="/admin/locations"
-                        onClick={() => {
-                          setIsProfileOpen(false);
-                          onNavigate?.("/admin/locations");
-                        }}
+                        onClick={() => setIsProfileOpen(false)}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
                       >
                         <span>📍</span>
@@ -200,10 +193,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                       </Link>
                       <Link
                         href="/admin/tags"
-                        onClick={() => {
-                          setIsProfileOpen(false);
-                          onNavigate?.("/admin/tags");
-                        }}
+                        onClick={() => setIsProfileOpen(false)}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
                       >
                         <span>🏷️</span>
@@ -211,10 +201,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                       </Link>
                       <Link
                         href="/admin"
-                        onClick={() => {
-                          setIsProfileOpen(false);
-                          onNavigate?.("/admin");
-                        }}
+                        onClick={() => setIsProfileOpen(false)}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
                       >
                         <span>⚙️</span>
@@ -222,10 +209,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                       </Link>
                       <Link
                         href="/admin/users"
-                        onClick={() => {
-                          setIsProfileOpen(false);
-                          onNavigate?.("/admin/users");
-                        }}
+                        onClick={() => setIsProfileOpen(false)}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
                       >
                         <span>👥</span>
@@ -233,10 +217,7 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
                       </Link>
                       <Link
                         href="/admin/permissions"
-                        onClick={() => {
-                          setIsProfileOpen(false);
-                          onNavigate?.("/admin/permissions");
-                        }}
+                        onClick={() => setIsProfileOpen(false)}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
                       >
                         <span>🔑</span>
@@ -261,13 +242,13 @@ export function StatusBar({ onOpenDrawer, onNavigate }: StatusBarProps) {
               )}
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/login")}
+            <Link
+              href="/login"
+              onClick={() => setIsProfileOpen(false)}
               className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl min-h-[36px] shadow-sm hover:bg-blue-700 transition-colors"
             >
               {t("auth.login")}
-            </button>
+            </Link>
           )}
         </div>
       </PageContainer>

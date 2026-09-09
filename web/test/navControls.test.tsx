@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { NavActions } from "../src/components/NavActions.tsx";
@@ -8,6 +9,27 @@ import { LoginPage } from "../src/pages/LoginPage.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { useThemeStore } from "../src/store/themeStore.ts";
 import { UserRole } from "../src/types/index.ts";
+
+function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
+  const internals = (
+    React as unknown as {
+      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
+        ReactCurrentDispatcher: { current: { useState: (init: unknown) => [unknown, () => void] } };
+      };
+    }
+  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
+  let idx = 0;
+  internals.current.useState = (init: unknown) => {
+    const value =
+      idx < values.length
+        ? values[idx++]
+        : typeof init === "function"
+          ? (init as () => unknown)()
+          : init;
+    return [value, () => {}];
+  };
+  return <>{children}</>;
+}
 
 describe("NavActions (Language & Theme toggle controls)", () => {
   it("renders both language and theme toggle buttons with required testids", () => {
@@ -61,6 +83,44 @@ describe("Page-level headers", () => {
     );
     expect(html).not.toContain('data-testid="lang-toggle"');
     expect(html).not.toContain('data-testid="theme-toggle"');
+  });
+
+  it("keeps shared navigation as semantic links without duplicate navigation callbacks", () => {
+    useAuthStore.setState({
+      user: { id: 1, username: "admin", full_name: "Admin", role: UserRole.ADMIN },
+    });
+    const html = renderToString(
+      <WithMockState
+        values={[
+          true,
+          {
+            total: 0,
+            completed: 0,
+            currentName: "",
+            percent: 100,
+            isSyncing: false,
+            conflictCount: 0,
+          },
+          true,
+          true,
+        ]}
+      >
+        <Router ssrPath="/">
+          <StatusBar onOpenDrawer={() => {}} />
+        </Router>
+      </WithMockState>,
+    );
+    for (const href of [
+      "/reports",
+      "/admin/locations",
+      "/admin/tags",
+      "/admin",
+      "/admin/users",
+      "/admin/permissions",
+    ]) {
+      expect(html).toContain(`href="${href}"`);
+    }
+    expect(html).not.toContain("onNavigate");
   });
 
   it("keeps exactly one control set in the shared status bar", () => {

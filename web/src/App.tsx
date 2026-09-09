@@ -151,7 +151,6 @@ export function App() {
       <AppShell
         showStatusBar={Boolean(user) && !currentPath.startsWith("/login")}
         onOpenDrawer={() => setIsDrawerOpen(true)}
-        onNavigate={(path) => setLocation(path)}
         globalOverlay={
           <OfflineOutboxDrawer
             isOpen={isDrawerOpen}
