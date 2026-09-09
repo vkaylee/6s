@@ -1,3 +1,4 @@
+// Package auth provides authentication and authorization handlers.
 package auth
 
 import (
@@ -50,7 +51,7 @@ type ADConfigResponse struct {
 func (h *ADConfigHandler) GetADConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetADConfig(r.Context())
 	if err != nil {
-		response.JSON(w, http.StatusOK, ADConfigResponse{
+		_ = response.JSON(w, http.StatusOK, ADConfigResponse{
 			IsEnabled:     false,
 			Server:        "",
 			Port:          636,
@@ -80,7 +81,7 @@ func (h *ADConfigHandler) GetADConfig(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:       cfg.UpdatedAt.Format(time.RFC3339),
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // UpdateADConfigRequest payload to update AD settings.
@@ -103,13 +104,13 @@ type UpdateADConfigRequest struct {
 func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var req UpdateADConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -120,12 +121,12 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 	var encryptedBindPass string
 	if req.BindPassword != "" {
 		if h.cipher == nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 			return
 		}
 		enc, err := h.cipher.Encrypt(req.BindPassword)
 		if err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 		encryptedBindPass = enc
@@ -148,7 +149,7 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		UpdatedBy:     sql.NullInt64{Int64: currentUser.ID, Valid: true},
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -160,10 +161,10 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		IpAddress:   sql.NullString{String: r.RemoteAddr, Valid: true},
 		UserAgent:   sql.NullString{String: r.UserAgent(), Valid: true},
 	}); auditErr != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(auditErr))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(auditErr))
 		return
 	}
-	response.JSON(w, http.StatusOK, ADConfigResponse{
+	_ = response.JSON(w, http.StatusOK, ADConfigResponse{
 		IsEnabled:       saved.IsEnabled,
 		Server:          saved.Server,
 		Port:            int(saved.Port),
@@ -181,11 +182,11 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 }
 
 // TestADConfig handles POST /api/config/ad/test (Admin only).
-func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
+func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // distinct validation failures map to distinct API errors
 	var req UpdateADConfigRequest
 	if r.Body != nil {
 		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil && decErr.Error() != "EOF" {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decErr))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decErr))
 			return
 		}
 	}
@@ -213,22 +214,22 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.BindPassword == "" && saved.BindPassword != "" {
 			if h.cipher == nil {
-				response.AppError(w, r, apperror.Internal(i18n.ErrADEncryptionKeyMissing))
+				_ = response.AppError(w, r, apperror.Internal(i18n.ErrADEncryptionKeyMissing))
 				return
 			}
 			var decryptErr error
 			req.BindPassword, decryptErr = h.cipher.Decrypt(saved.BindPassword)
 			if decryptErr != nil {
-				response.AppError(w, r, apperror.Internal(i18n.ErrADEncryptionKeyMissing))
+				_ = response.AppError(w, r, apperror.Internal(i18n.ErrADEncryptionKeyMissing))
 				return
 			}
 		}
 	} else if req.Server == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrADConfigNotFound).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrADConfigNotFound).WithCause(err))
 		return
 	}
 
-	var client LDAPClient = h.ldapClient
+	client := h.ldapClient
 	if client == nil {
 		client = NewLiveLDAPClient(LDAPConfig{
 			Server:        req.Server,
@@ -244,12 +245,12 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	if err := client.TestSearchPermission(); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrADTestFailed, err.Error()).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrADTestFailed, err.Error()).WithCause(err))
 		return
 	}
 
 	elapsed := time.Since(start).Milliseconds()
-	response.JSON(w, http.StatusOK, map[string]any{
+	_ = response.JSON(w, http.StatusOK, map[string]any{
 		"success":  true,
 		"message":  "LDAP bind and user search permission OK",
 		"duration": elapsed,

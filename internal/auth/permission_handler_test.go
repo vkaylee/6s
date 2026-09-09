@@ -222,7 +222,7 @@ func TestPermissionHandler_SystemPermissionsProtected(t *testing.T) {
 }
 
 func TestPermissionHandler_RequiresPermissionManage(t *testing.T) {
-	next := RequirePermission(PermissionManage)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next := RequirePermission(PermissionManage)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	ctxUser := context.WithValue(context.Background(), UserContextKey, db.User{ID: 1, Role: "USER"})

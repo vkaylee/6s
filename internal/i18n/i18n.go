@@ -1,3 +1,4 @@
+// Package i18n provides localized message keys and translation helpers.
 package i18n
 
 import (
@@ -27,10 +28,10 @@ const (
 	ErrNotFound                 Key = "error.not_found"
 	ErrConflict                 Key = "error.conflict"
 	ErrInvalidInput             Key = "error.invalid_input"
-	ErrTokenExpired             Key = "auth.token_expired"
-	ErrInvalidToken             Key = "auth.invalid_token"
+	ErrTokenExpired             Key = "auth.token_expired" //nolint:gosec // localization key
+	ErrInvalidToken             Key = "auth.invalid_token" //nolint:gosec // localization key
 	ErrAccountLocked            Key = "auth.account_locked"
-	ErrInvalidCreds             Key = "auth.invalid_credentials"
+	ErrInvalidCreds             Key = "auth.invalid_credentials" //nolint:gosec // localization key
 	ErrMissingAuth              Key = "auth.missing_header"
 	ErrInvalidAuthFmt           Key = "auth.invalid_header_format"
 	ErrUserNotFound             Key = "auth.user_not_found"
@@ -38,8 +39,8 @@ const (
 	ErrMissingLoginInput        Key = "auth.missing_login_input"
 	ErrLoginRateLimit           Key = "auth.rate_limit_exceeded"
 	ErrAccountLockedTemp        Key = "auth.account_locked_temporary"
-	ErrMissingRefreshToken      Key = "auth.missing_refresh_token"
-	ErrInvalidRefreshToken      Key = "auth.invalid_refresh_token"
+	ErrMissingRefreshToken      Key = "auth.missing_refresh_token" //nolint:gosec // localization key
+	ErrInvalidRefreshToken      Key = "auth.invalid_refresh_token" //nolint:gosec // localization key
 	ErrADConfigNotFound         Key = "auth.ad_config_not_found"
 	ErrADEncryptionKeyMissing   Key = "auth.ad_encryption_key_missing"
 	ErrADTestFailed             Key = "auth.ad_test_failed"

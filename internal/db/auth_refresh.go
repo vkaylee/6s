@@ -1,3 +1,4 @@
+// Package db contains generated and hand-written database queries.
 package db
 
 import (

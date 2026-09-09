@@ -63,11 +63,11 @@ func RequirePermission(code string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, ok := GetUserFromContext(r.Context()); !ok {
-				response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+				_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 				return
 			}
 			if !HasPermission(r.Context(), code) {
-				response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+				_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 				return
 			}
 			next.ServeHTTP(w, r)

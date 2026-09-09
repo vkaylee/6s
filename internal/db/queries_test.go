@@ -171,6 +171,9 @@ func TestQueries_ListIssuesFiltered(t *testing.T) {
 
 	q := New(sqlDB)
 	rows, err := q.ListIssuesFiltered(context.Background(), ListIssuesFilteredParams{})
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
 	if len(rows) != 1 || rows[0].ID != 1 || rows[0].Category != category1S {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}

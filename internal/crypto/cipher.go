@@ -1,3 +1,4 @@
+// Package crypto provides application encryption helpers.
 package crypto
 
 import (

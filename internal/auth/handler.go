@@ -121,7 +121,7 @@ func toUserResponse(u db.User) UserResponse {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		accountKey = req.BadgeCode
 	}
 	if accountKey == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingLoginInput))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingLoginInput))
 		return
 	}
 	clientIP := h.limiter.GetClientIP(r)
@@ -141,18 +141,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	user, ok := h.authenticateUser(r.Context(), req, clientIP, r.UserAgent())
 	if !ok {
 		h.recordFailureAndLock(r.Context(), clientIP, accountKey, r.UserAgent())
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidCreds))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidCreds))
 		return
 	}
 
 	if !user.IsActive {
-		response.AppError(w, r, apperror.Forbidden(i18n.ErrAccountLocked))
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrAccountLocked))
 		return
 	}
 
 	h.limiter.RecordSuccess(accountKey)
 	if loginErr := h.store.UpdateUserLastLogin(r.Context(), user.ID); loginErr != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(loginErr))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(loginErr))
 		return
 	}
 	h.issueTokensAndRespond(w, r, user)
@@ -163,13 +163,13 @@ func (h *Handler) checkRateAndLockout(w http.ResponseWriter, r *http.Request, cl
 	if !okIP {
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		appErr := apperror.TooManyRequests(i18n.ErrLoginRateLimit).WithDetails(map[string]any{"retry_after": retryAfter})
-		response.AppError(w, r, appErr)
+		_ = response.AppError(w, r, appErr)
 		return false
 	}
 	if !okAccount {
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		appErr := apperror.TooManyRequests(i18n.ErrAccountLockedTemp).WithDetails(map[string]any{"retry_after": retryAfter})
-		response.AppError(w, r, appErr)
+		_ = response.AppError(w, r, appErr)
 		return false
 	}
 	return true
@@ -288,13 +288,13 @@ func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.U
 func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, user db.User) {
 	accessToken, exp, err := h.tokenManager.GenerateAccessToken(user.ID)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
 	rawRefresh, refreshHash, err := GenerateRefreshToken()
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -308,10 +308,10 @@ func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, 
 		ExpiresAt:  refreshExpiresAt,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-	response.JSON(w, http.StatusOK, map[string]any{
+	_ = response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       accessToken,
 		"expires_in":         exp,
 		"refresh_token":      rawRefresh,
@@ -344,7 +344,7 @@ type RefreshRequest struct {
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.RefreshToken) == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRefreshToken))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRefreshToken))
 		return
 	}
 
@@ -353,10 +353,10 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	oldToken, err := h.store.GetRefreshTokenByHash(ctx, tokenHash)
 	if err != nil {
 		if reuseErr := h.handleRefreshReuse(ctx, r, tokenHash); reuseErr != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 			return
 		}
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 		return
 	}
 
@@ -364,29 +364,29 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	user, err := h.store.GetUserByID(ctx, oldToken.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
+			_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 			return
 		}
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery))
 		return
 	}
 	if !user.IsActive {
 		if revokeErr := h.store.RevokeUserRefreshTokens(ctx, oldToken.UserID); revokeErr != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 			return
 		}
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 		return
 	}
 
 	newAccess, exp, err := h.tokenManager.GenerateAccessToken(oldToken.UserID)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 	newRawRefresh, newHash, err := GenerateRefreshToken()
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 
@@ -394,7 +394,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// A non-transactional revoke-then-insert fallback can leave a session
 		// permanently unusable. Refuse rotation unless the store is atomic.
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 	rotationErr := rotator.RotateRefreshToken(ctx, oldToken.ID, db.CreateRefreshTokenParams{
@@ -408,17 +408,17 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 			// Another request won the compare-and-revoke race. Treat this as
 			// replay and revoke every session for the affected user.
 			if familyErr := h.revokeRefreshFamily(ctx, r, oldToken.UserID); familyErr != nil {
-				response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+				_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 				return
 			}
-			response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
+			_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 			return
 		}
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]any{
+	_ = response.JSON(w, http.StatusOK, map[string]any{
 		"access_token":       newAccess,
 		"expires_in":         exp,
 		"refresh_token":      newRawRefresh,
@@ -472,33 +472,33 @@ type RevokeRequest struct {
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var req RevokeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.UserID != nil {
 		if currentUser.Role != RoleAdmin.String() && currentUser.ID != *req.UserID {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 			return
 		}
 		if err := h.store.RevokeUserRefreshTokens(r.Context(), *req.UserID); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 	} else if req.RefreshTokenID != nil {
 		if err := h.store.RevokeRefreshToken(r.Context(), *req.RefreshTokenID); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 	} else {
 		if err := h.store.RevokeUserRefreshTokens(r.Context(), currentUser.ID); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 			return
 		}
 	}
@@ -511,17 +511,17 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 		IpAddress:   sql.NullString{String: maskAuditValue(h.limiter.GetClientIP(r)), Valid: true},
 		UserAgent:   sql.NullString{String: maskAuditValue(r.UserAgent()), Valid: true},
 	}); aErr != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(aErr))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(aErr))
 		return
 	}
-	response.JSON(w, http.StatusOK, map[string]any{"revoked": true})
+	_ = response.JSON(w, http.StatusOK, map[string]any{"revoked": true})
 }
 
 // Sessions handles GET /api/auth/sessions.
 func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
@@ -529,12 +529,12 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	queryUID := r.URL.Query().Get("user_id")
 	if queryUID != "" {
 		if currentUser.Role != RoleAdmin.String() {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 			return
 		}
 		uid, err := strconv.ParseInt(queryUID, 10, 64)
 		if err != nil {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 			return
 		}
 		targetUserID = uid
@@ -542,7 +542,7 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 
 	sessions, err := h.store.ListUserActiveSessions(r.Context(), targetUserID)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrSessionsQueryFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrSessionsQueryFailed).WithCause(err))
 		return
 	}
 
@@ -566,7 +566,7 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 
-	response.JSON(w, http.StatusOK, items)
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // SetupStatusResponse describes whether initial superadmin setup is required.
@@ -578,10 +578,10 @@ type SetupStatusResponse struct {
 func (h *Handler) SetupStatus(w http.ResponseWriter, r *http.Request) {
 	adminCount, err := h.store.CountAdmins(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-	response.JSON(w, http.StatusOK, SetupStatusResponse{
+	_ = response.JSON(w, http.StatusOK, SetupStatusResponse{
 		NeedsSetup: adminCount == 0,
 	})
 }
@@ -597,22 +597,22 @@ type SetupSuperadminRequest struct {
 // SetupSuperadmin handles POST /api/auth/setup.
 func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 	if _, ok := GetUserFromContext(r.Context()); !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 	adminCount, err := h.store.CountAdmins(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 	if adminCount > 0 {
-		response.AppError(w, r, apperror.Forbidden(i18n.ErrAdminExists))
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrAdminExists))
 		return
 	}
 
 	var req SetupSuperadminRequest
 	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decodeErr))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decodeErr))
 		return
 	}
 
@@ -621,21 +621,21 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.TrimSpace(req.Email)
 
 	if req.Username == "" || len(req.Username) < 3 {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrUsernameTooShort))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrUsernameTooShort))
 		return
 	}
 	if len(req.Password) < 8 {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrPasswordTooShort))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrPasswordTooShort))
 		return
 	}
 	if req.FullName == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingFullName))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingFullName))
 		return
 	}
 
 	hash, err := HashPassword(req.Password)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
@@ -651,7 +651,7 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 		Email:        emailVal,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrSetupFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrSetupFailed).WithCause(err))
 		return
 	}
 
@@ -674,21 +674,21 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 	if h.ticketManager == nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 
 	ticket, err := h.ticketManager.Issue(currentUser.ID)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{
+	_ = response.JSON(w, http.StatusOK, map[string]string{
 		"ticket": ticket,
 	})
 }

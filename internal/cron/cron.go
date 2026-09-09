@@ -1,3 +1,4 @@
+// Package cron runs scheduled background jobs.
 package cron
 
 import (

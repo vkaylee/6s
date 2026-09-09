@@ -1,3 +1,4 @@
+// Package issue provides HTTP handlers for issue workflows.
 package issue
 
 import (
@@ -84,11 +85,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	items, total, err := h.service.ListIssuesFiltered(r.Context(), statuses, categories, locationCodes, overdue, page, limit)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrIssueListFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrIssueListFailed).WithCause(err))
 		return
 	}
 
-	response.Paginated(w, http.StatusOK, items, page, limit, int(total))
+	_ = response.Paginated(w, http.StatusOK, items, page, limit, int(total))
 }
 
 // GetByID handles GET /api/issues/{id}.
@@ -96,33 +97,33 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
 	resp, err := h.service.GetIssueByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
-		response.AppError(w, r, apperror.Internal(i18n.ErrIssueGetFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrIssueGetFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // Sync handles POST /api/issues/sync (Multipart form).
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	if err := r.ParseMultipartForm(10 * 1024 * 1024); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMultipartTooLarge).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMultipartTooLarge).WithCause(err))
 		return
 	}
 
@@ -134,7 +135,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	tagsStr := strings.TrimSpace(r.FormValue("tags"))
 
 	if clientUUID == "" || category == "" || locationCode == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingIssueFields))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingIssueFields))
 		return
 	}
 
@@ -147,7 +148,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	photoBefore, _, fileErr := r.FormFile("photo_before")
 	if fileErr != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingPhotoBefore).WithCause(fileErr))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingPhotoBefore).WithCause(fileErr))
 		return
 	}
 	if cErr := photoBefore.Close(); cErr != nil {
@@ -176,10 +177,10 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	resp, created, err := h.service.SyncIssue(r.Context(), syncReq, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCategory) {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
 			return
 		}
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrIssueSaveFailed, err.Error()).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrIssueSaveFailed, err.Error()).WithCause(err))
 		return
 	}
 
@@ -187,26 +188,26 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	if created {
 		statusCode = http.StatusCreated
 	}
-	response.JSON(w, statusCode, resp)
+	_ = response.JSON(w, statusCode, resp)
 }
 
 // Resolve handles POST /api/issues/{id}/resolve (Multipart form).
 func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, parseErr := strconv.ParseInt(idStr, 10, 64)
 	if parseErr != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseErr))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseErr))
 		return
 	}
 
 	if err := r.ParseMultipartForm(10 * 1024 * 1024); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidMultipart).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidMultipart).WithCause(err))
 		return
 	}
 
@@ -216,7 +217,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	force := (forceStr == "true" || forceStr == "1")
 
 	if resolvedUUID == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingResolvedUUID))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingResolvedUUID))
 		return
 	}
 
@@ -229,7 +230,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	photoAfter, _, fileErr := r.FormFile("photo_after")
 	if fileErr != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingPhotoAfter).WithCause(fileErr))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingPhotoAfter).WithCause(fileErr))
 		return
 	}
 	if err := photoAfter.Close(); err != nil {
@@ -250,7 +251,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
@@ -258,14 +259,14 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 				"current_status":  resp,
 				"current_version": expectedVersion,
 			})
-			response.AppError(w, r, appErr)
+			_ = response.AppError(w, r, appErr)
 			return
 		}
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // CloseRequest defines payload for closing an issue.
@@ -278,14 +279,14 @@ type CloseRequest struct {
 func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
@@ -303,22 +304,22 @@ func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueCloseForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueCloseForbidden))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
+			_ = response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
 			return
 		}
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // ReopenRequest defines payload for reopening an issue.
@@ -331,14 +332,14 @@ type ReopenRequest struct {
 func (h *Handler) Reopen(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
@@ -356,22 +357,22 @@ func (h *Handler) Reopen(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueReopenForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueReopenForbidden))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
+			_ = response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
 			return
 		}
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // InvalidRequest defines payload for invalidating an issue.
@@ -384,14 +385,14 @@ type InvalidRequest struct {
 func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
 
@@ -409,22 +410,22 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 	}, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueInvalidForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueInvalidForbidden))
 			return
 		}
 		if errors.Is(err, ErrIssueConflict) {
-			response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
+			_ = response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict).WithCause(err))
 			return
 		}
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // PatchRequest defines payload for in-place quick editing of an issue.
@@ -486,14 +487,14 @@ func (h *Handler) parseJSONPatch(r *http.Request) (PatchIssueRequest, error) {
 func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	id, parseIDErr := strconv.ParseInt(idStr, 10, 64)
 	if parseIDErr != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseIDErr))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseIDErr))
 		return
 	}
 
@@ -502,13 +503,13 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		patchReq, parseErr = h.parseMultipartPatch(r)
 		if parseErr != nil {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrMultipartTooLarge).WithCause(parseErr))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMultipartTooLarge).WithCause(parseErr))
 			return
 		}
 	} else {
 		patchReq, parseErr = h.parseJSONPatch(r)
 		if parseErr != nil {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(parseErr))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(parseErr))
 			return
 		}
 	}
@@ -516,29 +517,29 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.service.PatchIssue(r.Context(), patchReq, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
-			response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrIssuePatchForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssuePatchForbidden))
 			return
 		}
 		if errors.Is(err, ErrInvalidCategory) {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
 			return
 		}
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, resp)
+	_ = response.JSON(w, http.StatusOK, resp)
 }
 
 // Events streams real-time issue updates via Server-Sent Events (SSE).
 func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(errors.New("streaming unsupported")))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(errors.New("streaming unsupported")))
 		return
 	}
 

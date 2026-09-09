@@ -1,3 +1,4 @@
+// Package response provides unified JSON API response helpers.
 package response
 
 import (
@@ -32,10 +33,12 @@ type ErrorBody struct {
 	Details any    `json:"details,omitempty"`
 }
 
+// JSON writes a successful JSON response envelope.
 func JSON(w http.ResponseWriter, status int, data any) error {
 	return writeJSON(w, status, Envelope{Data: data})
 }
 
+// Paginated writes a JSON response envelope with pagination metadata.
 func Paginated(w http.ResponseWriter, status int, data any, page, limit, total int) error {
 	return writeJSON(w, status, Envelope{
 		Data:       data,
@@ -62,6 +65,7 @@ func writeJSON(w http.ResponseWriter, status int, payload Envelope) error {
 
 // (Deprecated direct error helpers removed to enforce AppError with i18n)
 
+// AppError writes an application error response translated for the request locale.
 func AppError(w http.ResponseWriter, r *http.Request, appErr *apperror.AppError) error {
 	locale := i18n.FromContext(r.Context())
 	msg := i18n.Translate(locale, appErr.Key, appErr.Args...)

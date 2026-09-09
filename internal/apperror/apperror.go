@@ -1,3 +1,4 @@
+// Package apperror defines structured application errors.
 package apperror
 
 import (

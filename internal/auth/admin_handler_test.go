@@ -21,7 +21,7 @@ type adminStoreAdapter struct {
 }
 
 func (a adminStoreAdapter) ListUsers(_ context.Context, arg db.ListUsersParams) ([]db.User, error) {
-	var out []db.User
+	out := make([]db.User, 0, len(a.m.users))
 	for _, u := range a.m.users {
 		if arg.AssignedLocationCode.Valid && u.AssignedLocationCode.String != arg.AssignedLocationCode.String {
 			continue

@@ -1,3 +1,4 @@
+// Package observability provides structured logging with sensitive-data redaction.
 package observability
 
 import (
@@ -100,13 +101,14 @@ func maskPII(value, field string) string {
 	}
 }
 
+// Redact masks common PII and credential values in a string or nested value.
 func Redact(value any) any {
 	text, ok := value.(string)
 	if !ok {
 		return value
 	}
 	text = emailPattern.ReplaceAllString(text, `$1***@$2`)
-	text = phonePattern.ReplaceAllStringFunc(text, func(phone string) string { return "[REDACTED]" })
+	text = phonePattern.ReplaceAllStringFunc(text, func(_ string) string { return "[REDACTED]" })
 	text = queryPattern.ReplaceAllString(text, `${1}[REDACTED]`)
 	for _, marker := range []string{"password=", "token=", "secret=", "app_token=", "webhook="} {
 		text = strings.ReplaceAll(text, marker, marker+"[REDACTED]")

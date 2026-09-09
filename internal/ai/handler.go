@@ -1,3 +1,4 @@
+// Package ai provides AI configuration and issue-assistance HTTP handlers.
 package ai
 
 import (

@@ -15,13 +15,17 @@ import (
 	"6s/internal/response"
 )
 
+// PermissionStore defines persistence operations for permission administration.
 type PermissionStore interface {
 	ListPermissions(context.Context) ([]db.Permission, error)
 	ListRolePermissions(context.Context) ([]db.RolePermission, error)
 	ReplaceRolePermissionsAndAudit(context.Context, db.ReplaceRolePermissionsParams, db.InsertAuditLogParams) error
 }
+
+// PermissionHandler serves permission administration endpoints.
 type PermissionHandler struct{ store PermissionStore }
 
+// NewPermissionHandler constructs a permission administration handler.
 func NewPermissionHandler(store PermissionStore) *PermissionHandler {
 	return &PermissionHandler{store: store}
 }
@@ -43,15 +47,16 @@ type permissionsResponse struct {
 
 var permissionRoles = []string{RoleUser.String(), RoleLineLeader.String(), RoleSafetyOfficer.String(), RoleAdmin.String()}
 
+// List returns the permission catalog and role assignments.
 func (h *PermissionHandler) List(w http.ResponseWriter, r *http.Request) {
 	permissions, err := h.store.ListPermissions(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
 	pairs, err := h.store.ListRolePermissions(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
 	byRole := make(map[string][]string, len(permissionRoles))
@@ -70,25 +75,26 @@ func (h *PermissionHandler) List(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(byRole[role])
 		result.Roles = append(result.Roles, permissionRoleResponse{Role: role, Permissions: byRole[role]})
 	}
-	response.JSON(w, http.StatusOK, result)
+	_ = response.JSON(w, http.StatusOK, result)
 }
 
+// UpdateRole replaces one role's permission assignments.
 func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	role := chi.URLParam(r, "role")
 	if !Role(role).IsValid() {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "invalid role"))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "invalid role"))
 		return
 	}
 	var req struct {
 		Permissions []string `json:"permissions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 	catalog, err := h.store.ListPermissions(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
 	valid := make(map[string]bool, len(catalog))
@@ -100,26 +106,26 @@ func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]bool, len(req.Permissions))
 	for _, code := range req.Permissions {
 		if !valid[code] || seen[code] {
-			response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "invalid or duplicate permission"))
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "invalid or duplicate permission"))
 			return
 		}
 		seen[code] = true
 	}
 	if role == RoleAdmin.String() {
 		if !seen[PermissionManage] || !seen[PermissionUserManage] {
-			response.AppError(w, r, apperror.Conflict("ADMIN_LOCKOUT", i18n.ErrPermissionLockout))
+			_ = response.AppError(w, r, apperror.Conflict("ADMIN_LOCKOUT", i18n.ErrPermissionLockout))
 			return
 		}
 		for code, isSystem := range system {
 			if isSystem && !seen[code] {
-				response.AppError(w, r, apperror.Conflict("SYSTEM_PERMISSION", i18n.ErrPermissionSystemRequired))
+				_ = response.AppError(w, r, apperror.Conflict("SYSTEM_PERMISSION", i18n.ErrPermissionSystemRequired))
 				return
 			}
 		}
 	}
 	oldPairs, err := h.store.ListRolePermissions(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
 	old := []string{}
@@ -139,10 +145,10 @@ func (h *PermissionHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		IpAddress: sql.NullString{String: clientIP(r), Valid: true}, UserAgent: sql.NullString{String: r.UserAgent(), Valid: true},
 	}
 	if err := h.store.ReplaceRolePermissionsAndAudit(r.Context(), db.ReplaceRolePermissionsParams{Role: role, Column2: req.Permissions}, audit); err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrPermissionSaveFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrPermissionSaveFailed).WithCause(err))
 		return
 	}
-	response.JSON(w, http.StatusOK, permissionRoleResponse{Role: role, Permissions: req.Permissions})
+	_ = response.JSON(w, http.StatusOK, permissionRoleResponse{Role: role, Permissions: req.Permissions})
 
 }
 

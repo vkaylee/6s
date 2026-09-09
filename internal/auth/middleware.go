@@ -82,24 +82,24 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 		if err != nil {
 			var appErr *apperror.AppError
 			if errors.As(err, &appErr) {
-				response.AppError(w, r, appErr)
+				_ = response.AppError(w, r, appErr)
 			} else {
-				response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err))
+				_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err))
 			}
 			return
 		}
 		user, err := m.userGetter.GetUserByID(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				response.AppError(w, r, apperror.Unauthorized(i18n.ErrUserNotFound))
+				_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUserNotFound))
 				return
 			}
-			response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 			return
 		}
 
 		if !user.IsActive {
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrAccountLocked))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrAccountLocked))
 			return
 		}
 
@@ -107,7 +107,7 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 		if m.permissionGetter != nil {
 			permissions, err := m.permissionGetter.GetUserPermissions(ctx, user.ID)
 			if err != nil {
-				response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+				_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 				return
 			}
 			ctx = WithPermissions(ctx, permissions)
@@ -128,7 +128,7 @@ func RequireRole(allowedRoles ...Role) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := GetUserFromContext(r.Context())
 			if !ok {
-				response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+				_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 				return
 			}
 
@@ -138,7 +138,7 @@ func RequireRole(allowedRoles ...Role) func(http.Handler) http.Handler {
 					return
 				}
 			}
-			response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
 		})
 	}
 }

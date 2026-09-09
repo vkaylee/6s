@@ -1,3 +1,4 @@
+// Package storage manages local file storage for uploaded issue photos.
 package storage
 
 import (

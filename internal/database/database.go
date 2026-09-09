@@ -1,3 +1,4 @@
+// Package database manages SQL connections and migrations.
 package database
 
 import (
@@ -63,7 +64,7 @@ func Connect(ctx context.Context, dsn string, poolCfg PoolConfig) (*sql.DB, erro
 // RunMigrations applies each embedded up migration once, in version order.
 // Each migration and its tracking row commit atomically in one transaction;
 // a changed applied migration fails rather than being silently re-executed.
-func RunMigrations(ctx context.Context, db *sql.DB) (retErr error) {
+func RunMigrations(ctx context.Context, db *sql.DB) (retErr error) { //nolint:gocognit // ordered migration and checksum validation stay explicit
 	if db == nil {
 		return fmt.Errorf("run migrations: nil database")
 	}

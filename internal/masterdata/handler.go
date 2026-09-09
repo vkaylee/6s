@@ -1,3 +1,4 @@
+// Package masterdata provides HTTP handlers for location and tag APIs.
 package masterdata
 
 import (
@@ -63,7 +64,7 @@ type TagResponse struct {
 func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 	locs, err := h.store.ListLocations(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
 		return
 	}
 
@@ -79,14 +80,14 @@ func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	response.JSON(w, http.StatusOK, items)
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // ListAllLocations handles GET /api/locations/all (Admin only).
 func (h *Handler) ListAllLocations(w http.ResponseWriter, r *http.Request) {
 	locs, err := h.store.ListAllLocations(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrLocationQueryFailed).WithCause(err))
 		return
 	}
 
@@ -102,7 +103,7 @@ func (h *Handler) ListAllLocations(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	response.JSON(w, http.StatusOK, items)
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // UpdateLocationStatusRequest defines payload to toggle location active status.
@@ -122,7 +123,7 @@ func (h *Handler) UpdateLocationStatus(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateLocationStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -131,11 +132,11 @@ func (h *Handler) UpdateLocationStatus(w http.ResponseWriter, r *http.Request) {
 		IsActive: req.IsActive,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, LocationResponse{
+	_ = response.JSON(w, http.StatusOK, LocationResponse{
 		Code:     loc.Code,
 		NameVi:   loc.NameVi,
 		NameZh:   loc.NameZh,
@@ -165,12 +166,12 @@ func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.NameVi == "" || req.QRCode == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationMissingFields))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationMissingFields))
 		return
 	}
 
@@ -182,11 +183,11 @@ func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 		QrCode: req.QRCode,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationUpdateFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, LocationResponse{
+	_ = response.JSON(w, http.StatusOK, LocationResponse{
 		Code:     loc.Code,
 		NameVi:   loc.NameVi,
 		NameZh:   loc.NameZh,
@@ -209,12 +210,12 @@ type CreateLocationRequest struct {
 func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 	var req CreateLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.Code == "" || req.NameVi == "" || req.QRCode == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationMissingFields))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationMissingFields))
 		return
 	}
 	loc, err := h.store.CreateLocation(r.Context(), db.CreateLocationParams{
@@ -225,11 +226,11 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 		QrCode: req.QRCode,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationCreateFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrLocationCreateFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusCreated, LocationResponse{
+	_ = response.JSON(w, http.StatusCreated, LocationResponse{
 		Code:     loc.Code,
 		NameVi:   loc.NameVi,
 		NameZh:   loc.NameZh,
@@ -243,7 +244,7 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
 	tags, err := h.store.ListTags(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
 		return
 	}
 
@@ -261,14 +262,14 @@ func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	response.JSON(w, http.StatusOK, items)
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // ListAllTags handles GET /api/tags/all (Admin only).
 func (h *Handler) ListAllTags(w http.ResponseWriter, r *http.Request) {
 	tags, err := h.store.ListAllTags(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
 		return
 	}
 
@@ -286,7 +287,7 @@ func (h *Handler) ListAllTags(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	response.JSON(w, http.StatusOK, items)
+	_ = response.JSON(w, http.StatusOK, items)
 }
 
 // UpdateTagStatusRequest defines payload to update tag active status.
@@ -306,7 +307,7 @@ func (h *Handler) UpdateTagStatus(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateTagStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -315,11 +316,11 @@ func (h *Handler) UpdateTagStatus(w http.ResponseWriter, r *http.Request) {
 		IsActive: req.IsActive,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrTagUpdateFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagUpdateFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, TagResponse{
+	_ = response.JSON(w, http.StatusOK, TagResponse{
 		Code:     tag.Code,
 		NameVi:   tag.NameVi,
 		NameZh:   tag.NameZh,
@@ -342,16 +343,16 @@ type BatchUpdateTagsStatusRequest struct {
 func (h *Handler) BatchUpdateTagsStatus(w http.ResponseWriter, r *http.Request) {
 	var req BatchUpdateTagsStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.All != nil && *req.All {
 		if err := h.store.SetAllTagsActiveStatus(r.Context(), req.IsActive); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed).WithCause(err))
 			return
 		}
-		response.JSON(w, http.StatusOK, map[string]any{"success": true})
+		_ = response.JSON(w, http.StatusOK, map[string]any{"success": true})
 		return
 	}
 
@@ -361,12 +362,12 @@ func (h *Handler) BatchUpdateTagsStatus(w http.ResponseWriter, r *http.Request) 
 			Code:     code,
 			IsActive: req.IsActive,
 		}); err != nil {
-			response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed).WithCause(err))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed).WithCause(err))
 			return
 		}
 	}
 
-	response.JSON(w, http.StatusOK, map[string]any{"success": true})
+	_ = response.JSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // UpsertTagRequest defines payload to create or update a tag.
@@ -383,12 +384,12 @@ type UpsertTagRequest struct {
 func (h *Handler) UpsertTag(w http.ResponseWriter, r *http.Request) {
 	var req UpsertTagRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
 	if req.Code == "" || req.NameVi == "" || req.Category == "" {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrTagMissingFields))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagMissingFields))
 		return
 	}
 	tag, err := h.store.UpsertTag(r.Context(), db.UpsertTagParams{
@@ -400,11 +401,11 @@ func (h *Handler) UpsertTag(w http.ResponseWriter, r *http.Request) {
 		IsPreset: req.IsPreset,
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrTagSaveFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagSaveFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, TagResponse{
+	_ = response.JSON(w, http.StatusOK, TagResponse{
 		Code:     tag.Code,
 		NameVi:   tag.NameVi,
 		NameZh:   tag.NameZh,

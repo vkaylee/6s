@@ -1,3 +1,4 @@
+// Package web embeds the frontend assets.
 package web
 
 import (

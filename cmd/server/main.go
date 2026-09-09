@@ -1,3 +1,4 @@
+// Command server starts the 6S HTTP API.
 package main
 
 import (
@@ -100,23 +101,23 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r.Use(i18n.Middleware)
 	// Liveness is dependency-free so orchestrators restart only stopped processes.
 	healthHandler := func(w http.ResponseWriter, _ *http.Request) {
-		response.JSON(w, http.StatusOK, map[string]string{
+		_ = response.JSON(w, http.StatusOK, map[string]string{
 			"status": "ok",
 			"db":     "not_checked",
 		})
 	}
 	readinessHandler := func(w http.ResponseWriter, req *http.Request) {
 		if dbConn == nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
+			_ = response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
 			return
 		}
 		ctx, cancel := context.WithTimeout(req.Context(), time.Second)
 		defer cancel()
 		if err := dbConn.PingContext(ctx); err != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
+			_ = response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
 			return
 		}
-		response.JSON(w, http.StatusOK, map[string]string{"status": "ok", "db": "ok"})
+		_ = response.JSON(w, http.StatusOK, map[string]string{"status": "ok", "db": "ok"})
 	}
 	r.Get("/api/health", healthHandler)
 	r.Head("/api/health", healthHandler)

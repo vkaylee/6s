@@ -1,3 +1,4 @@
+// Package report provides reporting and CSV export HTTP handlers.
 package report
 
 import (
@@ -35,11 +36,11 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	summary, err := h.service.GetSummary(r.Context(), days, locationCode)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, summary)
+	_ = response.JSON(w, http.StatusOK, summary)
 }
 
 // ExportCSV handles GET /api/issues/export (streams CSV with UTF-8 BOM for Excel).
@@ -50,7 +51,7 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.service.GetExportData(r.Context(), status, category, locationCode)
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
 

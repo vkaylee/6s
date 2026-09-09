@@ -1,3 +1,4 @@
+// Package notification provides notification configuration and delivery handlers.
 package notification
 
 import (
@@ -53,17 +54,17 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetNotificationConfig(r.Context())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			response.JSON(w, http.StatusOK, ConfigResponse{
+			_ = response.JSON(w, http.StatusOK, ConfigResponse{
 				WxPusherEnabled: true,
 				PublicBaseURL:   "https://6s.factory.lan",
 			})
 			return
 		}
-		response.AppError(w, r, apperror.Internal(i18n.ErrNotificationLoadFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrNotificationLoadFailed).WithCause(err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, ConfigResponse{
+	_ = response.JSON(w, http.StatusOK, ConfigResponse{
 		WxPusherEnabled: cfg.WxpusherEnabled,
 		HasAppToken:     cfg.WxpusherAppToken != "",
 		HasWebhookURL:   cfg.LanWebhookUrl != "",
@@ -86,13 +87,13 @@ type UpdateConfigRequest struct {
 func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
 
 	var req UpdateConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
 
@@ -101,7 +102,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		if h.cipher != nil {
 			enc, err := h.cipher.Encrypt(req.WxPusherAppToken)
 			if err != nil {
-				response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+				_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 				return
 			}
 			encryptedAppToken = enc
@@ -115,7 +116,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		if h.cipher != nil {
 			enc, err := h.cipher.Encrypt(req.LANWebhookURL)
 			if err != nil {
-				response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+				_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 				return
 			}
 			encryptedWebhookURL = enc
@@ -142,7 +143,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		UpdatedBy:        sql.NullInt64{Int64: currentUser.ID, Valid: true},
 	})
 	if err != nil {
-		response.AppError(w, r, apperror.Internal(i18n.ErrNotificationSaveFailed).WithCause(err))
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrNotificationSaveFailed).WithCause(err))
 		return
 	}
 
@@ -159,7 +160,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		observability.Log("error", "notification audit log write failed", map[string]any{"error": alErr.Error()})
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{
+	_ = response.JSON(w, http.StatusOK, map[string]string{
 		"message": "Cập nhật cấu hình thông báo thành công",
 	})
 }
@@ -175,7 +176,7 @@ type TestConfigResult struct {
 func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 	cfgRow, err := h.store.GetNotificationConfig(r.Context())
 	if err != nil {
-		response.AppError(w, r, apperror.BadRequest(i18n.ErrNotificationTestMissing).WithCause(err))
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrNotificationTestMissing).WithCause(err))
 		return
 	}
 
@@ -223,5 +224,5 @@ func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 		results = append(results, res)
 	}
 
-	response.JSON(w, http.StatusOK, results)
+	_ = response.JSON(w, http.StatusOK, results)
 }
