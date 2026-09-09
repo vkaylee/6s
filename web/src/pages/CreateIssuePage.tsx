@@ -387,7 +387,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-32">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-32">
       {/* Hidden file inputs for retake */}
       <input
         ref={wideInputRef}

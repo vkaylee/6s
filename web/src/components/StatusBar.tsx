@@ -38,6 +38,14 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchInputRef.current?.focus();
@@ -97,7 +105,7 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
         {/* Left: Brand title & Sync/Network status */}
         <div className="flex items-center space-x-3">
           <div className="flex flex-col">
-            <h1 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-zinc-100 leading-tight">
+            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 leading-tight">
               {t("nav.title")}
             </h1>
             <button
@@ -184,14 +192,14 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
                 title={user.full_name}
               >
                 {/* Avatar Badge */}
-                <div className="w-9 h-9 rounded-lg bg-blue-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
+                <div className="w-9 h-9 rounded-lg bg-blue-600 text-white font-semibold text-sm flex items-center justify-center shadow-sm">
                   {user.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}
                 </div>
                 <div className="text-left hidden sm:block leading-tight pr-1">
                   <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate max-w-[200px] lg:max-w-[260px]">
                     {user.full_name}
                   </div>
-                  <div className="text-[11px] text-zinc-400 font-medium truncate max-w-[200px] lg:max-w-[260px]">
+                  <div className="text-[11px] text-zinc-400 font-normal truncate max-w-[200px] lg:max-w-[260px]">
                     {user.role}
                   </div>
                 </div>
@@ -203,7 +211,7 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 p-2 z-50 animate-slide-down">
                   {/* User Profile Card */}
                   <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 mb-1">
-                    <div className="text-xs font-black text-zinc-900 dark:text-zinc-100 truncate">
+                    <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                       {user.full_name}
                     </div>
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">

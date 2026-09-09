@@ -113,7 +113,7 @@ export function PermissionMatrixPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-28">
       {/* Page Heading */}
       <PageContainer className="pt-4 pb-2">
         <div className="flex items-center space-x-3">

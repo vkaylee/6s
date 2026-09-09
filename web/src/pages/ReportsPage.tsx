@@ -306,7 +306,7 @@ export function ReportsPage() {
   const chartHeight = Math.max(280, filteredLocationData.length * 44 + 40);
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-20">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-20">
       {/* Page Heading */}
       <div className="pt-4">
         <PageContainer className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">

@@ -19,7 +19,7 @@ export function AppShell({
   onSearchChange,
 }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100">
       {showStatusBar && (
         <StatusBar
           onOpenDrawer={onOpenDrawer}

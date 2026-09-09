@@ -276,7 +276,7 @@ export function App() {
           </Route>
           <Route path="/">
             <ProtectedRoute>
-              <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+              <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-28">
                 <main className="pt-4">
                   <PageContainer className="space-y-4">
                     {/* Health Gauge Ring Widget (SPEC.md Section 9.8.A) */}

@@ -128,25 +128,27 @@ function TagCard({
       <div className="space-y-1 flex-1 min-w-0">
         <div className="flex items-center flex-wrap gap-2">
           <span
-            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${tag.category === IssueCategory.S6 ? "bg-rose-100 text-rose-800" : "bg-blue-100 text-blue-800"}`}
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${tag.category === IssueCategory.S6 ? "bg-rose-100 text-rose-800" : "bg-blue-100 text-blue-800"}`}
           >
             {tag.category}
           </span>
-          <span className="font-mono text-xs font-bold">{tag.code}</span>
+          <span className="font-mono text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            {tag.code}
+          </span>
           {!compact && (
-            <span className="text-[10px] font-bold">
+            <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
               {active ? t("admin.active_status") : t("admin.inactive_status")}
             </span>
           )}
         </div>
-        <div className="text-sm font-bold">{tag.name_vi}</div>
+        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tag.name_vi}</div>
         {(tag.name_zh || tag.name_en) && (
-          <div className="text-xs text-zinc-400">
+          <div className="text-xs text-zinc-500 dark:text-zinc-400">
             {tag.name_zh} {tag.name_en && `• ${tag.name_en}`}
           </div>
         )}
         {!compact && (
-          <div className="text-[10px] font-semibold text-zinc-400">
+          <div className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
             {t("admin.tag_use_count").replace("{count}", String(tag.use_count))}
           </div>
         )}
@@ -577,7 +579,7 @@ export function IssueTagsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans pb-28">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-28">
       <PageContainer className="pt-4">
         <div className="flex items-center space-x-3">
           <button
