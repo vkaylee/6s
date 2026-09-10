@@ -124,12 +124,13 @@ func toUserResponse(u db.User, capabilities []string) UserResponse {
 }
 
 func (h *Handler) userCapabilities(ctx context.Context, userID int64) ([]string, error) {
-  capabilities, err := h.store.GetUserPermissions(ctx, userID)
-  if err != nil {
-    return nil, err
-  }
-  return capabilities, nil
+	capabilities, err := h.store.GetUserPermissions(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return capabilities, nil
 }
+
 // Login handles POST /api/auth/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
@@ -421,7 +422,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		DeviceInfo: sql.NullString{String: r.UserAgent(), Valid: r.UserAgent() != ""},
 		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
 	})
-if rotationErr != nil {
+	if rotationErr != nil {
 		if errors.Is(rotationErr, sql.ErrNoRows) {
 			// Another request won the compare-and-revoke race. Treat this as
 			// replay and revoke every session for the affected user.

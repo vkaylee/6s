@@ -40,25 +40,25 @@ func newMockFullStore() *mockFullStore {
 }
 
 func (m *mockFullStore) GetUserPermissions(_ context.Context, id int64) ([]string, error) {
-  m.mu.Lock()
-  defer m.mu.Unlock()
-  caps, ok := m.capabilities[id]
-  if ok {
-    return append([]string(nil), caps...), nil
-  }
-  u, okUser := m.users[id]
-  if !okUser {
-    for _, candidate := range m.usersByName {
-      if candidate.ID == id {
-        u, okUser = candidate, true
-        break
-      }
-    }
-  }
-  if okUser && u.Role == RoleSuperadmin.String() {
-    return append([]string(nil), CatalogCapabilities...), nil
-  }
-  return []string{}, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	caps, ok := m.capabilities[id]
+	if ok {
+		return append([]string(nil), caps...), nil
+	}
+	u, okUser := m.users[id]
+	if !okUser {
+		for _, candidate := range m.usersByName {
+			if candidate.ID == id {
+				u, okUser = candidate, true
+				break
+			}
+		}
+	}
+	if okUser && u.Role == RoleSuperadmin.String() {
+		return append([]string(nil), CatalogCapabilities...), nil
+	}
+	return []string{}, nil
 
 }
 
