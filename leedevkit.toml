@@ -26,6 +26,9 @@ server = ["server"]
 web = ["webdashboard"]
 all = ["server", "webdashboard"]
 
+[test.dependencies]
+e2e-web = ["db", "e2e-server"]
+
 [ai]
 extra_rules = []
 rules_dir = ".agent/rules"
@@ -43,7 +46,7 @@ server_lint = "./leedevkit test server --lint-only"
 server_unit = "./leedevkit test server --unit-only"
 web_lint = "./leedevkit test web --lint-only"
 web_unit = "./leedevkit test web --unit-only"
-web_e2e = "cd web && bunx playwright test --reporter=line"
+web_e2e = "./leedevkit test web --e2e-only"
 openapi_drift = "cd web && bun run openapi:drift"
 security_scan = "./scripts/security-scan.sh"
 sbom = "./scripts/security-scan.sh sbom"

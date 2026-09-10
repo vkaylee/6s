@@ -44,9 +44,9 @@ export function isBehaviorTag(tagCode: string, category?: string): boolean {
   return category === "5S" || Boolean(BEHAVIOR_TAG_MAP[tagCode]);
 }
 
-export function detectCauseType(category?: string | null, tags: string[] = []): CauseType {
+export function detectCauseType(category?: string | null, tags?: string[] | null): CauseType {
   if (category === "5S") return "BEHAVIOR";
-  if (tags.some((tag) => isBehaviorTag(tag, category || undefined))) {
+  if ((tags ?? []).some((tag) => isBehaviorTag(tag, category || undefined))) {
     return "BEHAVIOR";
   }
   return "CONDITION";

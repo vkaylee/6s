@@ -36,11 +36,11 @@ Do not disable certificate validation globally. This certificate is for local de
 ./leedevkit test web --unit-only
 ```
 
-Run browser E2E from `web/` after installing the Playwright browser binary:
+Run full browser E2E in an isolated container without installing host browsers:
 
 ```sh
-bunx playwright install chromium
-bunx playwright test
+./leedevkit test web --e2e-only
 ```
 
+The E2E runner launches Chromium inside an isolated test environment with a dedicated disposable database and test server. Failure screenshots and traces are saved to `artifacts/e2e/`.
 Audit logs remain for 3 years. Weekly cleanup follows `.agent/rules/data-governance.md` and `sql/queries.sql`.

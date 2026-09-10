@@ -1,0 +1,21 @@
+FROM mcr.microsoft.com/playwright:v1.63.0-noble
+
+USER root
+WORKDIR /workspace/web
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    BUN_INSTALL=/opt/bun \
+    PATH=/opt/bun/bin:$PATH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://bun.sh/install | bash -s -- bun-v1.1.45 \
+    && test "$(bun --version)" = "1.1.45"
+COPY web/package.json web/bun.lock ./
+RUN bun install --frozen-lockfile \
+    && test "$(bunx playwright --version)" = "Version 1.63.0" \
+    && test -x "$(find /ms-playwright -type f \( -name chrome -o -name chrome-headless-shell \) -print -quit)" \
+    && bun -e 'import { chromium } from "playwright"; const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] }); await browser.close();'
+RUN chown -R pwuser:pwuser /workspace
+
+USER pwuser

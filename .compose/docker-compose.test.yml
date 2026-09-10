@@ -17,25 +17,105 @@ services:
     healthcheck:
       test: ["CMD", "go", "version"]
 
+  e2e-server:
+    profiles: ["e2e-web"]
+    build:
+      context: ..
+      dockerfile: .compose/Dockerfile.e2e-server
+    image: 6s-e2e-server:local
+    environment:
+      CGO_ENABLED: "0"
+      SERVER_PORT: "8080"
+      DATA_DIR: "/tmp/e2e-data"
+      DB_DSN: "postgres://e2e:e2e_password@db:5432/6s_e2e?sslmode=disable"
+      JWT_SECRET: "e2e-only-jwt-secret-01234567890123456789"
+      APP_ENCRYPTION_KEY: "01234567890123456789012345678901"
+      DEV_INSECURE: "1"
+    command: ["/usr/local/bin/server"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      e2e:
+        aliases: [server]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/api/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  db:
+    profiles: ["e2e-web"]
+    image: docker.io/library/postgres:18-alpine
+    environment:
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e_password
+      POSTGRES_DB: 6s_e2e
+    networks: [e2e]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e -d 6s_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql
+
+  e2e-seed:
+    profiles: ["e2e-web"]
+    image: docker.io/library/postgres:18-alpine
+    depends_on:
+      e2e-server:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: e2e
+      PGPASSWORD: e2e_password
+      PGDATABASE: 6s_e2e
+    volumes:
+      - ..:/workspace:ro
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/workspace/.compose/e2e-seed.sql"]
+    networks: [e2e]
+
   webdashboard:
     profiles: ["bun", "web", "lint-web", "unit-web", "e2e-web"]
     build:
       context: ..
-      dockerfile: .compose/Dockerfile.bun
-    image: 6s-bun:1.1
+      dockerfile: .compose/Dockerfile.e2e
+    image: 6s-e2e-bun:1.63.0
     container_name: ${COMPOSE_PROJECT_NAME}_bun_init_1
+    user: "0:0"
     volumes:
       - ..:/workspace
-      - bun-install-cache:/root/.bun/install/cache
+      - e2e-node-modules:/workspace/web/node_modules
+      - e2e-bun-install-cache:/root/.bun/install/cache
     working_dir: /workspace/web
-    command: ["sleep", "infinity"]
+    environment:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      E2E_BASE_URL: ${E2E_BASE_URL:-http://server:8080}
+      E2E_USERNAME: ${E2E_USERNAME:-e2e-admin}
+      E2E_PASSWORD: ${E2E_PASSWORD:-E2EAdmin123!}
+      E2E_FORBIDDEN_USERNAME: ${E2E_FORBIDDEN_USERNAME:-e2e-worker}
+      E2E_FORBIDDEN_PASSWORD: ${E2E_FORBIDDEN_PASSWORD:-E2EWorker123!}
+      E2E_LOCATION_CODE: ${E2E_LOCATION_CODE:-E2E_LINE}
+      E2E_OTHER_LOCATION_CODE: ${E2E_OTHER_LOCATION_CODE:-E2E_OTHER_LINE}
+    command: ["sh", "-ec", 'bun install --frozen-lockfile && test -n "$$(find "$${PLAYWRIGHT_BROWSERS_PATH}" -type f \( -name chrome -o -name chrome-headless-shell \) -print -quit)" && exec sleep infinity']
+    networks: [e2e]
     healthcheck:
-      test: ["CMD", "bun", "--version"]
+      test: ["CMD-SHELL", 'test -n "$$(find "$${PLAYWRIGHT_BROWSERS_PATH}" -type f \( -name chrome -o -name chrome-headless-shell \) -print -quit)"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
 volumes:
   go-module-cache:
     name: 6s-test-go-module-cache
   go-build-cache:
     name: 6s-test-go-build-cache
-  bun-install-cache:
-    name: 6s-test-bun-install-cache
+  e2e-node-modules:
+  e2e-bun-install-cache:
+
+networks:
+  e2e:
