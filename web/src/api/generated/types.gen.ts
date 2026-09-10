@@ -89,7 +89,24 @@ export type ReporterScore = {
     full_name: string;
     points: number;
     valid_count: number;
-    safety_count: number;
+    safety_count?: number;
+};
+
+export type LocationMembership = {
+    location_code: string;
+    user_id: number;
+    username?: string;
+    full_name?: string;
+    responsibility_type: 'OWNER' | 'BACKUP' | 'REVIEWER';
+    valid_from: string;
+    valid_to?: string;
+    is_active: boolean;
+};
+
+export type TeamLocation = {
+    team_id: number;
+    location_code: string;
+    created_at?: string;
 };
 
 export type AiConfig = {
@@ -859,6 +876,115 @@ export type UpdateAdminUserResponses = {
 
 export type UpdateAdminUserResponse = UpdateAdminUserResponses[keyof UpdateAdminUserResponses];
 
+export type ListLocationMembersData = {
+    body?: never;
+    path: {
+        code: string;
+    };
+    query?: never;
+    url: '/admin/locations/{code}/members';
+};
+
+export type ListLocationMembersResponses = {
+    /**
+     * Danh sách thành viên
+     */
+    200: unknown;
+};
+
+export type DeleteLocationMemberData = {
+    body?: never;
+    path: {
+        code: string;
+        userID: number;
+    };
+    query?: never;
+    url: '/admin/locations/{code}/members/{userID}';
+};
+
+export type DeleteLocationMemberResponses = {
+    /**
+     * Xóa thành công
+     */
+    204: void;
+};
+
+export type DeleteLocationMemberResponse = DeleteLocationMemberResponses[keyof DeleteLocationMemberResponses];
+
+export type UpsertLocationMemberData = {
+    body: {
+        responsibility_type: 'OWNER' | 'BACKUP' | 'REVIEWER';
+        valid_from?: string;
+        valid_to?: string;
+        is_active?: boolean;
+    };
+    path: {
+        code: string;
+        userID: number;
+    };
+    query?: never;
+    url: '/admin/locations/{code}/members/{userID}';
+};
+
+export type UpsertLocationMemberResponses = {
+    /**
+     * Gán thành công
+     */
+    200: unknown;
+};
+
+export type ListTeamLocationsData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/admin/teams/{id}/locations';
+};
+
+export type ListTeamLocationsResponses = {
+    /**
+     * Danh sách khu vực
+     */
+    200: unknown;
+};
+
+export type DeleteTeamLocationData = {
+    body?: never;
+    path: {
+        id: number;
+        code: string;
+    };
+    query?: never;
+    url: '/admin/teams/{id}/locations/{code}';
+};
+
+export type DeleteTeamLocationResponses = {
+    /**
+     * Xóa thành công
+     */
+    204: void;
+};
+
+export type DeleteTeamLocationResponse = DeleteTeamLocationResponses[keyof DeleteTeamLocationResponses];
+
+export type AddTeamLocationData = {
+    body?: never;
+    path: {
+        id: number;
+        code: string;
+    };
+    query?: never;
+    url: '/admin/teams/{id}/locations/{code}';
+};
+
+export type AddTeamLocationResponses = {
+    /**
+     * Gán thành công
+     */
+    200: unknown;
+};
+
 export type GetAiConfigData = {
     body?: never;
     path?: never;
@@ -1119,13 +1245,30 @@ export type StreamIssueEventsResponse = StreamIssueEventsResponses[keyof StreamI
 export type ExportIssuesCsvData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        status?: string;
+        category?: string;
+        location_code?: string;
+    };
     url: '/issues/export';
 };
 
+export type ExportIssuesCsvErrors = {
+    /**
+     * Chưa xác thực
+     */
+    401: ErrorEnvelope;
+    /**
+     * Không có quyền xuất dữ liệu
+     */
+    403: ErrorEnvelope;
+};
+
+export type ExportIssuesCsvError = ExportIssuesCsvErrors[keyof ExportIssuesCsvErrors];
+
 export type ExportIssuesCsvResponses = {
     /**
-     * CSV file
+     * CSV file containing only issues visible to the authenticated user
      */
     200: string;
 };
