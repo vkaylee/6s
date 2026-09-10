@@ -277,7 +277,6 @@ components:
         - full_name
         - points
         - valid_count
-        - safety_count
       properties:
         user_id:
           type: integer
@@ -294,6 +293,44 @@ components:
         safety_count:
           type: integer
           example: 3
+    LocationMembership:
+      type: object
+      required: [location_code, user_id, responsibility_type, valid_from, is_active]
+      properties:
+        location_code:
+          type: string
+          example: LINE_A1
+        user_id:
+          type: integer
+          example: 4
+        username:
+          type: string
+        full_name:
+          type: string
+        responsibility_type:
+          type: string
+          enum: [OWNER, BACKUP, REVIEWER]
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+          nullable: true
+        is_active:
+          type: boolean
+
+    TeamLocation:
+      type: object
+      required: [team_id, location_code]
+      properties:
+        team_id:
+          type: integer
+        location_code:
+          type: string
+        created_at:
+          type: string
+          format: date-time
     AIConfig:
       type: object
       required: [is_enabled, base_url, has_api_key, default_model, model_translate, model_vision, model_summary]
@@ -1364,6 +1401,70 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /admin/locations/{code}/members:
+    get:
+      operationId: listLocationMembers
+      summary: Danh sách người phụ trách khu vực (Requires `user:manage`)
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Danh sách thành viên}
+    
+  /admin/locations/{code}/members/{userID}:
+    put:
+      operationId: upsertLocationMember
+      summary: Gán người phụ trách khu vực (Requires `user:manage`)
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: userID, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [responsibility_type]
+              properties:
+                responsibility_type: {type: string, enum: [OWNER, BACKUP, REVIEWER]}
+                valid_from: {type: string, format: date-time}
+                valid_to: {type: string, format: date-time, nullable: true}
+                is_active: {type: boolean}
+      responses:
+        '200': {description: Gán thành công}
+    delete:
+      operationId: deleteLocationMember
+      summary: Xóa người phụ trách khỏi khu vực (Requires `user:manage`)
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: userID, in: path, required: true, schema: {type: integer}}
+      responses:
+        '204': {description: Xóa thành công}
+
+  /admin/teams/{id}/locations:
+    get:
+      operationId: listTeamLocations
+      summary: Danh sách khu vực của team (Requires `user:manage`)
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses:
+        '200': {description: Danh sách khu vực}
+  /admin/teams/{id}/locations/{code}:
+    put:
+      operationId: addTeamLocation
+      summary: Gán khu vực cho team (Requires `user:manage`)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Gán thành công}
+    delete:
+      operationId: deleteTeamLocation
+      summary: Xóa khu vực khỏi team (Requires `user:manage`)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Xóa thành công}
+
   /config/ai:
     get:
       operationId: getAiConfig
@@ -1672,9 +1773,7 @@ paths:
   /issues/export:
     get:
       operationId: exportIssuesCsv
-      summary: Xuất CSV danh sách issue trong phạm vi site và visibility của người dùng
-      security:
-        - BearerAuth: []
+      summary: Xuất CSV danh sách issue trong phạm vi site và visibility của người dùng. Yêu cầu permission `reports:export`.
       parameters:
         - name: status
           in: query

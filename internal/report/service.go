@@ -203,13 +203,12 @@ func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locat
 	}
 
 	rows, err := s.store.ListIssuesForExport(ctx, db.ListIssuesForExportParams{
-		Status:               statusParam,
-		Category:             catParam,
-		LocationCode:         locParam,
-		SiteID:               user.SiteID,
-		UserID:               user.ID,
-		Role:                 user.Role,
-		AssignedLocationCode: user.AssignedLocationCode,
+		Status:       statusParam,
+		Category:     catParam,
+		LocationCode: locParam,
+		SiteID:       user.SiteID,
+		UserID:       user.ID,
+		Role:         user.Role,
 	})
 	if err != nil {
 		return nil, err

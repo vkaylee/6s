@@ -28,10 +28,12 @@ import {
   YAxis,
 } from "recharts";
 import { Link } from "wouter";
+
 import { apiClient, fetchAuthenticatedBlob } from "../api/client.ts";
 import { IssueCard } from "../components/IssueCard.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
+import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { useThemeStore } from "../store/themeStore.ts";
 import {
@@ -73,6 +75,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   [IssueCategory.S6]: "#f43f5e", // Rose (Safety)
 };
 export function ReportsPage() {
+  const currentUser = useAuthStore((s) => s.user);
+  const canExport = hasCapability(currentUser, "reports:export");
   const { t, locale } = useI18nStore();
   const { isDark } = useThemeStore();
 
@@ -362,23 +366,25 @@ export function ReportsPage() {
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
               </button>
-              <button
-                type="button"
-                data-testid="btn-export-csv"
-                onClick={handleExportCSV}
-                disabled={isExporting}
-                className="h-8 px-2.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                title={t("reports.export_csv")}
-              >
-                {isExporting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Download className="w-3.5 h-3.5" />
-                )}
-                <span className="hidden md:inline">
-                  {isExporting ? t("reports.exporting") : t("reports.export_csv")}
-                </span>
-              </button>
+              {canExport && (
+                <button
+                  type="button"
+                  data-testid="btn-export-csv"
+                  onClick={handleExportCSV}
+                  disabled={isExporting}
+                  className="h-8 px-2.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  title={t("reports.export_csv")}
+                >
+                  {isExporting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span className="hidden md:inline">
+                    {isExporting ? t("reports.exporting") : t("reports.export_csv")}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 

@@ -35,6 +35,17 @@ const ALL_ROLES: string[] = [
 type RoleFilter = "ALL" | string;
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
+export interface LocationMembershipItem {
+  location_code: string;
+  user_id: number;
+  username: string;
+  full_name: string;
+  responsibility_type: string;
+  valid_from: string;
+  valid_to: string | null;
+  is_active: boolean;
+}
+
 export function UserAccessPage() {
   useHeaderVisibility();
   const { t } = useI18nStore();

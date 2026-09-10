@@ -62,6 +62,27 @@ CREATE TABLE IF NOT EXISTS team_memberships (
     PRIMARY KEY (team_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS location_memberships (
+    location_code VARCHAR(50) NOT NULL REFERENCES locations(code) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    responsibility_type VARCHAR(20) NOT NULL DEFAULT 'OWNER' CHECK (responsibility_type IN ('OWNER', 'BACKUP', 'REVIEWER')),
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    valid_to TIMESTAMPTZ,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    PRIMARY KEY (location_code, user_id),
+    CHECK (valid_to IS NULL OR valid_to > valid_from)
+);
+
+CREATE TABLE IF NOT EXISTS team_locations (
+    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    location_code VARCHAR(50) NOT NULL REFERENCES locations(code) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    PRIMARY KEY (team_id, location_code)
+);
+
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id BIGSERIAL PRIMARY KEY,

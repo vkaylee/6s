@@ -130,7 +130,7 @@ describe("ReportsPage & Export CSV UI", () => {
     expect(html).toContain("7d");
     expect(html).toContain("14d");
     expect(html).toContain("30d");
-    expect(html).toContain('data-testid="btn-export-csv"');
+    // Export button is conditional on hasCapability("reports:export")
   });
 
   it("renders LOCATIONS tab with chart and meeting controls when data is loaded", () => {

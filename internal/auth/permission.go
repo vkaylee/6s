@@ -26,6 +26,7 @@ const (
 	PermissionManage           = "permission:manage"
 	PermissionMasterdataManage = "masterdata:manage"
 	PermissionReportsView      = "reports:view"
+	PermissionReportsExport    = "reports:export"
 	PermissionSettingsManage   = "settings:manage"
 )
 
@@ -37,7 +38,7 @@ var CatalogCapabilities = []string{
 	PermissionIssueCloseSafety, PermissionIssueReopen, PermissionIssueInvalidate,
 	PermissionScoringManage, PermissionADManage, PermissionUserManage,
 	PermissionManage, PermissionMasterdataManage, PermissionReportsView,
-	PermissionSettingsManage,
+	PermissionReportsExport, PermissionSettingsManage,
 }
 
 // ResolveCapabilities expands effective capabilities for a role.

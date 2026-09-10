@@ -90,6 +90,7 @@ type Store interface {
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
 	GetLocationByCode(ctx context.Context, code string) (db.Location, error)
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
+	ListActiveLocationCodesForUser(ctx context.Context, arg db.ListActiveLocationCodesForUserParams) ([]string, error)
 	GetTranslationCacheBatch(ctx context.Context, arg db.GetTranslationCacheBatchParams) ([]db.GetTranslationCacheBatchRow, error)
 }
 
@@ -119,7 +120,7 @@ func (s *ServiceImpl) SubscribeEvents() (<-chan Event, func()) {
 // OpenMedia authorizes issue visibility before opening its controlled attachment.
 func (s *ServiceImpl) OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error) {
 	issue, err := s.store.GetIssueByID(ctx, id)
-	if err != nil || !canViewIssue(ctx, issue) {
+	if err != nil || !s.canViewIssue(ctx, issue) {
 		return nil, ErrIssueNotFound
 	}
 	return s.storageManager.OpenAttachment(folder, basename)
@@ -366,11 +367,15 @@ func (s *ServiceImpl) canCloseIssue(ctx context.Context, currentUser db.User, is
 	if currentUser.ID == issue.CreatorID && auth.HasPermission(ctx, auth.PermissionIssueCloseOwn) {
 		return true
 	}
-	return auth.HasPermission(ctx, auth.PermissionIssueCloseLine) && currentUser.AssignedLocationCode.Valid && currentUser.AssignedLocationCode.String == issue.LocationCode
+	scope, err := auth.LocationScope(ctx, s.store, currentUser)
+	if err != nil {
+		return false
+	}
+	return auth.HasPermission(ctx, auth.PermissionIssueCloseLine) && scope.CanAccessLocation(issue.LocationCode)
 }
 
-func canReviewIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
-	return auth.HasPermission(ctx, auth.PermissionIssueReopen) && (&ServiceImpl{}).canCloseIssue(ctx, currentUser, issue)
+func (s *ServiceImpl) canReviewIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
+	return auth.HasPermission(ctx, auth.PermissionIssueReopen) && s.canCloseIssue(ctx, currentUser, issue)
 }
 
 // CloseIssue handles closing and scoring a resolved issue.
@@ -441,7 +446,7 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 	if issue.Status != StatusPendingReview.String() {
 		return nil, fmt.Errorf("%w: issue must be PENDING_REVIEW", ErrIssueConflict)
 	}
-	if !canReviewIssue(ctx, currentUser, issue) {
+	if !s.canReviewIssue(ctx, currentUser, issue) {
 		return nil, ErrPermissionDenied
 	}
 
@@ -645,7 +650,8 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 	}
 	return res, err
 }
-func canViewIssue(ctx context.Context, issue db.Issue) bool {
+
+func (s *ServiceImpl) canViewIssue(ctx context.Context, issue db.Issue) bool {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
 		return true
@@ -662,13 +668,20 @@ func canViewIssue(ctx context.Context, issue db.Issue) bool {
 	if user.Role == auth.RoleSafetyOfficer.String() || user.Role == auth.RoleAdmin.String() || user.Role == auth.RoleSuperadmin.String() {
 		return true
 	}
-	return user.Role == auth.RoleLineLeader.String() && user.AssignedLocationCode.Valid && user.AssignedLocationCode.String == issue.LocationCode
+	if user.Role == auth.RoleLineLeader.String() {
+		scope, err := auth.LocationScope(ctx, s.store, user)
+		if err != nil {
+			return false
+		}
+		return scope.CanAccessLocation(issue.LocationCode)
+	}
+	return false
 }
 
 // GetIssueByID retrieves detailed issue response with the same visibility policy as list.
 func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, id)
-	if err != nil || !canViewIssue(ctx, issue) {
+	if err != nil || !s.canViewIssue(ctx, issue) {
 		return nil, ErrIssueNotFound
 	}
 
@@ -737,7 +750,7 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 	rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
 		Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdueParam,
 		SiteID: currentUser.SiteID, UserID: currentUser.ID, Role: currentUser.Role,
-		AssignedLocationCode: currentUser.AssignedLocationCode, Limit: int32(limit), Offset: int32(offset), //nolint:gosec // bounded above
+		Limit: int32(limit), Offset: int32(offset), //nolint:gosec // bounded above
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list issues failed: %w", err)
@@ -746,7 +759,6 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 	total, err := s.store.CountIssuesFiltered(ctx, db.CountIssuesFilteredParams{
 		Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdueParam,
 		SiteID: userFromContext(ctx).SiteID, UserID: userFromContext(ctx).ID, Role: userFromContext(ctx).Role,
-		AssignedLocationCode: userFromContext(ctx).AssignedLocationCode,
 	})
 	if err != nil {
 		total = int64(len(rows))

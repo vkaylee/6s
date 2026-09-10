@@ -355,6 +355,8 @@ Màn hình chính hiển thị 3 chỉ số nhanh giúp cấp quản lý nhận 
 - **Action scope độc lập read scope:** Xem được không đồng nghĩa được sửa, nhận việc, upload ảnh, duyệt, reopen hoặc invalidate.
 - **Assignment:** `assigned_team_id` là đơn vị chịu trách nhiệm; `assignee_id` là cá nhân nhận xử lý. Assignment thay đổi phải ghi audit; không xóa lịch sử.
 - **Default workspace:** UI mở tab `Cần tôi xử lý`; tab `Hiện trường chung` cho issue `SITE_PUBLIC`; tab `An toàn hạn chế` chỉ hiện khi user đủ scope.
+- **Location & Team Memberships:** Một location có thể có nhiều user (`location_memberships`) và nhiều team (`team_locations`) phụ trách. User có thể quản lý nhiều khu vực với các vai trò `OWNER`, `BACKUP`, `REVIEWER`. Line Leader có quyền trên các khu vực mà user là thành viên trực tiếp còn hiệu lực hoặc thông qua team mà user là thành viên. Phân quyền không phụ thuộc vào cột đơn `users.assigned_location_code` (giữ lại chỉ để tương thích ngược).
+- **Permission Split:** `reports:view` để xem thống kê báo cáo; `reports:export` để tải dữ liệu CSV. Quyền export được cấp cho LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN.
 
 ### 5.3. Ma trận quyền theo vai trò
 | Hành động | USER | LINE_LEADER | SAFETY_OFFICER | ADMIN/SUPERADMIN |
@@ -365,7 +367,7 @@ Màn hình chính hiển thị 3 chỉ số nhanh giúp cấp quản lý nhận 
 | Nhận/gán issue | Bản thân | Team/location phụ trách | Toàn site | Toàn site |
 | Upload `photo_after` | Assignee/team/creator | Scope phụ trách | Toàn site | Toàn site |
 | Đóng issue 1S-5S | Creator hoặc assignee sau kiểm tra | Scope phụ trách | Toàn site | Toàn site |
-| Đóng issue 6S | Chặn (403) | Chặn (403) | Toàn site | Toàn site |
+| Export báo cáo CSV | USER không có | LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN | LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN | LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN |
 | REOPEN | Creator/assignee | Scope phụ trách | Toàn site | Toàn site |
 | INVALID | Chặn (403) | Chặn (403) | Cho phép | Cho phép |
 | Xem audit/score logs | Theo capability và scope | Theo capability và scope | Toàn site | Toàn site |
@@ -840,17 +842,15 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
 ### 6.6. Users Admin & Cấu hình Kênh Thông Báo (Admin)
 - `PATCH /api/admin/users/{id}` (Admin): Body `{"role": "...", "assigned_location_code": "LINE_A2", "is_active": false}` — BẮT BUỘC cho luồng AD JIT: group mapping chỉ quyết định `role`, còn `assigned_location_code` luôn rỗng lúc provision -> Line Leader đồng bộ từ AD phải được Admin gán chuyền qua endpoint này thì các rule "duyệt/reopen chuyền mình" mới hoạt động. Ghi `system_audit_logs` (`action='USER_UPDATED'`).
 - `GET /api/admin/users/` (Admin): danh mục nhân sự phục vụ màn Admin.
-### 6.7. AI & Dịch tự động
-- `GET /api/config/ai`, `PUT /api/config/ai`, `POST /api/config/ai/test`, `POST /api/config/ai/test-dns`: Admin-only; cấu hình provider OpenAI-compatible, model, base URL và kiểm tra kết nối/DNS.
-- `GET /api/ai/status`: User đã xác thực; chỉ trả trạng thái bật/tắt, không lộ secret.
-- `POST /api/ai/translate`: User đã xác thực; dịch nội dung giới hạn kích thước, hỗ trợ cache.
-- `POST /api/ai/cached`: User đã xác thực; tra cache trước khi gọi provider.
-- `POST /api/ai/review`, `POST /api/ai/review-follow-up`: User đã xác thực; AI review issue và hỏi tiếp.
-- Provider lỗi, timeout hoặc AI tắt: trả error envelope chuẩn; không làm mất issue/offline draft.
-
-### 6.8. Error Localization
-- Error envelope gồm `code`, `key`, `message`, tùy chọn `details`.
-- `message` bản địa hóa theo locale `vi`, `en`, `zh` từ request; `key` ổn định cho client.
+- `GET /api/admin/locations/{code}/members` (Admin): liệt kê thành viên location, bao gồm direct membership và team membership.
+- `PUT /api/admin/locations/{code}/members/{user_id}` (Admin): cập nhật `responsibility_type`, `valid_from`, `valid_to`. Ghi `LOCATION_MEMBER_UPSERT`.
+- `DELETE /api/admin/locations/{code}/members/{user_id}` (Admin): xóa membership. Ghi `LOCATION_MEMBER_DELETE`.
+- `GET /api/admin/teams/{id}/locations` (Admin): liệt kê các location mà team phụ trách.
+- `PUT /api/admin/teams/{id}/locations/{code}` (Admin): gán team vào location. Ghi `TEAM_LOCATION_ADD`.
+- `DELETE /api/admin/teams/{id}/locations/{code}` (Admin): gỡ team khỏi location. Ghi `TEAM_LOCATION_DELETE`.
+### 6.7. Reports & Export
+- `GET /api/issues/reports/summary` — Xem báo cáo thống kê (yêu cầu `reports:view`). Backend áp dụng site scope và location scope dựa trên user. USER không có quyền.
+- `GET /api/reports/export` — Xuất CSV (yêu cầu `reports:export`). Cùng scope với summary. Export bị giới hạn bởi `maxExportRows` (~10,000 dòng).
 
 ---
 

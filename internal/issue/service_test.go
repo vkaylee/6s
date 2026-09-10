@@ -441,6 +441,14 @@ func (m *mockIssueStore) GetUserByID(_ context.Context, id int64) (db.User, erro
 	return u, nil
 }
 
+func (m *mockIssueStore) ListActiveLocationCodesForUser(_ context.Context, arg db.ListActiveLocationCodesForUserParams) ([]string, error) {
+	u, ok := m.users[arg.UserID]
+	if ok && u.AssignedLocationCode.Valid {
+		return []string{u.AssignedLocationCode.String}, nil
+	}
+	return nil, nil
+}
+
 func createTestFileHeader(t *testing.T, fieldName, filename string, content []byte) *multipart.FileHeader {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)

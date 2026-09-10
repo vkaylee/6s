@@ -91,6 +91,17 @@ type Location struct {
 	CreatedAt time.Time
 }
 
+type LocationMembership struct {
+	LocationCode       string
+	UserID             int64
+	ResponsibilityType string
+	ValidFrom          time.Time
+	ValidTo            sql.NullTime
+	IsActive           bool
+	CreatedAt          time.Time
+	CreatedBy          sql.NullInt64
+}
+
 type NotificationConfig struct {
 	ID               int32
 	WxpusherEnabled  bool
@@ -203,6 +214,13 @@ type Team struct {
 	Name      string
 	IsActive  bool
 	CreatedAt time.Time
+}
+
+type TeamLocation struct {
+	TeamID       int64
+	LocationCode string
+	CreatedAt    time.Time
+	CreatedBy    sql.NullInt64
 }
 
 type TeamMembership struct {

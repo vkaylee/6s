@@ -153,6 +153,8 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 	adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
 	permissionHandler := auth.NewPermissionHandler(queries)
 	userAdminHandler := auth.NewAdminHandler(queries)
+	locationMembershipHandler := auth.NewLocationMembershipHandler(queries)
+	teamLocationHandler := auth.NewTeamLocationHandler(queries)
 	settingsHandler := settings.NewHandler(queries)
 	// Public auth routes
 	r.Route("/api/auth", func(ar chi.Router) {
@@ -193,6 +195,20 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 
 		ur.Get("/", userAdminHandler.ListUsers)
 		ur.Patch("/{id}", userAdminHandler.UpdateUser)
+	})
+	r.Route("/api/admin/locations/{code}/members", func(lr chi.Router) {
+		lr.Use(authMw.Authenticate)
+		lr.Use(auth.RequirePermission(auth.PermissionUserManage))
+		lr.Get("/", locationMembershipHandler.ListLocationMembers)
+		lr.Put("/{userID}", locationMembershipHandler.UpsertLocationMember)
+		lr.Delete("/{userID}", locationMembershipHandler.DeleteLocationMember)
+	})
+	r.Route("/api/admin/teams/{id}/locations", func(tr chi.Router) {
+		tr.Use(authMw.Authenticate)
+		tr.Use(auth.RequirePermission(auth.PermissionUserManage))
+		tr.Get("/", teamLocationHandler.ListTeamLocations)
+		tr.Put("/{code}", teamLocationHandler.AddTeamLocation)
+		tr.Delete("/{code}", teamLocationHandler.DeleteTeamLocation)
 	})
 	r.Route("/api/admin/settings", func(sr chi.Router) {
 		sr.Use(authMw.Authenticate)
@@ -272,7 +288,7 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 	})
 
 	// Reports and exports require the reports capability.
-	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionReportsView)).Get("/api/issues/export", reportHandler.ExportCSV)
+	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionReportsExport)).Get("/api/issues/export", reportHandler.ExportCSV)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {

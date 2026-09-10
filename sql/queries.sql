@@ -219,6 +219,103 @@ SET name_vi = $2,
 WHERE code = $1
 RETURNING *;
 
+-- name: ListLocationMemberships :many
+SELECT m.location_code, m.user_id, m.responsibility_type, m.valid_from, m.valid_to, m.is_active, m.created_at,
+       l.name_vi, l.name_zh, l.name_en,
+       u.username, u.full_name
+FROM location_memberships m
+JOIN locations l ON l.code = m.location_code
+JOIN users u ON u.id = m.user_id
+WHERE m.location_code = $1
+ORDER BY m.is_active DESC, m.created_at DESC;
+
+-- name: GetLocationMembership :one
+SELECT * FROM location_memberships
+WHERE location_code = $1 AND user_id = $2 LIMIT 1;
+
+-- name: UpsertLocationMembership :one
+INSERT INTO location_memberships (
+    location_code, user_id, responsibility_type, valid_from, valid_to, is_active, created_by
+) VALUES (
+    $1, $2, $3, COALESCE(sqlc.narg('valid_from')::timestamptz, CURRENT_TIMESTAMP), sqlc.narg('valid_to')::timestamptz, COALESCE(sqlc.narg('is_active')::boolean, TRUE), sqlc.narg('created_by')::bigint
+)
+ON CONFLICT (location_code, user_id) DO UPDATE SET
+    responsibility_type = EXCLUDED.responsibility_type,
+    valid_from = EXCLUDED.valid_from,
+    valid_to = EXCLUDED.valid_to,
+    is_active = EXCLUDED.is_active,
+    created_by = EXCLUDED.created_by
+RETURNING *;
+
+-- name: DeleteLocationMembership :exec
+DELETE FROM location_memberships
+WHERE location_code = $1 AND user_id = $2;
+
+-- name: ListUserLocationMemberships :many
+SELECT * FROM location_memberships
+WHERE user_id = $1
+ORDER BY is_active DESC, location_code ASC;
+
+-- name: ListActiveLocationCodesForUser :many
+SELECT DISTINCT m.location_code
+FROM location_memberships m
+JOIN locations l ON l.code = m.location_code
+WHERE m.user_id = $1
+  AND m.is_active = TRUE
+  AND m.valid_from <= CURRENT_TIMESTAMP
+  AND (m.valid_to IS NULL OR m.valid_to > CURRENT_TIMESTAMP)
+  AND (sqlc.narg('site_id')::bigint IS NULL OR l.site_id = sqlc.narg('site_id')::bigint)
+UNION
+SELECT DISTINCT tl.location_code
+FROM team_locations tl
+JOIN team_memberships tm ON tm.team_id = tl.team_id
+JOIN locations l ON l.code = tl.location_code
+WHERE tm.user_id = $1
+  AND (sqlc.narg('site_id')::bigint IS NULL OR l.site_id = sqlc.narg('site_id')::bigint);
+
+-- name: ListTeamLocations :many
+SELECT tl.team_id, tl.location_code, tl.created_at,
+       l.name_vi, l.name_zh, l.name_en
+FROM team_locations tl
+JOIN locations l ON l.code = tl.location_code
+WHERE tl.team_id = $1
+ORDER BY tl.location_code ASC;
+
+-- name: GetTeamLocation :one
+SELECT * FROM team_locations
+WHERE team_id = $1 AND location_code = $2 LIMIT 1;
+
+-- name: AddTeamLocation :exec
+INSERT INTO team_locations (team_id, location_code, created_by)
+VALUES ($1, $2, sqlc.narg('created_by')::bigint)
+ON CONFLICT (team_id, location_code) DO NOTHING;
+
+-- name: DeleteTeamLocation :exec
+DELETE FROM team_locations
+WHERE team_id = $1 AND location_code = $2;
+
+-- name: ListLocationTeams :many
+SELECT tl.team_id, t.code AS team_code, t.name AS team_name, tl.created_at
+FROM team_locations tl
+JOIN teams t ON t.id = tl.team_id
+WHERE tl.location_code = $1
+ORDER BY t.name ASC;
+
+-- name: ListTeams :many
+SELECT * FROM teams
+WHERE (sqlc.narg('site_id')::bigint IS NULL OR site_id = sqlc.narg('site_id')::bigint)
+  AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean)
+ORDER BY id ASC;
+
+-- name: GetTeamByID :one
+SELECT * FROM teams WHERE id = $1 LIMIT 1;
+
+-- name: ListUserTeams :many
+SELECT t.* FROM teams t
+JOIN team_memberships tm ON tm.team_id = t.id
+WHERE tm.user_id = $1
+ORDER BY t.id ASC;
+
 -- name: ListTags :many
 SELECT * FROM tags
 WHERE is_active = TRUE
@@ -318,7 +415,7 @@ WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.statu
   AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
   AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
   AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
-  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND (i.location_code = sqlc.narg('assigned_location_code')::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint))))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
 ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
@@ -331,7 +428,7 @@ WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.statu
   AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
   AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
   AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
-  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND (i.location_code = sqlc.narg('assigned_location_code')::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint))));
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)));
 
 -- name: ResolveIssue :one
 UPDATE issues
@@ -668,7 +765,7 @@ WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category'))
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
   AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
-  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND (i.location_code = sqlc.narg('assigned_location_code')::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint))))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000;
 
 

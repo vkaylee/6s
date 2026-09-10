@@ -30,6 +30,23 @@ func (q *Queries) AddRolePermission(ctx context.Context, arg AddRolePermissionPa
 	return err
 }
 
+const addTeamLocation = `-- name: AddTeamLocation :exec
+INSERT INTO team_locations (team_id, location_code, created_by)
+VALUES ($1, $2, $3::bigint)
+ON CONFLICT (team_id, location_code) DO NOTHING
+`
+
+type AddTeamLocationParams struct {
+	TeamID       int64
+	LocationCode string
+	CreatedBy    sql.NullInt64
+}
+
+func (q *Queries) AddTeamLocation(ctx context.Context, arg AddTeamLocationParams) error {
+	_, err := q.db.ExecContext(ctx, addTeamLocation, arg.TeamID, arg.LocationCode, arg.CreatedBy)
+	return err
+}
+
 const claimOutboxTasks = `-- name: ClaimOutboxTasks :many
 UPDATE notification_outbox
 SET status = 'SENDING',
@@ -158,18 +175,17 @@ WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
   AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
   AND ($5::bigint = 0 OR i.site_id = $5)
-  AND ($5::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $7::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($7::varchar = 'LINE_LEADER' AND (i.location_code = $8::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $6::bigint))))
+  AND ($5::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $7::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
 `
 
 type CountIssuesFilteredParams struct {
-	Statuses             []string
-	Categories           []string
-	LocationCodes        []string
-	Overdue              sql.NullBool
-	SiteID               int64
-	UserID               int64
-	Role                 string
-	AssignedLocationCode sql.NullString
+	Statuses      []string
+	Categories    []string
+	LocationCodes []string
+	Overdue       sql.NullBool
+	SiteID        int64
+	UserID        int64
+	Role          string
 }
 
 func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilteredParams) (int64, error) {
@@ -181,7 +197,6 @@ func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilter
 		arg.SiteID,
 		arg.UserID,
 		arg.Role,
-		arg.AssignedLocationCode,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -515,6 +530,21 @@ func (q *Queries) DeleteIssueTags(ctx context.Context, issueID int64) error {
 	return err
 }
 
+const deleteLocationMembership = `-- name: DeleteLocationMembership :exec
+DELETE FROM location_memberships
+WHERE location_code = $1 AND user_id = $2
+`
+
+type DeleteLocationMembershipParams struct {
+	LocationCode string
+	UserID       int64
+}
+
+func (q *Queries) DeleteLocationMembership(ctx context.Context, arg DeleteLocationMembershipParams) error {
+	_, err := q.db.ExecContext(ctx, deleteLocationMembership, arg.LocationCode, arg.UserID)
+	return err
+}
+
 const deleteRolePermissions = `-- name: DeleteRolePermissions :exec
 DELETE FROM role_permissions
 WHERE role = $1
@@ -522,6 +552,21 @@ WHERE role = $1
 
 func (q *Queries) DeleteRolePermissions(ctx context.Context, role string) error {
 	_, err := q.db.ExecContext(ctx, deleteRolePermissions, role)
+	return err
+}
+
+const deleteTeamLocation = `-- name: DeleteTeamLocation :exec
+DELETE FROM team_locations
+WHERE team_id = $1 AND location_code = $2
+`
+
+type DeleteTeamLocationParams struct {
+	TeamID       int64
+	LocationCode string
+}
+
+func (q *Queries) DeleteTeamLocation(ctx context.Context, arg DeleteTeamLocationParams) error {
+	_, err := q.db.ExecContext(ctx, deleteTeamLocation, arg.TeamID, arg.LocationCode)
 	return err
 }
 
@@ -883,6 +928,32 @@ func (q *Queries) GetLocationLeaderboardStats(ctx context.Context, arg GetLocati
 	return items, nil
 }
 
+const getLocationMembership = `-- name: GetLocationMembership :one
+SELECT location_code, user_id, responsibility_type, valid_from, valid_to, is_active, created_at, created_by FROM location_memberships
+WHERE location_code = $1 AND user_id = $2 LIMIT 1
+`
+
+type GetLocationMembershipParams struct {
+	LocationCode string
+	UserID       int64
+}
+
+func (q *Queries) GetLocationMembership(ctx context.Context, arg GetLocationMembershipParams) (LocationMembership, error) {
+	row := q.db.QueryRowContext(ctx, getLocationMembership, arg.LocationCode, arg.UserID)
+	var i LocationMembership
+	err := row.Scan(
+		&i.LocationCode,
+		&i.UserID,
+		&i.ResponsibilityType,
+		&i.ValidFrom,
+		&i.ValidTo,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
 const getLocationScoreSumInWeek = `-- name: GetLocationScoreSumInWeek :one
 SELECT COALESCE(SUM(points), 0)::bigint AS sum_points
 FROM score_logs
@@ -1107,6 +1178,46 @@ func (q *Queries) GetSystemSettings(ctx context.Context) (SystemSetting, error) 
 		&i.Timezone,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const getTeamByID = `-- name: GetTeamByID :one
+SELECT id, site_id, code, name, is_active, created_at FROM teams WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetTeamByID(ctx context.Context, id int64) (Team, error) {
+	row := q.db.QueryRowContext(ctx, getTeamByID, id)
+	var i Team
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.Code,
+		&i.Name,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTeamLocation = `-- name: GetTeamLocation :one
+SELECT team_id, location_code, created_at, created_by FROM team_locations
+WHERE team_id = $1 AND location_code = $2 LIMIT 1
+`
+
+type GetTeamLocationParams struct {
+	TeamID       int64
+	LocationCode string
+}
+
+func (q *Queries) GetTeamLocation(ctx context.Context, arg GetTeamLocationParams) (TeamLocation, error) {
+	row := q.db.QueryRowContext(ctx, getTeamLocation, arg.TeamID, arg.LocationCode)
+	var i TeamLocation
+	err := row.Scan(
+		&i.TeamID,
+		&i.LocationCode,
+		&i.CreatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
@@ -1522,6 +1633,52 @@ func (q *Queries) InvalidateIssue(ctx context.Context, arg InvalidateIssueParams
 	return i, err
 }
 
+const listActiveLocationCodesForUser = `-- name: ListActiveLocationCodesForUser :many
+SELECT DISTINCT m.location_code
+FROM location_memberships m
+JOIN locations l ON l.code = m.location_code
+WHERE m.user_id = $1
+  AND m.is_active = TRUE
+  AND m.valid_from <= CURRENT_TIMESTAMP
+  AND (m.valid_to IS NULL OR m.valid_to > CURRENT_TIMESTAMP)
+  AND ($2::bigint IS NULL OR l.site_id = $2::bigint)
+UNION
+SELECT DISTINCT tl.location_code
+FROM team_locations tl
+JOIN team_memberships tm ON tm.team_id = tl.team_id
+JOIN locations l ON l.code = tl.location_code
+WHERE tm.user_id = $1
+  AND ($2::bigint IS NULL OR l.site_id = $2::bigint)
+`
+
+type ListActiveLocationCodesForUserParams struct {
+	UserID int64
+	SiteID sql.NullInt64
+}
+
+func (q *Queries) ListActiveLocationCodesForUser(ctx context.Context, arg ListActiveLocationCodesForUserParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveLocationCodesForUser, arg.UserID, arg.SiteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var location_code string
+		if err := rows.Scan(&location_code); err != nil {
+			return nil, err
+		}
+		items = append(items, location_code)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllActivePhotoBasenames = `-- name: ListAllActivePhotoBasenames :many
 SELECT photo_before AS photo_name FROM issues WHERE photo_before != ''
 UNION
@@ -1651,24 +1808,23 @@ WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
   AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
   AND ($5::bigint = 0 OR i.site_id = $5)
-  AND ($5::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $7::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($7::varchar = 'LINE_LEADER' AND (i.location_code = $8::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $6::bigint))))
+  AND ($5::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $7::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
 ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
-LIMIT $10 OFFSET $9
+LIMIT $9 OFFSET $8
 `
 
 type ListIssuesFilteredParams struct {
-	Statuses             []string
-	Categories           []string
-	LocationCodes        []string
-	Overdue              sql.NullBool
-	SiteID               int64
-	UserID               int64
-	Role                 string
-	AssignedLocationCode sql.NullString
-	Offset               int32
-	Limit                int32
+	Statuses      []string
+	Categories    []string
+	LocationCodes []string
+	Overdue       sql.NullBool
+	SiteID        int64
+	UserID        int64
+	Role          string
+	Offset        int32
+	Limit         int32
 }
 
 type ListIssuesFilteredRow struct {
@@ -1711,7 +1867,6 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 		arg.SiteID,
 		arg.UserID,
 		arg.Role,
-		arg.AssignedLocationCode,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -1772,18 +1927,17 @@ WHERE ($1::varchar IS NULL OR i.status = $1)
   AND ($2::varchar IS NULL OR i.category = $2)
   AND ($3::varchar IS NULL OR i.location_code = $3)
   AND ($4::bigint = 0 OR i.site_id = $4)
-  AND ($4::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $5::bigint OR i.assignee_id = $5::bigint OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($6::varchar = 'LINE_LEADER' AND (i.location_code = $7::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $5::bigint))))
+  AND ($4::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $5::bigint OR i.assignee_id = $5::bigint OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($6::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $5::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($6::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $5::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000
 `
 
 type ListIssuesForExportParams struct {
-	Status               sql.NullString
-	Category             sql.NullString
-	LocationCode         sql.NullString
-	SiteID               int64
-	UserID               int64
-	Role                 string
-	AssignedLocationCode sql.NullString
+	Status       sql.NullString
+	Category     sql.NullString
+	LocationCode sql.NullString
+	SiteID       int64
+	UserID       int64
+	Role         string
 }
 
 type ListIssuesForExportRow struct {
@@ -1816,7 +1970,6 @@ func (q *Queries) ListIssuesForExport(ctx context.Context, arg ListIssuesForExpo
 		arg.SiteID,
 		arg.UserID,
 		arg.Role,
-		arg.AssignedLocationCode,
 	)
 	if err != nil {
 		return nil, err
@@ -1845,6 +1998,111 @@ func (q *Queries) ListIssuesForExport(ctx context.Context, arg ListIssuesForExpo
 			&i.ResolvedAt,
 			&i.ClosedAt,
 			&i.TagsString,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationMemberships = `-- name: ListLocationMemberships :many
+SELECT m.location_code, m.user_id, m.responsibility_type, m.valid_from, m.valid_to, m.is_active, m.created_at,
+       l.name_vi, l.name_zh, l.name_en,
+       u.username, u.full_name
+FROM location_memberships m
+JOIN locations l ON l.code = m.location_code
+JOIN users u ON u.id = m.user_id
+WHERE m.location_code = $1
+ORDER BY m.is_active DESC, m.created_at DESC
+`
+
+type ListLocationMembershipsRow struct {
+	LocationCode       string
+	UserID             int64
+	ResponsibilityType string
+	ValidFrom          time.Time
+	ValidTo            sql.NullTime
+	IsActive           bool
+	CreatedAt          time.Time
+	NameVi             string
+	NameZh             string
+	NameEn             string
+	Username           string
+	FullName           string
+}
+
+func (q *Queries) ListLocationMemberships(ctx context.Context, locationCode string) ([]ListLocationMembershipsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLocationMemberships, locationCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLocationMembershipsRow
+	for rows.Next() {
+		var i ListLocationMembershipsRow
+		if err := rows.Scan(
+			&i.LocationCode,
+			&i.UserID,
+			&i.ResponsibilityType,
+			&i.ValidFrom,
+			&i.ValidTo,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.Username,
+			&i.FullName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationTeams = `-- name: ListLocationTeams :many
+SELECT tl.team_id, t.code AS team_code, t.name AS team_name, tl.created_at
+FROM team_locations tl
+JOIN teams t ON t.id = tl.team_id
+WHERE tl.location_code = $1
+ORDER BY t.name ASC
+`
+
+type ListLocationTeamsRow struct {
+	TeamID    int64
+	TeamCode  string
+	TeamName  string
+	CreatedAt time.Time
+}
+
+func (q *Queries) ListLocationTeams(ctx context.Context, locationCode string) ([]ListLocationTeamsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLocationTeams, locationCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLocationTeamsRow
+	for rows.Next() {
+		var i ListLocationTeamsRow
+		if err := rows.Scan(
+			&i.TeamID,
+			&i.TeamCode,
+			&i.TeamName,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2283,6 +2541,96 @@ func (q *Queries) ListTagsForIssues(ctx context.Context, issueIds []int64) ([]Li
 	return items, nil
 }
 
+const listTeamLocations = `-- name: ListTeamLocations :many
+SELECT tl.team_id, tl.location_code, tl.created_at,
+       l.name_vi, l.name_zh, l.name_en
+FROM team_locations tl
+JOIN locations l ON l.code = tl.location_code
+WHERE tl.team_id = $1
+ORDER BY tl.location_code ASC
+`
+
+type ListTeamLocationsRow struct {
+	TeamID       int64
+	LocationCode string
+	CreatedAt    time.Time
+	NameVi       string
+	NameZh       string
+	NameEn       string
+}
+
+func (q *Queries) ListTeamLocations(ctx context.Context, teamID int64) ([]ListTeamLocationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTeamLocations, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTeamLocationsRow
+	for rows.Next() {
+		var i ListTeamLocationsRow
+		if err := rows.Scan(
+			&i.TeamID,
+			&i.LocationCode,
+			&i.CreatedAt,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTeams = `-- name: ListTeams :many
+SELECT id, site_id, code, name, is_active, created_at FROM teams
+WHERE ($1::bigint IS NULL OR site_id = $1::bigint)
+  AND ($2::boolean IS NULL OR is_active = $2::boolean)
+ORDER BY id ASC
+`
+
+type ListTeamsParams struct {
+	SiteID   sql.NullInt64
+	IsActive sql.NullBool
+}
+
+func (q *Queries) ListTeams(ctx context.Context, arg ListTeamsParams) ([]Team, error) {
+	rows, err := q.db.QueryContext(ctx, listTeams, arg.SiteID, arg.IsActive)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Team
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(
+			&i.ID,
+			&i.SiteID,
+			&i.Code,
+			&i.Name,
+			&i.IsActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserActiveSessions = `-- name: ListUserActiveSessions :many
 SELECT id, device_info, created_at, expires_at
 FROM refresh_tokens
@@ -2313,6 +2661,81 @@ func (q *Queries) ListUserActiveSessions(ctx context.Context, userID int64) ([]L
 			&i.DeviceInfo,
 			&i.CreatedAt,
 			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserLocationMemberships = `-- name: ListUserLocationMemberships :many
+SELECT location_code, user_id, responsibility_type, valid_from, valid_to, is_active, created_at, created_by FROM location_memberships
+WHERE user_id = $1
+ORDER BY is_active DESC, location_code ASC
+`
+
+func (q *Queries) ListUserLocationMemberships(ctx context.Context, userID int64) ([]LocationMembership, error) {
+	rows, err := q.db.QueryContext(ctx, listUserLocationMemberships, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LocationMembership
+	for rows.Next() {
+		var i LocationMembership
+		if err := rows.Scan(
+			&i.LocationCode,
+			&i.UserID,
+			&i.ResponsibilityType,
+			&i.ValidFrom,
+			&i.ValidTo,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.CreatedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserTeams = `-- name: ListUserTeams :many
+SELECT t.id, t.site_id, t.code, t.name, t.is_active, t.created_at FROM teams t
+JOIN team_memberships tm ON tm.team_id = t.id
+WHERE tm.user_id = $1
+ORDER BY t.id ASC
+`
+
+func (q *Queries) ListUserTeams(ctx context.Context, userID int64) ([]Team, error) {
+	rows, err := q.db.QueryContext(ctx, listUserTeams, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Team
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(
+			&i.ID,
+			&i.SiteID,
+			&i.Code,
+			&i.Name,
+			&i.IsActive,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3006,6 +3429,55 @@ func (q *Queries) UpsertAIConfig(ctx context.Context, arg UpsertAIConfigParams) 
 		&i.ModelSummary,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const upsertLocationMembership = `-- name: UpsertLocationMembership :one
+INSERT INTO location_memberships (
+    location_code, user_id, responsibility_type, valid_from, valid_to, is_active, created_by
+) VALUES (
+    $1, $2, $3, COALESCE($4::timestamptz, CURRENT_TIMESTAMP), $5::timestamptz, COALESCE($6::boolean, TRUE), $7::bigint
+)
+ON CONFLICT (location_code, user_id) DO UPDATE SET
+    responsibility_type = EXCLUDED.responsibility_type,
+    valid_from = EXCLUDED.valid_from,
+    valid_to = EXCLUDED.valid_to,
+    is_active = EXCLUDED.is_active,
+    created_by = EXCLUDED.created_by
+RETURNING location_code, user_id, responsibility_type, valid_from, valid_to, is_active, created_at, created_by
+`
+
+type UpsertLocationMembershipParams struct {
+	LocationCode       string
+	UserID             int64
+	ResponsibilityType string
+	ValidFrom          sql.NullTime
+	ValidTo            sql.NullTime
+	IsActive           sql.NullBool
+	CreatedBy          sql.NullInt64
+}
+
+func (q *Queries) UpsertLocationMembership(ctx context.Context, arg UpsertLocationMembershipParams) (LocationMembership, error) {
+	row := q.db.QueryRowContext(ctx, upsertLocationMembership,
+		arg.LocationCode,
+		arg.UserID,
+		arg.ResponsibilityType,
+		arg.ValidFrom,
+		arg.ValidTo,
+		arg.IsActive,
+		arg.CreatedBy,
+	)
+	var i LocationMembership
+	err := row.Scan(
+		&i.LocationCode,
+		&i.UserID,
+		&i.ResponsibilityType,
+		&i.ValidFrom,
+		&i.ValidTo,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }

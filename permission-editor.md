@@ -35,7 +35,8 @@ Thêm permission editor riêng cho Admin: quản lý ma trận `role → permiss
 | `user:manage` | Quản lý user/role/location/active |
 | `permission:manage` | Sửa ma trận quyền |
 | `masterdata:manage` | Quản lý locations/tags |
-
+| `reports:view` | Xem báo cáo thống kê |
+| `reports:export` | Xuất báo cáo CSV |
 ## Tasks
 - [ ] Task 1: Migration `000007_permissions.up/down.sql`: bảng `permissions`, `role_permissions`, seed data theo SPEC 5.2. → Verify: up/down chạy sạch, seed khớp ma trận.
 - [ ] Task 2: sqlc queries + regenerate. → Verify: `sqlc generate` không lỗi.
