@@ -57,38 +57,30 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
     isDraggingRef.current = false;
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+  const handlePointerDownEvent = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    handlePointerDown(e.clientX, e.clientY);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    checkDrag(e.touches[0].clientX, e.touches[0].clientY);
-    handleMove(e.touches[0].clientX);
+  const handlePointerMoveEvent = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    checkDrag(e.clientX, e.clientY);
+    handleMove(e.clientX);
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (e.changedTouches.length > 0) {
-      handlePointerUp(e.changedTouches[0].clientX);
+  const handlePointerUpEvent = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    handlePointerUp(e.clientX);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
     }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 0) {
-      handlePointerDown(e.clientX, e.clientY);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (e.buttons === 1) {
-      checkDrag(e.clientX, e.clientY);
-      handleMove(e.clientX);
-    }
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (e.button === 0) {
-      handlePointerUp(e.clientX);
-    }
+    pointerStartRef.current = null;
+    isDraggingRef.current = false;
   };
   return (
     <div
@@ -100,12 +92,12 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
       aria-valuenow={Math.round(sliderPos)}
       aria-valuetext={`${Math.round(sliderPos)}%`}
       tabIndex={0}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md touch-none select-none"
+      onDragStart={(e) => e.preventDefault()}
+      onPointerDown={handlePointerDownEvent}
+      onPointerMove={handlePointerMoveEvent}
+      onPointerUp={handlePointerUpEvent}
+      onPointerCancel={handlePointerCancel}
       onKeyDown={(e) => {
         if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
           e.preventDefault();
@@ -122,11 +114,11 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
         }
       }}
     >
-      {/* After image (Bottom layer) */}
       <AuthenticatedImage
         imageUrl={afterUrl}
         alt={t("slider.after_alt")}
-        className="absolute inset-0 w-full h-full object-cover"
+        draggable={false}
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
       />
       <div
         className={`absolute bottom-3 right-3 bg-emerald-600/90 text-white text-[10px] font-black px-2 py-1 rounded-md backdrop-blur-xs transition-opacity duration-150 ${
@@ -142,7 +134,8 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
           <AuthenticatedImage
             imageUrl={beforeUrl}
             alt={t("slider.before_alt")}
-            className="absolute inset-0 max-w-none h-full object-cover"
+            draggable={false}
+            className="absolute inset-0 max-w-none h-full object-cover pointer-events-none select-none"
             style={{
               width: containerRef.current ? `${containerRef.current.clientWidth}px` : "100%",
             }}
@@ -159,10 +152,12 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
 
       {/* Draggable Divider Bar */}
       <div
-        className="absolute inset-y-0 w-1 bg-white cursor-ew-resize shadow-2xl flex items-center justify-center -ml-0.5"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+        className="absolute inset-y-0 w-1 bg-white cursor-ew-resize shadow-2xl flex items-center justify-center -ml-0.5 select-none"
         style={{ left: `${sliderPos}%` }}
       >
-        <div className="w-8 h-8 rounded-full bg-white text-zinc-900 shadow-xl border-2 border-zinc-200 flex items-center justify-center font-bold text-xs">
+        <div className="w-8 h-8 rounded-full bg-white text-zinc-900 shadow-xl border-2 border-zinc-200 flex items-center justify-center font-bold text-xs pointer-events-none">
           ↔
         </div>
       </div>
