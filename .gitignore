@@ -13,3 +13,4 @@ build-errors.log
 .cache/
 .config/
 web/test-results/
+.env
