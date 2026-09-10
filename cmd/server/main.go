@@ -132,7 +132,7 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	if cfg != nil {
 		storageDir = cfg.DataDir
 	}
-	registerStaticRoutes(r, storageDir)
+	registerStaticRoutes(r, storageDir, cfg != nil && cfg.DevInsecure)
 	return r
 }
 
