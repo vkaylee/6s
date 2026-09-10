@@ -73,8 +73,8 @@ const mockIssue: IssueItem = {
   location_name: "Chuyền May A1",
   description: "Cần sắp xếp lại vật tư",
   status: IssueStatus.OPEN,
-  photo_before: "before-101.jpg",
-  photo_detail: "detail-101.jpg",
+  photo_before: "/api/issues/101/media/before/before-101.jpg",
+  photo_detail: "/api/issues/101/media/detail/detail-101.jpg",
   created_at: "2026-03-01T00:00:00Z",
   tags: ["San sát"],
 };
@@ -197,8 +197,8 @@ describe("CreateIssueModal Component", () => {
           "Mô tả sự cố", // description
           null, // photoBefore
           null, // photoDetail
-          "before.jpg", // previewBefore
-          "detail.jpg", // previewDetail
+          "/api/issues/101/media/before/before.jpg", // previewBefore
+          "/api/issues/101/media/detail/detail.jpg", // previewDetail
           false, // isSubmitting
         ]}
       >

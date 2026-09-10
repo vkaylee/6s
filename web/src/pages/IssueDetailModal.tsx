@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { issueOperations } from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
+import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { TagLabel } from "../components/TagLabel.tsx";
@@ -674,8 +675,8 @@ export function IssueDetailModal({
                   }}
                   className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
                 >
-                  <img
-                    src={resolvePhotoUrl(currentIssue.photo_before, "before")}
+                  <AuthenticatedImage
+                    imageUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
                     alt={t("issue_detail.photo_before_alt")}
                     className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
                   />
@@ -710,8 +711,8 @@ export function IssueDetailModal({
                   }}
                   className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
                 >
-                  <img
-                    src={resolvePhotoUrl(currentIssue.photo_detail, "detail")}
+                  <AuthenticatedImage
+                    imageUrl={resolvePhotoUrl(currentIssue.photo_detail, "detail")}
                     alt={t("issue_detail.photo_detail_alt")}
                     className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
                   />
@@ -1289,9 +1290,8 @@ export function IssueDetailModal({
                 }
               }}
             >
-              <img
-                key={previewPhoto.url}
-                src={previewPhoto.url}
+              <AuthenticatedImage
+                imageUrl={previewPhoto.url}
                 alt={previewPhoto.alt}
                 style={{
                   transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoomScale})`,

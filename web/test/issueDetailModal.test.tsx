@@ -43,7 +43,7 @@ describe("IssueDetailModal Component", () => {
     location_code: "LINE_A1",
     location_name: "Chuyền May A1",
     description: "Dầu loang dưới sàn máy may",
-    photo_before: "/uploads/before/before.jpg",
+    photo_before: "/api/issues/101/media/before/before.jpg",
     status: IssueStatus.OPEN,
     creator_id: 10,
     creator_name: "Nguyễn Văn A",
@@ -222,7 +222,7 @@ describe("IssueDetailModal Component", () => {
   it("renders detail photo when photo_detail exists", () => {
     const issueWithDetail: IssueItem = {
       ...mockIssue,
-      photo_detail: "c0a80101-0000-4000-8000-000000000101_detail.jpg",
+      photo_detail: "/api/issues/101/media/detail/c0a80101-0000-4000-8000-000000000101_detail.jpg",
     };
     const html = renderToString(
       <IssueDetailModal
@@ -232,14 +232,16 @@ describe("IssueDetailModal Component", () => {
         onRefresh={() => {}}
       />,
     );
-    expect(html).toContain("/uploads/detail/c0a80101-0000-4000-8000-000000000101_detail.jpg");
+    expect(html).toContain(
+      "/api/issues/101/media/detail/c0a80101-0000-4000-8000-000000000101_detail.jpg",
+    );
     expect(html).toContain("Chạm ảnh để xem toàn màn hình");
   });
 
   it("renders zoom preview buttons when issue has photo_after", () => {
     const resolvedIssue: IssueItem = {
       ...mockIssue,
-      photo_after: "c0a80101-0000-4000-8000-000000000101_after.jpg",
+      photo_after: "/api/issues/101/media/after/c0a80101-0000-4000-8000-000000000101_after.jpg",
       status: IssueStatus.PENDING_REVIEW,
     };
     const html = renderToString(
@@ -250,8 +252,10 @@ describe("IssueDetailModal Component", () => {
         onRefresh={() => {}}
       />,
     );
-    expect(html).toContain("/uploads/before/before.jpg");
-    expect(html).toContain("/uploads/after/c0a80101-0000-4000-8000-000000000101_after.jpg");
+    expect(html).toContain("/api/issues/101/media/before/before.jpg");
+    expect(html).toContain(
+      "/api/issues/101/media/after/c0a80101-0000-4000-8000-000000000101_after.jpg",
+    );
   });
   it("renders status badge and tags in modal", () => {
     useAuthStore.setState({
@@ -505,7 +509,7 @@ describe("IssueDetailModal Component", () => {
       </WithMockState>,
     );
 
-    expect(html).toContain("/uploads/before/before.jpg");
+    expect(html).toContain("/api/issues/101/media/before/before.jpg");
   });
 
   it("renders reopen confirmation dialog when showConfirmAction is REOPEN", () => {

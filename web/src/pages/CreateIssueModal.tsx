@@ -1,6 +1,7 @@
 import { Camera, Check, ShieldAlert, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { type DraftIssue, saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
@@ -365,8 +366,8 @@ export function CreateIssueModal({
                     className="hidden"
                   />
                   {previewBefore ? (
-                    <img
-                      src={previewBefore}
+                    <AuthenticatedImage
+                      imageUrl={previewBefore}
                       alt={t("issue.photo_wide_alt")}
                       className="absolute inset-0 w-full h-full object-cover"
                     />
@@ -397,8 +398,8 @@ export function CreateIssueModal({
                     className="hidden"
                   />
                   {previewDetail ? (
-                    <img
-                      src={previewDetail}
+                    <AuthenticatedImage
+                      imageUrl={previewDetail}
                       alt={t("issue.photo_detail_alt")}
                       className="absolute inset-0 w-full h-full object-cover"
                     />

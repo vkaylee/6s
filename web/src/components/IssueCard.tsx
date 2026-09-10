@@ -9,6 +9,7 @@ import {
   type TagItem,
 } from "../types/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
+import { AuthenticatedImage } from "./AuthenticatedImage.tsx";
 import { TagLabel } from "./TagLabel.tsx";
 
 interface IssueCardProps {
@@ -137,8 +138,8 @@ export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCa
           <div className="flex items-center gap-2 shrink-0 overflow-hidden">
             {issue.photo_before && (
               <div className="relative group/shrink-0">
-                <img
-                  src={resolvePhotoUrl(issue.photo_before, "before")}
+                <AuthenticatedImage
+                  imageUrl={resolvePhotoUrl(issue.photo_before, "before")}
                   alt={t("slider.before_alt")}
                   loading="lazy"
                   className={`${
@@ -159,8 +160,8 @@ export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCa
 
             {issue.photo_after && (
               <div className="relative group/shrink-0">
-                <img
-                  src={resolvePhotoUrl(issue.photo_after, "after")}
+                <AuthenticatedImage
+                  imageUrl={resolvePhotoUrl(issue.photo_after, "after")}
                   alt={t("slider.after_alt")}
                   loading="lazy"
                   className="w-28 h-20 sm:w-32 sm:h-22 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border-2 border-emerald-500/60 dark:border-emerald-500/80"

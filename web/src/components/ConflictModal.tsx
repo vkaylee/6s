@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DraftResolve } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
+import { AuthenticatedImage } from "./AuthenticatedImage.tsx";
 
 interface ConflictModalProps {
   resolveItem: DraftResolve;
@@ -107,8 +108,8 @@ export function ConflictModal({
                   {t("conflict.server_photo_label")}
                 </div>
                 {serverPhotoAfter ? (
-                  <img
-                    src={resolvePhotoUrl(serverPhotoAfter, "after")}
+                  <AuthenticatedImage
+                    imageUrl={resolvePhotoUrl(serverPhotoAfter, "after")}
                     alt={t("conflict.server_photo_alt")}
                     className="w-full aspect-[4/3] object-cover rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-xs"
                   />
@@ -148,8 +149,8 @@ export function ConflictModal({
                 {t("conflict.server_version", { version: serverVersion })}
               </div>
               {serverPhotoAfter ? (
-                <img
-                  src={resolvePhotoUrl(serverPhotoAfter, "after")}
+                <AuthenticatedImage
+                  imageUrl={resolvePhotoUrl(serverPhotoAfter, "after")}
                   alt={t("conflict.server_photo_alt")}
                   className="w-full aspect-[4/3] object-cover rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-xs"
                 />

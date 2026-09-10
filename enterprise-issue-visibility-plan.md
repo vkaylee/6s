@@ -43,19 +43,19 @@ Implement site-isolated, policy-based issue visibility with team/person assignme
 - [ ] Run `./leedevkit test web --lint-only` and `./leedevkit test web --unit-only`.
 - [ ] Smoke-test login, workspace switching, media loading, assignment, and close flow across `USER`, `LINE_LEADER`, `SAFETY_OFFICER`, and `ADMIN`.
 
-### Phase 6 — Dev-only legacy image compatibility (next)
-- [ ] **Reproduce:** confirm legacy API responses still contain `/uploads/{folder}/{basename}` and verify files exist under configured `DATA_DIR`; capture expected 200 response in `DEV_INSECURE` only.
-- [ ] **Dev route gate:** pass an explicit `allowLegacyUploads` flag from config; mount the old `/uploads/*` file server only when `DEV_INSECURE=true`. Never infer this from hostname or request headers.
-- [ ] **Production fail-closed:** keep protected `/api/issues/{id}/media/...` as the canonical URL; when `DEV_INSECURE=false`, legacy `/uploads/*` must return 404 and must not expose directory contents.
-- [ ] **Compatibility behavior:** preserve old basename paths for existing records in dev; new records continue returning protected media URLs. Do not migrate or duplicate image files.
-- [ ] **Verification:** add route tests for dev 200, production 404, traversal rejection, and protected media authorization; run server lint/unit plus a dev smoke request against an existing image.
-- [ ] **Cleanup:** remove legacy route after all dev fixtures/clients consume protected media URLs; document the removal condition in release notes.
+### Phase 6 — Protected media migration (completed)
+- [x] Backend responses use `/api/issues/{id}/media/{folder}/{basename}` for all stored photos.
+- [x] Web clients fetch protected media with `Authorization` and render Blob URLs; JWTs never appear in URLs.
+- [x] Removed public `/uploads/*` route from all environments.
+- [x] Existing files remain in `DATA_DIR`; no file copy or rename is required because records store basenames and backend constructs protected URLs.
+- [x] Bare legacy basenames are rejected by the web URL helper instead of silently targeting a removed public route.
+- [x] Verified protected media authorization, issue visibility, path traversal checks, and frontend auth loading.
 
-## Dev image policy
+## Media policy
 
-- `DEV_INSECURE=true`: legacy `/uploads/*` compatibility allowed for local development only.
-- `DEV_INSECURE=false`: no public uploads route; media requires authenticated issue-scoped endpoint.
-- Production configuration MUST reject plaintext DB/HTTP independently; enabling legacy compatibility MUST NOT weaken those existing checks.
+- Dev and production use the same protected media URL and authorization contract.
+- Public uploads are unavailable in every environment.
+- Existing deployments require no filesystem migration; restart with the updated backend/frontend.
 ## Dependencies
 
 1. Phase 1 before Phase 5 security verification.

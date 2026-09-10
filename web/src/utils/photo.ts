@@ -1,10 +1,7 @@
-/**
- * Normalizes photo URLs returned by the API or local caches.
- * Ensures relative basenames (e.g. {uuid}_wide.jpg) are prefixed with /uploads/{folder}/
- */
+/** Normalizes photo URLs returned by the API or local caches. */
 export function resolvePhotoUrl(
   url?: string | null,
-  fallbackFolder: "before" | "detail" | "after" = "before",
+  _fallbackFolder: "before" | "detail" | "after" = "before",
 ): string {
   if (!url) {
     return "";
@@ -18,5 +15,5 @@ export function resolvePhotoUrl(
   ) {
     return url;
   }
-  return `/uploads/${fallbackFolder}/${url}`;
+  return "";
 }

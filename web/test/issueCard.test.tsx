@@ -24,7 +24,7 @@ describe("IssueCard Component", () => {
     location_code: "A1",
     location_name: "Khu vực A1",
     description: "Cái quạt hỏng",
-    photo_before: "test.jpg",
+    photo_before: "/api/issues/1/media/before/test.jpg",
     created_at: new Date().toISOString(),
     tags: [],
   };
@@ -50,7 +50,7 @@ describe("IssueCard Component", () => {
     const issueWithAfter: IssueItem = {
       ...mockIssue,
       status: IssueStatus.PENDING_REVIEW,
-      photo_after: "after.jpg",
+      photo_after: "/api/issues/1/media/after/after.jpg",
       resolver_name: "Thợ Sửa B",
     };
     const html = renderToString(<IssueCard issue={issueWithAfter} onClick={() => {}} />);

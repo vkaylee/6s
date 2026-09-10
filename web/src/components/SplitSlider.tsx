@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
+import { AuthenticatedImage } from "./AuthenticatedImage.tsx";
 
 interface SplitSliderProps {
   beforeUrl: string;
@@ -106,8 +107,8 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
       className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden select-none bg-zinc-900 touch-none shadow-md cursor-pointer"
     >
       {/* After image (Bottom layer) */}
-      <img
-        src={afterUrl}
+      <AuthenticatedImage
+        imageUrl={afterUrl}
         alt={t("slider.after_alt")}
         className="absolute inset-0 w-full h-full object-cover"
       />
@@ -122,8 +123,8 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
       {/* Before image (Top layer, clipped by width) */}
       <div className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: `${sliderPos}%` }}>
         <div className="relative w-full h-full">
-          <img
-            src={beforeUrl}
+          <AuthenticatedImage
+            imageUrl={beforeUrl}
             alt={t("slider.before_alt")}
             className="absolute inset-0 max-w-none h-full object-cover"
             style={{

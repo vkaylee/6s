@@ -142,6 +142,14 @@ const authenticatedFetch = Object.assign(
   { preconnect: globalThis.fetch.preconnect },
 );
 
+export async function fetchAuthenticatedBlob(url: string, init?: RequestInit): Promise<Blob> {
+  const res = await authenticatedFetch(url, { ...init, method: "GET" });
+  if (!res.ok) {
+    throw new ApiError(res.status, `Lỗi tải ảnh (${res.status})`, "MEDIA_ERROR");
+  }
+  return res.blob();
+}
+
 export const sdkClient: Client = createClient(
   createConfig({ baseUrl, fetch: authenticatedFetch, responseStyle: "fields" }),
 );

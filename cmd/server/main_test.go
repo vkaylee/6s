@@ -6,12 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 
 	"6s/internal/config"
 	"6s/internal/crypto"
@@ -103,39 +99,6 @@ func TestSPAStaticFallback(t *testing.T) {
 	}
 }
 
-func TestLegacyUploadsDevGate(t *testing.T) {
-	tempDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tempDir, "before"), 0750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "before", "existing.jpg"), []byte("image"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	for _, insecure := range []bool{true, false} {
-		r := chi.NewRouter()
-		registerStaticRoutes(r, tempDir, insecure)
-		req := httptest.NewRequest(http.MethodGet, "/uploads/before/existing.jpg", nil)
-		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
-		want := http.StatusNotFound
-		if insecure {
-			want = http.StatusOK
-		}
-		if rec.Code != want {
-			t.Errorf("DEV_INSECURE=%t: expected status %d, got %d", insecure, want, rec.Code)
-		}
-	}
-
-	r := chi.NewRouter()
-	registerStaticRoutes(r, tempDir, true)
-	req := httptest.NewRequest(http.MethodGet, "/uploads/before/../existing.jpg", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected traversal status 404, got %d", rec.Code)
-	}
-}
-
 func TestRouter_ConfiguredSetup(t *testing.T) {
 	tempDir := t.TempDir()
 	cfg := &config.Config{
@@ -171,5 +134,15 @@ func TestRouter_ConfiguredSetup(t *testing.T) {
 	r.ServeHTTP(recLogin, reqLogin)
 	if recLogin.Code == http.StatusNotFound {
 		t.Errorf("expected route /api/auth/login to be registered, got 404")
+	}
+}
+
+func TestUploadsRouteRemoved(t *testing.T) {
+	r := setupRouter(nil, nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/uploads/before/existing.jpg", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected removed uploads route to return 404, got %d", rec.Code)
 	}
 }
