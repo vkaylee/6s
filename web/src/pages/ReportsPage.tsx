@@ -28,10 +28,11 @@ import {
   YAxis,
 } from "recharts";
 import { Link } from "wouter";
-import { apiClient } from "../api/client.ts";
+import { apiClient, fetchAuthenticatedBlob } from "../api/client.ts";
 import { IssueCard } from "../components/IssueCard.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
+import { modalDialog } from "../store/dialogStore.ts";
 import { useThemeStore } from "../store/themeStore.ts";
 import {
   IssueCategory,
@@ -46,6 +47,23 @@ import type { LocationReportItem } from "../utils/analytics.ts";
 import { goBack } from "../utils/navigation.ts";
 import { IssueDetailModal } from "./IssueDetailModal.tsx";
 
+export async function downloadReportsCsv(locationCode?: string): Promise<void> {
+  const query = locationCode
+    ? `?${new URLSearchParams({ location_code: locationCode }).toString()}`
+    : "";
+  const blob = await fetchAuthenticatedBlob(`/api/issues/export${query}`);
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `6S_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export type ReportMeetingTab = "LOCATIONS" | "PEOPLE" | "TRENDS";
+
 const CATEGORY_COLORS: Record<string, string> = {
   [IssueCategory.S1]: "#3b82f6", // Blue
   [IssueCategory.S2]: "#06b6d4", // Cyan
@@ -54,9 +72,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   [IssueCategory.S5]: "#8b5cf6", // Violet
   [IssueCategory.S6]: "#f43f5e", // Rose (Safety)
 };
-
-export type ReportMeetingTab = "LOCATIONS" | "PEOPLE" | "TRENDS";
-
 export function ReportsPage() {
   const { t, locale } = useI18nStore();
   const { isDark } = useThemeStore();
@@ -188,25 +203,10 @@ export function ReportsPage() {
   const handleExportCSV = async () => {
     try {
       setIsExporting(true);
-      const res = await fetch("/api/issues/export", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("6s_access_token") || ""}`,
-        },
-      });
-      if (!res.ok) {
-        throw new Error(`Export failed: ${res.status}`);
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `6S_Report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadReportsCsv(selectedLocationFilter || undefined);
     } catch (err) {
       console.error("Failed to export CSV", err);
+      await modalDialog.alert(t("reports.export_error"), t("common.error"));
     } finally {
       setIsExporting(false);
     }

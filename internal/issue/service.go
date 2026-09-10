@@ -83,6 +83,7 @@ type Store interface {
 	ReopenIssue(ctx context.Context, arg db.ReopenIssueParams) (db.Issue, error)
 	InvalidateIssue(ctx context.Context, arg db.InvalidateIssueParams) (db.Issue, error)
 	PatchIssue(ctx context.Context, arg db.PatchIssueParams) (db.Issue, error)
+	PatchIssueWithTagsAtomic(ctx context.Context, arg db.PatchIssueParams, tags []string) (db.Issue, error)
 	CreateOutboxEntry(ctx context.Context, arg db.CreateOutboxEntryParams) (db.NotificationOutbox, error)
 	InsertScoreLog(ctx context.Context, arg db.InsertScoreLogParams) error
 	GetScoringRuleByKey(ctx context.Context, ruleKey string) (db.ScoringRule, error)
@@ -615,7 +616,7 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 		return nil, parseErr
 	}
 
-	updated, patchErr := s.store.PatchIssue(ctx, db.PatchIssueParams{
+	patch := db.PatchIssueParams{
 		ID:           issue.ID,
 		Category:     catVal,
 		CauseType:    causeVal,
@@ -623,22 +624,15 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 		Description:  descVal,
 		PhotoBefore:  beforeVal,
 		PhotoDetail:  detailVal,
-	})
-	if patchErr != nil {
-		return nil, fmt.Errorf("failed to patch issue: %w", patchErr)
 	}
-
+	var updated db.Issue
 	if len(req.Tags) > 0 {
-		if delErr := s.store.DeleteIssueTags(ctx, issue.ID); delErr != nil {
-			log.Printf("failed to delete issue tags: %v", delErr)
-		}
-		for _, t := range req.Tags {
-			if t != "" {
-				if insErr := s.store.InsertIssueTag(ctx, db.InsertIssueTagParams{IssueID: issue.ID, TagCode: t}); insErr != nil {
-					log.Printf("failed to insert tag: %v", insErr)
-				}
-			}
-		}
+		updated, err = s.store.PatchIssueWithTagsAtomic(ctx, patch, req.Tags)
+	} else {
+		updated, err = s.store.PatchIssue(ctx, patch)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch issue: %w", err)
 	}
 
 	if escalatedToSafety {

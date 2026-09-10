@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,18 @@ import (
 	"6s/internal/config"
 	"6s/internal/crypto"
 )
+
+type unavailableConn struct{ mockConn }
+
+func (c *unavailableConn) Ping(context.Context) error {
+	return errors.New("database unavailable: password=top-secret")
+}
+
+type unavailableDriver struct{}
+
+func (d *unavailableDriver) Open(string) (driver.Conn, error) {
+	return &unavailableConn{}, nil
+}
 
 type mockStmt struct{}
 
@@ -48,6 +62,33 @@ func (d *mockDriver) Open(_ string) (driver.Conn, error) {
 
 func init() {
 	sql.Register("mock_sql_driver", &mockDriver{})
+	sql.Register("unavailable_sql_driver", &unavailableDriver{})
+}
+
+func TestReadinessUnavailableDBReturnsSafeError(t *testing.T) {
+	db, err := sql.Open("unavailable_sql_driver", "test")
+	if err != nil {
+		t.Fatalf("failed to open unavailable db: %v", err)
+	}
+	defer db.Close()
+
+	r := setupRouter(db, nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/ready", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /api/ready: expected status %d, got %d", http.StatusServiceUnavailable, rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{`"status":"not_ready"`, `"db":"disconnected"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("GET /api/ready: response %q missing %s", body, want)
+		}
+	}
+	if strings.Contains(body, "top-secret") || strings.Contains(body, "database unavailable") {
+		t.Errorf("GET /api/ready leaked database error: %q", body)
+	}
 }
 
 func TestHealthEndpoint(t *testing.T) {

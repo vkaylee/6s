@@ -676,7 +676,8 @@
     "occurrences": "{count} times",
     "drilldown_tag_title": "Issues tagged with {tag}",
     "export_csv": "Export CSV",
-    "exporting": "Exporting..."
+    "exporting": "Exporting...",
+    "export_error": "Unable to export the report. Please try again."
   },
   "not_found": {
     "title": "404 - Page Not Found",

@@ -1055,16 +1055,25 @@ func TestHandler_LoginMoreBranchesAndADConfigErrors(t *testing.T) {
 		t.Errorf("expected 500 when cipher is nil and BindPassword is set, got %d", rrNoCipher.Code)
 	}
 
-	// TestADConfig bad JSON -> 400
-	reqTestBad := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{bad")))
+	// TestADConfig requires authentication before parsing or dialing.
+	reqTestUnauth := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{bad")))
+	rrTestUnauth := httptest.NewRecorder()
+	adHandler.TestADConfig(rrTestUnauth, reqTestUnauth)
+	if rrTestUnauth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauthenticated AD test, got %d", rrTestUnauth.Code)
+	}
+
+	// Authenticated malformed JSON -> 400.
+	reqTestBad := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{bad"))).WithContext(context.WithValue(context.Background(), UserContextKey, adminUser))
 	rrTestBad := httptest.NewRecorder()
 	adHandler.TestADConfig(rrTestBad, reqTestBad)
 	if rrTestBad.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for bad json in test AD, got %d", rrTestBad.Code)
 	}
 
-	// TestADConfig when no server in request and store empty -> 400
-	reqTestNoServer := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{}")))
+	// Missing stored server -> 400 after authentication.
+	store.adConfig = db.AdConfig{}
+	reqTestNoServer := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{}"))).WithContext(context.WithValue(context.Background(), UserContextKey, adminUser))
 	rrTestNoServer := httptest.NewRecorder()
 	adHandler.TestADConfig(rrTestNoServer, reqTestNoServer)
 	if rrTestNoServer.Code != http.StatusBadRequest {
@@ -1074,7 +1083,7 @@ func TestHandler_LoginMoreBranchesAndADConfigErrors(t *testing.T) {
 	// TestADConfig with encrypted stored password and missing cipher -> explicit configuration error.
 	store.adConfig = db.AdConfig{Server: "ad.lan", Port: 636, BindPassword: "encrypted"}
 	noCipherTestHandler := NewADConfigHandler(store, nil, mockLDAP)
-	reqMissingKey := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{}")))
+	reqMissingKey := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader([]byte("{}"))).WithContext(context.WithValue(context.Background(), UserContextKey, adminUser))
 	rrMissingKey := httptest.NewRecorder()
 	noCipherTestHandler.TestADConfig(rrMissingKey, reqMissingKey)
 	if rrMissingKey.Code != http.StatusInternalServerError {
@@ -1087,7 +1096,7 @@ func TestHandler_LoginMoreBranchesAndADConfigErrors(t *testing.T) {
 	// TestADConfig failed connection -> 502
 	testWithServer := UpdateADConfigRequest{Server: "ad.lan", Port: 636}
 	bodyTestServer, _ := json.Marshal(testWithServer)
-	reqTestFail := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader(bodyTestServer))
+	reqTestFail := httptest.NewRequest("POST", "/api/config/ad/test", bytes.NewReader(bodyTestServer)).WithContext(context.WithValue(context.Background(), UserContextKey, adminUser))
 	rrTestFail := httptest.NewRecorder()
 	adHandler.TestADConfig(rrTestFail, reqTestFail)
 	if rrTestFail.Code != http.StatusInternalServerError {

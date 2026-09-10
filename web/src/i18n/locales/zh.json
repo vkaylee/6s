@@ -676,7 +676,8 @@
     "occurrences": "{count} 次",
     "drilldown_tag_title": "含有标签 {tag} 的问题列表",
     "export_csv": "导出 CSV",
-    "exporting": "导出中..."
+    "exporting": "导出中...",
+    "export_error": "无法导出报告，请重试。"
   },
   "not_found": {
     "title": "404 - 页面未找到",

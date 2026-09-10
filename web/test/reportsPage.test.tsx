@@ -1,8 +1,9 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
-import { ReportsPage } from "../src/pages/ReportsPage.tsx";
+import { downloadReportsCsv, ReportsPage } from "../src/pages/ReportsPage.tsx";
+import { useAuthStore } from "../src/store/authStore.ts";
 import {
   IssueCategory,
   type LocationHealthScore,
@@ -10,6 +11,7 @@ import {
   type ReporterLeaderboard,
   type ReportSummaryResponse,
   type TagItem,
+  UserRole,
 } from "../src/types/index.ts";
 
 function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
@@ -34,6 +36,28 @@ function WithMockState({ values, children }: { values: unknown[]; children: Reac
   };
   return <>{children}</>;
 }
+const defaultGetRefreshToken = useAuthStore.getState().getRefreshToken;
+
+beforeEach(() => {
+  useAuthStore.setState({
+    user: null,
+    accessToken: null,
+    isOfflineGrace: false,
+    isLoading: false,
+    getRefreshToken: defaultGetRefreshToken,
+  });
+});
+
+afterEach(async () => {
+  await useAuthStore.getState().clearAuth();
+  useAuthStore.setState({
+    user: null,
+    accessToken: null,
+    isOfflineGrace: false,
+    isLoading: false,
+    getRefreshToken: defaultGetRefreshToken,
+  });
+});
 
 const mockSummary: ReportSummaryResponse = {
   kpi: {
@@ -252,5 +276,227 @@ describe("ReportsPage & Export CSV UI", () => {
     );
     expect(html).toContain("1S");
     expect(html).toContain("2S");
+  });
+
+  it("refreshes expired access token and proceeds with CSV download", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "admin",
+        full_name: "Super Admin",
+        role: UserRole.ADMIN,
+      },
+      accessToken: "expired-jwt-token",
+      getRefreshToken: async () => "valid-refresh-token",
+    });
+
+    const calls: { url: string; authHeader: string }[] = [];
+    let clicked = false;
+    let downloadedFilename = "";
+
+    const mockAnchor = {
+      href: "",
+      download: "",
+      click: () => {
+        clicked = true;
+        downloadedFilename = mockAnchor.download;
+      },
+      remove: () => {},
+    };
+
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: (tag: string) => (tag === "a" ? mockAnchor : {}),
+      body: { appendChild: () => {} },
+    };
+
+    (globalThis as unknown as { window: unknown }).window = {
+      URL: {
+        createObjectURL: () => "blob:mock-csv-data",
+        revokeObjectURL: () => {},
+      },
+    };
+
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const parsedUrl = new URL(rawUrl, "http://localhost");
+      const url = `${parsedUrl.pathname}${parsedUrl.search}`;
+      const authHeader = new Headers(init?.headers).get("Authorization") ?? "";
+      calls.push({ url, authHeader });
+
+      if (url === "/api/auth/refresh") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              access_token: "refreshed-jwt-token",
+              refresh_token: "new-refresh-token",
+              user: {
+                id: 1,
+                username: "admin",
+                full_name: "Super Admin",
+                role: UserRole.ADMIN,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (url.startsWith("/api/issues/export")) {
+        if (authHeader === "Bearer expired-jwt-token") {
+          return new Response(
+            JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Token expired" } }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (authHeader === "Bearer refreshed-jwt-token") {
+          return new Response("ID,UUID,Category\n1,uuid-1,1S", {
+            status: 200,
+            headers: {
+              "Content-Type": "text/csv; charset=utf-8",
+              "Content-Disposition": 'attachment; filename="6S_Issues_Export.csv"',
+            },
+          });
+        }
+      }
+
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      await downloadReportsCsv("LINE_A1");
+      expect(calls.length).toBe(3);
+      expect(calls[0].url).toBe("/api/issues/export?location_code=LINE_A1");
+      expect(calls[0].authHeader).toBe("Bearer expired-jwt-token");
+      expect(calls[1].url).toBe("/api/auth/refresh");
+      expect(calls[2].url).toBe("/api/issues/export?location_code=LINE_A1");
+      expect(calls[2].authHeader).toBe("Bearer refreshed-jwt-token");
+      expect(clicked).toBe(true);
+      expect(downloadedFilename).toMatch(/^6S_Report_\d{4}-\d{2}-\d{2}\.csv$/);
+    } finally {
+      globalThis.fetch = originalFetch;
+      (globalThis as unknown as { window: unknown }).window = originalWindow;
+      (globalThis as unknown as { document: unknown }).document = originalDocument;
+      await useAuthStore.getState().clearAuth();
+    }
+  });
+
+  it("aborts download when token refresh fails on 401", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    useAuthStore.setState({
+      user: {
+        id: 2,
+        username: "officer",
+        full_name: "Safety Officer",
+        role: UserRole.SAFETY_OFFICER,
+      },
+      accessToken: "expired-token",
+      getRefreshToken: async () => "invalid-refresh-token",
+    });
+
+    let clicked = false;
+    const mockAnchor = {
+      href: "",
+      download: "",
+      click: () => {
+        clicked = true;
+      },
+      remove: () => {},
+    };
+
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: (tag: string) => (tag === "a" ? mockAnchor : {}),
+      body: { appendChild: () => {} },
+    };
+
+    (globalThis as unknown as { window: unknown }).window = {
+      URL: {
+        createObjectURL: () => "blob:should-not-exist",
+        revokeObjectURL: () => {},
+      },
+    };
+
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "/api/auth/refresh") {
+        return new Response(JSON.stringify({ error: { message: "Refresh token revoked" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("Unauthorized", { status: 401 });
+    }) as typeof fetch;
+
+    try {
+      await expect(downloadReportsCsv()).rejects.toThrow();
+      expect(clicked).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      (globalThis as unknown as { window: unknown }).window = originalWindow;
+      (globalThis as unknown as { document: unknown }).document = originalDocument;
+      await useAuthStore.getState().clearAuth();
+    }
+  });
+
+  it("aborts download on 403 Forbidden without creating a download link", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    useAuthStore.setState({
+      user: {
+        id: 3,
+        username: "user_worker",
+        full_name: "Regular Worker",
+        role: UserRole.USER,
+      },
+      accessToken: "worker-valid-token",
+    });
+
+    let clicked = false;
+    const mockAnchor = {
+      href: "",
+      download: "",
+      click: () => {
+        clicked = true;
+      },
+      remove: () => {},
+    };
+
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: (tag: string) => (tag === "a" ? mockAnchor : {}),
+      body: { appendChild: () => {} },
+    };
+
+    (globalThis as unknown as { window: unknown }).window = {
+      URL: {
+        createObjectURL: () => "blob:forbidden-error-body",
+        revokeObjectURL: () => {},
+      },
+    };
+
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: { code: "FORBIDDEN", message: "Forbidden: role insufficient" } }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await expect(downloadReportsCsv()).rejects.toThrow();
+      expect(clicked).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      (globalThis as unknown as { window: unknown }).window = originalWindow;
+      (globalThis as unknown as { document: unknown }).document = originalDocument;
+      await useAuthStore.getState().clearAuth();
+    }
   });
 });

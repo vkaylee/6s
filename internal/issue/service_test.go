@@ -49,6 +49,8 @@ type mockIssueStore struct {
 	auditLogs    []db.InsertAuditLogParams
 	translations map[string]string
 	rules        map[string]int32
+	tagDeleteErr error
+	tagInsertErr error
 }
 
 func newMockIssueStore() *mockIssueStore {
@@ -99,6 +101,9 @@ func (m *mockIssueStore) CreateIssue(_ context.Context, arg db.CreateIssueParams
 }
 
 func (m *mockIssueStore) InsertIssueTag(_ context.Context, arg db.InsertIssueTagParams) error {
+	if m.tagInsertErr != nil {
+		return m.tagInsertErr
+	}
 	m.tags[arg.IssueID] = append(m.tags[arg.IssueID], arg.TagCode)
 	return nil
 }
@@ -165,12 +170,89 @@ func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
 }
 
 func (m *mockIssueStore) DeleteIssueTags(_ context.Context, issueID int64) error {
+	if m.tagDeleteErr != nil {
+		return m.tagDeleteErr
+	}
 	delete(m.tags, issueID)
 	return nil
 }
 
+func (m *mockIssueStore) PatchIssueWithTagsAtomic(ctx context.Context, arg db.PatchIssueParams, tags []string) (db.Issue, error) {
+	issueBefore := m.issues[arg.ID]
+	tagsBefore := append([]string(nil), m.tags[arg.ID]...)
+	updated, err := m.PatchIssue(ctx, arg)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	if err := m.DeleteIssueTags(ctx, arg.ID); err != nil {
+		m.issues[arg.ID] = issueBefore
+		m.tags[arg.ID] = tagsBefore
+		return db.Issue{}, err
+	}
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		if err := m.InsertIssueTag(ctx, db.InsertIssueTagParams{IssueID: arg.ID, TagCode: tag}); err != nil {
+			m.issues[arg.ID] = issueBefore
+			m.tags[arg.ID] = tagsBefore
+			return db.Issue{}, err
+		}
+	}
+	return updated, nil
+}
+
 func (m *mockIssueStore) IncrementTagUseCount(_ context.Context, _ string) error {
 	return nil
+}
+
+func TestIssueService_PatchIssue_TagFailureRollsBackIssueAndTags(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		setFailure func(*mockIssueStore)
+	}{
+		{name: "delete", setFailure: func(m *mockIssueStore) { m.tagDeleteErr = fmt.Errorf("delete tags") }},
+		{name: "insert", setFailure: func(m *mockIssueStore) { m.tagInsertErr = fmt.Errorf("insert tag") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newMockIssueStore()
+			store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 10, Category: "1S", CauseType: "MANUAL", LocationCode: "LINE_A1", Status: "OPEN", CreatedAt: time.Now()}
+			store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Line A1"}
+			store.users[10] = db.User{ID: 10, Username: "worker", FullName: "Worker"}
+			store.tags[1] = []string{"old"}
+			beforeIssue := store.issues[1]
+			beforeTags := append([]string(nil), store.tags[1]...)
+			tc.setFailure(store)
+
+			svc := NewService(store, nil, make(chan struct{}, 1))
+			events, unsubscribe := svc.SubscribeEvents()
+			defer unsubscribe()
+			worker := store.users[10]
+			newCategory := "6S"
+			_, err := svc.PatchIssue(ctxFor(worker), PatchIssueRequest{
+				IssueID:  1,
+				Category: &newCategory,
+				Tags:     []string{"new"},
+			}, worker)
+			if err == nil {
+				t.Fatal("expected atomic tag failure")
+			}
+			if got := store.issues[1]; got.Version != beforeIssue.Version || got.Category != beforeIssue.Category {
+				t.Fatalf("issue changed after failed tag mutation: before=%+v after=%+v", beforeIssue, got)
+			}
+			if got := store.tags[1]; len(got) != len(beforeTags) || got[0] != beforeTags[0] {
+				t.Fatalf("tags changed after failed tag mutation: before=%v after=%v", beforeTags, got)
+			}
+			select {
+			case event := <-events:
+				t.Fatalf("unexpected event after failed patch: %+v", event)
+			default:
+			}
+			if len(store.outbox) != 0 {
+				t.Fatalf("unexpected notification side effect after failed patch: %+v", store.outbox)
+			}
+		})
+	}
 }
 
 func (m *mockIssueStore) ListIssuesFiltered(_ context.Context, _ db.ListIssuesFilteredParams) ([]db.ListIssuesFilteredRow, error) {

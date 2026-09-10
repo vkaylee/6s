@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -217,5 +218,37 @@ func TestValidateSearchResult(t *testing.T) {
 	}
 	if err := validateSearchResult("DC=example,DC=com", valid, &ldap.Error{ResultCode: ldap.LDAPResultInsufficientAccessRights}); err == nil {
 		t.Fatal("expected access-denied error")
+	}
+}
+
+func TestValidateLDAPConfigAllowsPrivateAndCustomPorts(t *testing.T) {
+	for _, req := range []UpdateADConfigRequest{
+		{Server: "10.0.0.12", Port: 1389},
+		{Server: "ad.factory.lan", Port: 3269},
+		{Server: "[fd00::12]", Port: 636},
+	} {
+		if err := validateLDAPConfig(req); err != nil {
+			t.Fatalf("valid LDAP config rejected: %v", err)
+		}
+	}
+	for _, req := range []UpdateADConfigRequest{
+		{Server: "", Port: 389},
+		{Server: "ad.factory.lan/path", Port: 389},
+		{Server: "ad.factory.lan", Port: 0},
+		{Server: "ad.factory.lan", Port: 65536},
+	} {
+		if err := validateLDAPConfig(req); err == nil {
+			t.Fatalf("malformed LDAP config accepted: %+v", req)
+		}
+	}
+}
+
+func TestUpdateADConfigRequestPreservesExplicitFalse(t *testing.T) {
+	var req UpdateADConfigRequest
+	if err := json.Unmarshal([]byte(`{"use_tls":false,"skip_tls_verify":false}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.UseTLS || req.SkipTLSVerify || !req.useTLSSet || !req.skipTLSSet {
+		t.Fatalf("explicit false booleans not preserved: %+v", req)
 	}
 }

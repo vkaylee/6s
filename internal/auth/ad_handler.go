@@ -4,7 +4,10 @@ package auth
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"6s/internal/apperror"
@@ -49,6 +52,10 @@ type ADConfigResponse struct {
 
 // GetADConfig handles GET /api/config/ad (Admin only).
 func (h *ADConfigHandler) GetADConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := GetUserFromContext(r.Context()); !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
 	cfg, err := h.store.GetADConfig(r.Context())
 	if err != nil {
 		_ = response.JSON(w, http.StatusOK, ADConfigResponse{
@@ -98,6 +105,48 @@ type UpdateADConfigRequest struct {
 	GroupAdminDN  string `json:"group_admin_dn"`
 	GroupSafetyDN string `json:"group_safety_dn"`
 	GroupLeaderDN string `json:"group_leader_dn"`
+	useTLSSet     bool
+	skipTLSSet    bool
+}
+
+// UnmarshalJSON records whether boolean fields were supplied. This preserves
+// explicit false values when testing a stored configuration.
+func (q *UpdateADConfigRequest) UnmarshalJSON(data []byte) error {
+	type alias UpdateADConfigRequest
+	var v struct {
+		alias
+		UseTLS        *bool `json:"use_tls"`
+		SkipTLSVerify *bool `json:"skip_tls_verify"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*q = UpdateADConfigRequest(v.alias)
+	if v.UseTLS != nil {
+		q.UseTLS, q.useTLSSet = *v.UseTLS, true
+	}
+	if v.SkipTLSVerify != nil {
+		q.SkipTLSVerify, q.skipTLSSet = *v.SkipTLSVerify, true
+	}
+	return nil
+}
+
+func validateLDAPConfig(req UpdateADConfigRequest) error {
+	server := strings.TrimSpace(req.Server)
+	if server == "" || strings.ContainsAny(server, "/?#\\") || strings.IndexFunc(server, func(r rune) bool { return r <= ' ' }) >= 0 {
+		return fmt.Errorf("invalid LDAP server")
+	}
+	trimmed := server
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		trimmed = trimmed[1 : len(trimmed)-1]
+	}
+	if net.ParseIP(trimmed) == nil && strings.Contains(server, ":") {
+		return fmt.Errorf("invalid LDAP server")
+	}
+	if req.Port < 1 || req.Port > 65535 {
+		return fmt.Errorf("invalid LDAP port")
+	}
+	return nil
 }
 
 // UpdateADConfig handles PUT /api/config/ad (Admin only).
@@ -114,8 +163,22 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.Port <= 0 || req.Port > 65535 {
+	if req.Port < 0 || req.Port > 65535 {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	if req.Port == 0 {
 		req.Port = 636
+	}
+
+	if strings.TrimSpace(req.Server) != "" {
+		if err := validateLDAPConfig(req); err != nil {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+			return
+		}
+	} else if req.IsEnabled {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
 	}
 
 	var encryptedBindPass string
@@ -183,12 +246,21 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 
 // TestADConfig handles POST /api/config/ad/test (Admin only).
 func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // distinct validation failures map to distinct API errors
+	if _, ok := GetUserFromContext(r.Context()); !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+
 	var req UpdateADConfigRequest
 	if r.Body != nil {
 		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil && decErr.Error() != "EOF" {
 			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decErr))
 			return
 		}
+	}
+	if req.Port < 0 || req.Port > 65535 {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
 	}
 	if saved, err := h.store.GetADConfig(r.Context()); err == nil {
 		if req.Server == "" {
@@ -206,10 +278,10 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 		if req.UserFilter == "" {
 			req.UserFilter = saved.UserFilter
 		}
-		if !req.UseTLS {
+		if !req.useTLSSet {
 			req.UseTLS = saved.UseTls
 		}
-		if !req.SkipTLSVerify {
+		if !req.skipTLSSet {
 			req.SkipTLSVerify = saved.SkipTlsVerify
 		}
 		if req.BindPassword == "" && saved.BindPassword != "" {
@@ -229,6 +301,14 @@ func (h *ADConfigHandler) TestADConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Port == 0 {
+		req.Port = 636
+	}
+
+	if err := validateLDAPConfig(req); err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
 	client := h.ldapClient
 	if client == nil {
 		client = NewLiveLDAPClient(LDAPConfig{

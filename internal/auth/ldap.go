@@ -78,6 +78,7 @@ func (c *LiveLDAPClient) dial() (*ldap.Conn, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrLDAPUnreachable, err)
 		}
+		conn.SetTimeout(5 * time.Second)
 		return conn, nil
 	}
 
@@ -94,6 +95,7 @@ func (c *LiveLDAPClient) dial() (*ldap.Conn, error) {
 			return nil, fmt.Errorf("%w: StartTLS failed: %v", ErrLDAPUnreachable, err)
 		}
 	}
+	conn.SetTimeout(5 * time.Second)
 
 	return conn, nil
 }

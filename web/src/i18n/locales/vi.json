@@ -676,7 +676,8 @@
     "occurrences": "{count} lần",
     "drilldown_tag_title": "Danh sách sự cố lỗi {tag}",
     "export_csv": "Xuất CSV",
-    "exporting": "Đang xuất..."
+    "exporting": "Đang xuất...",
+    "export_error": "Không thể xuất báo cáo. Vui lòng thử lại."
   },
   "not_found": {
     "title": "404 - Không tìm thấy trang",
