@@ -34,18 +34,23 @@ export function InstallPrompt() {
 
       {showIOSModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
+          aria-labelledby="pwa-ios-install-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
         >
           <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 animate-fade-in">
             <div className="flex justify-between items-start">
-              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+              <h3
+                id="pwa-ios-install-title"
+                className="text-base font-bold text-zinc-900 dark:text-zinc-100"
+              >
                 {t("pwa.ios_title")}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowIOSModal(false)}
+                aria-label={t("common.close")}
                 className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-sm font-bold"
               >
                 ✕

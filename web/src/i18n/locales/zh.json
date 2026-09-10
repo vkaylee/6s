@@ -35,6 +35,9 @@
     "login_required": "请先登录",
     "login_failed": "登录失败",
     "setup_superadmin": "设置超级管理员",
+    "access_denied_title": "无访问权限",
+    "access_denied_message": "当前账号无权访问此页面。如认为这是错误，请联系管理员。",
+    "back_to_dashboard": "返回主看板",
     "setup_success": "初始化账号成功！",
     "required_fields": "请填写所有必填项 (*)",
     "setup_superadmin_desc": "系统暂无管理员。请先初始化设置超级管理员账号以开始使用。",
@@ -135,7 +138,8 @@
     "before": "改善前",
     "after": "改善后",
     "before_alt": "改善前照片",
-    "after_alt": "改善后照片"
+    "after_alt": "改善后照片",
+    "comparison_slider": "改善前后对比滑块"
   },
   "leaderboard": {
     "location_health": "区域健康度",
@@ -255,9 +259,12 @@
     "tool_circle": "圆形",
     "tool_rect": "矩形",
     "tool_pen": "画笔",
-    "tool_move": "移动",
     "tool_undo": "撤销",
     "tool_clear": "清空",
+    "color_red": "红色",
+    "color_yellow": "黄色",
+    "color_blue": "蓝色",
+    "color_green": "绿色",
     "photo_annotate_btn": "圈选标注",
     "photo_retake_btn": "重拍",
     "photo_remove_btn": "删除",
@@ -610,7 +617,13 @@
     "sort_oldest": "最早发布",
     "empty_search_desc": "未找到符合当前筛选条件或关键词的问题",
     "empty_reset_btn": "重置筛选",
-    "empty_all_clear": "太棒了！车间当前没有未解决的6S问题。"
+    "empty_all_clear": "太棒了！车间当前没有未解决的6S问题。",
+    "load_error_title": "无法刷新看板数据",
+    "load_error_desc": "请检查网络或服务器连接，然后重试。",
+    "master_data_error_title": "无法加载车间基础数据",
+    "master_data_error_desc": "位置与标签信息可能不完整，请重试以恢复。",
+    "leaderboard_error_title": "无法加载排行榜数据",
+    "leaderboard_error_desc": "下方积分可能不是最新数据，请重试刷新。"
   },
   "reports": {
     "title": "管理层会议统计报告",

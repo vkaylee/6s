@@ -94,9 +94,11 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
     <div
       ref={containerRef}
       role="slider"
+      aria-label={t("slider.comparison_slider")}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(sliderPos)}
+      aria-valuetext={`${Math.round(sliderPos)}%`}
       tabIndex={0}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -104,7 +106,21 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden select-none bg-zinc-900 touch-none shadow-md cursor-pointer"
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+          e.preventDefault();
+          setSliderPos((position) => Math.max(0, position - 5));
+        } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+          e.preventDefault();
+          setSliderPos((position) => Math.min(100, position + 5));
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          setSliderPos(0);
+        } else if (e.key === "End") {
+          e.preventDefault();
+          setSliderPos(100);
+        }
+      }}
     >
       {/* After image (Bottom layer) */}
       <AuthenticatedImage

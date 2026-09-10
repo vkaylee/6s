@@ -37,6 +37,11 @@ interface UseDashboardDataOptions {
   user: UserProfile | null;
 }
 
+export interface DashboardDataErrors {
+  issues: boolean;
+  masterData: boolean;
+  leaderboards: boolean;
+}
 export function useDashboardData({
   accessToken,
   locale,
@@ -94,6 +99,14 @@ export function useDashboardData({
   const [advancedFilters, setAdvancedFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueItem | null>(null);
+  const [dashboardErrors, setDashboardErrors] = useState<DashboardDataErrors>({
+    issues: false,
+    masterData: false,
+    leaderboards: false,
+  });
+  const issuesRequest = useRef(0);
+  const masterDataRequest = useRef(0);
+  const leaderboardsRequest = useRef(0);
 
   const openIssueById = async (issueId: number) => {
     const existing = issues.find((issue) => issue.id === issueId);
@@ -115,42 +128,25 @@ export function useDashboardData({
   }, [searchString, issues]);
 
   const loadMasterData = async () => {
+    const requestId = ++masterDataRequest.current;
+    setDashboardErrors((prev) => ({ ...prev, masterData: false }));
     try {
       const [locData, tagData] = await Promise.all([
         apiClient<LocationItem[]>("/api/locations"),
         apiClient<Tag[]>("/api/tags"),
       ]);
+      if (requestId !== masterDataRequest.current) return;
       setLocations(locData || []);
       setTags(normalizeTags(tagData || []));
     } catch {
-      setLocations([
-        {
-          code: "LINE_A1",
-          name_vi: "Chuyền May A1",
-          name_zh: "缝纫一拉",
-          name_en: "Sewing Line A1",
-          is_active: true,
-        },
-        {
-          code: "LINE_A2",
-          name_vi: "Chuyền May A2",
-          name_zh: "缝纫二拉",
-          name_en: "Sewing Line A2",
-          is_active: true,
-        },
-        {
-          code: "WAREHOUSE",
-          name_vi: "Kho Nguyên Liệu",
-          name_zh: "原料仓",
-          name_en: "Raw Warehouse",
-          is_active: true,
-        },
-      ]);
-      setTags([]);
+      if (requestId === masterDataRequest.current) {
+        setDashboardErrors((prev) => ({ ...prev, masterData: true }));
+      }
     }
   };
 
   const loadIssues = async (reset = false, customFilters?: FilterState) => {
+    const requestId = ++issuesRequest.current;
     const targetPage = reset ? 1 : issuePage;
     if (reset) {
       setIsLoadingIssues(true);
@@ -158,6 +154,7 @@ export function useDashboardData({
     } else {
       setIsLoadingMore(true);
     }
+    setDashboardErrors((prev) => ({ ...prev, issues: false }));
 
     const filters = customFilters || advancedFilters;
     const queryParams = new URLSearchParams({ page: String(targetPage), limit: "20" });
@@ -170,6 +167,7 @@ export function useDashboardData({
       const res = await apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
         includeMeta: true,
       });
+      if (requestId !== issuesRequest.current) return;
       const list = res?.data || [];
       const meta = res?.pagination || { page: targetPage, limit: 20, total: list.length };
       setPaginationMeta(meta);
@@ -182,10 +180,14 @@ export function useDashboardData({
         appendUniqueIssues(list);
       }
     } catch {
-      // ignore
+      if (requestId === issuesRequest.current) {
+        setDashboardErrors((prev) => ({ ...prev, issues: true }));
+      }
     } finally {
-      if (reset) setIsLoadingIssues(false);
-      else setIsLoadingMore(false);
+      if (requestId === issuesRequest.current) {
+        if (reset) setIsLoadingIssues(false);
+        else setIsLoadingMore(false);
+      }
     }
   };
 
@@ -198,6 +200,7 @@ export function useDashboardData({
 
   const loadMoreIssues = () => {
     if (isLoadingMore || isLoadingIssues) return;
+    const requestId = ++issuesRequest.current;
     const nextPage = issuePage + 1;
     setIssuePage(nextPage);
     const queryParams = new URLSearchParams({ page: String(nextPage), limit: "20" });
@@ -215,11 +218,17 @@ export function useDashboardData({
       includeMeta: true,
     })
       .then((res) => {
+        if (requestId !== issuesRequest.current) return;
         if (res?.pagination) setPaginationMeta(res.pagination);
         appendUniqueIssues(res?.data || []);
       })
-      .catch(() => setIssuePage((prev) => Math.max(1, prev - 1)))
-      .finally(() => setIsLoadingMore(false));
+      .catch(() => {
+        if (requestId !== issuesRequest.current) return;
+        setDashboardErrors((prev) => ({ ...prev, issues: true }));
+      })
+      .finally(() => {
+        if (requestId === issuesRequest.current) setIsLoadingMore(false);
+      });
   };
 
   const applyAdvancedFilters = (newFilters: FilterState) => {
@@ -233,15 +242,20 @@ export function useDashboardData({
   };
 
   const loadLeaderboards = async () => {
+    const requestId = ++leaderboardsRequest.current;
+    setDashboardErrors((prev) => ({ ...prev, leaderboards: false }));
     try {
       const [locHealth, repLeader] = await Promise.all([
         apiClient<LocationHealthScore[]>("/api/leaderboard/locations"),
         apiClient<ReporterLeaderboard[]>("/api/leaderboard/reporters"),
       ]);
+      if (requestId !== leaderboardsRequest.current) return;
       setLocationHealth(locHealth || []);
       setReporters(repLeader || []);
     } catch {
-      // ignore
+      if (requestId === leaderboardsRequest.current) {
+        setDashboardErrors((prev) => ({ ...prev, leaderboards: true }));
+      }
     }
   };
 
@@ -429,6 +443,10 @@ export function useDashboardData({
     loadMoreIssues,
     loadLeaderboards,
     loadMasterData,
+    dashboardErrors,
+    retryIssues: () => loadIssues(true),
+    retryMasterData: () => loadMasterData(),
+    retryLeaderboards: () => loadLeaderboards(),
     sortedIssues,
     facetCounts,
     overallScore,

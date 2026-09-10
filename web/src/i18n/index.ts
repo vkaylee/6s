@@ -50,28 +50,34 @@ function resolvePath(obj: unknown, path: string): string | undefined {
   return typeof current === "string" ? current : undefined;
 }
 
-export const useI18nStore = create<I18nState>((set, get) => ({
-  locale: getInitialLocale(),
-  setLocale: (locale: SupportedLocale) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, locale);
-      document.documentElement.lang = locale;
-    }
-    set({ locale });
-  },
-  t: (path: string, params?: Record<string, string | number>) => {
-    const { locale } = get();
-    const currentDict = dictionaries[locale] ?? dictionaries.vi;
-    let template = resolvePath(currentDict, path) ?? resolvePath(dictionaries.vi, path) ?? path;
-
-    if (params) {
-      for (const [key, value] of Object.entries(params)) {
-        template = template.replace(new RegExp(`\\{${key}\\}`, "g"), String(value));
+export const useI18nStore = create<I18nState>((set, get) => {
+  const initialLocale = getInitialLocale();
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = initialLocale;
+  }
+  return {
+    locale: initialLocale,
+    setLocale: (locale: SupportedLocale) => {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, locale);
+        document.documentElement.lang = locale;
       }
-    }
-    return template;
-  },
-}));
+      set({ locale });
+    },
+    t: (path: string, params?: Record<string, string | number>) => {
+      const { locale } = get();
+      const currentDict = dictionaries[locale] ?? dictionaries.vi;
+      let template = resolvePath(currentDict, path) ?? resolvePath(dictionaries.vi, path) ?? path;
+
+      if (params) {
+        for (const [key, value] of Object.entries(params)) {
+          template = template.replace(new RegExp(`\\{${key}\\}`, "g"), String(value));
+        }
+      }
+      return template;
+    },
+  };
+});
 
 export function t(path: string, params?: Record<string, string | number>): string {
   return useI18nStore.getState().t(path, params);

@@ -89,6 +89,7 @@ export function OfflineOutboxDrawer({
           <button
             type="button"
             onClick={onClose}
+            aria-label={t("common.close")}
             className="p-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 min-w-[44px] min-h-[44px] flex items-center justify-center text-xl font-bold"
           >
             ✕
@@ -147,6 +148,7 @@ export function OfflineOutboxDrawer({
                     </div>
                     <button
                       type="button"
+                      aria-label={`${t("outbox.discard")} ${item.location_code}`}
                       onClick={() => handleDeleteIssue(item.client_uuid)}
                       className="text-xs text-rose-600 hover:text-rose-800 font-bold p-2 min-h-[44px]"
                     >
@@ -205,8 +207,8 @@ export function OfflineOutboxDrawer({
                       )}
                       <button
                         type="button"
+                        aria-label={`${t("outbox.discard")} ${item.issue_id}`}
                         onClick={() => handleDeleteResolve(item.resolved_client_uuid)}
-                        className="text-xs text-rose-600 hover:text-rose-800 font-bold p-2 min-h-[44px]"
                       >
                         {t("outbox.discard")}
                       </button>

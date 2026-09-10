@@ -10,7 +10,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -110,8 +110,12 @@ export function ReportsPage() {
   useEffect(() => {
     setDrilldownPage(1);
   }, [drilldownType, selectedLocationDrill, selectedCategoryDrill, selectedTagDrill]);
+  const [loadError, setLoadError] = useState(false);
+  const reportRequest = useRef(0);
   const loadData = async () => {
+    const requestId = ++reportRequest.current;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const locationQuery = selectedLocationFilter
         ? `&location_code=${encodeURIComponent(selectedLocationFilter)}`
@@ -122,21 +126,23 @@ export function ReportsPage() {
       const [summaryRes, locationsRes, repRes, mLocRes, mTagRes] = await Promise.all([
         apiClient<ReportSummaryResponse>(`/api/reports/summary?days=${daysRange}${locationQuery}`),
         apiClient<LocationHealthScore[]>(`/api/leaderboard/locations${leaderboardLocationQuery}`),
-        apiClient<ReporterLeaderboard[]>(
-          `/api/leaderboard/reporters${leaderboardLocationQuery}`,
-        ).catch(() => []),
-        apiClient<LocationItem[]>("/api/locations").catch(() => []),
-        apiClient<TagItem[]>("/api/tags").catch(() => []),
+        apiClient<ReporterLeaderboard[]>(`/api/leaderboard/reporters${leaderboardLocationQuery}`),
+        apiClient<LocationItem[]>("/api/locations"),
+        apiClient<TagItem[]>("/api/tags"),
       ]);
+      if (requestId !== reportRequest.current) return;
       setSummaryData(summaryRes || null);
       setLocations(locationsRes || []);
       setReporters(repRes || []);
       setMasterLocations(mLocRes || []);
       setMasterTags(mTagRes || []);
     } catch (err) {
-      console.error("Failed to load report analytics data", err);
+      if (requestId === reportRequest.current) {
+        setLoadError(true);
+        console.error("Failed to load report analytics data", err);
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === reportRequest.current) setIsLoading(false);
     }
   };
 
@@ -416,6 +422,27 @@ export function ReportsPage() {
           </div>
         </PageContainer>
       </div>
+      {loadError && (
+        <PageContainer className="mt-4">
+          <div
+            role="alert"
+            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 rounded-2xl p-4"
+          >
+            <div>
+              <p className="text-sm font-bold">{t("app.load_error_title")}</p>
+              <p className="text-xs mt-1">{t("app.load_error_desc")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={loadData}
+              disabled={isLoading}
+              className="min-h-[40px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold disabled:opacity-50"
+            >
+              {t("common.retry")}
+            </button>
+          </div>
+        </PageContainer>
+      )}
 
       {/* Main Content Area */}
       <main className="pt-4">

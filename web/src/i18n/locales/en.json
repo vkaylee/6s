@@ -33,6 +33,9 @@
     "password": "Password",
     "full_name": "Full Name",
     "login_required": "Please login",
+    "access_denied_title": "Access denied",
+    "access_denied_message": "Your account does not have permission to access this page. Contact an administrator if you believe this is a mistake.",
+    "back_to_dashboard": "Back to dashboard",
     "login_failed": "Login failed",
     "setup_superadmin": "Setup Superadmin",
     "setup_success": "Superadmin account created successfully!",
@@ -135,7 +138,8 @@
     "before": "BEFORE",
     "after": "AFTER",
     "before_alt": "Before resolution",
-    "after_alt": "After resolution"
+    "after_alt": "After resolution",
+    "comparison_slider": "Before and after comparison slider"
   },
   "leaderboard": {
     "location_health": "Area Health",
@@ -255,9 +259,12 @@
     "tool_circle": "Circle",
     "tool_rect": "Rectangle",
     "tool_pen": "Draw",
-    "tool_move": "Move",
     "tool_undo": "Undo",
     "tool_clear": "Clear",
+    "color_red": "Red",
+    "color_yellow": "Yellow",
+    "color_blue": "Blue",
+    "color_green": "Green",
     "photo_annotate_btn": "Annotate",
     "photo_retake_btn": "Retake",
     "photo_remove_btn": "Remove",
@@ -610,7 +617,13 @@
     "sort_oldest": "Oldest",
     "empty_search_desc": "No issues matched the active filters or search terms",
     "empty_reset_btn": "Reset filters",
-    "empty_all_clear": "Great! No active 6S issues remaining in the plant."
+    "empty_all_clear": "Great! No active 6S issues remaining in the plant.",
+    "load_error_title": "Couldn't refresh dashboard data",
+    "load_error_desc": "Check your network connection or server, then retry.",
+    "master_data_error_title": "Couldn't load factory master data",
+    "master_data_error_desc": "Locations & tags may be incomplete. Try again to recover.",
+    "leaderboard_error_title": "Couldn't load leaderboard data",
+    "leaderboard_error_desc": "Scores shown below may be stale. Retry to refresh."
   },
   "reports": {
     "title": "Executive Meeting Reports",

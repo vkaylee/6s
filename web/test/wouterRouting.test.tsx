@@ -115,9 +115,10 @@ describe("Wouter UX & Routing Verification", () => {
           false,
           { statuses: [], categories: [], locationCodes: [] },
           false,
-          null,
-          null,
-          true,
+          null, // 18. selectedIssue
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          null, // 20. conflictItem
+          true, // 21. isSetupOpen
         ]}
       >
         <Router ssrPath="/">
@@ -440,8 +441,9 @@ describe("Wouter UX & Routing Verification", () => {
           { statuses: [], categories: [], locationCodes: [] }, // 16. advancedFilters
           false, // 17. isDrawerOpen
           reviewIssue, // 18. selectedIssue (opens IssueDetailModal)
-          conflictDraft, // 19. conflictItem (opens ConflictModal)
-          true, // 20. isSetupOpen (opens SetupSuperadminModal)
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          conflictDraft, // 20. conflictItem (opens ConflictModal)
+          true, // 21. isSetupOpen (opens SetupSuperadminModal)
         ]}
       >
         <Router ssrPath="/">

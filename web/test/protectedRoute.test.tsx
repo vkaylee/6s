@@ -87,7 +87,7 @@ describe("ProtectedRoute component", () => {
       </Router>,
     );
 
-    expect(html).toBe("");
+    expect(html).toContain("Không có quyền truy cập");
   });
 
   it("allows user with required capability and blocks user without it", () => {
@@ -119,7 +119,7 @@ describe("ProtectedRoute component", () => {
         </ProtectedRoute>
       </Router>,
     );
-    expect(blockedHtml).toBe("");
+    expect(blockedHtml).toContain("Không có quyền truy cập");
   });
 
   it("blocks ADMIN from SUPERADMIN-only routes", () => {
@@ -135,7 +135,7 @@ describe("ProtectedRoute component", () => {
         </ProtectedRoute>
       </Router>,
     );
-    expect(html).toBe("");
+    expect(html).toContain("Không có quyền truy cập");
   });
 
   it("fails closed on old session without capabilities even if role is ADMIN", () => {
@@ -158,6 +158,6 @@ describe("ProtectedRoute component", () => {
         </ProtectedRoute>
       </Router>,
     );
-    expect(html).toBe("");
+    expect(html).toContain("Không có quyền truy cập");
   });
 });

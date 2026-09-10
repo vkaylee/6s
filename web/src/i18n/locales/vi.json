@@ -33,6 +33,9 @@
     "password": "Mật khẩu",
     "full_name": "Họ và tên",
     "login_required": "Vui lòng đăng nhập",
+    "access_denied_title": "Không có quyền truy cập",
+    "access_denied_message": "Tài khoản của bạn không có quyền truy cập trang này. Vui lòng liên hệ quản trị viên nếu bạn cho rằng đây là nhầm lẫn.",
+    "back_to_dashboard": "Về trang chính",
     "login_failed": "Đăng nhập thất bại",
     "setup_superadmin": "Thiết lập Superadmin",
     "setup_success": "Khởi tạo tài khoản thành công!",
@@ -135,7 +138,8 @@
     "before": "TRƯỚC",
     "after": "SAU",
     "before_alt": "Trước khi khắc phục",
-    "after_alt": "Sau khi khắc phục"
+    "after_alt": "Sau khi khắc phục",
+    "comparison_slider": "Thanh trượt so sánh trước và sau"
   },
   "leaderboard": {
     "location_health": "Sức khỏe khu vực",
@@ -255,9 +259,12 @@
     "tool_circle": "Khoanh tròn",
     "tool_rect": "Khung chữ nhật",
     "tool_pen": "Vẽ tự do",
-    "tool_move": "Di chuyển",
     "tool_undo": "Hoàn tác",
     "tool_clear": "Xóa nét",
+    "color_red": "Đỏ",
+    "color_yellow": "Vàng",
+    "color_blue": "Xanh dương",
+    "color_green": "Xanh lá",
     "photo_annotate_btn": "Khoanh lỗi",
     "photo_retake_btn": "Chụp lại",
     "photo_remove_btn": "Xóa",
@@ -610,7 +617,13 @@
     "sort_oldest": "Cũ nhất",
     "empty_search_desc": "Không tìm thấy kết quả nào phù hợp với bộ lọc hoặc từ khóa hiện tại",
     "empty_reset_btn": "Đặt lại bộ lọc",
-    "empty_all_clear": "Hiện tại xưởng không có vấn đề 6S nào tồn đọng!"
+    "empty_all_clear": "Hiện tại xưởng không có vấn đề 6S nào tồn đọng!",
+    "load_error_title": "Không thể làm mới dữ liệu bảng điều khiển",
+    "load_error_desc": "Vui lòng kiểm tra kết nối mạng hoặc máy chủ, sau đó thử lại.",
+    "master_data_error_title": "Không thể tải dữ liệu danh mục xưởng",
+    "master_data_error_desc": "Dữ liệu vị trí và thẻ có thể chưa đầy đủ. Thử lại để khôi phục.",
+    "leaderboard_error_title": "Không thể tải dữ liệu bảng xếp hạng",
+    "leaderboard_error_desc": "Điểm số hiển thị có thể chưa cập nhật. Thử lại để làm mới."
   },
   "reports": {
     "title": "Báo cáo Họp Ban Giám Đốc",

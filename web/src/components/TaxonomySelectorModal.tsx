@@ -1,5 +1,5 @@
 import { Check, Search, Tag, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import {
   IssueCategory,
@@ -64,6 +64,7 @@ export function TaxonomySelectorModal({
   });
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Reset/sync tab with currentCategory whenever modal opens
   useEffect(() => {
@@ -100,16 +101,44 @@ export function TaxonomySelectorModal({
     });
   }, [tags, isSearching, activeTab, queryNorm, tagQuery]);
 
-  // Handle Escape key to close modal
+  // Escape closes; Tab cycles inside the dialog and focus returns to the opener.
   useEffect(() => {
     if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    focusables()[0]?.focus();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !dialog.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !dialog.contains(active))) {
+        e.preventDefault();
+        first.focus();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -154,20 +183,27 @@ export function TaxonomySelectorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in sm:p-4">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="taxonomy-modal-title"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in sm:p-4"
+    >
       {/* Clickable Backdrop overlay button for a11y & instant dismiss */}
       <button
         type="button"
-        onClick={onClose}
-        aria-label="Dismiss backdrop"
-        tabIndex={-1}
+        aria-label={t("common.close")}
         className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-none"
       />
       <div className="w-full sm:max-w-2xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <h2
+              id="taxonomy-modal-title"
+              className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2"
+            >
               <Tag className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>{t("issue.tags_modal_title")}</span>
             </h2>
@@ -178,10 +214,10 @@ export function TaxonomySelectorModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 flex items-center justify-center transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
         {/* Search & Category Filter Bar */}
@@ -200,9 +236,10 @@ export function TaxonomySelectorModal({
               <button
                 type="button"
                 onClick={() => setTagQuery("")}
+                aria-label={t("common.close")}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-1"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -212,6 +249,7 @@ export function TaxonomySelectorModal({
             <button
               type="button"
               onClick={() => setActiveTab("ALL")}
+              aria-pressed={activeTab === "ALL"}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors min-h-[34px] ${
                 activeTab === "ALL"
                   ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm"
@@ -227,6 +265,7 @@ export function TaxonomySelectorModal({
                   key={s.key}
                   type="button"
                   onClick={() => setActiveTab(s.key)}
+                  aria-pressed={isTabActive}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all min-h-[34px] border ${
                     isTabActive
                       ? s.isSafety

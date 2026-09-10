@@ -267,12 +267,12 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 
 	r.Route("/api/reports", func(rr chi.Router) {
 		rr.Use(authMw.Authenticate)
-		rr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+		rr.Use(auth.RequirePermission(auth.PermissionReportsView))
 		rr.Get("/summary", reportHandler.GetSummary)
 	})
 
-	// Allow CSV export under /api/issues/export
-	r.With(authMw.Authenticate, auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader)).Get("/api/issues/export", reportHandler.ExportCSV)
+	// Reports and exports require the reports capability.
+	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionReportsView)).Get("/api/issues/export", reportHandler.ExportCSV)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
@@ -280,7 +280,7 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 	scoringHandler := scoring.NewHandler(scoringSvc)
 	r.Route("/api/leaderboard", func(lbr chi.Router) {
 		lbr.Use(authMw.Authenticate)
-		lbr.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSafetyOfficer, auth.RoleLineLeader))
+		lbr.Use(auth.RequirePermission(auth.PermissionReportsView))
 		lbr.Get("/locations", scoringHandler.GetLocationLeaderboard)
 		lbr.Get("/reporters", scoringHandler.GetReporterLeaderboard)
 		lbr.Get("/score-logs", scoringHandler.GetTargetScoreLogs)
