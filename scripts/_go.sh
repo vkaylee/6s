@@ -11,6 +11,8 @@ IMAGE_NAME="6s-go:1.23"
 
 exec "$CONTAINER_RUNTIME" run --rm -i \
     -v "$PWD":/workspace:Z \
+    -v 6s-test-go-module-cache:/go/pkg/mod \
+    -v 6s-test-go-build-cache:/root/.cache/go-build \
     -w /workspace \
     -e CGO_ENABLED=0 \
     "$IMAGE_NAME" go "$@"
