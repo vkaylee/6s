@@ -85,7 +85,8 @@ func rowValuesForQuery(query string) []driver.Value {
 	switch {
 	case strings.Contains(query, "ListIssuesFiltered"):
 		return []driver.Value{
-			int64(1), "uuid", int32(1), int64(1), nil, "1S", "CONDITION", "LOC1", nil, nil,
+			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
+			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil,
 			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
 			int64(1), "LOC1", "creator", "Creator A", nil, nil,
 		}
@@ -151,9 +152,12 @@ func rowValuesForQuery(query string) []driver.Value {
 	case strings.Contains(query, "createOutboxEntry"):
 		return []driver.Value{int64(1), int64(1), "EVT", "WXPUSHER", []byte(`{}`), "PENDING", int32(0), int32(3), nil, now, now, nil}
 	default:
-		// Issue default
+		// Issue default: ID, client UUID, version, site, creator, resolver,
+		// assignee, team, category, cause, visibility, location, description,
+		// reject reason, photos, score, status, timestamps.
 		return []driver.Value{
-			int64(1), "uuid", int32(1), int64(1), nil, "1S", "CONDITION", "LOC1", nil, nil,
+			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
+			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil,
 			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
 		}
 	}

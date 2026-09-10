@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"6s/internal/auth"
 	"6s/internal/db"
 )
 
@@ -182,9 +183,14 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 	}, nil
 }
 
-// GetExportData fetches at most maxExportRows issues with associated tag codes.
-// The SQL query applies the same limit; the service cap protects alternate stores.
+// GetExportData fetches at most maxExportRows issues visible to the authenticated user.
+// The SQL query applies the same site and visibility policy as issue listing; the service cap protects alternate stores.
 func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locationCode string) ([]db.ListIssuesForExportRow, error) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok || user.ID <= 0 || user.SiteID <= 0 {
+		return nil, fmt.Errorf("authenticated user with site scope required for export")
+	}
+
 	var statusParam, catParam, locParam sql.NullString
 	if status != "" {
 		statusParam = sql.NullString{String: status, Valid: true}
@@ -197,9 +203,13 @@ func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locat
 	}
 
 	rows, err := s.store.ListIssuesForExport(ctx, db.ListIssuesForExportParams{
-		Status:       statusParam,
-		Category:     catParam,
-		LocationCode: locParam,
+		Status:               statusParam,
+		Category:             catParam,
+		LocationCode:         locParam,
+		SiteID:               user.SiteID,
+		UserID:               user.ID,
+		Role:                 user.Role,
+		AssignedLocationCode: user.AssignedLocationCode,
 	})
 	if err != nil {
 		return nil, err

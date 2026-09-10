@@ -12,7 +12,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"mime/multipart"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +33,10 @@ type Response struct {
 	ID                    int64     `json:"id"`
 	ClientUUID            string    `json:"client_uuid"`
 	Version               int32     `json:"version"`
+	SiteID                int64     `json:"site_id"`
+	AssigneeID            *int64    `json:"assignee_id,omitempty"`
+	AssignedTeamID        *int64    `json:"assigned_team_id,omitempty"`
+	VisibilityClass       string    `json:"visibility_class"`
 	Category              string    `json:"category"`
 	CauseType             string    `json:"cause_type"`
 	LocationCode          string    `json:"location_code"`
@@ -109,6 +115,15 @@ func (s *ServiceImpl) SubscribeEvents() (<-chan Event, func()) {
 	return s.hub.Subscribe()
 }
 
+// OpenMedia authorizes issue visibility before opening its controlled attachment.
+func (s *ServiceImpl) OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error) {
+	issue, err := s.store.GetIssueByID(ctx, id)
+	if err != nil || !canViewIssue(ctx, issue) {
+		return nil, ErrIssueNotFound
+	}
+	return s.storageManager.OpenAttachment(folder, basename)
+}
+
 // broadcast emits an event to all active SSE subscribers.
 func (s *ServiceImpl) broadcast(evt Event) {
 	if s.hub != nil {
@@ -147,14 +162,10 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 	}
 
 	created, createErr := s.store.CreateIssue(ctx, db.CreateIssueParams{
-		ClientUuid:   req.ClientUUID,
-		CreatorID:    currentUser.ID,
-		Category:     req.Category,
-		CauseType:    NormalizeCauseType(req.CauseType, req.Category),
-		LocationCode: req.LocationCode,
-		Description:  descVal,
-		PhotoBefore:  beforeBasename,
-		PhotoDetail:  detailBasename,
+		ClientUuid: req.ClientUUID, SiteID: currentUser.SiteID, CreatorID: currentUser.ID,
+		Category: req.Category, CauseType: NormalizeCauseType(req.CauseType, req.Category),
+		VisibilityClass: visibilityForCategory(req.Category), LocationCode: req.LocationCode,
+		Description: descVal, PhotoBefore: beforeBasename, PhotoDetail: detailBasename,
 	})
 	if createErr != nil {
 		return nil, false, fmt.Errorf("failed to create issue: %w", createErr)
@@ -640,11 +651,30 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 	}
 	return res, err
 }
+func canViewIssue(ctx context.Context, issue db.Issue) bool {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		return true
+	}
+	if issue.SiteID != 0 && user.SiteID != 0 && issue.SiteID != user.SiteID {
+		return false
+	}
+	if issue.VisibilityClass == "SITE_PUBLIC" {
+		return true
+	}
+	if issue.CreatorID == user.ID || (issue.AssigneeID.Valid && issue.AssigneeID.Int64 == user.ID) {
+		return true
+	}
+	if user.Role == auth.RoleSafetyOfficer.String() || user.Role == auth.RoleAdmin.String() || user.Role == auth.RoleSuperadmin.String() {
+		return true
+	}
+	return user.Role == auth.RoleLineLeader.String() && user.AssignedLocationCode.Valid && user.AssignedLocationCode.String == issue.LocationCode
+}
 
-// GetIssueByID retrieves detailed issue response with tags and creator.
+// GetIssueByID retrieves detailed issue response with the same visibility policy as list.
 func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, id)
-	if err != nil {
+	if err != nil || !canViewIssue(ctx, issue) {
 		return nil, ErrIssueNotFound
 	}
 
@@ -652,23 +682,16 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 	if locErr != nil {
 		log.Printf("location not found: %v", locErr)
 	}
-
 	creator, crErr := s.store.GetUserByID(ctx, issue.CreatorID)
 	if crErr != nil {
 		log.Printf("creator user not found: %v", crErr)
 	}
-
 	var resolver *UserItem
 	if issue.ResolverID.Valid {
 		if resUser, resErr := s.store.GetUserByID(ctx, issue.ResolverID.Int64); resErr == nil {
-			resolver = &UserItem{
-				ID:       resUser.ID,
-				Username: resUser.Username,
-				FullName: resUser.FullName,
-			}
+			resolver = &UserItem{ID: resUser.ID, Username: resUser.Username, FullName: resUser.FullName}
 		}
 	}
-
 	tagRows, tagErr := s.store.ListTagsForIssue(ctx, issue.ID)
 	if tagErr != nil {
 		log.Printf("list tags for issue failed: %v", tagErr)
@@ -677,15 +700,11 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 	for _, t := range tagRows {
 		tags = append(tags, t.Code)
 	}
-
 	resp := toIssueResponse(issue, loc.NameVi, tags, creator, resolver)
 	if issue.Description.Valid && strings.TrimSpace(issue.Description.String) != "" {
 		targetLang := ai.NormalizeLangCode(i18n.FromContext(ctx))
 		h := ai.ComputeContentHash(issue.Description.String)
-		if cachedRows, cErr := s.store.GetTranslationCacheBatch(ctx, db.GetTranslationCacheBatchParams{
-			ContentHashes: []string{h},
-			TargetLang:    targetLang,
-		}); cErr == nil && len(cachedRows) > 0 && cachedRows[0].TranslatedText != "" {
+		if cachedRows, cErr := s.store.GetTranslationCacheBatch(ctx, db.GetTranslationCacheBatchParams{ContentHashes: []string{h}, TargetLang: targetLang}); cErr == nil && len(cachedRows) > 0 && cachedRows[0].TranslatedText != "" {
 			resp.TranslatedDescription = &cachedRows[0].TranslatedText
 		}
 	}
@@ -717,23 +736,23 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 		overdueParam = sql.NullBool{Bool: true, Valid: true}
 	}
 
+	if limit > math.MaxInt32 || offset > math.MaxInt32 {
+		return nil, 0, fmt.Errorf("pagination exceeds database limit")
+	}
+	currentUser := userFromContext(ctx)
 	rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
-		Statuses:      statuses,
-		Categories:    categories,
-		LocationCodes: locationCodes,
-		Overdue:       overdueParam,
-		Limit:         int32(limit),  //nolint:gosec
-		Offset:        int32(offset), //nolint:gosec
+		Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdueParam,
+		SiteID: currentUser.SiteID, UserID: currentUser.ID, Role: currentUser.Role,
+		AssignedLocationCode: currentUser.AssignedLocationCode, Limit: int32(limit), Offset: int32(offset), //nolint:gosec // bounded above
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list issues failed: %w", err)
 	}
 
 	total, err := s.store.CountIssuesFiltered(ctx, db.CountIssuesFilteredParams{
-		Statuses:      statuses,
-		Categories:    categories,
-		LocationCodes: locationCodes,
-		Overdue:       overdueParam,
+		Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdueParam,
+		SiteID: userFromContext(ctx).SiteID, UserID: userFromContext(ctx).ID, Role: userFromContext(ctx).Role,
+		AssignedLocationCode: userFromContext(ctx).AssignedLocationCode,
 	})
 	if err != nil {
 		total = int64(len(rows))
@@ -805,24 +824,28 @@ func (s *ServiceImpl) loadTranslationsForRows(ctx context.Context, rows []db.Lis
 
 func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *string) Response {
 	issue := db.Issue{
-		ID:           r.ID,
-		ClientUuid:   r.ClientUuid,
-		Version:      r.Version,
-		CreatorID:    r.CreatorID,
-		ResolverID:   r.ResolverID,
-		Category:     r.Category,
-		CauseType:    r.CauseType,
-		LocationCode: r.LocationCode,
-		Description:  r.Description,
-		RejectReason: r.RejectReason,
-		PhotoBefore:  r.PhotoBefore,
-		PhotoDetail:  r.PhotoDetail,
-		PhotoAfter:   r.PhotoAfter,
-		ScoreRating:  r.ScoreRating,
-		Status:       r.Status,
-		CreatedAt:    r.CreatedAt,
-		ResolvedAt:   r.ResolvedAt,
-		ClosedAt:     r.ClosedAt,
+		ID:              r.ID,
+		ClientUuid:      r.ClientUuid,
+		Version:         r.Version,
+		SiteID:          r.SiteID,
+		CreatorID:       r.CreatorID,
+		ResolverID:      r.ResolverID,
+		AssigneeID:      r.AssigneeID,
+		AssignedTeamID:  r.AssignedTeamID,
+		Category:        r.Category,
+		CauseType:       r.CauseType,
+		VisibilityClass: r.VisibilityClass,
+		LocationCode:    r.LocationCode,
+		Description:     r.Description,
+		RejectReason:    r.RejectReason,
+		PhotoBefore:     r.PhotoBefore,
+		PhotoDetail:     r.PhotoDetail,
+		PhotoAfter:      r.PhotoAfter,
+		ScoreRating:     r.ScoreRating,
+		Status:          r.Status,
+		CreatedAt:       r.CreatedAt,
+		ResolvedAt:      r.ResolvedAt,
+		ClosedAt:        r.ClosedAt,
 	}
 	creator := db.User{
 		ID:       r.CreatorID,
@@ -845,22 +868,19 @@ func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *str
 
 func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.User, resolver *UserItem) *Response {
 	resp := &Response{
-		ID:           issue.ID,
-		ClientUUID:   issue.ClientUuid,
-		Version:      issue.Version,
-		Category:     issue.Category,
-		CauseType:    issue.CauseType,
-		LocationCode: issue.LocationCode,
-		LocationName: locName,
-		Tags:         tags,
-		Status:       issue.Status,
-		Creator: UserItem{
-			ID:       creator.ID,
-			Username: creator.Username,
-			FullName: creator.FullName,
-		},
-		Resolver:  resolver,
-		CreatedAt: issue.CreatedAt.Format(time.RFC3339),
+		ID: issue.ID, ClientUUID: issue.ClientUuid, Version: issue.Version, SiteID: issue.SiteID,
+		Category: issue.Category, CauseType: issue.CauseType, LocationCode: issue.LocationCode,
+		LocationName: locName, Tags: tags, Status: issue.Status, VisibilityClass: issue.VisibilityClass,
+		Creator:  UserItem{ID: creator.ID, Username: creator.Username, FullName: creator.FullName},
+		Resolver: resolver, CreatedAt: issue.CreatedAt.Format(time.RFC3339),
+	}
+	if issue.AssigneeID.Valid {
+		v := issue.AssigneeID.Int64
+		resp.AssigneeID = &v
+	}
+	if issue.AssignedTeamID.Valid {
+		v := issue.AssignedTeamID.Int64
+		resp.AssignedTeamID = &v
 	}
 
 	if issue.Description.Valid {
@@ -870,11 +890,11 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 		resp.RejectReason = &issue.RejectReason.String
 	}
 	if issue.PhotoDetail.Valid && issue.PhotoDetail.String != "" {
-		pDetail := formatPhotoURL("detail", issue.PhotoDetail.String)
+		pDetail := formatPhotoURL(issue.ID, "detail", issue.PhotoDetail.String)
 		resp.PhotoDetail = &pDetail
 	}
 	if issue.PhotoAfter.Valid && issue.PhotoAfter.String != "" {
-		pAfter := formatPhotoURL("after", issue.PhotoAfter.String)
+		pAfter := formatPhotoURL(issue.ID, "after", issue.PhotoAfter.String)
 		resp.PhotoAfter = &pAfter
 	}
 	if issue.ScoreRating.Valid {
@@ -888,21 +908,35 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 		tStr := issue.ClosedAt.Time.Format(time.RFC3339)
 		resp.ClosedAt = &tStr
 	}
-	resp.PhotoBefore = formatPhotoURL("before", issue.PhotoBefore)
+	resp.PhotoBefore = formatPhotoURL(issue.ID, "before", issue.PhotoBefore)
 
 	return resp
 }
 
-func formatPhotoURL(folder, filename string) string {
+func formatPhotoURL(issueID int64, folder, filename string) string {
 	if filename == "" {
 		return ""
 	}
 	if strings.HasPrefix(filename, "/") || strings.HasPrefix(filename, "data:") {
 		return filename
 	}
-	return fmt.Sprintf("/uploads/%s/%s", folder, filename)
+	return fmt.Sprintf("/api/issues/%d/media/%s/%s", issueID, folder, filename)
 }
 
 func isValidCategory(c string) bool {
 	return Category(c).IsValid()
+}
+
+func userFromContext(ctx context.Context) db.User {
+	if user, ok := auth.GetUserFromContext(ctx); ok {
+		return user
+	}
+	return db.User{}
+}
+
+func visibilityForCategory(category string) string {
+	if category == Category6S.String() {
+		return "SAFETY_RESTRICTED"
+	}
+	return "SITE_PUBLIC"
 }

@@ -11,15 +11,8 @@ import (
 	"6s/web"
 )
 
-// registerStaticRoutes sets up SPA fallback and static uploads serving.
-func registerStaticRoutes(r *chi.Mux, storageDir string) {
-	// Serve static uploads
-	if storageDir != "" {
-		fsUploads := http.StripPrefix("/uploads/", http.FileServer(http.Dir(storageDir)))
-		r.Get("/uploads/*", func(w http.ResponseWriter, req *http.Request) {
-			fsUploads.ServeHTTP(w, req)
-		})
-	}
+// registerStaticRoutes sets up SPA fallback and certificate serving.
+func registerStaticRoutes(r *chi.Mux, _ string) {
 
 	// Serve Root CA certificate if exists (SPEC.md Section 10.1)
 	r.Get("/cert/ca.crt", func(w http.ResponseWriter, req *http.Request) {

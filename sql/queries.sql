@@ -266,9 +266,9 @@ WHERE id = $1 LIMIT 1;
 
 -- name: CreateIssue :one
 INSERT INTO issues (
-    client_uuid, version, creator_id, category, cause_type, location_code, description, photo_before, photo_detail, status
+    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code, description, photo_before, photo_detail, status
 ) VALUES (
-    $1, 1, $2, $3, $4, $5, $6, $7, $8, 'OPEN'
+    $1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'OPEN'
 )
 RETURNING *;
 
@@ -317,17 +317,21 @@ WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.statu
   AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR i.category = ANY(sqlc.narg('categories')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
   AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND (i.location_code = sqlc.narg('assigned_location_code')::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint))))
 ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountIssuesFiltered :one
-SELECT COUNT(*) FROM issues
-WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR status = ANY(sqlc.narg('statuses')::varchar[]))
-  AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR category = ANY(sqlc.narg('categories')::varchar[]))
-  AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR location_code = ANY(sqlc.narg('location_codes')::varchar[]))
-  AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'));
+SELECT COUNT(*) FROM issues i
+WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.status = ANY(sqlc.narg('statuses')::varchar[]))
+  AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR i.category = ANY(sqlc.narg('categories')::varchar[]))
+  AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
+  AND (sqlc.narg('overdue')::boolean IS NULL OR sqlc.narg('overdue')::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND (i.location_code = sqlc.narg('assigned_location_code')::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint))));
 
 -- name: ResolveIssue :one
 UPDATE issues
@@ -660,7 +664,11 @@ ORDER BY violation_count DESC, t.code ASC LIMIT $1;
 -- name: ListIssuesForExport :many
 SELECT i.id, i.client_uuid, i.category, i.location_code, loc.name_vi AS location_name_vi, loc.name_zh AS location_name_zh, loc.name_en AS location_name_en, i.status, i.description, i.reject_reason, u.username AS creator_username, u.full_name AS creator_full_name, res.username AS resolver_username, res.full_name AS resolver_full_name, i.score_rating, i.created_at, i.resolved_at, i.closed_at, COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
 FROM issues i JOIN locations loc ON i.location_code = loc.code JOIN users u ON i.creator_id = u.id LEFT JOIN users res ON i.resolver_id = res.id LEFT JOIN issue_tags it ON it.issue_id = i.id
-WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status')) AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category')) AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
+  AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category'))
+  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
+  AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND (i.location_code = sqlc.narg('assigned_location_code')::varchar OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint))))
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000;
 
 

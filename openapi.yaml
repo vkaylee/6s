@@ -1672,14 +1672,44 @@ paths:
   /issues/export:
     get:
       operationId: exportIssuesCsv
-      summary: Xuất CSV danh sách issue
+      summary: Xuất CSV danh sách issue trong phạm vi site và visibility của người dùng
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: location_code
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         '200':
-          description: CSV file
+          description: CSV file containing only issues visible to the authenticated user
           content:
             text/csv:
               schema:
                 type: string
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Không có quyền xuất dữ liệu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /issues/{id}/score-logs:
     get:

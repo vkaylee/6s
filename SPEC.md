@@ -54,6 +54,26 @@ Hệ thống webapp mobile-first hỗ trợ nhân viên nhà xưởng ghi nhận
 - **Mã hóa dữ liệu nhạy cảm at-rest**: Các cột credential (`ad_configs.bind_password`, `notification_configs.wxpusher_app_token`, `notification_configs.lan_webhook_url`) phải được mã hóa bằng thuật toán `AES-256-GCM` trước khi lưu vào PostgreSQL, sử dụng master key đọc từ biến môi trường `APP_ENCRYPTION_KEY` (32 bytes base64). Tuyệt đối không lưu plaintext credential trong database.
 ### 3.3. Chi tiết Schema DDL
 ```sql
+-- Tenant/site boundary. A deployment may host multiple factories or plants.
+CREATE TABLE IF NOT EXISTS sites (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Bảng đội/bộ phận xử lý; assignment dùng FK, không dùng text tự do.
+CREATE TABLE IF NOT EXISTS teams (
+    id BIGSERIAL PRIMARY KEY,
+    site_id BIGINT NOT NULL REFERENCES sites(id),
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (site_id, code)
+);
+
 -- Bảng danh mục vị trí chuẩn hóa (Master Data - Chống phân mảnh dữ liệu)
 CREATE TABLE IF NOT EXISTS locations (
     id BIGSERIAL PRIMARY KEY,
@@ -78,7 +98,8 @@ CREATE TABLE IF NOT EXISTS users (
     badge_code VARCHAR(100) UNIQUE,           -- Mã thẻ QR nhân viên quét đăng nhập 1 chạm
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255),                       -- Đồng bộ từ mail attribute của AD
-    role VARCHAR(30) NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','LINE_LEADER','SAFETY_OFFICER','ADMIN')),
+    role VARCHAR(30) NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','LINE_LEADER','SAFETY_OFFICER','ADMIN','SUPERADMIN')),
+    site_id BIGINT NOT NULL REFERENCES sites(id),
     assigned_location_code VARCHAR(50) REFERENCES locations(code), -- Khu vực quản lý chính (cho LINE_LEADER)
     wx_uid VARCHAR(100),                      -- UID nhận tin WxPusher
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -115,21 +136,36 @@ CREATE TABLE IF NOT EXISTS issues (
     id BIGSERIAL PRIMARY KEY,
     client_uuid UUID UNIQUE NOT NULL,        -- UUID v4 sinh tại client chống duplicate khi sync
     version INT NOT NULL DEFAULT 1,          -- Optimistic locking chống xung đột sync offline
+    site_id BIGINT NOT NULL REFERENCES sites(id), -- Tenant/site boundary; mọi truy vấn phải scope theo site
     creator_id BIGINT NOT NULL REFERENCES users(id),
     resolver_id BIGINT REFERENCES users(id), -- Người upload ảnh khắc phục
+    assignee_id BIGINT REFERENCES users(id), -- Cá nhân đang chịu trách nhiệm xử lý
+    assigned_team_id BIGINT REFERENCES teams(id), -- Đội/bộ phận chịu trách nhiệm chính
     category VARCHAR(10) NOT NULL CHECK (category IN ('1S','2S','3S','4S','5S','6S')),
+    visibility_class VARCHAR(30) NOT NULL DEFAULT 'SITE_PUBLIC' CHECK (visibility_class IN ('SITE_PUBLIC','SAFETY_RESTRICTED')),
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code), -- Chuẩn hóa theo Master Data
     description TEXT,
     reject_reason TEXT,                      -- Lý do từ chối duyệt (khi REOPEN) hoặc lý do bác bỏ (khi INVALID)
-    photo_before VARCHAR(255) NOT NULL,      -- CHỈ basename '{uuid}_wide.{ext}' — không lưu path (đổi -data-dir không hỏng record)
+    photo_before VARCHAR(255) NOT NULL,      -- CHỈ basename '{uuid}_wide.{ext}' — không lưu path
     photo_detail VARCHAR(255),               -- CHỈ basename '{uuid}_detail.{ext}'
     photo_after VARCHAR(255),                -- CHỈ basename '{uuid}.{ext}'
     score_rating SMALLINT DEFAULT 3 CHECK (score_rating BETWEEN 1 AND 5), -- Đánh giá chất lượng khắc phục (1-5 sao khi đóng)
     status VARCHAR(30) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','PENDING_REVIEW','CLOSED','INVALID')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    resolved_at TIMESTAMPTZ,                 -- Thời điểm upload photo_after
-    closed_at TIMESTAMPTZ                    -- Thời điểm duyệt đóng issue
+    resolved_at TIMESTAMPTZ,
+    closed_at TIMESTAMPTZ
 );
+
+-- Đội/bộ phận xử lý; không dùng text tự do để tránh phân mảnh assignment.
+CREATE TABLE IF NOT EXISTS teams (
+    id BIGSERIAL PRIMARY KEY,
+    site_id BIGINT NOT NULL REFERENCES sites(id),
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (site_id, code)
+);
+***
 
 -- Bảng liên kết tags (Normalized Junction Table - Tối ưu truy vấn lọc tags, tránh LIKE scan)
 CREATE TABLE IF NOT EXISTS issue_tags (
@@ -303,51 +339,42 @@ Màn hình chính hiển thị 3 chỉ số nhanh giúp cấp quản lý nhận 
 
 ### 4.6. Chấm điểm sức khỏe 6S & Điểm cá nhân Thợ săn 6S (Leaderboards)
 - **A. Điểm sức khỏe Chuyền/Khu vực (Tập thể - Health Score)**:
-  - Tự động tính toán theo thời gian thực (Zero-input), mỗi khu vực khởi đầu tuần với 100 điểm gốc (`base_weekly_score`).
-  - Trừ điểm lỗi thường (`OPEN` từ 1S - 5S): theo `penalty_normal` (mặc định `-2`).
-  - Trừ điểm lỗi an toàn (`OPEN` là 6S): theo `penalty_safety` (mặc định `-10`).
-  - Trừ điểm tồn đọng quá hạn (`OPEN` > 48h): theo `penalty_overdue` (mặc định `-5/ngày`). Backend Go chạy goroutine ticker mỗi 00:00 hàng ngày (theo giờ địa phương nhà máy), quét toàn bộ issue `OPEN` quá 48h và insert tự động 1 bản ghi phạt vào `score_logs` kèm `penalty_date = 'YYYY-MM-DD'`. Nhờ ràng buộc `uq_score_logs_overdue`, tác vụ quét bù hoàn toàn idempotent, không sợ phạt trùng lặp.
-  - Phạt khắc phục đối phó bị Reopen: theo `penalty_reopen` (mặc định `-2`).
-  - Thưởng điểm Kaizen xuất sắc khi đóng issue (`score_rating = 5` sao): theo `bonus_kaizen` (mặc định `+5`).
-  - **Điều kiện nhận điểm**: Issue bắt buộc phải qua bước duyệt đạt (`CLOSED`). Báo lỗi lúc `OPEN` chưa được cộng điểm để ngăn chặn spam.
-  - Khi issue chuyển sang `CLOSED`:
-    - Báo lỗi thường (1S - 5S) được duyệt: Creator nhận `+2 điểm` (`reward_reporter_normal`).
-    - Báo lỗi an toàn nguy hiểm (6S) được duyệt: Creator nhận `+5 điểm` (`reward_reporter_safety`).
-  - Khi issue bị đánh dấu `INVALID` (Báo sai / Ảnh rác / Trục lợi điểm):
-    - Creator bị phạt `-5 điểm` (`penalty_reporter_invalid`).
-- **B. Bảng xếp hạng trên UI**:
-  - Tab 1: "Sức khỏe Khu vực" (Xếp từ thấp đến cao để giải quyết điểm nóng).
-  - Tab 2: "Top Thợ săn 6S" (Vinh danh cá nhân phát hiện nhiều vấn đề chuẩn xác nhất).
-- **C. Sổ cái bất biến (Score Ledger) & Cơ chế Hồi tố điểm (Phase 2 - Scope Mở Rộng)**:
-  - *Lưu ý YAGNI: Phase 1 tập trung tính điểm tuần theo thời gian thực (snapshot lúc phát sinh). Tính năng Hồi tố (Retroactive Recalculation) thuộc Phase 2.*
-  - Mọi biến động điểm được ghi nhận vào `score_logs` theo snapshot giá trị quy tắc tại thời điểm phát sinh.
-  - Khi thay đổi cấu hình điểm: Mặc định chỉ áp dụng cho tương lai, không ảnh hưởng dữ liệu lịch sử tuần/tháng trước.
-  - Hồi tố theo chỉ đạo (`apply_from`): KHÔNG `UPDATE` ngược vào entry đã phát hành (giữ đúng tính bất biến của sổ cái). Hệ thống quét `score_logs` từ `apply_from`, tính chênh lệch điểm cũ so với quy tắc mới, rồi chèn **entry điều chỉnh delta** (`rule_key = 'retro_adjust'`, points = delta, target giữ nguyên) kèm ghi vết `system_audit_logs` (`target_table = 'scoring_rules'`). Tổng điểm = `SUM(points)` tự hấp thụ delta, không cần công thức ngoại lệ.
-
 ## 5. VÒNG ĐỜI VÀ MA TRẬN PHÂN QUYỀN ISSUE
 
 ### 5.1. Vòng đời trạng thái
 1. `OPEN`: Issue mới tạo, chờ xử lý.
 2. `PENDING_REVIEW`: Đã có người upload `photo_after`.
-3. `CLOSED`: Creator hoặc Admin xác nhận khắc phục đạt yêu cầu -> Kích hoạt cộng điểm cá nhân cho Creator.
-4. `OPEN` (Reopen): Creator hoặc Admin từ chối khắc phục, yêu cầu làm lại.
-5. `INVALID`: Admin bác bỏ issue (báo sai, spam) -> Trừ điểm phạt Creator.
+3. `CLOSED`: Người có quyền duyệt xác nhận khắc phục đạt yêu cầu.
+4. `OPEN` (Reopen): Từ chối khắc phục, yêu cầu làm lại.
+5. `INVALID`: Người có quyền kiểm duyệt bác bỏ issue; ghi audit và áp dụng điểm phạt.
 
-### 5.2. Ma trận quyền theo vai trò (Enterprise RBAC Matrix)
+### 5.2. Enterprise data governance
+- **Site isolation:** Mọi user, team, location, issue thuộc một `site_id`. Backend luôn áp dụng site scope; không tin `site_id` từ client.
+- **Visibility class:** `SITE_PUBLIC` áp dụng cho issue 1S-5S; user trong cùng site được xem để tránh báo trùng và hỗ trợ Gemba. `SAFETY_RESTRICTED` áp dụng cho 6S hoặc issue được đánh dấu nhạy cảm.
+- **Restricted readers:** `SAFETY_OFFICER`, `ADMIN`, `SUPERADMIN`; `LINE_LEADER` chỉ khi issue thuộc location/team mình quản lý; creator, assignee, team member được xem issue của mình. Người ngoài phạm vi nhận `404` để tránh lộ sự tồn tại.
+- **Action scope độc lập read scope:** Xem được không đồng nghĩa được sửa, nhận việc, upload ảnh, duyệt, reopen hoặc invalidate.
+- **Assignment:** `assigned_team_id` là đơn vị chịu trách nhiệm; `assignee_id` là cá nhân nhận xử lý. Assignment thay đổi phải ghi audit; không xóa lịch sử.
+- **Default workspace:** UI mở tab `Cần tôi xử lý`; tab `Hiện trường chung` cho issue `SITE_PUBLIC`; tab `An toàn hạn chế` chỉ hiện khi user đủ scope.
 
-| Hành động | USER (Công nhân) | LINE_LEADER (Trưởng chuyền) | SAFETY_OFFICER (An toàn) | ADMIN (Quản trị) |
+### 5.3. Ma trận quyền theo vai trò
+| Hành động | USER | LINE_LEADER | SAFETY_OFFICER | ADMIN/SUPERADMIN |
 |---|:---:|:---:|:---:|:---:|
-| Tạo issue (Offline/Online) | Cho phép | Cho phép | Cho phép | Cho phép |
-| Xem danh sách / chi tiết | Toàn bộ | Toàn bộ | Toàn bộ | Toàn bộ |
-| Upload ảnh sau sửa (`photo_after`) | Cho phép | Cho phép | Cho phép | Cho phép |
-| Đóng issue thường (1S-5S) | Creator chỉ đóng issue của mình | Duyệt issue thuộc chuyền mình hoặc Creator | Duyệt toàn bộ | Duyệt toàn bộ |
-| Đóng issue an toàn (6S) | Chặn (403) | Chặn (403) | **Duyệt toàn bộ** | **Duyệt toàn bộ** |
-| Mở lại issue (`REOPEN`) | Creator | Line Leader chuyền hoặc Creator | Toàn bộ | Toàn bộ |
-| Bác bỏ issue (`INVALID`) | Chặn (403) | Chặn (403) | Cho phép | Cho phép |
-| Cấu hình điểm & Hồi tố | Chặn (403) | Chặn (403) | Chặn (403) | **Toàn quyền** |
-| Cấu hình Active Directory / LDAP | Chặn (403) | Chặn (403) | Chặn (403) | **Toàn quyền** |
-| Quản lý permission matrix | Chặn (403) | Chặn (403) | Chặn (403) | Theo permission `permission:manage` |
-| Xem audit/score logs | Theo quyền | Theo quyền | Theo quyền | Theo quyền |
+| Tạo issue | Site | Site | Site | Site |
+| Xem `SITE_PUBLIC` | Site | Site | Site | Site |
+| Xem `SAFETY_RESTRICTED` | Creator/assignee/team | Location/team phụ trách | Toàn site | Toàn site |
+| Nhận/gán issue | Bản thân | Team/location phụ trách | Toàn site | Toàn site |
+| Upload `photo_after` | Assignee/team/creator | Scope phụ trách | Toàn site | Toàn site |
+| Đóng issue 1S-5S | Creator hoặc assignee sau kiểm tra | Scope phụ trách | Toàn site | Toàn site |
+| Đóng issue 6S | Chặn (403) | Chặn (403) | Toàn site | Toàn site |
+| REOPEN | Creator/assignee | Scope phụ trách | Toàn site | Toàn site |
+| INVALID | Chặn (403) | Chặn (403) | Cho phép | Cho phép |
+| Xem audit/score logs | Theo capability và scope | Theo capability và scope | Toàn site | Toàn site |
+
+### 5.4. Query/security contract
+- List/detail/export dùng cùng policy predicate; không tạo endpoint bypass scope.
+- Filter client chỉ thu hẹp kết quả, không mở rộng quyền.
+- Scope tính từ authenticated user, role, site, assigned location/team, creator, assignee; mọi mutation kiểm tra lại trong transaction.
+- Migration phải backfill `site_id`; issue 6S tồn tại trước migration nhận `SAFETY_RESTRICTED` cần review, không tự động public hóa.
 
 ## 5.3. CHUẨN HÓA KỸ THUẬT & PHẢN HỒI API (TECHNICAL CONTRACTS)
 

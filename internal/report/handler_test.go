@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"6s/internal/auth"
 	"6s/internal/db"
 	"6s/internal/report"
 )
@@ -141,8 +142,10 @@ func TestReportHandler_ExportCSV(t *testing.T) {
 	}
 	svc := report.NewService(store)
 	h := report.NewHandler(svc)
+	user := db.User{ID: 10, Role: "ADMIN", SiteID: 1, IsActive: true}
 
 	req := httptest.NewRequest("GET", "/api/issues/export", nil)
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, user))
 	rr := httptest.NewRecorder()
 	h.ExportCSV(rr, req)
 
@@ -175,9 +178,10 @@ func TestReport_ErrorAndFilterBranches(t *testing.T) {
 	if rrErrSum.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 on summary error, got %d", rrErrSum.Code)
 	}
-
 	// 2. ExportCSV error
+	user := db.User{ID: 10, Role: "ADMIN", SiteID: 1, IsActive: true}
 	reqErrExp := httptest.NewRequest("GET", "/api/issues/export", nil)
+	reqErrExp = reqErrExp.WithContext(context.WithValue(reqErrExp.Context(), auth.UserContextKey, user))
 	rrErrExp := httptest.NewRecorder()
 	errHandler.ExportCSV(rrErrExp, reqErrExp)
 	if rrErrExp.Code != http.StatusInternalServerError {
@@ -200,8 +204,8 @@ func TestReport_ErrorAndFilterBranches(t *testing.T) {
 	}
 	validSvc := report.NewService(validStore)
 	validHandler := report.NewHandler(validSvc)
-
 	reqFilter := httptest.NewRequest("GET", "/api/issues/export?status=CLOSED&category=1S&location_code=LOC1", nil)
+	reqFilter = reqFilter.WithContext(context.WithValue(reqFilter.Context(), auth.UserContextKey, user))
 	rrFilter := httptest.NewRecorder()
 	validHandler.ExportCSV(rrFilter, reqFilter)
 	if rrFilter.Code != http.StatusOK {
@@ -229,8 +233,13 @@ func TestReportService_GetExportDataBoundsRows(t *testing.T) {
 		rows[i].ID = int64(i + 1)
 	}
 	service := report.NewService(&mockReportStore{exports: rows})
+	ctx := context.WithValue(context.Background(), auth.UserContextKey, db.User{
+		ID:     5,
+		SiteID: 2,
+		Role:   "ADMIN",
+	})
 
-	got, err := service.GetExportData(context.Background(), "", "", "")
+	got, err := service.GetExportData(ctx, "", "", "")
 	if err != nil {
 		t.Fatalf("GetExportData error: %v", err)
 	}
@@ -239,5 +248,33 @@ func TestReportService_GetExportDataBoundsRows(t *testing.T) {
 	}
 	if got[0].ID != 1 || got[len(got)-1].ID != 100_000 {
 		t.Fatalf("unexpected rows after export bound: first=%d last=%d", got[0].ID, got[len(got)-1].ID)
+	}
+}
+
+func TestReportHandler_ExportCSV_Unauthorized(t *testing.T) {
+	svc := report.NewService(&mockReportStore{})
+	h := report.NewHandler(svc)
+
+	req := httptest.NewRequest("GET", "/api/issues/export", nil)
+	rr := httptest.NewRecorder()
+	h.ExportCSV(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 unauthorized, got %d", rr.Code)
+	}
+}
+
+func TestReportService_GetExportData_RequiresAuthenticatedSite(t *testing.T) {
+	svc := report.NewService(&mockReportStore{})
+
+	// Unauthenticated
+	if _, err := svc.GetExportData(context.Background(), "", "", ""); err == nil {
+		t.Fatalf("expected error without user in context")
+	}
+
+	// Missing site_id
+	ctxNoSite := context.WithValue(context.Background(), auth.UserContextKey, db.User{ID: 1, Role: "ADMIN"})
+	if _, err := svc.GetExportData(ctxNoSite, "", "", ""); err == nil {
+		t.Fatalf("expected error without site_id")
 	}
 }

@@ -2,6 +2,15 @@
 -- PostgreSQL session timezone MUST be UTC in production connections.
 -- PostgreSQL Schema for 6S System (from SPEC.md)
 
+CREATE TABLE IF NOT EXISTS sites (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS locations (
     id BIGSERIAL PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL,
@@ -9,10 +18,21 @@ CREATE TABLE IF NOT EXISTS locations (
     name_zh VARCHAR(255) NOT NULL,
     name_en VARCHAR(255) NOT NULL,
     qr_code VARCHAR(100) UNIQUE NOT NULL,
+    site_id BIGINT NOT NULL REFERENCES sites(id),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_locations_code_lower ON locations (LOWER(code));
+
+CREATE TABLE IF NOT EXISTS teams (
+    id BIGSERIAL PRIMARY KEY,
+    site_id BIGINT NOT NULL REFERENCES sites(id),
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, code)
+);
 
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
@@ -25,6 +45,7 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255),
     role VARCHAR(30) NOT NULL DEFAULT 'USER',
+    site_id BIGINT NOT NULL REFERENCES sites(id),
     assigned_location_code VARCHAR(50) REFERENCES locations(code),
     wx_uid VARCHAR(100),
     timezone VARCHAR(64),
@@ -32,6 +53,13 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS team_memberships (
+    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (team_id, user_id)
 );
 
 
@@ -62,10 +90,14 @@ CREATE TABLE IF NOT EXISTS issues (
     id BIGSERIAL PRIMARY KEY,
     client_uuid UUID UNIQUE NOT NULL,
     version INT NOT NULL DEFAULT 1,
+    site_id BIGINT NOT NULL REFERENCES sites(id),
     creator_id BIGINT NOT NULL REFERENCES users(id),
     resolver_id BIGINT REFERENCES users(id),
+    assignee_id BIGINT REFERENCES users(id),
+    assigned_team_id BIGINT REFERENCES teams(id),
     category VARCHAR(10) NOT NULL,
     cause_type VARCHAR(20) NOT NULL DEFAULT 'CONDITION',
+    visibility_class VARCHAR(30) NOT NULL DEFAULT 'SITE_PUBLIC',
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code),
     description TEXT,
     reject_reason TEXT,

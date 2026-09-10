@@ -50,24 +50,28 @@ type CronTaskLog struct {
 }
 
 type Issue struct {
-	ID           int64
-	ClientUuid   string
-	Version      int32
-	CreatorID    int64
-	ResolverID   sql.NullInt64
-	Category     string
-	CauseType    string
-	LocationCode string
-	Description  sql.NullString
-	RejectReason sql.NullString
-	PhotoBefore  string
-	PhotoDetail  sql.NullString
-	PhotoAfter   sql.NullString
-	ScoreRating  sql.NullInt16
-	Status       string
-	CreatedAt    time.Time
-	ResolvedAt   sql.NullTime
-	ClosedAt     sql.NullTime
+	ID              int64
+	ClientUuid      string
+	Version         int32
+	SiteID          int64
+	CreatorID       int64
+	ResolverID      sql.NullInt64
+	AssigneeID      sql.NullInt64
+	AssignedTeamID  sql.NullInt64
+	Category        string
+	CauseType       string
+	VisibilityClass string
+	LocationCode    string
+	Description     sql.NullString
+	RejectReason    sql.NullString
+	PhotoBefore     string
+	PhotoDetail     sql.NullString
+	PhotoAfter      sql.NullString
+	ScoreRating     sql.NullInt16
+	Status          string
+	CreatedAt       time.Time
+	ResolvedAt      sql.NullTime
+	ClosedAt        sql.NullTime
 }
 
 type IssueTag struct {
@@ -82,6 +86,7 @@ type Location struct {
 	NameZh    string
 	NameEn    string
 	QrCode    string
+	SiteID    int64
 	IsActive  bool
 	CreatedAt time.Time
 }
@@ -150,6 +155,15 @@ type ScoringRule struct {
 	Description sql.NullString
 }
 
+type Site struct {
+	ID        int64
+	Code      string
+	Name      string
+	Timezone  string
+	IsActive  bool
+	CreatedAt time.Time
+}
+
 type SystemAuditLog struct {
 	ID          int64
 	UserID      sql.NullInt64
@@ -182,6 +196,21 @@ type Tag struct {
 	IsActive bool
 }
 
+type Team struct {
+	ID        int64
+	SiteID    int64
+	Code      string
+	Name      string
+	IsActive  bool
+	CreatedAt time.Time
+}
+
+type TeamMembership struct {
+	TeamID    int64
+	UserID    int64
+	CreatedAt time.Time
+}
+
 type TranslationCache struct {
 	ContentHash    string
 	TargetLang     string
@@ -201,6 +230,7 @@ type User struct {
 	FullName             string
 	Email                sql.NullString
 	Role                 string
+	SiteID               int64
 	AssignedLocationCode sql.NullString
 	WxUid                sql.NullString
 	Timezone             sql.NullString

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"6s/internal/apperror"
+	"6s/internal/auth"
 	"6s/internal/i18n"
 	"6s/internal/response"
 )
@@ -45,6 +46,11 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 // ExportCSV handles GET /api/issues/export (streams CSV with UTF-8 BOM for Excel).
 func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
+	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+
 	status := r.URL.Query().Get("status")
 	category := r.URL.Query().Get("category")
 	locationCode := r.URL.Query().Get("location_code")

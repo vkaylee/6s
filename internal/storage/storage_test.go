@@ -197,3 +197,41 @@ func TestDetectImageExtension_EdgeCases(t *testing.T) {
 		t.Error("expected false for nil data")
 	}
 }
+
+func TestManager_OpenAttachment(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	clientUUID := "c0a80101-0000-4000-8000-000000000001"
+	jpegBytes := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0x01}, 100)...)
+	fh := createTestFileHeader(t, "photo_before", "test.jpg", jpegBytes)
+	savedName, err := mgr.SaveBeforePhoto(fh, clientUUID)
+	if err != nil {
+		t.Fatalf("SaveBeforePhoto failed: %v", err)
+	}
+
+	// 1. Successful open
+	f, err := mgr.OpenAttachment("before", savedName)
+	if err != nil {
+		t.Fatalf("OpenAttachment failed: %v", err)
+	}
+	_ = f.Close()
+
+	// 2. Traversal folder rejected
+	if _, err := mgr.OpenAttachment("../etc", savedName); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for bad folder, got %v", err)
+	}
+
+	// 3. Traversal filename rejected
+	if _, err := mgr.OpenAttachment("before", "../passwd"); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for relative filename, got %v", err)
+	}
+
+	// 4. Non-existent file
+	if _, err := mgr.OpenAttachment("before", "c0a80101-0000-4000-8000-000000000099_wide.jpg"); err == nil {
+		t.Errorf("expected not found error for missing file, got nil")
+	}
+}

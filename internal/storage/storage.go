@@ -172,6 +172,37 @@ func DetectImageExtension(data []byte) (string, bool) {
 	return "", false
 }
 
+// OpenAttachment opens a stored issue photo after validating its controlled path.
+// Callers must authorize the owning issue before invoking this method.
+func (m *Manager) OpenAttachment(folder, basename string) (*os.File, error) {
+	if folder != "before" && folder != "detail" && folder != "after" {
+		return nil, ErrPathTraversal
+	}
+	if basename == "" || filepath.Base(basename) != basename || basename == "." || basename == ".." {
+		return nil, ErrPathTraversal
+	}
+
+	root, err := filepath.EvalSymlinks(m.baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve storage root: %w", err)
+	}
+	target := filepath.Join(root, folder, basename)
+	cleanTarget := filepath.Clean(target)
+	rel, err := filepath.Rel(root, cleanTarget)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, ErrPathTraversal
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(cleanTarget)
+	if err != nil {
+		return nil, err
+	}
+	rel, err = filepath.Rel(root, resolvedTarget)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, ErrPathTraversal
+	}
+	return os.Open(resolvedTarget)
+}
+
 // FileServer returns an http.Handler serving files from baseDir with immutable cache header.
 func (m *Manager) FileServer() http.Handler {
 	fileServer := http.FileServer(http.Dir(m.baseDir))

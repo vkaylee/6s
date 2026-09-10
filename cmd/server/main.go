@@ -216,8 +216,6 @@ func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middle
 	storageMgr, err := storage.NewManager(storageDir)
 	if err != nil {
 		log.Printf("Warning: failed to init storage manager: %v", err)
-	} else {
-		r.Mount("/uploads", storageMgr.FileServer())
 	}
 
 	registerMasterDataRoutes(r, queries, authMw)
@@ -259,6 +257,7 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 		ir.Get("/events", issueHandler.Events)
 		ir.Get("/", issueHandler.List)
 		ir.Post("/sync", issueHandler.Sync)
+		ir.Get("/{id}/media/{folder}/{filename}", issueHandler.Media)
 		ir.Get("/{id}", issueHandler.GetByID)
 		ir.Post("/{id}/resolve", issueHandler.Resolve)
 		ir.Post("/{id}/close", issueHandler.Close)

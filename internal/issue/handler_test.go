@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,8 @@ import (
 type mockIssueService struct {
 	issueResp *Response
 	err       error
+	events    chan Event
+	eventErrs map[int64]error
 }
 
 func (m *mockIssueService) SyncIssue(_ context.Context, _ SyncIssueRequest, _ db.User) (*Response, bool, error) {
@@ -64,11 +67,20 @@ func (m *mockIssueService) PatchIssue(_ context.Context, _ PatchIssueRequest, _ 
 	return m.issueResp, nil
 }
 
-func (m *mockIssueService) GetIssueByID(_ context.Context, _ int64) (*Response, error) {
+func (m *mockIssueService) GetIssueByID(_ context.Context, id int64) (*Response, error) {
+	if err, ok := m.eventErrs[id]; ok {
+		return nil, err
+	}
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.issueResp, nil
+}
+func (m *mockIssueService) OpenMedia(_ context.Context, _ int64, _, _ string) (*os.File, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return nil, ErrIssueNotFound
 }
 
 func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _, _, _ []string, _ bool, _, _ int) ([]Response, int64, error) {
@@ -78,6 +90,9 @@ func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _, _, _ []strin
 	return []Response{*m.issueResp}, 1, nil
 }
 func (m *mockIssueService) SubscribeEvents() (<-chan Event, func()) {
+	if m.events != nil {
+		return m.events, func() {}
+	}
 	ch := make(chan Event, 1)
 	return ch, func() {}
 }
@@ -135,7 +150,8 @@ func TestIssueHandler(t *testing.T) {
 
 	// 4. Events SSE stream
 	ctxCancel, cancel := context.WithCancel(context.Background())
-	reqEvents := httptest.NewRequest("GET", "/api/issues/events", nil).WithContext(ctxCancel)
+	defer cancel()
+	reqEvents := httptest.NewRequest("GET", "/api/issues/events", nil).WithContext(context.WithValue(ctxCancel, auth.UserContextKey, user))
 	rrEvents := httptest.NewRecorder()
 
 	// Cancel context after brief moment to terminate SSE loop
@@ -150,6 +166,44 @@ func TestIssueHandler(t *testing.T) {
 	}
 	if ct := rrEvents.Header().Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
 		t.Errorf("expected text/event-stream content-type, got %s", ct)
+	}
+}
+
+func TestIssueHandler_EventsFiltersUnauthorizedIssues(t *testing.T) {
+	events := make(chan Event, 2)
+	events <- Event{Type: EventIssueUpdated, IssueID: 1}
+	events <- Event{Type: EventIssueUpdated, IssueID: 2}
+	mockSvc := &mockIssueService{
+		issueResp: &Response{ID: 2},
+		events:    events,
+		eventErrs: map[int64]error{1: ErrIssueNotFound},
+	}
+	handler := NewHandler(mockSvc)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest("GET", "/api/issues/events", nil).WithContext(context.WithValue(ctx, auth.UserContextKey, db.User{ID: 7, SiteID: 3, Role: "USER", IsActive: true}))
+	rec := httptest.NewRecorder()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	handler.Events(rec, req)
+	body := rec.Body.String()
+	if strings.Contains(body, `"issue_id":1`) {
+		t.Fatalf("unauthorized issue event leaked: %s", body)
+	}
+	if !strings.Contains(body, `"issue_id":2`) {
+		t.Fatalf("authorized issue event missing: %s", body)
+	}
+}
+
+func TestIssueHandler_EventsRequiresAuthentication(t *testing.T) {
+	handler := NewHandler(&mockIssueService{})
+	rec := httptest.NewRecorder()
+	handler.Events(rec, httptest.NewRequest("GET", "/api/issues/events", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated SSE, got %d", rec.Code)
 	}
 }
 

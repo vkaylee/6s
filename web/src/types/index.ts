@@ -61,12 +61,32 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
+export const IssueVisibilityClass = {
+  SITE_PUBLIC: "SITE_PUBLIC",
+  SAFETY_RESTRICTED: "SAFETY_RESTRICTED",
+} as const;
+export type IssueVisibilityClass = (typeof IssueVisibilityClass)[keyof typeof IssueVisibilityClass];
+
+export const IssueWorkspace = {
+  MY_WORK: "MY_WORK",
+  SITE_FEED: "SITE_FEED",
+  RESTRICTED: "RESTRICTED",
+} as const;
+export type IssueWorkspace = (typeof IssueWorkspace)[keyof typeof IssueWorkspace];
+
 import type {
   Issue as OpenApiIssue,
   PaginationMeta as OpenApiPaginationMeta,
 } from "../api/generated/index.ts";
 
 export type IssueItem = OpenApiIssue & {
+  /** Enterprise assignment and visibility fields are optional during legacy API rollout. */
+  site_id?: number;
+  assignee_id?: number | null;
+  assignee_name?: string | null;
+  assigned_team_id?: number | null;
+  assigned_team_name?: string | null;
+  visibility_class?: IssueVisibilityClass | null;
   cause_type?: CauseType;
   location_name: string;
   creator_name: string;
@@ -74,6 +94,23 @@ export type IssueItem = OpenApiIssue & {
   translated_description?: string | null;
   score_deducted?: number;
 };
+
+export function resolveIssueVisibility(
+  issue: Pick<IssueItem, "category" | "visibility_class">,
+): IssueVisibilityClass {
+  return (
+    issue.visibility_class ??
+    (issue.category === IssueCategory.S6
+      ? IssueVisibilityClass.SAFETY_RESTRICTED
+      : IssueVisibilityClass.SITE_PUBLIC)
+  );
+}
+
+export function hasRestrictedIssueScope(role?: UserRole): boolean {
+  return (
+    role === UserRole.SAFETY_OFFICER || role === UserRole.ADMIN || role === UserRole.SUPERADMIN
+  );
+}
 
 export type PaginationMeta = OpenApiPaginationMeta;
 

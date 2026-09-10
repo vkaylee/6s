@@ -9,6 +9,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ type Service interface {
 	InvalidateIssue(ctx context.Context, req InvalidateIssueRequest, currentUser db.User) (*Response, error)
 	PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error)
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
+	OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error)
 	ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, overdue bool, page, limit int) ([]Response, int64, error)
 	SubscribeEvents() (<-chan Event, func())
 }
@@ -112,6 +114,35 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = response.JSON(w, http.StatusOK, resp)
+}
+
+// Media handles GET /api/issues/{id}/media/{folder}/{filename}.
+func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
+		return
+	}
+	folder := chi.URLParam(r, "folder")
+	filename := chi.URLParam(r, "filename")
+
+	f, err := h.service.OpenMedia(r.Context(), id, folder, filename)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+		return
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	stat, err := f.Stat()
+	if err != nil {
+		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-cache")
+	http.ServeContent(w, r, stat.Name(), stat.ModTime(), f)
 }
 
 // Sync handles POST /api/issues/sync (Multipart form).
@@ -537,6 +568,10 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 
 // Events streams real-time issue updates via Server-Sent Events (SSE).
 func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
+	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrMissingAuth))
+		return
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(errors.New("streaming unsupported")))
@@ -563,6 +598,10 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 		case evt, open := <-eventsCh:
 			if !open {
 				return
+			}
+			// Re-check current visibility at delivery time; event payload contains only an ID.
+			if _, err := h.service.GetIssueByID(r.Context(), evt.IssueID); err != nil {
+				continue
 			}
 			data, err := json.Marshal(evt)
 			if err != nil {

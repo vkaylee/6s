@@ -433,7 +433,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 		t.Fatal("timeout waiting for ISSUE_CREATED event")
 	}
 
-	expectedBeforeURL := "/uploads/before/" + clientUUID + "_wide.jpg"
+	expectedBeforeURL := "/api/issues/1/media/before/" + clientUUID + "_wide.jpg"
 	if resp.PhotoBefore != expectedBeforeURL {
 		t.Errorf("expected photo_before %s, got %s", expectedBeforeURL, resp.PhotoBefore)
 	}
@@ -452,7 +452,7 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	if resResp.Status != StatusPendingReview.String() {
 		t.Errorf("expected status PENDING_REVIEW, got %s", resResp.Status)
 	}
-	expectedAfterURL := "/uploads/after/" + resolveUUID + ".jpg"
+	expectedAfterURL := "/api/issues/1/media/after/" + resolveUUID + ".jpg"
 	if resResp.PhotoAfter == nil || *resResp.PhotoAfter != expectedAfterURL {
 		t.Errorf("expected photo_after %s, got %v", expectedAfterURL, resResp.PhotoAfter)
 	}
