@@ -12,36 +12,36 @@ Implement site-isolated, policy-based issue visibility with team/person assignme
 
 ## Implementation sequence
 
-### Phase 1 — Close backend data-boundary gaps
-- [ ] **Export scope:** extend `ListIssuesForExportParams` with authenticated site/user/role/location; apply the identical visibility predicate; update report handler/service and OpenAPI.
-- [ ] **Detail scope:** keep `GetIssueByID` restricted; add negative tests for cross-site and restricted non-member access; remove any internal-context bypass reachable from HTTP.
-- [ ] **Attachment scope:** replace public `/uploads` mount with authenticated issue-media handler; resolve issue by ID, authorize visibility, validate basename; preserve storage path isolation.
-- [ ] **Event scope:** filter SSE events by subscriber site and issue visibility; avoid broadcasting restricted issue IDs/content to unauthorized clients; add unsubscribe/slow-consumer behavior tests.
+### Phase 1 — Completed backend data boundaries
+- [x] **Export scope:** extended `ListIssuesForExportParams` with site, user, role, and location scope; enforced authenticated user; updated OpenAPI.
+- [x] **Detail scope:** `GetIssueByID` enforces site and restricted visibility policy; rejects unauthorized access with not found.
+- [x] **Attachment scope:** removed public static upload mounts; added authenticated `GET /api/issues/{id}/media/{folder}/{filename}` with path traversal and symlink escape protection.
+- [x] **Event scope:** authenticated SSE stream re-checks issue visibility per event and suppresses unauthorized delivery.
 
-### Phase 2 — Enforce action scope
-- [ ] Add explicit policy functions for `read`, `assign`, `claim`, `upload`, `close`, `reopen`, `invalidate`; default deny.
-- [ ] Enforce action checks in handlers before services; re-check issue site/status/version inside mutation transactions.
-- [ ] Add assignment API using `assigned_team_id`/`assignee_id`; require same-site active targets; audit every assignment and visibility-class change.
-- [ ] Ensure `6S` always remains restricted unless an authorized safety/admin workflow changes classification with audit.
+### Phase 2 — Action-scope authorization and assignment (Next)
+- [ ] **Policy domain:** create explicit action policy (`canRead`, `canAssign`, `canClaim`, `canUploadAfter`, `canClose`, `canReopen`, `canInvalidate`) with default deny.
+- [ ] **Handler enforcement:** authorize incoming action in HTTP handler before service calls; verify actor and target site match.
+- [ ] **Transactional re-check:** inside mutation transaction, verify issue site, status, version, and actor action-scope before applying changes.
+- [ ] **Assignment mutations:** implement assign-to-team (`assigned_team_id`) and assign-to-user (`assignee_id`); reject cross-site targets; record audit logs.
+- [ ] **Classification protection:** keep `6S` restricted; allow visibility overrides only through audited safety/admin actions.
 
-### Phase 3 — Complete API and persistence contract
-- [ ] Add migration reconciliation checks: orphan site/team/user references, cross-site assignments, null/invalid visibility values; keep rollback safe and non-destructive.
-- [ ] Update `openapi.yaml`, generated client types, request/response DTOs, sync payload compatibility, and export schema.
-- [ ] Add indexes/query plans for `(site_id, visibility_class, created_at)`, assignee, team, membership; verify bounded pagination.
+### Phase 3 — Frontend workspaces and UX
+- [ ] **Workspace state:** add workspace selector (`MY_WORK`, `SITE_FEED`, `RESTRICTED`) to `useDashboardData` and dashboard view.
+- [ ] **Workspace queries:** map `MY_WORK` to user's creator/assignee/team scope, `SITE_FEED` to `SITE_PUBLIC`, `RESTRICTED` to safety view.
+- [ ] **Issue presentation:** show assignment tags, visibility badge, and restricted indicators on `IssueCard` and `IssueDetailModal`.
+- [ ] **Action gating:** hide or disable claim, resolve, close, reopen, and invalidate buttons when actor lacks action scope.
+- [ ] **Translations and accessibility:** provide Vietnamese, English, and Chinese labels; include screen-reader friendly workspace cues.
 
-### Phase 4 — Frontend workspaces
-- [ ] Add default `Cần tôi xử lý`: creator, assignee, team membership, leader location, unresolved/review-needed states.
-- [ ] Add `Hiện trường chung`: same-site `SITE_PUBLIC` feed; preserve server filtering, client filters only narrow results.
-- [ ] Add `An toàn hạn chế`: visible only with restricted scope; show safe empty/forbidden states without leaking issue existence.
-- [ ] Display assignment, visibility, and restricted indicators; hide unauthorized actions; maintain keyboard/screen-reader labels and i18n in `vi`, `en`, `zh`.
+### Phase 4 — Migration hardening and contract completion
+- [ ] **Migration safety:** add verification queries for orphan references and backfill validation in test runner; keep rollback clean.
+- [ ] **API documentation:** update OpenAPI specs for media, assignment mutations, and workspace filter parameters; update generated types.
+- [ ] **Query tuning:** ensure indexes match workspace queries: `(site_id, visibility_class, created_at)` and `(site_id, assignee_id, status)`.
 
-### Phase 5 — Verification and release
-- [ ] Add behavior tests: same-site public read; cross-site denial; restricted creator/assignee/team/leader access; unauthorized denial; action/read separation; export/media/SSE leakage.
-- [ ] Add migration tests: fresh install, legacy backfill, rollback, mixed-version additive client behavior, cross-site trigger rejection.
+### Phase 5 — Full verification and release
+- [ ] Add regression tests: cross-site access denial across list/detail/media/export/SSE; action-vs-read authorization matrix; assignment validation.
 - [ ] Run `./leedevkit test server --lint-only` and `./leedevkit test server --unit-only`.
 - [ ] Run `./leedevkit test web --lint-only` and `./leedevkit test web --unit-only`.
-- [ ] Smoke-test authenticated role/site matrix, attachment access, export, and live events.
-
+- [ ] Smoke-test login, workspace switching, media loading, assignment, and close flow across `USER`, `LINE_LEADER`, `SAFETY_OFFICER`, and `ADMIN`.
 ## Dependencies
 
 1. Phase 1 before Phase 5 security verification.
