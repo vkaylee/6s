@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -12,6 +13,7 @@ import (
 )
 
 var mockReturnEOF = false
+var mockReturnError = false
 
 const (
 	category1S = "1S"
@@ -28,6 +30,9 @@ func (s *mockDBStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	return driver.RowsAffected(1), nil
 }
 func (s *mockDBStmt) Query(_ []driver.Value) (driver.Rows, error) {
+	if mockReturnError {
+		return nil, errors.New("mock query failure")
+	}
 	if mockReturnEOF {
 		return &mockDBRows{read: true}, nil
 	}
@@ -180,6 +185,21 @@ func TestQueries_ListIssuesFiltered(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].ID != 1 || rows[0].Category != category1S {
 		t.Fatalf("unexpected rows: %+v", rows)
+	}
+}
+
+func TestQueries_ListIssuesFilteredReturnsQueryError(t *testing.T) {
+	mockReturnError = true
+	t.Cleanup(func() { mockReturnError = false })
+	sqlDB, err := sql.Open("mock_db_driver", "")
+	if err != nil {
+		t.Fatalf("open mock db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	_, err = New(sqlDB).ListIssuesFiltered(context.Background(), ListIssuesFilteredParams{})
+	if err == nil || !strings.Contains(err.Error(), "mock query failure") {
+		t.Fatalf("expected query error, got %v", err)
 	}
 }
 
