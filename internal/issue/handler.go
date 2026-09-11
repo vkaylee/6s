@@ -71,19 +71,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	overdue := q.Get("overdue") == "true"
 
-	page := 1
-	if pStr := q.Get("page"); pStr != "" {
-		if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-
-	limit := 20
-	if lStr := q.Get("limit"); lStr != "" {
-		if l, err := strconv.Atoi(lStr); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
+	page, limit := response.ParsePageLimit(q, 20, 100)
 
 	items, total, err := h.service.ListIssuesFiltered(r.Context(), statuses, categories, locationCodes, overdue, page, limit)
 	if err != nil {
@@ -96,8 +84,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // GetByID handles GET /api/issues/{id}.
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
@@ -118,8 +105,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // Media handles GET /api/issues/{id}/media/{folder}/{filename}.
 func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
@@ -230,8 +216,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idStr := chi.URLParam(r, "id")
-	id, parseErr := strconv.ParseInt(idStr, 10, 64)
+	id, parseErr := response.ParseIDParam(r, "id")
 	if parseErr != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseErr))
 		return
@@ -314,8 +299,7 @@ func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
@@ -367,8 +351,7 @@ func (h *Handler) Reopen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
@@ -420,8 +403,7 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
@@ -522,8 +504,7 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idStr := chi.URLParam(r, "id")
-	id, parseIDErr := strconv.ParseInt(idStr, 10, 64)
+	id, parseIDErr := response.ParseIDParam(r, "id")
 	if parseIDErr != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(parseIDErr))
 		return

@@ -203,6 +203,36 @@ func (m *Manager) OpenAttachment(folder, basename string) (*os.File, error) {
 	return os.Open(resolvedTarget)
 }
 
+// RemovePhoto deletes a stored issue photo after validating its controlled path.
+// Callers must authorize the owning issue before invoking this method.
+func (m *Manager) RemovePhoto(folder, basename string) error {
+	if folder != "before" && folder != "detail" && folder != "after" {
+		return ErrPathTraversal
+	}
+	if basename == "" || filepath.Base(basename) != basename || basename == "." || basename == ".." {
+		return ErrPathTraversal
+	}
+
+	root, err := filepath.EvalSymlinks(m.baseDir)
+	if err != nil {
+		return fmt.Errorf("resolve storage root: %w", err)
+	}
+	cleanTarget := filepath.Clean(filepath.Join(root, folder, basename))
+	rel, err := filepath.Rel(root, cleanTarget)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ErrPathTraversal
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(cleanTarget)
+	if err != nil {
+		return err
+	}
+	rel, err = filepath.Rel(root, resolvedTarget)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ErrPathTraversal
+	}
+	return os.Remove(resolvedTarget)
+}
+
 // FileServer returns an http.Handler serving files from baseDir with immutable cache header.
 func (m *Manager) FileServer() http.Handler {
 	fileServer := http.FileServer(http.Dir(m.baseDir))

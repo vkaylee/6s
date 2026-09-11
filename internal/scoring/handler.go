@@ -6,10 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 
 	"6s/internal/apperror"
 	"6s/internal/auth"
@@ -60,8 +57,7 @@ func (h *Handler) GetReporterLeaderboard(w http.ResponseWriter, r *http.Request)
 
 // GetIssueScoreLogs handles GET /api/issues/{id}/score-logs.
 func (h *Handler) GetIssueScoreLogs(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return

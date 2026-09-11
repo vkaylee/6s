@@ -6,10 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 
 	"6s/internal/apperror"
 	"6s/internal/db"
@@ -22,14 +19,8 @@ import (
 type AdminStore interface {
 	ListUsers(ctx context.Context, arg db.ListUsersParams) ([]db.User, error)
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
-	UpdateUserAdmin(ctx context.Context, arg db.UpdateUserAdminParams) (db.User, error)
 	GetLocationByCode(ctx context.Context, code string) (db.Location, error)
 	CountAdmins(ctx context.Context) (int64, error)
-	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
-	RevokeUserRefreshTokens(ctx context.Context, userID int64) error
-}
-
-type atomicAdminStore interface {
 	UpdateUserAdminAtomic(ctx context.Context, update db.UpdateUserAdminParams, revoke bool, audit db.InsertAuditLogParams) (db.User, error)
 }
 
@@ -228,19 +219,6 @@ func (h *AdminHandler) authorizeUserChange(actor db.User, target db.User, req Up
 	}
 	return nil
 }
-func (h *AdminHandler) revokeChangedSessions(ctx context.Context, id int64, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) error {
-	if req.Role != nil && params.Role != target.Role {
-		if err := h.store.RevokeUserRefreshTokens(ctx, id); err != nil {
-			return err
-		}
-	}
-	if req.IsActive != nil && !*req.IsActive && target.IsActive {
-		if err := h.store.RevokeUserRefreshTokens(ctx, id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 func (h *AdminHandler) userAuditParams(r *http.Request, actor db.User, id int64, target, updated db.User) (db.InsertAuditLogParams, error) {
 	oldJSON, err := json.Marshal(toAdminUserResponse(target))
 	if err != nil {
@@ -256,17 +234,9 @@ func (h *AdminHandler) userAuditParams(r *http.Request, actor db.User, id int64,
 	}, nil
 }
 
-func (h *AdminHandler) auditUserUpdate(ctx context.Context, r *http.Request, actor db.User, id int64, target, updated db.User) error {
-	audit, err := h.userAuditParams(r, actor, id, target, updated)
-	if err != nil {
-		return err
-	}
-	return h.store.InsertAuditLog(ctx, audit)
-}
-
 // UpdateUser handles PATCH /api/admin/users/{id}.
 func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := response.ParseIDParam(r, "id")
 	if err != nil || id <= 0 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
 		return
@@ -321,25 +291,8 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(auditErr))
 		return
 	}
-	var updated db.User
-	if atomicStore, ok := h.store.(atomicAdminStore); ok {
-		updated, err = atomicStore.UpdateUserAdminAtomic(r.Context(), params, shouldRevoke, audit)
-	} else {
-		updated, err = h.store.UpdateUserAdmin(r.Context(), params)
-	}
+	updated, err := h.store.UpdateUserAdminAtomic(r.Context(), params, shouldRevoke, audit)
 	if err != nil {
-		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
-		return
-	}
-	if _, atomic := h.store.(atomicAdminStore); atomic {
-		_ = response.JSON(w, http.StatusOK, toAdminUserResponse(updated))
-		return
-	}
-	if err := h.revokeChangedSessions(r.Context(), id, target, req, params); err != nil {
-		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
-		return
-	}
-	if err := h.auditUserUpdate(r.Context(), r, actor, id, target, updated); err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserUpdateFailed).WithCause(err))
 		return
 	}

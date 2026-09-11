@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -98,6 +99,33 @@ func (m *mockIssueStore) CreateIssue(_ context.Context, arg db.CreateIssueParams
 	}
 	m.issues[iss.ID] = iss
 	return iss, nil
+}
+
+func (m *mockIssueStore) CreateIssueWithSideEffects(ctx context.Context, params db.CreateIssueParams, tags []string, buildOutbox func(int64) []db.CreateOutboxEntryParams, buildScores func(int64) []db.InsertScoreLogParams) (db.Issue, error) {
+	created, err := m.CreateIssue(ctx, params)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		if err := m.InsertIssueTag(ctx, db.InsertIssueTagParams{IssueID: created.ID, TagCode: tag}); err != nil {
+			delete(m.issues, created.ID)
+			delete(m.tags, created.ID)
+			return db.Issue{}, err
+		}
+	}
+	m.outbox = append(m.outbox, buildOutbox(created.ID)...)
+	m.scoreLogs = append(m.scoreLogs, buildScores(created.ID)...)
+	return created, nil
+}
+
+func (m *mockIssueStore) ResolveIssueAtomic(ctx context.Context, force bool, params db.ResolveIssueParams, forceParams db.ForceResolveIssueParams) (db.Issue, error) {
+	if force {
+		return m.ForceResolveIssue(ctx, forceParams)
+	}
+	return m.ResolveIssue(ctx, params)
 }
 
 func (m *mockIssueStore) InsertIssueTag(_ context.Context, arg db.InsertIssueTagParams) error {
@@ -570,7 +598,7 @@ func TestIssueService_ConfiguredScoringRules(t *testing.T) {
 	}
 	svc := &ServiceImpl{store: store}
 	issue := db.Issue{ID: 1, CreatorID: 2, LocationCode: "LINE_A1", Category: "3S"}
-	svc.recordSyncPenalty(context.Background(), issue.ID, issue.Category, issue.LocationCode)
+	svc.recordConfiguredScore(context.Background(), issue.ID, "LOCATION", issue.LocationCode, "penalty_normal", -2, false)
 	svc.recordCloseReward(context.Background(), issue, 5)
 	if len(store.scoreLogs) != 3 || store.scoreLogs[0].Points != -7 || store.scoreLogs[1].Points != 9 || store.scoreLogs[2].Points != 4 {
 		t.Fatalf("configured scores not applied: %+v", store.scoreLogs)
@@ -1044,4 +1072,49 @@ func TestIssueService_PermissionParity(t *testing.T) {
 	}
 	_, err = svc.PatchIssue(ctxFor(leader), PatchIssueRequest{IssueID: patchIssue.ID, Category: &newCat}, leader)
 	deny(t, err, "LINE_LEADER", "patch others' issue")
+}
+
+func TestIssueService_ResolveFailureRemovesOrphanAfterPhoto(t *testing.T) {
+	mockStore := newMockIssueStore()
+	mockStore.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
+	mockStore.users[worker.ID] = worker
+
+	tempDir := t.TempDir()
+	storageMgr, _ := storage.NewManager(tempDir)
+	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
+
+	jpegBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+	fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpegBytes)
+	fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpegBytes)
+
+	resp, _, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000000091",
+		Category:     Category1S.String(),
+		LocationCode: "LINE_A1",
+		PhotoBefore:  fhBefore,
+	}, worker)
+	if err != nil {
+		t.Fatalf("Sync issue failed: %v", err)
+	}
+
+	// Stale expected version makes the mock resolve fail, exercising the cleanup path.
+	_, err = svc.ResolveIssue(ctxFor(worker), ResolveIssueRequest{
+		IssueID:            resp.ID,
+		ResolvedClientUUID: "c0a80101-0000-4000-8000-000000000092",
+		ExpectedVersion:    resp.Version + 99,
+		PhotoAfter:         fhAfter,
+	}, worker)
+	if err == nil {
+		t.Fatal("expected resolve failure on stale version")
+	}
+
+	afterDir := filepath.Join(tempDir, "after")
+	entries, readErr := os.ReadDir(afterDir)
+	if readErr != nil {
+		t.Fatalf("read after dir: %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("orphan after photo not removed: %v", entries)
+	}
 }

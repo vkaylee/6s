@@ -85,6 +85,29 @@ type ScoreLogItem struct {
 	IssueStatus      string  `json:"issue_status,omitempty"`
 }
 
+// mapScoreLogRow maps a database score log row to ScoreLogItem.
+func mapScoreLogRow(id, issueID int64, targetType, targetID, ruleKey, ruleDescription string, points int32, createdAt time.Time, penaltyDate sql.NullTime, issueCategory, issueDescription, issueStatus string) ScoreLogItem {
+	var pDate *string
+	if penaltyDate.Valid {
+		dStr := penaltyDate.Time.Format("2006-01-02")
+		pDate = &dStr
+	}
+	return ScoreLogItem{
+		ID:               id,
+		IssueID:          issueID,
+		TargetType:       targetType,
+		TargetID:         targetID,
+		RuleKey:          ruleKey,
+		RuleDescription:  ruleDescription,
+		Points:           points,
+		CreatedAt:        createdAt.Format(time.RFC3339),
+		PenaltyDate:      pDate,
+		IssueCategory:    issueCategory,
+		IssueDescription: issueDescription,
+		IssueStatus:      issueStatus,
+	}
+}
+
 // StartOfWeek calculates Monday 00:00:00 of the current week in local timezone.
 func StartOfWeek(t time.Time, loc *time.Location) time.Time {
 	localTime := t.In(loc)
@@ -222,22 +245,10 @@ func (s *Service) GetIssueScoreLogs(ctx context.Context, issueID int64) ([]Score
 
 	items := make([]ScoreLogItem, 0, len(rows))
 	for _, r := range rows {
-		var pDate *string
-		if r.PenaltyDate.Valid {
-			dStr := r.PenaltyDate.Time.Format("2006-01-02")
-			pDate = &dStr
-		}
-		items = append(items, ScoreLogItem{
-			ID:              r.ID,
-			IssueID:         r.IssueID,
-			TargetType:      r.TargetType,
-			TargetID:        r.TargetID,
-			RuleKey:         r.RuleKey,
-			RuleDescription: r.RuleDescription,
-			Points:          r.Points,
-			CreatedAt:       r.CreatedAt.Format(time.RFC3339),
-			PenaltyDate:     pDate,
-		})
+		items = append(items, mapScoreLogRow(
+			r.ID, r.IssueID, r.TargetType, r.TargetID, r.RuleKey, r.RuleDescription,
+			r.Points, r.CreatedAt, r.PenaltyDate, "", "", "",
+		))
 	}
 	return items, nil
 }
@@ -262,25 +273,10 @@ func (s *Service) GetTargetScoreLogsInCycle(ctx context.Context, targetType, tar
 
 	items := make([]ScoreLogItem, 0, len(rows))
 	for _, r := range rows {
-		var pDate *string
-		if r.PenaltyDate.Valid {
-			dStr := r.PenaltyDate.Time.Format("2006-01-02")
-			pDate = &dStr
-		}
-		items = append(items, ScoreLogItem{
-			ID:               r.ID,
-			IssueID:          r.IssueID,
-			TargetType:       r.TargetType,
-			TargetID:         r.TargetID,
-			RuleKey:          r.RuleKey,
-			RuleDescription:  r.RuleDescription,
-			Points:           r.Points,
-			CreatedAt:        r.CreatedAt.Format(time.RFC3339),
-			PenaltyDate:      pDate,
-			IssueCategory:    r.IssueCategory,
-			IssueDescription: r.IssueDescription,
-			IssueStatus:      r.IssueStatus,
-		})
+		items = append(items, mapScoreLogRow(
+			r.ID, r.IssueID, r.TargetType, r.TargetID, r.RuleKey, r.RuleDescription,
+			r.Points, r.CreatedAt, r.PenaltyDate, r.IssueCategory, r.IssueDescription, r.IssueStatus,
+		))
 	}
 	return items, nil
 }

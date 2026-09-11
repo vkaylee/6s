@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -110,7 +109,7 @@ func parseTimePtr(t *string) (sql.NullTime, error) {
 // UpsertLocationMember handles PUT /api/admin/locations/{code}/members/{userID}.
 func (h *LocationMembershipHandler) UpsertLocationMember(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	userID, err := response.ParseIDParam(r, "userID")
 	if err != nil || userID <= 0 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
 		return
@@ -201,7 +200,7 @@ func (h *LocationMembershipHandler) UpsertLocationMember(w http.ResponseWriter, 
 // DeleteLocationMember handles DELETE /api/admin/locations/{code}/members/{userID}.
 func (h *LocationMembershipHandler) DeleteLocationMember(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	userID, err := response.ParseIDParam(r, "userID")
 	if err != nil || userID <= 0 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
 		return

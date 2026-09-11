@@ -17,25 +17,50 @@ import (
 	"6s/internal/response"
 )
 
-// Store defines database operations required by auth handler.
-type Store interface {
+// UserReader resolves user identity and permissions.
+type UserReader interface {
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
 	GetUserByUsername(ctx context.Context, username string) (db.User, error)
 	GetUserByBadgeCode(ctx context.Context, badgeCode sql.NullString) (db.User, error)
 	GetUserPermissions(ctx context.Context, id int64) ([]string, error)
+}
+
+// UserProvisioning creates and updates user accounts.
+type UserProvisioning interface {
 	UpdateUserLastLogin(ctx context.Context, id int64) error
 	CreateUserJIT(ctx context.Context, arg db.CreateUserJITParams) (db.User, error)
 	UpdateUserADLogin(ctx context.Context, arg db.UpdateUserADLoginParams) (db.User, error)
+	CreateLocalAdmin(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error)
+	CountAdmins(ctx context.Context) (int64, error)
+}
+
+// TokenStore manages refresh tokens and active sessions.
+type TokenStore interface {
 	CreateRefreshToken(ctx context.Context, arg db.CreateRefreshTokenParams) (db.RefreshToken, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (db.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, id int64) error
 	RevokeUserRefreshTokens(ctx context.Context, userID int64) error
 	ListUserActiveSessions(ctx context.Context, userID int64) ([]db.ListUserActiveSessionsRow, error)
+}
+
+// LDAPConfigStore reads and writes the AD/LDAP integration config.
+type LDAPConfigStore interface {
 	GetADConfig(ctx context.Context) (db.AdConfig, error)
 	UpsertADConfig(ctx context.Context, arg db.UpsertADConfigParams) (db.AdConfig, error)
+}
+
+// AuditStore persists authentication audit entries.
+type AuditStore interface {
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
-	CountAdmins(ctx context.Context) (int64, error)
-	CreateLocalAdmin(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error)
+}
+
+// Store is the full persistence surface required by auth handler.
+type Store interface {
+	UserReader
+	UserProvisioning
+	TokenStore
+	LDAPConfigStore
+	AuditStore
 }
 
 type refreshRotator interface {
@@ -203,12 +228,10 @@ func (h *Handler) authenticateUser(ctx context.Context, req LoginRequest, client
 		if isCredError {
 			return db.User{}, false
 		}
+		ip, ua := maskedAuditSource(clientIP, userAgent)
 		if aErr := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-			Action:      "AD_UNREACHABLE_FALLBACK",
-			TargetTable: "users",
-			TargetID:    maskAuditValue(req.Username),
-			IpAddress:   sql.NullString{String: maskAuditValue(clientIP), Valid: clientIP != ""},
-			UserAgent:   sql.NullString{String: maskAuditValue(userAgent), Valid: userAgent != ""},
+			Action: "AD_UNREACHABLE_FALLBACK", TargetTable: "users", TargetID: maskAuditValue(req.Username),
+			IpAddress: ip, UserAgent: ua,
 		}); aErr != nil {
 			return db.User{}, false
 		}
@@ -342,12 +365,10 @@ func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, 
 func (h *Handler) recordFailureAndLock(ctx context.Context, clientIP, accountKey, userAgent string) {
 	locked := h.limiter.RecordFailure(clientIP, accountKey)
 	if locked {
+		ip, ua := maskedAuditSource(clientIP, userAgent)
 		if aErr := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-			Action:      "LOGIN_LOCKED",
-			TargetTable: "users",
-			TargetID:    maskAuditValue(accountKey),
-			IpAddress:   sql.NullString{String: maskAuditValue(clientIP), Valid: clientIP != ""},
-			UserAgent:   sql.NullString{String: maskAuditValue(userAgent), Valid: userAgent != ""},
+			Action: "LOGIN_LOCKED", TargetTable: "users", TargetID: maskAuditValue(accountKey),
+			IpAddress: ip, UserAgent: ua,
 		}); aErr != nil {
 			return
 		}
@@ -467,12 +488,10 @@ func (h *Handler) revokeRefreshFamily(ctx context.Context, r *http.Request, user
 	if err := h.store.RevokeUserRefreshTokens(ctx, userID); err != nil {
 		return err
 	}
+	ip, ua := maskedAuditSource(h.clientIP(r), r.UserAgent())
 	if err := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-		Action:      "REFRESH_TOKEN_REUSE",
-		TargetTable: "refresh_tokens",
-		TargetID:    maskAuditValue(strconv.FormatInt(userID, 10)),
-		IpAddress:   sql.NullString{String: maskAuditValue(h.clientIP(r)), Valid: h.clientIP(r) != ""},
-		UserAgent:   sql.NullString{String: maskAuditValue(r.UserAgent()), Valid: r.UserAgent() != ""},
+		Action: "REFRESH_TOKEN_REUSE", TargetTable: "refresh_tokens", TargetID: maskAuditValue(strconv.FormatInt(userID, 10)),
+		IpAddress: ip, UserAgent: ua,
 	}); err != nil {
 		return err
 	}
@@ -680,13 +699,10 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientIP := h.limiter.GetClientIP(r)
+	ip, ua := maskedAuditSource(clientIP, r.UserAgent())
 	if logErr := h.store.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
-		UserID:      sql.NullInt64{Int64: user.ID, Valid: true},
-		Action:      "INITIAL_SUPERADMIN_SETUP",
-		TargetTable: "users",
-		TargetID:    maskAuditValue(user.Username),
-		IpAddress:   sql.NullString{String: maskAuditValue(clientIP), Valid: clientIP != ""},
-		UserAgent:   sql.NullString{String: maskAuditValue(r.UserAgent()), Valid: r.UserAgent() != ""},
+		UserID: sql.NullInt64{Int64: user.ID, Valid: true}, Action: "INITIAL_SUPERADMIN_SETUP", TargetTable: "users",
+		TargetID: maskAuditValue(user.Username), IpAddress: ip, UserAgent: ua,
 	}); logErr != nil {
 		return
 	}

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -50,7 +49,7 @@ type TeamLocationResponse struct {
 
 // ListTeamLocations handles GET /api/admin/teams/{id}/locations.
 func (h *TeamLocationHandler) ListTeamLocations(w http.ResponseWriter, r *http.Request) {
-	teamID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	teamID, err := response.ParseIDParam(r, "id")
 	if err != nil || teamID <= 0 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
 		return
@@ -76,7 +75,7 @@ func (h *TeamLocationHandler) ListTeamLocations(w http.ResponseWriter, r *http.R
 
 // AddTeamLocation handles PUT /api/admin/teams/{id}/locations/{code}.
 func (h *TeamLocationHandler) AddTeamLocation(w http.ResponseWriter, r *http.Request) {
-	teamID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	teamID, err := response.ParseIDParam(r, "id")
 	if err != nil || teamID <= 0 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
 		return
@@ -140,7 +139,7 @@ func (h *TeamLocationHandler) AddTeamLocation(w http.ResponseWriter, r *http.Req
 
 // DeleteTeamLocation handles DELETE /api/admin/teams/{id}/locations/{code}.
 func (h *TeamLocationHandler) DeleteTeamLocation(w http.ResponseWriter, r *http.Request) {
-	teamID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	teamID, err := response.ParseIDParam(r, "id")
 	if err != nil || teamID <= 0 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
 		return

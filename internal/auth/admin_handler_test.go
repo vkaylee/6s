@@ -34,15 +34,21 @@ func (a adminStoreAdapter) ListUsers(_ context.Context, arg db.ListUsersParams) 
 	return out, nil
 }
 
-func (a adminStoreAdapter) UpdateUserAdmin(_ context.Context, arg db.UpdateUserAdminParams) (db.User, error) {
-	u, ok := a.m.users[arg.ID]
+func (a adminStoreAdapter) UpdateUserAdminAtomic(_ context.Context, update db.UpdateUserAdminParams, revoke bool, audit db.InsertAuditLogParams) (db.User, error) {
+	u, ok := a.m.users[update.ID]
 	if !ok {
 		return db.User{}, sql.ErrNoRows
 	}
-	u.Role = arg.Role
-	u.AssignedLocationCode = arg.AssignedLocationCode
-	u.IsActive = arg.IsActive
-	a.m.users[arg.ID] = u
+	u.Role, u.AssignedLocationCode, u.IsActive = update.Role, update.AssignedLocationCode, update.IsActive
+	a.m.users[update.ID] = u
+	if revoke {
+		if err := a.m.RevokeUserRefreshTokens(context.Background(), update.ID); err != nil {
+			return db.User{}, err
+		}
+	}
+	if err := a.m.InsertAuditLog(context.Background(), audit); err != nil {
+		return db.User{}, err
+	}
 	return u, nil
 }
 

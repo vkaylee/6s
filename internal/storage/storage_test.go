@@ -235,3 +235,63 @@ func TestManager_OpenAttachment(t *testing.T) {
 		t.Errorf("expected not found error for missing file, got nil")
 	}
 }
+
+func TestManager_RemovePhoto(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	clientUUID := "c0a80101-0000-4000-8000-000000000001"
+	jpegBytes := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0x01}, 100)...)
+	fh := createTestFileHeader(t, "photo_before", "test.jpg", jpegBytes)
+	savedName, err := mgr.SaveBeforePhoto(fh, clientUUID)
+	if err != nil {
+		t.Fatalf("SaveBeforePhoto failed: %v", err)
+	}
+
+	// 1. Successful removal
+	if err := mgr.RemovePhoto("before", savedName); err != nil {
+		t.Fatalf("RemovePhoto failed: %v", err)
+	}
+	// File should be gone
+	if _, err := mgr.OpenAttachment("before", savedName); err == nil {
+		t.Errorf("expected not found after removal, got nil")
+	}
+
+	// 2. Remove again (non-existent) - should return error
+	if err := mgr.RemovePhoto("before", savedName); err == nil {
+		t.Errorf("expected error for removing non-existent file, got nil")
+	}
+
+	// 3. Traversal folder rejected
+	if err := mgr.RemovePhoto("../etc", savedName); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for bad folder, got %v", err)
+	}
+
+	// 4. Traversal filename rejected
+	if err := mgr.RemovePhoto("before", "../passwd"); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for relative filename, got %v", err)
+	}
+
+	// 5. Invalid folder rejected
+	if err := mgr.RemovePhoto("invalid", savedName); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for invalid folder, got %v", err)
+	}
+
+	// 6. Empty basename rejected
+	if err := mgr.RemovePhoto("before", ""); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for empty basename, got %v", err)
+	}
+
+	// 7. Dot basename rejected
+	if err := mgr.RemovePhoto("before", "."); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for dot basename, got %v", err)
+	}
+
+	// 8. Dot-dot basename rejected
+	if err := mgr.RemovePhoto("before", ".."); err != ErrPathTraversal {
+		t.Errorf("expected ErrPathTraversal for dot-dot basename, got %v", err)
+	}
+}
