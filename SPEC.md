@@ -739,7 +739,7 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
   - Kết quả: Cập nhật DB, tăng `version = version + 1`. Nếu đổi sang `6S`, ghi nhận outbox để kích hoạt thông báo khẩn cấp WeChat / Webhook.
 - **Tên endpoint thực tế**: User administration dùng `PATCH /api/admin/users/{id}` và `GET /api/admin/users/`; issue invalidation dùng `/api/issues/{id}/invalid`.
 - **Sự kiện realtime**: `GET /api/issues/events` dùng Server-Sent Events (SSE), yêu cầu xác thực.
-- **Export**: `GET /api/issues/export` xuất CSV, yêu cầu xác thực.
+- **Export**: `GET /api/issues/export` xuất XLSX, yêu cầu xác thực.
 **OpenAPI**: `openapi.yaml` là contract máy đọc; mọi route mới phải cập nhật đồng thời tại đây và trong mục API này.
 
 ### 6.4. Chấm điểm & Bảng xếp hạng (Scoring & Leaderboard)

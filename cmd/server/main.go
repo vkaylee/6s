@@ -288,7 +288,7 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 	})
 
 	// Reports and exports require the reports capability.
-	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionReportsExport)).Get("/api/issues/export", reportHandler.ExportCSV)
+	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionReportsExport)).Get("/api/issues/export", reportHandler.ExportXLSX)
 }
 
 func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {

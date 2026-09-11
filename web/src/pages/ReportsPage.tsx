@@ -49,7 +49,7 @@ import type { LocationReportItem } from "../utils/analytics.ts";
 import { goBack } from "../utils/navigation.ts";
 import { IssueDetailModal } from "./IssueDetailModal.tsx";
 
-export async function downloadReportsCsv(locationCode?: string): Promise<void> {
+export async function downloadReportsXlsx(locationCode?: string): Promise<void> {
   const query = locationCode
     ? `?${new URLSearchParams({ location_code: locationCode }).toString()}`
     : "";
@@ -57,7 +57,7 @@ export async function downloadReportsCsv(locationCode?: string): Promise<void> {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `6S_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `6S_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -210,12 +210,12 @@ export function ReportsPage() {
     drilldownPage,
   ]);
 
-  const handleExportCSV = async () => {
+  const handleExportXLSX = async () => {
     try {
       setIsExporting(true);
-      await downloadReportsCsv(selectedLocationFilter || undefined);
+      await downloadReportsXlsx(selectedLocationFilter || undefined);
     } catch (err) {
-      console.error("Failed to export CSV", err);
+      console.error("Failed to export XLSX", err);
       await modalDialog.alert(t("reports.export_error"), t("common.error"));
     } finally {
       setIsExporting(false);
@@ -369,11 +369,11 @@ export function ReportsPage() {
               {canExport && (
                 <button
                   type="button"
-                  data-testid="btn-export-csv"
-                  onClick={handleExportCSV}
+                  data-testid="btn-export-xlsx"
+                  onClick={handleExportXLSX}
                   disabled={isExporting}
                   className="h-8 px-2.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                  title={t("reports.export_csv")}
+                  title={t("reports.export_xlsx")}
                 >
                   {isExporting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -381,7 +381,7 @@ export function ReportsPage() {
                     <Download className="w-3.5 h-3.5" />
                   )}
                   <span className="hidden md:inline">
-                    {isExporting ? t("reports.exporting") : t("reports.export_csv")}
+                    {isExporting ? t("reports.exporting") : t("reports.export_xlsx")}
                   </span>
                 </button>
               )}

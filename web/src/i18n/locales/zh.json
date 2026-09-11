@@ -688,7 +688,7 @@
     "top_tags_desc": "高频发生的具体隐患标签（点击标签可筛选查看现场证据）",
     "occurrences": "{count} 次",
     "drilldown_tag_title": "含有标签 {tag} 的问题列表",
-    "export_csv": "导出 CSV",
+    "export_xlsx": "导出 XLSX",
     "exporting": "导出中...",
     "export_error": "无法导出报告，请重试。"
   },

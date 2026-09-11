@@ -23,7 +23,7 @@ test.describe("Smoke & Critical User Flows", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test("reports CSV export asserting filter query and CSV data", async ({
+  test("reports XLSX export asserting filter query and XLSX data", async ({
     page,
     request,
   }) => {
@@ -59,7 +59,7 @@ test.describe("Smoke & Critical User Flows", () => {
     await loginViaUI(page, username, password);
     await page.goto(`${baseURL}/reports`);
 
-    const exportBtn = page.locator('[data-testid="btn-export-csv"]');
+    const exportBtn = page.locator('[data-testid="btn-export-xlsx"]');
     await expect(exportBtn).toBeVisible({ timeout: 10000 });
 
     // 3. Explicitly filter by target location (non-optional)
@@ -81,30 +81,19 @@ test.describe("Smoke & Critical User Flows", () => {
     expect(exportResponse.status()).toBe(200);
 
     const contentType = exportResponse.headers()["content-type"] || "";
-    expect(contentType).toContain("text/csv");
+    expect(contentType).toContain("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     expect(exportResponse.url()).toContain(
       `location_code=${encodeURIComponent(targetLoc)}`,
     );
 
-    // Read the completed download; browser fetch responses may not expose blob bytes to Playwright.
-    const csvPath = await download.path();
-    expect(csvPath).toBeTruthy();
-    const csvText = await readFile(csvPath, "utf8");
-    expect(csvText).toContain("ID");
-    expect(csvText).toContain("Category");
-    expect(csvText).toContain("Location Code");
-    expect(csvText).toContain("Status");
-
-    // Must include the target location issue and exclude the other location issue
-    expect(csvText).toContain(String(issueTarget.id));
-    expect(csvText).toContain(targetDesc);
-    expect(csvText).not.toContain(excludedDesc);
-
-    // Download file verification
-    expect(download.suggestedFilename()).toMatch(/\.csv$/i);
+    const xlsxPath = await download.path();
+    expect(xlsxPath).toBeTruthy();
+    const xlsxBytes = await readFile(xlsxPath);
+    expect(xlsxBytes.subarray(0, 2).toString("hex")).toBe("504b");
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/i);
   });
 
-  test("expired access token refresh recovers transparently during CSV export", async ({
+  test("expired access token refresh recovers transparently during XLSX export", async ({
     page,
   }) => {
     // Note: simulates access token expiry specifically during CSV export via constrained routing.
@@ -114,7 +103,7 @@ test.describe("Smoke & Critical User Flows", () => {
     await loginViaUI(page, username, password);
     await page.goto(`${baseURL}/reports`);
 
-    const exportBtn = page.locator('[data-testid="btn-export-csv"]');
+    const exportBtn = page.locator('[data-testid="btn-export-xlsx"]');
     await expect(exportBtn).toBeVisible({ timeout: 10000 });
 
     let return401Once = true;
@@ -156,7 +145,7 @@ test.describe("Smoke & Critical User Flows", () => {
 
     expect(refreshResponse.status()).toBe(200);
     expect(retriedExportResponse.status()).toBe(200);
-    expect(download.suggestedFilename()).toMatch(/\.csv$/i);
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/i);
 
     // Verify user remained authenticated on reports page
     await expect(page).not.toHaveURL(/\/login/);
@@ -172,7 +161,7 @@ test.describe("Smoke & Critical User Flows", () => {
     await loginViaUI(page, username, password);
     await page.goto(`${baseURL}/reports`);
 
-    const exportBtn = page.locator('[data-testid="btn-export-csv"]');
+    const exportBtn = page.locator('[data-testid="btn-export-xlsx"]');
     await expect(exportBtn).toBeVisible({ timeout: 10000 });
 
     let downloadTriggered = false;

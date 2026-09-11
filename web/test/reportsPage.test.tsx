@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
-import { downloadReportsCsv, ReportsPage } from "../src/pages/ReportsPage.tsx";
+import { downloadReportsXlsx, ReportsPage } from "../src/pages/ReportsPage.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import {
   IssueCategory,
@@ -278,7 +278,7 @@ describe("ReportsPage & Export CSV UI", () => {
     expect(html).toContain("2S");
   });
 
-  it("refreshes expired access token and proceeds with CSV download", async () => {
+  it("refreshes expired access token and proceeds with XLSX download", async () => {
     const originalFetch = globalThis.fetch;
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;
@@ -315,7 +315,7 @@ describe("ReportsPage & Export CSV UI", () => {
 
     (globalThis as unknown as { window: unknown }).window = {
       URL: {
-        createObjectURL: () => "blob:mock-csv-data",
+        createObjectURL: () => "blob:mock-xlsx-data",
         revokeObjectURL: () => {},
       },
     };
@@ -334,12 +334,7 @@ describe("ReportsPage & Export CSV UI", () => {
             data: {
               access_token: "refreshed-jwt-token",
               refresh_token: "new-refresh-token",
-              user: {
-                id: 1,
-                username: "admin",
-                full_name: "Super Admin",
-                role: UserRole.ADMIN,
-              },
+              user: { id: 1, username: "admin", full_name: "Super Admin", role: UserRole.ADMIN },
             },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -354,21 +349,20 @@ describe("ReportsPage & Export CSV UI", () => {
           );
         }
         if (authHeader === "Bearer refreshed-jwt-token") {
-          return new Response("ID,UUID,Category\n1,uuid-1,1S", {
+          return new Response("PK\x03\x04mock xlsx content", {
             status: 200,
             headers: {
-              "Content-Type": "text/csv; charset=utf-8",
-              "Content-Disposition": 'attachment; filename="6S_Issues_Export.csv"',
+              "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "Content-Disposition": 'attachment; filename="6S_Issues_Export.xlsx"',
             },
           });
         }
       }
-
       return new Response("Not found", { status: 404 });
     }) as typeof fetch;
 
     try {
-      await downloadReportsCsv("LINE_A1");
+      await downloadReportsXlsx("LINE_A1");
       expect(calls.length).toBe(3);
       expect(calls[0].url).toBe("/api/issues/export?location_code=LINE_A1");
       expect(calls[0].authHeader).toBe("Bearer expired-jwt-token");
@@ -376,7 +370,7 @@ describe("ReportsPage & Export CSV UI", () => {
       expect(calls[2].url).toBe("/api/issues/export?location_code=LINE_A1");
       expect(calls[2].authHeader).toBe("Bearer refreshed-jwt-token");
       expect(clicked).toBe(true);
-      expect(downloadedFilename).toMatch(/^6S_Report_\d{4}-\d{2}-\d{2}\.csv$/);
+      expect(downloadedFilename).toMatch(/^6S_Report_\d{4}-\d{2}-\d{2}\.xlsx$/);
     } finally {
       globalThis.fetch = originalFetch;
       (globalThis as unknown as { window: unknown }).window = originalWindow;
@@ -435,7 +429,7 @@ describe("ReportsPage & Export CSV UI", () => {
     }) as typeof fetch;
 
     try {
-      await expect(downloadReportsCsv()).rejects.toThrow();
+      await expect(downloadReportsXlsx()).rejects.toThrow();
       expect(clicked).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
@@ -490,7 +484,7 @@ describe("ReportsPage & Export CSV UI", () => {
     }) as unknown as typeof fetch;
 
     try {
-      await expect(downloadReportsCsv()).rejects.toThrow();
+      await expect(downloadReportsXlsx()).rejects.toThrow();
       expect(clicked).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;

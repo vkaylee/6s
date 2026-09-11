@@ -688,7 +688,7 @@
     "top_tags_desc": "Tần suất xuất hiện của các mã lỗi cụ thể (nhấn vào tag để lọc bằng chứng)",
     "occurrences": "{count} lần",
     "drilldown_tag_title": "Danh sách sự cố lỗi {tag}",
-    "export_csv": "Xuất CSV",
+    "export_xlsx": "Xuất XLSX",
     "exporting": "Đang xuất...",
     "export_error": "Không thể xuất báo cáo. Vui lòng thử lại."
   },

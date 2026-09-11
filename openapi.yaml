@@ -1772,8 +1772,8 @@ paths:
 
   /issues/export:
     get:
-      operationId: exportIssuesCsv
-      summary: Xuất CSV danh sách issue trong phạm vi site và visibility của người dùng. Yêu cầu permission `reports:export`.
+      operationId: exportIssuesXlsx
+      summary: Xuất XLSX danh sách issue trong phạm vi site và visibility của người dùng. Yêu cầu permission `reports:export`.
       parameters:
         - name: status
           in: query
@@ -1792,9 +1792,9 @@ paths:
             type: string
       responses:
         '200':
-          description: CSV file containing only issues visible to the authenticated user
+          description: XLSX file chứa danh sách issue trong phạm vi người dùng
           content:
-            text/csv:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema:
                 type: string
         '401':

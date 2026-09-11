@@ -1,10 +1,13 @@
 package report_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -123,7 +126,7 @@ func TestReportHandler_GetSummary(t *testing.T) {
 	}
 }
 
-func TestReportHandler_ExportCSV(t *testing.T) {
+func TestReportHandler_ExportXLSX(t *testing.T) {
 	store := &mockReportStore{
 		exports: []db.ListIssuesForExportRow{
 			{
@@ -147,22 +150,32 @@ func TestReportHandler_ExportCSV(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/issues/export", nil)
 	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, user))
 	rr := httptest.NewRecorder()
-	h.ExportCSV(rr, req)
+	h.ExportXLSX(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	contentType := rr.Header().Get("Content-Type")
-	if !strings.Contains(contentType, "text/csv") {
-		t.Errorf("expected text/csv, got %s", contentType)
+	if !strings.Contains(contentType, "openxmlformats-officedocument.spreadsheetml.sheet") {
+		t.Errorf("expected xlsx content-type, got %s", contentType)
 	}
-	body := rr.Body.String()
-	// Check UTF-8 BOM
-	if !strings.HasPrefix(body, "\xef\xbb\xbf") {
-		t.Errorf("expected UTF-8 BOM at start of CSV")
+	body := rr.Body.Bytes()
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("failed to open xlsx zip: %v", err)
 	}
-	if !strings.Contains(body, "Chuyền A1") || !strings.Contains(body, "exposed_wire; safety_gear") {
-		t.Errorf("CSV body missing expected record data: %s", body)
+	var sheetContent string
+	for _, f := range zr.File {
+		if f.Name == "xl/worksheets/sheet1.xml" {
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			_ = rc.Close()
+			sheetContent = string(b)
+			break
+		}
+	}
+	if !strings.Contains(sheetContent, "Chuyền A1") || !strings.Contains(sheetContent, "exposed_wire; safety_gear") {
+		t.Errorf("xlsx missing expected record data: %s", sheetContent)
 	}
 }
 
@@ -178,12 +191,12 @@ func TestReport_ErrorAndFilterBranches(t *testing.T) {
 	if rrErrSum.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 on summary error, got %d", rrErrSum.Code)
 	}
-	// 2. ExportCSV error
+	// 2. ExportXLSX error
 	user := db.User{ID: 10, Role: "ADMIN", SiteID: 1, IsActive: true}
 	reqErrExp := httptest.NewRequest("GET", "/api/issues/export", nil)
 	reqErrExp = reqErrExp.WithContext(context.WithValue(reqErrExp.Context(), auth.UserContextKey, user))
 	rrErrExp := httptest.NewRecorder()
-	errHandler.ExportCSV(rrErrExp, reqErrExp)
+	errHandler.ExportXLSX(rrErrExp, reqErrExp)
 	if rrErrExp.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 on export error, got %d", rrErrExp.Code)
 	}
@@ -207,7 +220,7 @@ func TestReport_ErrorAndFilterBranches(t *testing.T) {
 	reqFilter := httptest.NewRequest("GET", "/api/issues/export?status=CLOSED&category=1S&location_code=LOC1", nil)
 	reqFilter = reqFilter.WithContext(context.WithValue(reqFilter.Context(), auth.UserContextKey, user))
 	rrFilter := httptest.NewRecorder()
-	validHandler.ExportCSV(rrFilter, reqFilter)
+	validHandler.ExportXLSX(rrFilter, reqFilter)
 	if rrFilter.Code != http.StatusOK {
 		t.Errorf("expected 200 for filtered export, got %d", rrFilter.Code)
 	}
@@ -251,13 +264,13 @@ func TestReportService_GetExportDataBoundsRows(t *testing.T) {
 	}
 }
 
-func TestReportHandler_ExportCSV_Unauthorized(t *testing.T) {
+func TestReportHandler_ExportXLSX_Unauthorized(t *testing.T) {
 	svc := report.NewService(&mockReportStore{})
 	h := report.NewHandler(svc)
 
 	req := httptest.NewRequest("GET", "/api/issues/export", nil)
 	rr := httptest.NewRecorder()
-	h.ExportCSV(rr, req)
+	h.ExportXLSX(rr, req)
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 unauthorized, got %d", rr.Code)

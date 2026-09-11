@@ -688,7 +688,7 @@
     "top_tags_desc": "Most frequent issue tags recorded (click any tag to inspect evidence)",
     "occurrences": "{count} times",
     "drilldown_tag_title": "Issues tagged with {tag}",
-    "export_csv": "Export CSV",
+    "export_xlsx": "Export XLSX",
     "exporting": "Exporting...",
     "export_error": "Unable to export the report. Please try again."
   },
