@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
-import { loadAiStatus } from "../hooks/useAiStatus.ts";
+import { useAiStatus } from "../hooks/useAiStatus.ts";
 import { type SupportedLocale, useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { IssueCategory, resolveI18n, S_CATEGORIES } from "../types/index.ts";
@@ -221,12 +221,12 @@ function CreateTagModal({
   );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiFailed, setAiFailed] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(false);
+  const aiEnabled = useAiStatus();
   const [saving, setSaving] = useState(false);
 
   const translateNames = async () => {
+    if (aiEnabled !== true) return;
     const text = initialInput.trim();
-    if (!text) return;
     setAiLoading(true);
     setAiFailed(false);
     try {
@@ -262,23 +262,20 @@ function CreateTagModal({
     }
   };
   useEffect(() => {
-    if (editingTag) return;
-    void loadAiStatus().then((enabled) => {
-      setAiEnabled(enabled);
-      if (enabled) {
-        void translateNames();
-        return;
-      }
-      // AI off: seed the source language and let the user type the rest.
-      const text = initialInput.trim();
-      setNames({
-        vi: source === "vi" ? text : "",
-        en: source === "en" ? text : "",
-        zh: source === "zh" ? text : "",
-      });
-      setEditable({ vi: true, en: true, zh: true });
+    if (editingTag || aiEnabled === null) return;
+    if (aiEnabled) {
+      void translateNames();
+      return;
+    }
+    // AI off: seed source language and let user type remaining names.
+    const text = initialInput.trim();
+    setNames({
+      vi: source === "vi" ? text : "",
+      en: source === "en" ? text : "",
+      zh: source === "zh" ? text : "",
     });
-  }, [editingTag]);
+    setEditable({ vi: true, en: true, zh: true });
+  }, [editingTag, aiEnabled, initialInput, source]);
 
   const editName = async (lang: TagLocale) => {
     if (editable[lang] || aiFailed) return;
@@ -404,14 +401,21 @@ function CreateTagModal({
             </div>
 
             {/* Translations */}
-            {aiEnabled && !names && !aiLoading && (
+            {!editingTag && aiEnabled !== false && (
               <button
                 type="button"
                 onClick={translateNames}
-                className="w-full border border-blue-600 text-blue-600 font-bold py-3 px-4 rounded-xl min-h-[48px]"
+                disabled={aiEnabled !== true || aiLoading}
+                aria-disabled={aiEnabled !== true}
+                className="w-full border border-blue-600 text-blue-600 font-bold py-3 px-4 rounded-xl min-h-[48px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t("admin.tag_translate_btn")}
               </button>
+            )}
+            {aiEnabled === false && (
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                {t("admin.ai_disabled_reason")}
+              </p>
             )}
             {aiLoading && (
               <div className="text-sm text-zinc-500 text-center py-2">
@@ -424,12 +428,13 @@ function CreateTagModal({
                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("admin.tag_translations_label")}
                   </span>
-                  {aiEnabled && (
+                  {aiEnabled !== false && (
                     <button
                       type="button"
                       onClick={translateNames}
-                      disabled={aiLoading}
-                      className="text-xs font-bold text-blue-600 hover:underline disabled:opacity-40"
+                      disabled={aiEnabled !== true || aiLoading}
+                      aria-disabled={aiEnabled !== true}
+                      className="text-xs font-bold text-blue-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {t("admin.tag_retranslate_btn")}
                     </button>

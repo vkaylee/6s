@@ -1,6 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import * as React from "react";
 import { renderToString } from "react-dom/server";
+import { invalidateAiStatus } from "../src/hooks/useAiStatus.ts";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import {
@@ -35,6 +36,7 @@ function WithMockState({ values, children }: { values: unknown[]; children: Reac
 }
 
 describe("IssueDetailModal Component", () => {
+  beforeEach(() => invalidateAiStatus());
   const mockIssue: IssueItem = {
     id: 101,
     client_uuid: "c0a80101-0000-4000-8000-000000000101",
@@ -668,29 +670,29 @@ describe("IssueDetailModal Component", () => {
     expect(html).toContain("Dầu loang dưới sàn máy may");
   });
 
-  it("hides the AI review button when AI is disabled", () => {
+  it("hides AI controls and explains why when AI is disabled", () => {
     const html = renderToString(
       <WithMockState
         values={[
           mockIssue,
-          null, // translatedDesc
-          false, // isTranslating
-          false, // showOriginal
-          false, // isEditingFull
-          false, // isEditingCategory
-          false, // isEditingLocation
-          3, // scoreRating
-          "", // rejectReason
-          false, // isSubmitting
-          null, // showConfirmAction
-          null, // previewIndex
-          1, // zoomScale
-          { x: 0, y: 0 }, // panOffset
-          [], // issueScoreLogs
-          false, // loadingScores
-          false, // aiEnabled (AI disabled)
-          null, // aiReview
-          false, // isReviewing
+          null,
+          false,
+          false,
+          false,
+          false,
+          false,
+          3,
+          "",
+          false,
+          null,
+          null,
+          1,
+          { x: 0, y: 0 },
+          [],
+          false,
+          false,
+          null,
+          false,
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -699,6 +701,7 @@ describe("IssueDetailModal Component", () => {
 
     expect(html).not.toContain("Hỏi AI");
     expect(html).not.toContain("Dịch AI");
+    expect(html).toContain("AI đang tắt");
   });
 
   it("shows the AI review button when AI is enabled", () => {

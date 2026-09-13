@@ -8,7 +8,7 @@ import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { TagLabel } from "../components/TagLabel.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
-import { loadAiStatus } from "../hooks/useAiStatus.ts";
+import { useAiStatus } from "../hooks/useAiStatus.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
@@ -67,21 +67,6 @@ export function IssueDetailModal({
     translatedLangRef.current = locale;
     setShowOriginal(false);
   }, [issue, locale]);
-
-  // AIReviewResult is rendered by AIReviewPanel.
-  useEffect(() => {
-    if (!isOpen) {
-      setAiReview(null);
-      return;
-    }
-    let isMounted = true;
-    void loadAiStatus().then((enabled) => {
-      if (isMounted) setAiEnabled(enabled);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [isOpen]);
 
   const handleAIReview = async () => {
     if (!aiEnabled || isReviewing) {
@@ -163,7 +148,7 @@ export function IssueDetailModal({
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const [issueScoreLogs, setIssueScoreLogs] = useState<ScoreLogItem[]>([]);
   const [loadingScores, setLoadingScores] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(false);
+  const aiEnabled = useAiStatus();
   const [aiReview, setAiReview] = useState<AIReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState("");
@@ -732,13 +717,18 @@ export function IssueDetailModal({
                     </span>
                     <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {aiEnabled && (
+                  {aiEnabled === false ? (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 text-right">
+                      {t("issue_detail.ai_disabled_reason")}
+                    </p>
+                  ) : (
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                       <button
                         type="button"
                         onClick={handleAIReview}
-                        disabled={isReviewing}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/60 border border-violet-200/80 dark:border-violet-800/80 transition-colors shadow-2xs"
+                        disabled={aiEnabled !== true || isReviewing}
+                        aria-disabled={aiEnabled !== true}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/60 border border-violet-200/80 dark:border-violet-800/80 transition-colors shadow-2xs disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>
@@ -747,32 +737,33 @@ export function IssueDetailModal({
                             : t("issue_detail.ai_review_btn")}
                         </span>
                       </button>
-                    )}
-                    {aiEnabled && currentIssue.description && (
-                      <button
-                        type="button"
-                        onClick={handleTranslate}
-                        disabled={isTranslating}
-                        aria-busy={isTranslating}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors shadow-2xs disabled:cursor-wait disabled:opacity-70"
-                      >
-                        {isTranslating ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Languages className="w-3.5 h-3.5" />
-                        )}
-                        <span>
-                          {isTranslating
-                            ? t("issue_detail.translating")
-                            : translatedDesc && translatedLangRef.current === locale
-                              ? showOriginal
-                                ? t("issue_detail.translate_btn")
-                                : t("issue_detail.show_original")
-                              : t("issue_detail.translate_btn")}
-                        </span>
-                      </button>
-                    )}
-                  </div>
+                      {currentIssue.description && (
+                        <button
+                          type="button"
+                          onClick={handleTranslate}
+                          disabled={aiEnabled !== true || isTranslating}
+                          aria-disabled={aiEnabled !== true}
+                          aria-busy={isTranslating}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors shadow-2xs disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isTranslating ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Languages className="w-3.5 h-3.5" />
+                          )}
+                          <span>
+                            {isTranslating
+                              ? t("issue_detail.translating")
+                              : translatedDesc && translatedLangRef.current === locale
+                                ? showOriginal
+                                  ? t("issue_detail.translate_btn")
+                                  : t("issue_detail.show_original")
+                                : t("issue_detail.translate_btn")}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {translatedDesc && translatedLangRef.current === locale && !showOriginal ? (
                   <div className="space-y-1.5">

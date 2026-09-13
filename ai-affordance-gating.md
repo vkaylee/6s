@@ -1,44 +1,54 @@
-# Gate AI affordances theo trạng thái enabled
+# AI affordance visibility and disabled-state guidance
 
 ## Goal
-Ẩn (không render) mọi nút/thao tác AI ở phía người dùng khi AI chưa được bật trong `AdminConfigPage`, dùng một nguồn trạng thái dùng chung thay vì fetch rải rác.
+Luôn render button AI ở user flows. Khi AI chưa enable hoặc status chưa resolve, button disabled và UI giải thích cách bật; không gọi API AI ngoài status check.
 
 ## Quyết định
-- **Ẩn, không disable.** AI tắt là mặc định của hệ thống; nút disabled chỉ tạo affordance chết. Giữ Settings làm nơi bật.
-- **Không render khi chưa biết trạng thái** (`null`) → tránh nhấp nháy nút rồi biến mất. Nút chỉ xuất hiện khi status resolve `true`.
-- **Không thêm CTA "Bật AI"** trong luồng nghiệp vụ. Ngoài scope.
-- `AdminConfigPage` **không** bị gate — đó là nơi bật/tắt.
-- Badge `translated_by_ai` / `translated_badge` **không** bị gate — chúng phản ánh dữ liệu đã có, không phải affordance.
+- **Luôn render button AI** trong `IssueDetailModal` và `CreateTagModal`; giữ discoverability.
+- `aiEnabled === null`: button disabled, không warning lỗi; status còn đang tải.
+- `aiEnabled === false`: button disabled, hiển thị cảnh báo ngắn với đường dẫn `Settings → AI` nếu phù hợp.
+- `aiEnabled === true`: button hoạt động như hiện tại.
+- Không thêm CTA bật AI trong luồng nghiệp vụ; cảnh báo chỉ hướng dẫn admin.
+- `AdminConfigPage` vẫn là nơi bật/tắt AI.
+- Badge `translated_by_ai` / `translated_badge` giữ nguyên; chúng phản ánh dữ liệu đã có.
+- Backend không đổi; `/api/ai/status` trả `{ enabled: boolean }`, lỗi mạng giữ fail-closed.
 
 ## Tasks
+- [ ] **1. Chuẩn hóa `useAiStatus`** — cập nhật `web/src/hooks/useAiStatus.ts`
+  - Thêm hook trả `{ aiEnabled: boolean | null }` từ promise cache module-scope.
+  - Giữ một request `/api/ai/status` mỗi phiên; lỗi trả `false`.
+  - `invalidateAiStatus()` tiếp tục được gọi sau lưu cấu hình admin.
 
-- [ ] **1. Hook `useAiStatus`** — tạo `web/src/hooks/useAiStatus.ts`
-  - Fetch `GET /api/ai/status` **một lần**, cache ở module scope (promise dùng chung), tránh gọi lại mỗi modal.
-  - Trả `{ aiEnabled: boolean | null }`; `null` = đang tải/chưa biết. Lỗi mạng → `false` (fail-closed, giống hành vi hiện tại của `IssueDetailModal.tsx:116`).
-  - Verify: mở DevTools Network, mở/đóng nhiều issue modal → chỉ 1 request `/api/ai/status`.
+- [ ] **2. Đổi `IssueDetailModal.tsx`**
+  - Dùng hook; bỏ state/effect fetch status cục bộ.
+  - Render `ai_review_btn` và `translate_btn` không phụ thuộc `aiEnabled`.
+  - `disabled={aiEnabled !== true || isReviewing/isTranslating}`; thêm `aria-disabled` và tooltip/title cho trạng thái chưa bật.
+  - Chỉ gọi review/translate/cache khi `aiEnabled === true`.
+  - Hiển thị cảnh báo khi `aiEnabled === false`; không hiển thị warning khi `null`.
+  - Giữ auto-translate cache phụ thuộc status; không gọi `/api/ai/cached` khi AI off.
 
-- [ ] **2. `IssueDetailModal.tsx` dùng hook** — thay state + effect tại dòng 102–123
-  - Xoá `const [aiEnabled, setAiEnabled] = useState(false)` (dòng 205) và effect fetch status; lấy từ `useAiStatus()`.
-  - Reset `aiReview` khi modal đóng giữ nguyên (effect riêng).
-  - Thêm `aiEnabled` vào deps của effect auto-translate (dòng 100) → sửa lỗi không tự dịch khi status resolve sau effect đầu.
-  - Verify: bật AI → mở issue có mô tả → bản dịch cache tự hiện; tắt AI → không thấy nút "Hỏi AI"/"Dịch AI", không gọi `/api/ai/cached`.
+- [ ] **3. Đổi `CreateTagModal` trong `IssueTagsPage.tsx`**
+  - Dùng hook; auto-translate chỉ chạy khi status `true`.
+  - Render nút generate và retranslate luôn; disabled khi status chưa `true` hoặc đang loading.
+  - Khi AI off, luôn render ba ô tên editable, seed ngôn ngữ nguồn, cho nhập tay và Save không bị chặn bởi `names === null`.
+  - Hiển thị cảnh báo AI chưa bật; không gọi `/api/ai/translate` khi disabled.
 
-- [ ] **3. `IssueTagsPage.tsx` gate `CreateTagModal`**
-  - Dùng `useAiStatus()` trong `CreateTagModal`.
-  - Auto-chạy `translateNames()` (effect dòng 263–267) chỉ khi `aiEnabled === true`.
-  - Ẩn nút `tag_translate_btn` (dòng 393–401) và nút `tag_retranslate_btn` (dòng 413–420) khi `aiEnabled !== true`.
-  - AI off: `names` là `null` → người dùng nhập tay 3 ô; nút Save phải **không** bị chặn bởi `aiLoading`/`names`. Hiện `disabled={saving || aiLoading || !names}` ở dòng 446 đang chặn Save khi `names === null` → sửa để cho phép nhập tay.
-  - Verify: tắt AI → mở modal tạo tag mới → không có nút AI, 3 ô tên hiện trống và nhập được, lưu thành công. Bật AI → flow cũ giữ nguyên.
+- [ ] **4. Bổ sung i18n**
+  - Thêm key cảnh báo AI chưa bật cho `web/src/i18n/locales/{vi,en,zh}.json`.
+  - Giữ nguyên các key button hiện có.
 
-- [ ] **4. Chuỗi i18n không còn dùng** — kiểm tra `tag_translate_btn`, `tag_retranslate_btn`, `ai_review_btn`, `translate_btn` vẫn cần (chúng vẫn được render khi AI bật) → **giữ nguyên**. Không xoá key.
-  - Verify: `grep` xác nhận mỗi key còn ít nhất 1 chỗ dùng.
+- [ ] **5. Cập nhật regression coverage**
+  - Sửa test Issue Detail: AI off vẫn có button, button disabled, cảnh báo hiện; AI on button enabled.
+  - Thêm coverage CreateTagModal cho nhập tay khi AI off nếu test harness hiện có hỗ trợ.
+  - Giữ test cache/invalidation: một request status, lỗi status fail-closed.
 
 ## Done When
-- [ ] AI tắt: không tồn tại DOM node nào của nút AI trong `IssueDetailModal` và `CreateTagModal`; không có request `/api/ai/*` nào phát sinh ngoài lần gọi status.
-- [ ] AI bật: toàn bộ hành vi hiện tại không đổi.
-- [ ] Chỉ 1 request `/api/ai/status` cho cả phiên làm việc.
-- [ ] `./leedevkit test web --lint-only` và `./leedevkit test web --unit-only` pass.
+- [ ] AI off hoặc status loading: button AI vẫn tồn tại trong DOM, disabled, không phát sinh request `/api/ai/*` ngoài `/api/ai/status`.
+- [ ] AI off: cảnh báo rõ cách bật; CreateTagModal nhập tay và lưu được.
+- [ ] AI on: review, translate, cached translation, tag auto-translate giữ hành vi hiện tại.
+- [ ] `./leedevkit test web --lint-only` pass.
+- [ ] `./leedevkit test web --unit-only` pass.
 
 ## Notes
-- Không đụng `internal/ai/*`: backend đã fail-closed đúng (`handler_test.go:122` — AI disabled trả 400).
-- Không thêm state toàn cục vào `authStore`; trạng thái AI thuộc về server config, không thuộc phiên đăng nhập. Hook + module cache là đủ cho 2 consumer.
+- Chỉ sửa frontend và i18n. Không thêm dependency, DB migration, hay backend endpoint.
+- Không disable AdminConfigPage controls.

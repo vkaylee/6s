@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
 
 let cached: boolean | null = null;
@@ -16,6 +17,21 @@ export function loadAiStatus(): Promise<boolean> {
       return false;
     });
   return request;
+}
+
+/** Server AI toggle for UI gating; null while the shared status request resolves. */
+export function useAiStatus(): boolean | null {
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(cached);
+  useEffect(() => {
+    let active = true;
+    void loadAiStatus().then((enabled) => {
+      if (active) setAiEnabled(enabled);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return aiEnabled;
 }
 
 /** Drops the cached status so the next consumer refetches after a config change. */
