@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { invalidateAiStatus } from "../src/hooks/useAiStatus.ts";
+import { useI18nStore } from "../src/i18n/index.ts";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import {
@@ -222,6 +223,55 @@ describe("IssueDetailModal Component", () => {
       </WithMockState>,
     );
     expect(html).toContain("Chuyền May A1");
+  });
+  it("renders score rule labels in selected locale", () => {
+    const scoreLog: ScoreLogItem = {
+      id: 2,
+      issue_id: 101,
+      target_type: "LOCATION",
+      target_id: "LINE_A1",
+      rule_key: "penalty_normal",
+      rule_description: "Normal issue penalty",
+      points: -2,
+      created_at: new Date().toISOString(),
+    };
+    const expected = {
+      vi: "Trừ điểm sự cố thường",
+      en: "Normal issue penalty",
+      zh: "普通问题扣分",
+    } as const;
+
+    for (const [locale, label] of Object.entries(expected)) {
+      useI18nStore.getState().setLocale(locale as keyof typeof expected);
+      const html = renderToString(
+        <WithMockState
+          values={[
+            mockIssue,
+            null,
+            false,
+            false,
+            false,
+            false,
+            false,
+            3,
+            "",
+            false,
+            null,
+            null,
+            1,
+            { x: 0, y: 0 },
+            [scoreLog],
+            false,
+            true,
+            null,
+            false,
+          ]}
+        >
+          <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+        </WithMockState>,
+      );
+    }
+    useI18nStore.getState().setLocale("vi");
   });
   it("renders detail photo when photo_detail exists", () => {
     const issueWithDetail: IssueItem = {

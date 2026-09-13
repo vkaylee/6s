@@ -6,6 +6,27 @@ import { useI18nStore } from "../i18n/index.ts";
 import type { ScoreLogItem } from "../types/index.ts";
 import { goBack } from "../utils/navigation.ts";
 
+const SCORE_RULE_KEYS = [
+  "base_weekly_score",
+  "penalty_normal",
+  "penalty_safety",
+  "penalty_overdue",
+  "penalty_reopen",
+  "bonus_kaizen",
+  "reward_reporter_normal",
+  "reward_reporter_safety",
+  "penalty_reporter_invalid",
+] as const;
+function getScoreRuleLabel(
+  ruleKey: string,
+  description: string,
+  t: (path: string) => string,
+): string {
+  return SCORE_RULE_KEYS.includes(ruleKey as (typeof SCORE_RULE_KEYS)[number])
+    ? t(`leaderboard.rule_${ruleKey}`)
+    : description || ruleKey;
+}
+
 interface ScoreLedgerPageProps {
   targetType: "LOCATION" | "USER";
   id: string;
@@ -154,18 +175,18 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                         {log.issue_category && (
                           <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                            {log.issue_category}
+                            {t(`category.${log.issue_category}`)}
                           </span>
                         )}
                         <span className="font-mono text-xs font-black text-blue-600 dark:text-blue-400 group-hover:underline">
                           #{log.issue_id}
                         </span>
                         <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
-                          {log.rule_description || log.rule_key}
+                          {getScoreRuleLabel(log.rule_key, log.rule_description, t)}
                         </span>
                         {log.issue_status && (
                           <span className="text-[10px] font-medium text-zinc-400">
-                            • {log.issue_status}
+                            • {t(`status.${log.issue_status}`)}
                           </span>
                         )}
                       </div>

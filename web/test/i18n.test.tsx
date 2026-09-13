@@ -101,6 +101,22 @@ describe("i18n Locale Parity & Consistency (vi, en, zh)", () => {
     expect(t("non_existent_key")).toBe("non_existent_key");
   });
 });
+describe("Score ledger translations", () => {
+  it("translates score rule and status labels in every locale", () => {
+    const { setLocale, t } = useI18nStore.getState();
+    const expected = {
+      vi: ["Trừ điểm sự cố thường", "Đã hoàn thành"],
+      en: ["Normal issue penalty", "Closed"],
+      zh: ["普通问题扣分", "已关闭"],
+    } as const;
+
+    for (const [locale, [rule, status]] of Object.entries(expected)) {
+      setLocale(locale as keyof typeof expected);
+      expect(t("leaderboard.rule_penalty_normal")).toBe(rule);
+      expect(t("status.CLOSED")).toBe(status);
+    }
+  });
+});
 
 describe("resolveLocationNameByCode", () => {
   const locations = [

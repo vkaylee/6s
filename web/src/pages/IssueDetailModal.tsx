@@ -30,6 +30,28 @@ import { haptics } from "../utils/haptics.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
 import { CreateIssueModal } from "./CreateIssueModal.tsx";
 
+const SCORE_RULE_KEYS = [
+  "base_weekly_score",
+  "penalty_normal",
+  "penalty_safety",
+  "penalty_overdue",
+  "penalty_reopen",
+  "bonus_kaizen",
+  "reward_reporter_normal",
+  "reward_reporter_safety",
+  "penalty_reporter_invalid",
+] as const;
+
+function getScoreRuleLabel(
+  ruleKey: string,
+  description: string,
+  t: (path: string) => string,
+): string {
+  return SCORE_RULE_KEYS.includes(ruleKey as (typeof SCORE_RULE_KEYS)[number])
+    ? t(`leaderboard.rule_${ruleKey}`)
+    : description || ruleKey;
+}
+
 interface IssueDetailModalProps {
   issue: IssueItem;
   isOpen: boolean;
@@ -881,7 +903,7 @@ export function IssueDetailModal({
                         >
                           <div className="space-y-0.5">
                             <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                              {log.rule_description || log.rule_key}
+                              {getScoreRuleLabel(log.rule_key, log.rule_description, t)}
                               {log.penalty_date && ` (${log.penalty_date})`}
                             </div>
                           </div>
