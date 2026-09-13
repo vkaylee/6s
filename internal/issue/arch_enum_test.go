@@ -30,6 +30,7 @@ func TestArchitecture_EnforceEnumComparisons(t *testing.T) {
 		"LINE_LEADER":    "auth.RoleLineLeader",
 		"SAFETY_OFFICER": "auth.RoleSafetyOfficer",
 		"ADMIN":          "auth.RoleAdmin",
+		"SUPERADMIN":     "auth.RoleSuperadmin",
 	}
 
 	rootDir := "../"

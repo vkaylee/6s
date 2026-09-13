@@ -35,6 +35,7 @@ describe("Frontend Architecture: Enforce Enum Comparisons", () => {
     LINE_LEADER: "UserRole.LINE_LEADER",
     SAFETY_OFFICER: "UserRole.SAFETY_OFFICER",
     ADMIN: "UserRole.ADMIN",
+    SUPERADMIN: "UserRole.SUPERADMIN",
   };
 
   it("ensures no code compares raw string literals for Status, Category, or Role", () => {
