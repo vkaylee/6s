@@ -179,6 +179,16 @@ func TestRouter_ConfiguredSetup(t *testing.T) {
 	if recLogin.Code == http.StatusNotFound {
 		t.Errorf("expected route /api/auth/login to be registered, got 404")
 	}
+
+	// AI routes must be registered; auth middleware may reject requests, but never 404.
+	for _, path := range []string{"/api/ai/review", "/api/ai/review-follow-up"} {
+		reqAI := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"issue_id":7,"question":"What changed?"}`))
+		recAI := httptest.NewRecorder()
+		r.ServeHTTP(recAI, reqAI)
+		if recAI.Code == http.StatusNotFound {
+			t.Errorf("expected %s to be registered, got 404", path)
+		}
+	}
 }
 
 func TestUploadsRouteRemoved(t *testing.T) {

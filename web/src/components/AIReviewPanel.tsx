@@ -5,18 +5,21 @@ export type AIReviewResult = {
   verdict: "OK" | "REVIEW" | "MISMATCH";
   feedback: string;
   suggestion: { category?: string; cause_type?: string; tags?: string[] };
-  suggested_questions?: string[];
   used_vision: boolean;
 };
-type AIAnswer = { answer: string };
+type FollowUpTurn = { question: string; answer: string };
 
 type AIReviewPanelProps = {
   review: AIReviewResult;
   currentIssue: IssueItem;
   tags: TagItem[];
   value: string;
-  answer: AIAnswer | null;
   isAskingFollowUp: boolean;
+  pendingFollowUpQuestion: string | null;
+  streamingFollowUpAnswer: string;
+  followUpCount: number;
+  followUpLimit: number;
+  followUpHistory: FollowUpTurn[];
   onFollowUpQuestionChange: (question: string) => void;
   onApplySuggestion: (patch: Record<string, unknown>) => void;
   onFollowUp: (question?: string) => void;
@@ -30,8 +33,12 @@ export function AIReviewPanel({
   currentIssue,
   tags,
   value,
-  answer,
   isAskingFollowUp,
+  pendingFollowUpQuestion,
+  streamingFollowUpAnswer,
+  followUpCount,
+  followUpLimit,
+  followUpHistory,
   onFollowUpQuestionChange,
   onApplySuggestion,
   onFollowUp,
@@ -50,17 +57,17 @@ export function AIReviewPanel({
         ? "bg-rose-600"
         : "bg-amber-500 text-zinc-950";
   const appliedTags = new Set(currentIssue.tags ?? []);
-  const questionClass =
-    "rounded-md border border-zinc-300 px-2 py-1 text-[11px] leading-4 text-zinc-700 transition hover:border-violet-400 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800";
+  const limitReached = followUpCount >= followUpLimit;
+
   return (
-    <div className={`p-3 rounded-xl border text-xs space-y-2 ${panelClass}`}>
+    <div className={`space-y-2 rounded-xl border p-3 text-xs ${panelClass}`}>
       <span
-        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black text-white ${verdictClass}`}
+        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-black text-white ${verdictClass}`}
       >
         {t(`issue_detail.ai_review_verdict_${review.verdict.toLowerCase()}`)}
       </span>
       {review.feedback && (
-        <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">{review.feedback}</p>
+        <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">{review.feedback}</p>
       )}
       {(review.suggestion.category || review.suggestion.cause_type) && (
         <div className="flex flex-wrap gap-1.5">
@@ -108,47 +115,67 @@ export function AIReviewPanel({
           })}
         </div>
       )}
-      <div className="border-t border-zinc-200/70 dark:border-zinc-700/70 pt-2 space-y-2">
-        <p className="font-semibold text-zinc-700 dark:text-zinc-300">
-          {t("issue_detail.ai_follow_up_title")}
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {review.suggested_questions?.map((question) => (
+      <div className="space-y-2 border-t border-zinc-200/70 pt-2 dark:border-zinc-700/70">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+            {t("issue_detail.ai_follow_up_title")}
+          </p>
+          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            {followUpCount}/{followUpLimit}
+          </span>
+        </div>
+        {followUpHistory.length > 0 && (
+          <div className="space-y-2" role="log" aria-label={t("issue_detail.ai_follow_up_title")}>
+            {followUpHistory.map((turn) => (
+              <div key={`${turn.question}-${turn.answer}`} className="space-y-1">
+                <p className="ml-4 rounded-lg bg-violet-100 px-3 py-2 text-zinc-800 dark:bg-violet-950/50 dark:text-zinc-200">
+                  {turn.question}
+                </p>
+                <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+                  {turn.answer}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+        {(pendingFollowUpQuestion || isAskingFollowUp) && (
+          <div className="space-y-1" role="log" aria-live="polite">
+            {pendingFollowUpQuestion && (
+              <p className="ml-4 rounded-lg bg-violet-100 px-3 py-2 text-zinc-800 dark:bg-violet-950/50 dark:text-zinc-200">
+                {pendingFollowUpQuestion}
+              </p>
+            )}
+            {isAskingFollowUp && (
+              <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+                {streamingFollowUpAnswer || t("issue_detail.ai_follow_up_loading")}
+              </p>
+            )}
+          </div>
+        )}
+        {!isAskingFollowUp && (
+          <div className="flex gap-2">
+            <input
+              value={value}
+              onChange={(event) => onFollowUpQuestionChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onFollowUp();
+              }}
+              maxLength={500}
+              disabled={limitReached}
+              placeholder={t("issue_detail.ai_follow_up_placeholder")}
+              aria-label={t("issue_detail.ai_follow_up_title")}
+              className="min-h-9 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+            />
             <button
-              key={question}
               type="button"
-              className={questionClass}
-              onClick={() => onFollowUp(question)}
-              disabled={isAskingFollowUp}
+              className="min-h-9 rounded-md bg-violet-600 px-3 text-xs font-semibold text-white transition hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onFollowUp()}
+              disabled={!value.trim() || limitReached}
             >
-              {question}
+              {t("issue_detail.ai_follow_up_send")}
             </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={value}
-            onChange={(event) => onFollowUpQuestionChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onFollowUp();
-            }}
-            maxLength={500}
-            placeholder={t("issue_detail.ai_follow_up_placeholder")}
-            aria-label={t("issue_detail.ai_follow_up_title")}
-            className="min-h-9 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
-          />
-          <button
-            type="button"
-            className="min-h-9 rounded-md bg-violet-600 px-3 text-xs font-semibold text-white transition hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => onFollowUp()}
-            disabled={isAskingFollowUp || !value.trim()}
-          >
-            {isAskingFollowUp
-              ? t("issue_detail.ai_follow_up_loading")
-              : t("issue_detail.ai_follow_up_send")}
-          </button>
-        </div>
-        {answer && <p className="whitespace-pre-wrap">{answer.answer}</p>}
+          </div>
+        )}
       </div>
     </div>
   );

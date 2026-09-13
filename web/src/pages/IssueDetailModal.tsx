@@ -64,7 +64,9 @@ export function IssueDetailModal({
   useEffect(() => {
     setCurrentIssue(issue);
     setTranslatedDesc(issue.translated_description || null);
-    translatedLangRef.current = locale;
+    setFollowUpHistory([]);
+    setPendingFollowUpQuestion(null);
+    setStreamingFollowUpAnswer("");
     setShowOriginal(false);
   }, [issue, locale]);
 
@@ -91,18 +93,40 @@ export function IssueDetailModal({
 
   const handleFollowUp = async (question = followUpQuestion) => {
     const trimmed = question.trim();
-    if (!aiEnabled || !trimmed || isAskingFollowUp || !currentIssue.id) return;
+    if (
+      !aiEnabled ||
+      !trimmed ||
+      isAskingFollowUp ||
+      !currentIssue.id ||
+      followUpHistory.length >= followUpLimit
+    )
+      return;
     setIsAskingFollowUp(true);
+    setPendingFollowUpQuestion(trimmed);
+    setStreamingFollowUpAnswer("");
     try {
       const res = await apiClient<{ answer: string }>("/api/ai/review-follow-up", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issue_id: currentIssue.id, lang: locale, question: trimmed }),
+        body: JSON.stringify({
+          issue_id: currentIssue.id,
+          lang: locale,
+          question: trimmed,
+          history: followUpHistory,
+        }),
       });
       setFollowUpQuestion("");
-      setFollowUpAnswer(res.answer);
+      for (const [index] of Array.from(res.answer).entries()) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 18));
+        setStreamingFollowUpAnswer(res.answer.slice(0, index + 1));
+      }
+      setFollowUpHistory((history) => [...history, { question: trimmed, answer: res.answer }]);
+      setPendingFollowUpQuestion(null);
+      setStreamingFollowUpAnswer("");
       haptics.success();
     } catch {
+      setPendingFollowUpQuestion(null);
+      setStreamingFollowUpAnswer("");
       haptics.errorOrConflict();
       await modalDialog.alert(t("issue_detail.ai_follow_up_failed"));
     } finally {
@@ -140,7 +164,7 @@ export function IssueDetailModal({
     null,
   );
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [zoomScale, setZoomScale] = useState(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchDistanceRef = useRef<number | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
@@ -152,8 +176,13 @@ export function IssueDetailModal({
   const [aiReview, setAiReview] = useState<AIReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState("");
-  const [followUpAnswer, setFollowUpAnswer] = useState<string | null>(null);
+  const [pendingFollowUpQuestion, setPendingFollowUpQuestion] = useState<string | null>(null);
+  const [streamingFollowUpAnswer, setStreamingFollowUpAnswer] = useState("");
+  const [followUpHistory, setFollowUpHistory] = useState<
+    Array<{ question: string; answer: string }>
+  >([]);
   const [isAskingFollowUp, setIsAskingFollowUp] = useState(false);
+  const followUpLimit = 5;
 
   // Prefetch the cached translation once the AI status resolves.
   useEffect(() => {
@@ -801,9 +830,13 @@ export function IssueDetailModal({
                     currentIssue={currentIssue}
                     tags={tags}
                     value={followUpQuestion}
-                    answer={followUpAnswer ? { answer: followUpAnswer } : null}
-                    isAskingFollowUp={isAskingFollowUp}
+                    followUpCount={followUpHistory.length}
+                    followUpLimit={followUpLimit}
+                    followUpHistory={followUpHistory}
+                    pendingFollowUpQuestion={pendingFollowUpQuestion}
+                    streamingFollowUpAnswer={streamingFollowUpAnswer}
                     onFollowUpQuestionChange={setFollowUpQuestion}
+                    isAskingFollowUp={isAskingFollowUp}
                     onApplySuggestion={handleApplySuggestion}
                     onFollowUp={handleFollowUp}
                   />

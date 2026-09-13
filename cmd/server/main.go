@@ -339,6 +339,8 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		air.Get("/status", aiHandler.Status)
 		air.Post("/translate", aiHandler.Translate)
 		air.Get("/cached", aiHandler.GetCached)
+		air.Post("/review", aiHandler.Review)
+		air.Post("/review-follow-up", aiHandler.FollowUp)
 	})
 	backgroundCtx := context.Background()
 	outboxWorker := notification.NewWorker(queries, httpSender, cipher, notifyCh)

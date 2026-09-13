@@ -950,12 +950,12 @@ func TestGetCachedTranslation(t *testing.T) {
 
 func reviewTestFixture(gatewayURL, storageDir string) *mockStore {
 	if storageDir != "" {
-		// Fake evidence photos so collectReviewImages picks them up.
+		// Keep evidence fixtures distinct to verify overview/detail ordering in gateway payloads.
 		if err := os.MkdirAll(filepath.Join(storageDir, "before"), 0o755); err == nil {
-			_ = os.WriteFile(filepath.Join(storageDir, "before", "11111111-1111-1111-1111-111111111111_wide.jpg"), []byte{0xFF, 0xD8, 0xFF, 0xE0}, 0o600)
+			_ = os.WriteFile(filepath.Join(storageDir, "before", "11111111-1111-1111-1111-111111111111_wide.jpg"), []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x01}, 0o600)
 		}
 		if err := os.MkdirAll(filepath.Join(storageDir, "detail"), 0o755); err == nil {
-			_ = os.WriteFile(filepath.Join(storageDir, "detail", "11111111-1111-1111-1111-111111111111_detail.jpg"), []byte{0xFF, 0xD8, 0xFF, 0xE0}, 0o600)
+			_ = os.WriteFile(filepath.Join(storageDir, "detail", "11111111-1111-1111-1111-111111111111_detail.jpg"), []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x02}, 0o600)
 		}
 	}
 	return &mockStore{
@@ -988,16 +988,25 @@ func reviewTestFixture(gatewayURL, storageDir string) *mockStore {
 func TestReview_HappyPath(t *testing.T) {
 	// Minimal JPEG header suffices: readReviewPhoto only checks size and extension.
 	storageDir := t.TempDir()
-	for _, rel := range []string{"before/11111111-1111-1111-1111-111111111111_wide.jpg", "detail/11111111-1111-1111-1111-111111111111_detail.jpg"} {
-		p := filepath.Join(storageDir, rel)
+	beforeBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x01}
+	detailBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x02}
+	for _, fixture := range []struct {
+		rel  string
+		data []byte
+	}{
+		{"before/11111111-1111-1111-1111-111111111111_wide.jpg", beforeBytes},
+		{"detail/11111111-1111-1111-1111-111111111111_detail.jpg", detailBytes},
+	} {
+		p := filepath.Join(storageDir, fixture.rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}, 0o644); err != nil {
+		if err := os.WriteFile(p, fixture.data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var seenImageParts int
+	var imageURLs []string
 	var requestedModel string
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -1017,6 +1026,7 @@ func TestReview_HappyPath(t *testing.T) {
 			for _, p := range m.Content {
 				if p.Type == "image_url" && p.ImageURL != nil && strings.HasPrefix(p.ImageURL.URL, "data:image/jpeg;base64,") {
 					seenImageParts++
+					imageURLs = append(imageURLs, p.ImageURL.URL)
 				}
 			}
 		}
@@ -1046,7 +1056,11 @@ func TestReview_HappyPath(t *testing.T) {
 	if res.Suggestion.Category != testCategory1S {
 		t.Errorf("suggested category = %q, want 1S (different from current 3S)", res.Suggestion.Category)
 	}
-	// Both evidence photos (overview + close-up) must be attached as data URLs.
+	expectedBefore := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(beforeBytes)
+	expectedDetail := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(detailBytes)
+	if len(imageURLs) != 2 || imageURLs[0] != expectedBefore || imageURLs[1] != expectedDetail {
+		t.Errorf("expected overview then detail data URLs, got %v", imageURLs)
+	}
 	if !res.UsedVision || seenImageParts != 2 {
 		t.Errorf("used_vision=%v image parts=%d, want true/2", res.UsedVision, seenImageParts)
 	}
@@ -1136,10 +1150,66 @@ func TestFollowUp_ValidatesQuestionAndReturnsAnswer(t *testing.T) {
 	}
 }
 
-func TestFilterSuggestedQuestions(t *testing.T) {
-	questions := []string{"", "Q1", "Q1", strings.Repeat("x", reviewMaxQuestionRunes+1), "Q2", "Q3", "Q4", "Q5", "Q6"}
-	got := filterSuggestedQuestions(questions)
-	if len(got) != reviewMaxSuggestedQuestions || strings.Join(got, ",") != "Q1,Q2,Q3,Q4,Q5" {
-		t.Fatalf("unexpected filtered questions: %#v", got)
+func TestBuildReviewPromptUsesRequestedTagLanguageAndFullCatalog(t *testing.T) {
+	issue := db.Issue{Category: "3S", LocationCode: "LINE_A1", Description: sql.NullString{String: "Oil leak", Valid: true}}
+	selected := []db.ListTagsForIssueRow{{Code: "DIRT", NameVi: "Bụi bẩn", NameZh: "污垢", NameEn: "Dirt", Category: "3S"}}
+	catalog := make([]db.Tag, 0, 201)
+	for i := 0; i < 201; i++ {
+		catalog = append(catalog, db.Tag{
+			Code:     fmt.Sprintf("TAG_%03d", i),
+			NameVi:   fmt.Sprintf("VI_%03d", i),
+			NameZh:   fmt.Sprintf("ZH_%03d", i),
+			NameEn:   fmt.Sprintf("EN_%03d", i),
+			Category: "3S",
+		})
+	}
+
+	tests := []struct {
+		name        string
+		language    string
+		mustHave    []string
+		mustNotHave []string
+	}{
+		{name: "Vietnamese", language: "Vietnamese", mustHave: []string{"Bụi bẩn", "VI_000", "VI_200"}, mustNotHave: []string{"污垢", "Dirt", "ZH_000", "EN_000"}},
+		{name: "English", language: "English", mustHave: []string{"Dirt", "EN_000", "EN_200"}, mustNotHave: []string{"Bụi bẩn", "污垢", "VI_000", "ZH_000"}},
+		{name: "Chinese", language: "Simplified Chinese", mustHave: []string{"污垢", "ZH_000", "ZH_200"}, mustNotHave: []string{"Bụi bẩn", "Dirt", "VI_000", "EN_000"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt := buildReviewPrompt(issue, selected, catalog, tt.language, false)
+			for _, value := range tt.mustHave {
+				if !strings.Contains(prompt, value) {
+					t.Errorf("prompt missing %q", value)
+				}
+			}
+			for _, value := range tt.mustNotHave {
+				if strings.Contains(prompt, value) {
+					t.Errorf("prompt unexpectedly contains %q", value)
+				}
+			}
+			if !strings.Contains(prompt, "at most 5 codes") {
+				t.Error("prompt does not allow five suggested tags")
+			}
+		})
+	}
+}
+
+func TestBuildReviewPromptRequiresEvidenceBackedTagCodes(t *testing.T) {
+	issue := db.Issue{Category: "3S", LocationCode: "LINE_A1", Description: sql.NullString{String: "Wet floor", Valid: true}}
+	prompt := buildReviewPrompt(issue, nil, []db.Tag{{Code: "WET_FLOOR", NameVi: "Sàn ướt", NameEn: "Wet floor", NameZh: "湿地面", Category: "3S"}}, "English", true)
+	for _, rule := range []string{
+		"Treat the description and selected tags as user claims",
+		"Do not invent or assume details",
+		"If photos conflict with each other or with the report",
+		"Suggest a tag only when directly supported",
+		"leave suggested_category, suggested_cause_type empty and suggested_tags as []",
+		"never translated tag names",
+	} {
+		if !strings.Contains(prompt, rule) {
+			t.Errorf("prompt missing evidence rule %q", rule)
+		}
+	}
+	if !strings.Contains(prompt, `"suggested_tags":["CODE",...]`) {
+		t.Error("prompt missing tag-code JSON contract")
 	}
 }

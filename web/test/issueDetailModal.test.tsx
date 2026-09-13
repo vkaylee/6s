@@ -90,8 +90,10 @@ describe("IssueDetailModal Component", () => {
           [],
           false,
           true,
-          null,
-          false,
+          null, // followUpAnswer
+          "", // followUpQuestion
+          [], // followUpHistory
+          false, // isAskingFollowUp
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
@@ -724,9 +726,12 @@ describe("IssueDetailModal Component", () => {
           { x: 0, y: 0 }, // panOffset
           [], // issueScoreLogs
           false, // loadingScores
-          true, // aiEnabled (AI enabled)
           null, // aiReview
           false, // isReviewing
+          null, // followUpAnswer
+          "", // followUpQuestion
+          [], // followUpHistory
+          false, // isAskingFollowUp
         ]}
       >
         <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />

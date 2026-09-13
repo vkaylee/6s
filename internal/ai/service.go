@@ -864,10 +864,9 @@ const (
 
 const (
 	reviewMaxFeedbackRunes    = 1200
-	reviewMaxSuggestedTags    = 5
-	reviewTagCatalogLimit     = 200
 	reviewPhotoMaxBytes       = 2*1024*1024 + 1024 // storage cap is 2MB per photo
 	reviewDescriptionMaxRunes = 4000
+	reviewMaxSuggestedTags    = 5
 )
 
 // ReviewRequest defines input for POST /api/ai/review.
@@ -876,22 +875,28 @@ type ReviewRequest struct {
 	Lang    string `json:"lang"`
 }
 
+// FollowUpTurn records one successful follow-up exchange.
+type FollowUpTurn struct {
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
+}
+
 // FollowUpRequest defines input for POST /api/ai/review-follow-up.
 type FollowUpRequest struct {
-	IssueID  int64  `json:"issue_id"`
-	Lang     string `json:"lang"`
-	Question string `json:"question"`
+	IssueID  int64          `json:"issue_id"`
+	Lang     string         `json:"lang"`
+	Question string         `json:"question"`
+	History  []FollowUpTurn `json:"history,omitempty"`
 }
+
+const reviewMaxFollowUpTurns = 5
 
 // FollowUpResponse contains the AI answer to a review follow-up question.
 type FollowUpResponse struct {
 	Answer string `json:"answer"`
 }
 
-const (
-	reviewMaxSuggestedQuestions = 5
-	reviewMaxQuestionRunes      = 500
-)
+const reviewMaxQuestionRunes = 500
 
 // ReviewSuggestion holds AI-proposed corrections; empty fields mean "keep as is".
 type ReviewSuggestion struct {
@@ -902,12 +907,11 @@ type ReviewSuggestion struct {
 
 // ReviewResponse is the structured AI verdict for an issue report.
 type ReviewResponse struct {
-	Verdict            string           `json:"verdict"`
-	Feedback           string           `json:"feedback"`
-	Suggestion         ReviewSuggestion `json:"suggestion"`
-	SuggestedQuestions []string         `json:"suggested_questions,omitempty"`
-	Model              string           `json:"model"`
-	UsedVision         bool             `json:"used_vision"`
+	Verdict    string           `json:"verdict"`
+	Feedback   string           `json:"feedback"`
+	Suggestion ReviewSuggestion `json:"suggestion"`
+	Model      string           `json:"model"`
+	UsedVision bool             `json:"used_vision"`
 }
 
 // IsEnabled reports whether the AI gateway is active (false on any lookup error).
@@ -966,6 +970,14 @@ func (s *Service) FollowUp(ctx context.Context, req FollowUpRequest) (FollowUpRe
 	if len([]rune(question)) > reviewMaxQuestionRunes {
 		return FollowUpResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "question is too long")
 	}
+	if len(req.History) >= reviewMaxFollowUpTurns {
+		return FollowUpResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "follow-up limit reached")
+	}
+	for _, turn := range req.History {
+		if strings.TrimSpace(turn.Question) == "" || strings.TrimSpace(turn.Answer) == "" || len([]rune(turn.Question)) > reviewMaxQuestionRunes || len([]rune(turn.Answer)) > reviewMaxFeedbackRunes {
+			return FollowUpResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "invalid follow-up history")
+		}
+	}
 	cfg, err := s.store.GetAIConfig(ctx)
 	if err != nil || !cfg.IsEnabled {
 		return FollowUpResponse{}, apperror.BadRequest(i18n.ErrAINotEnabled)
@@ -992,26 +1004,31 @@ func (s *Service) FollowUp(ctx context.Context, req FollowUpRequest) (FollowUpRe
 	}
 	images := s.collectReviewImages(issue)
 	system := buildReviewPrompt(issue, selected, catalog, resolveTargetLang(req.Lang), len(images) > 0)
-	system += "\n\nAnswer the user's follow-up question about this review. Do not modify the issue. Keep the answer concise and write entirely in the requested language.\n"
-	answer, err := s.completeFollowUp(ctx, baseURL, cfg.ApiKey, model, system, question, images)
+	system += "\n\nAnswer the user's follow-up question about this review. Use the previous conversation turns for context. Do not modify the issue. Keep the answer concise and write entirely in the requested language.\n"
+	answer, err := s.completeFollowUp(ctx, baseURL, cfg.ApiKey, model, system, question, req.History, images)
 	if err != nil {
 		return FollowUpResponse{}, err
 	}
 	return FollowUpResponse{Answer: answer}, nil
 }
 
-func (s *Service) completeFollowUp(ctx context.Context, baseURL, apiKey, model, system, question string, images []openai.ChatCompletionContentPartUnionParam) (string, error) {
+func (s *Service) completeFollowUp(ctx context.Context, baseURL, apiKey, model, system, question string, history []FollowUpTurn, images []openai.ChatCompletionContentPartUnionParam) (string, error) {
 	client := s.newOpenAIClient(baseURL, s.getDecryptedAPIKey(apiKey))
 	if waitErr := s.waitRateLimit(ctx); waitErr != nil {
 		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, waitErr.Error()).WithCause(waitErr)
+	}
+	messages := []openai.ChatCompletionMessageParamUnion{openai.SystemMessage(system)}
+	for _, turn := range history {
+		messages = append(messages, openai.UserMessage(turn.Question), openai.AssistantMessage(turn.Answer))
 	}
 	userMsg := openai.UserMessage(question)
 	if len(images) > 0 {
 		parts := append([]openai.ChatCompletionContentPartUnionParam{openai.TextContentPart(question)}, images...)
 		userMsg = openai.UserMessage(parts)
 	}
+	messages = append(messages, userMsg)
 	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Messages:    []openai.ChatCompletionMessageParamUnion{openai.SystemMessage(system), userMsg},
+		Messages:    messages,
 		Model:       model,
 		Temperature: openai.Float(0.2),
 	})
@@ -1061,12 +1078,11 @@ func (s *Service) completeReview(ctx context.Context, baseURL, apiKey, model, pr
 // parseReviewResult validates the model's JSON verdict and clamps it to known codes.
 func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, usedVision bool) (ReviewResponse, error) {
 	var out struct {
-		Verdict            string   `json:"verdict"`
-		Feedback           string   `json:"feedback"`
-		SuggestedCategory  string   `json:"suggested_category"`
-		SuggestedCause     string   `json:"suggested_cause_type"`
-		SuggestedTags      []string `json:"suggested_tags"`
-		SuggestedQuestions []string `json:"suggested_questions"`
+		Verdict           string   `json:"verdict"`
+		Feedback          string   `json:"feedback"`
+		SuggestedCategory string   `json:"suggested_category"`
+		SuggestedCause    string   `json:"suggested_cause_type"`
+		SuggestedTags     []string `json:"suggested_tags"`
 	}
 	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &out); err != nil {
 		return ReviewResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, "model returned invalid review JSON")
@@ -1091,41 +1107,7 @@ func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTags
 		resp.Suggestion.CauseType = ct
 	}
 	resp.Suggestion.Tags = filterReviewTags(out.SuggestedTags, selected, catalog)
-	resp.SuggestedQuestions = filterSuggestedQuestions(out.SuggestedQuestions)
 	return resp, nil
-}
-
-func filterSuggestedQuestions(questions []string) []string {
-	out := make([]string, 0, reviewMaxSuggestedQuestions)
-	seen := make(map[string]struct{}, len(questions))
-	for _, question := range questions {
-		question = strings.TrimSpace(question)
-		if question == "" || len([]rune(question)) > reviewMaxQuestionRunes {
-			continue
-		}
-		if _, ok := seen[question]; ok {
-			continue
-		}
-		seen[question] = struct{}{}
-		out = append(out, question)
-		if len(out) == reviewMaxSuggestedQuestions {
-			break
-		}
-	}
-	return out
-}
-
-func reviewStoreError(err error) *apperror.AppError {
-	return apperror.New(http.StatusBadGateway, "AI_REVIEW_FAILED", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
-}
-
-func validReviewCategory(c string) bool {
-	switch c {
-	case "1S", "2S", "3S", "4S", "5S", "6S":
-		return true
-	default:
-		return false
-	}
 }
 
 // filterReviewTags keeps only catalog codes the report does not already have.
@@ -1152,6 +1134,19 @@ func filterReviewTags(suggested []string, selected []db.ListTagsForIssueRow, cat
 		}
 	}
 	return out
+}
+
+func reviewStoreError(err error) *apperror.AppError {
+	return apperror.New(http.StatusBadGateway, "AI_REVIEW_FAILED", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
+}
+
+func validReviewCategory(category string) bool {
+	switch category {
+	case "1S", "2S", "3S", "4S", "5S", "6S":
+		return true
+	default:
+		return false
+	}
 }
 
 // extractJSONObject returns the outermost {...} slice of a model reply, tolerating markdown fences.
@@ -1234,16 +1229,13 @@ func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalo
 			if i > 0 {
 				parts = append(parts, ", ")
 			}
-			parts = append(parts, fmt.Sprintf("%s(%s)", t.Code, t.NameVi))
+			parts = append(parts, fmt.Sprintf("%s(%s)", t.Code, reviewTagName(db.Tag{Code: t.Code, NameVi: t.NameVi, NameZh: t.NameZh, NameEn: t.NameEn, Category: t.Category}, langName)))
 		}
 		parts = append(parts, "\n")
 	}
-	parts = append(parts, "\n", reviewCategoryGuide, "\n\n", "TAG CATALOG (use ONLY these codes in suggestions):\n")
-	for i, t := range catalog {
-		if i >= reviewTagCatalogLimit {
-			break
-		}
-		parts = append(parts, fmt.Sprintf("- %s | %s | %s | %s | %s\n", t.Code, t.NameVi, t.NameZh, t.NameEn, t.Category))
+	parts = append(parts, "\n", reviewCategoryGuide, "\n\n", "TAG CATALOG (use ONLY these codes in suggestions; names shown in requested language):\n")
+	for _, t := range catalog {
+		parts = append(parts, fmt.Sprintf("- %s | %s | %s\n", t.Code, reviewTagName(t, langName), t.Category))
 	}
 	parts = append(parts, "\nEVIDENCE: ")
 	if hasPhotos {
@@ -1253,13 +1245,27 @@ func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalo
 	}
 	parts = append(parts,
 		"\n\nReturn ONLY a JSON object:\n",
-		`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...],"suggested_questions":["contextual question 1",...]}`,
+		`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...]}`,
 		"\nRules:\n",
 		"- OK: everything matches the evidence. REVIEW: plausible but uncertain or incomplete. MISMATCH: classification or report clearly contradicts the evidence.\n",
+		"- Treat the description and selected tags as user claims; distinguish them from facts visible in photos.\n",
+		"- Do not invent or assume details that are not visible in photos or stated in the report.\n",
+		"- If photos conflict with each other or with the report, explain the conflict and use REVIEW unless contradiction is clear.\n",
+		"- Suggest a tag only when directly supported by the description or photos; do not suggest tags merely because they share a category.\n",
+		"- If evidence is insufficient, leave suggested_category, suggested_cause_type empty and suggested_tags as [].\n",
 		"- suggested_* fields: fill ONLY when the correction clearly improves the report; leave empty or [] otherwise.\n",
-		"- suggested_tags: at most 3 codes from the TAG CATALOG, not already selected.\n",
-		"- suggested_questions: return 3 to 5 concise follow-up questions tailored to this report, its location, evidence, verdict and suggestions; return [] only if no useful question exists. Do not repeat the report verbatim.\n",
+		"- suggested_tags must contain tag codes from the catalog, never translated tag names; at most 5 codes and never already selected.\n",
 		"- feedback: at most 3 sentences addressed to the reporter; state what matches or what is wrong and why; write entirely in "+langName+".",
 	)
 	return strings.Join(parts, "")
+}
+func reviewTagName(tag db.Tag, langName string) string {
+	switch langName {
+	case "Simplified Chinese":
+		return tag.NameZh
+	case "English":
+		return tag.NameEn
+	default:
+		return tag.NameVi
+	}
 }
