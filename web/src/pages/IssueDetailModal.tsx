@@ -824,23 +824,6 @@ export function IssueDetailModal({
                     ))}
                   </div>
                 )}
-                {aiReview && (
-                  <AIReviewPanel
-                    review={aiReview}
-                    currentIssue={currentIssue}
-                    tags={tags}
-                    value={followUpQuestion}
-                    followUpCount={followUpHistory.length}
-                    followUpLimit={followUpLimit}
-                    followUpHistory={followUpHistory}
-                    pendingFollowUpQuestion={pendingFollowUpQuestion}
-                    streamingFollowUpAnswer={streamingFollowUpAnswer}
-                    onFollowUpQuestionChange={setFollowUpQuestion}
-                    isAskingFollowUp={isAskingFollowUp}
-                    onApplySuggestion={handleApplySuggestion}
-                    onFollowUp={handleFollowUp}
-                  />
-                )}
                 {currentIssue.reject_reason && (
                   <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
                     <strong>{t("issue_detail.reject_reason_label")}</strong>{" "}
@@ -848,6 +831,23 @@ export function IssueDetailModal({
                   </div>
                 )}
               </div>
+              {aiReview && (
+                <AIReviewPanel
+                  review={aiReview}
+                  currentIssue={currentIssue}
+                  tags={tags}
+                  value={followUpQuestion}
+                  followUpCount={followUpHistory.length}
+                  followUpLimit={followUpLimit}
+                  followUpHistory={followUpHistory}
+                  pendingFollowUpQuestion={pendingFollowUpQuestion}
+                  streamingFollowUpAnswer={streamingFollowUpAnswer}
+                  onFollowUpQuestionChange={setFollowUpQuestion}
+                  isAskingFollowUp={isAskingFollowUp}
+                  onApplySuggestion={handleApplySuggestion}
+                  onFollowUp={handleFollowUp}
+                />
+              )}
 
               {/* Score Impact Breakdown Card */}
               <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 space-y-2.5">

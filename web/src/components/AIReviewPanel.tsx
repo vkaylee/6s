@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type IssueItem, resolveTagLabel, type TagItem } from "../types/index.ts";
 
@@ -44,6 +45,32 @@ export function AIReviewPanel({
   onFollowUp,
 }: AIReviewPanelProps) {
   const { t, locale } = useI18nStore();
+  const [displayedFeedback, setDisplayedFeedback] = useState("");
+  const [isFeedbackRevealing, setIsFeedbackRevealing] = useState(Boolean(review.feedback));
+  useEffect(() => {
+    if (!review.feedback || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayedFeedback(review.feedback);
+      setIsFeedbackRevealing(false);
+      return;
+    }
+    let index = 0;
+    let timeoutId: number | undefined;
+    setDisplayedFeedback("");
+    setIsFeedbackRevealing(true);
+    const revealNext = () => {
+      index += 1;
+      setDisplayedFeedback(review.feedback.slice(0, index));
+      if (index < review.feedback.length) {
+        timeoutId = window.setTimeout(revealNext, 16);
+      } else {
+        setIsFeedbackRevealing(false);
+      }
+    };
+    timeoutId = window.setTimeout(revealNext, 16);
+    return () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [review.feedback]);
   const panelClass =
     review.verdict === "OK"
       ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900"
@@ -60,14 +87,16 @@ export function AIReviewPanel({
   const limitReached = followUpCount >= followUpLimit;
 
   return (
-    <div className={`space-y-2 rounded-xl border p-3 text-xs ${panelClass}`}>
+    <div
+      className={`animate-fade-in space-y-2 rounded-xl border p-3 text-xs [animation-duration:300ms] ${panelClass}`}
+    >
       <span
         className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-black text-white ${verdictClass}`}
       >
         {t(`issue_detail.ai_review_verdict_${review.verdict.toLowerCase()}`)}
       </span>
       {review.feedback && (
-        <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">{review.feedback}</p>
+        <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">{displayedFeedback}</p>
       )}
       {(review.suggestion.category || review.suggestion.cause_type) && (
         <div className="flex flex-wrap gap-1.5">
@@ -115,44 +144,44 @@ export function AIReviewPanel({
           })}
         </div>
       )}
-      <div className="space-y-2 border-t border-zinc-200/70 pt-2 dark:border-zinc-700/70">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-semibold text-zinc-700 dark:text-zinc-300">
-            {t("issue_detail.ai_follow_up_title")}
-          </p>
-          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            {followUpCount}/{followUpLimit}
-          </span>
-        </div>
-        {followUpHistory.length > 0 && (
-          <div className="space-y-2" role="log" aria-label={t("issue_detail.ai_follow_up_title")}>
-            {followUpHistory.map((turn) => (
-              <div key={`${turn.question}-${turn.answer}`} className="space-y-1">
-                <p className="ml-4 rounded-lg bg-violet-100 px-3 py-2 text-zinc-800 dark:bg-violet-950/50 dark:text-zinc-200">
-                  {turn.question}
-                </p>
-                <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
-                  {turn.answer}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-        {(pendingFollowUpQuestion || isAskingFollowUp) && (
-          <div className="space-y-1" role="log" aria-live="polite">
-            {pendingFollowUpQuestion && (
+      {followUpHistory.length > 0 && (
+        <div className="space-y-2" role="log" aria-label={t("issue_detail.ai_follow_up_title")}>
+          {followUpHistory.map((turn) => (
+            <div key={`${turn.question}-${turn.answer}`} className="space-y-1">
               <p className="ml-4 rounded-lg bg-violet-100 px-3 py-2 text-zinc-800 dark:bg-violet-950/50 dark:text-zinc-200">
-                {pendingFollowUpQuestion}
+                {turn.question}
               </p>
-            )}
-            {isAskingFollowUp && (
               <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
-                {streamingFollowUpAnswer || t("issue_detail.ai_follow_up_loading")}
+                {turn.answer}
               </p>
-            )}
+            </div>
+          ))}
+        </div>
+      )}
+      {(pendingFollowUpQuestion || isAskingFollowUp) && (
+        <div className="space-y-1" role="log" aria-live="polite">
+          {pendingFollowUpQuestion && (
+            <p className="ml-4 rounded-lg bg-violet-100 px-3 py-2 text-zinc-800 dark:bg-violet-950/50 dark:text-zinc-200">
+              {pendingFollowUpQuestion}
+            </p>
+          )}
+          {isAskingFollowUp && (
+            <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+              {streamingFollowUpAnswer || t("issue_detail.ai_follow_up_loading")}
+            </p>
+          )}
+        </div>
+      )}
+      {!isAskingFollowUp && !isFeedbackRevealing && (
+        <div className="space-y-2 border-t border-zinc-200/70 pt-2 dark:border-zinc-700/70">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+              {t("issue_detail.ai_follow_up_title")}
+            </p>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              {followUpCount}/{followUpLimit}
+            </span>
           </div>
-        )}
-        {!isAskingFollowUp && (
           <div className="flex gap-2">
             <input
               value={value}
@@ -175,8 +204,8 @@ export function AIReviewPanel({
               {t("issue_detail.ai_follow_up_send")}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

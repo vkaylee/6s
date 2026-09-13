@@ -1,0 +1,68 @@
+import { describe, expect, it } from "bun:test";
+import { renderToString } from "react-dom/server";
+import { AIReviewPanel, type AIReviewResult } from "../src/components/AIReviewPanel.tsx";
+import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
+
+const issue: IssueItem = {
+  id: 1,
+  client_uuid: "00000000-0000-4000-8000-000000000001",
+  version: 1,
+  category: IssueCategory.S3,
+  location_code: "LINE_A1",
+  location_name: "Line A1",
+  description: "Issue description",
+  photo_before: "",
+  status: IssueStatus.OPEN,
+  creator_id: 1,
+  creator_name: "Reporter",
+  tags: [],
+  created_at: new Date().toISOString(),
+};
+
+const review: AIReviewResult = {
+  verdict: "REVIEW",
+  feedback: "",
+  suggestion: {},
+  used_vision: false,
+};
+
+function renderPanel(isAskingFollowUp: boolean) {
+  return renderToString(
+    <AIReviewPanel
+      review={review}
+      currentIssue={issue}
+      tags={[]}
+      value=""
+      isAskingFollowUp={isAskingFollowUp}
+      pendingFollowUpQuestion={isAskingFollowUp ? "Explain this result" : null}
+      streamingFollowUpAnswer={isAskingFollowUp ? "Working" : ""}
+      followUpCount={isAskingFollowUp ? 1 : 0}
+      followUpLimit={5}
+      followUpHistory={[]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+}
+
+describe("AIReviewPanel follow-up controls", () => {
+  it("hides label, count, input and send button while answering", () => {
+    const html = renderPanel(true);
+
+    expect(html).toContain("Explain this result");
+    expect(html).toContain("Working");
+    expect(html).not.toContain("Hỏi thêm AI");
+    expect(html).not.toContain('type="text"');
+    expect(html).not.toContain("Gửi");
+  });
+
+  it("shows label, count, input and send button when idle", () => {
+    const html = renderPanel(false);
+
+    expect(html).toContain("Hỏi thêm AI");
+    expect(html).toMatch(/0(?:<!-- -->)?\/(?:<!-- -->)?5/);
+    expect(html).toContain('placeholder="Nhập câu hỏi..."');
+    expect(html).toContain("Gửi");
+  });
+});
