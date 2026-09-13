@@ -152,8 +152,6 @@ export function SplitSlider({ beforeUrl, afterUrl, onPhotoClick }: SplitSliderPr
 
       {/* Draggable Divider Bar */}
       <div
-        draggable={false}
-        onDragStart={(e) => e.preventDefault()}
         className="absolute inset-y-0 w-1 bg-white cursor-ew-resize shadow-2xl flex items-center justify-center -ml-0.5 select-none"
         style={{ left: `${sliderPos}%` }}
       >
