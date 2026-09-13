@@ -267,9 +267,15 @@ describe("IssueDetailModal Component", () => {
             false,
           ]}
         >
-          <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
+          <IssueDetailModal
+            issue={mockIssue}
+            isOpen={true}
+            onClose={() => {}}
+            onRefresh={() => {}}
+          />
         </WithMockState>,
       );
+      expect(html).toContain(label);
     }
     useI18nStore.getState().setLocale("vi");
   });
