@@ -149,6 +149,17 @@ describe("UI Components i18n Integration", () => {
     version: 1,
   };
 
+  it("rerenders subscribed components after locale changes", () => {
+    const { setLocale } = useI18nStore.getState();
+    setLocale("vi");
+    expect(renderToString(<IssueCard issue={sampleIssue} onClick={() => {}} />)).toContain(
+      "Mới ghi nhận",
+    );
+    setLocale("en");
+    expect(renderToString(<IssueCard issue={sampleIssue} onClick={() => {}} />)).toContain("Open");
+    setLocale("vi");
+  });
+
   it("renders IssueCard in Vietnamese, English, and Chinese correctly", () => {
     const { setLocale } = useI18nStore.getState();
 
