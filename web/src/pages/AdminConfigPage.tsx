@@ -61,7 +61,21 @@ function AIResultBox({ result, t }: AIResultBoxProps) {
           })
         : `✗ ${result.error}`}
       {result.check && <span className="block opacity-70">{result.check}</span>}
-      {result.reply && (
+      {result.translation_checks?.map((check) => (
+        <div
+          key={`${check.source}-${check.target}`}
+          className="mt-1 border-t border-current/10 pt-1"
+        >
+          <span>
+            {check.success ? "✓" : "✗"} {check.source}→{check.target}
+          </span>
+          {check.error && <span className="block opacity-80">{check.error}</span>}
+          {check.reply && (
+            <span className="block font-mono break-words opacity-90">→ {check.reply}</span>
+          )}
+        </div>
+      ))}
+      {!result.translation_checks?.length && result.reply && (
         <span className="block mt-1 font-mono break-words opacity-90">→ {result.reply}</span>
       )}
     </div>

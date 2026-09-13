@@ -78,15 +78,25 @@ type TestRequest struct {
 	Purpose string `json:"purpose"`
 }
 
+// TranslationTestResult reports one source/target translation probe.
+type TranslationTestResult struct {
+	Source  string `json:"source"`
+	Target  string `json:"target"`
+	Success bool   `json:"success"`
+	Reply   string `json:"reply,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 // TestResponse represents the result of a connectivity or functional model test.
 type TestResponse struct {
-	Success   bool   `json:"success"`
-	LatencyMs int64  `json:"latency_ms"`
-	ModelUsed string `json:"model_used"`
-	Purpose   string `json:"purpose,omitempty"`
-	Check     string `json:"check,omitempty"`
-	Reply     string `json:"reply,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Success           bool                    `json:"success"`
+	LatencyMs         int64                   `json:"latency_ms"`
+	ModelUsed         string                  `json:"model_used"`
+	Purpose           string                  `json:"purpose,omitempty"`
+	Check             string                  `json:"check,omitempty"`
+	Reply             string                  `json:"reply,omitempty"`
+	Error             string                  `json:"error,omitempty"`
+	TranslationChecks []TranslationTestResult `json:"translation_checks,omitempty"`
 }
 
 // DNSTestRequest defines parameters for testing DNS resolution.
@@ -381,6 +391,11 @@ func (s *Service) getDecryptedAPIKey(apiKey string) string {
 	return apiKey
 }
 
+// translateSystemPrompt builds the production translation instruction for a target language.
+func translateSystemPrompt(langName string) string {
+	return "You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations."
+}
+
 // Translate translates the given text into targetLang using OpenAI-compatible chat completion.
 func (s *Service) Translate(ctx context.Context, text, targetLang string) (string, error) {
 	text = strings.TrimSpace(text)
@@ -426,7 +441,7 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 
 	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations."),
+			openai.SystemMessage(translateSystemPrompt(langName)),
 			openai.UserMessage(text),
 		},
 		Model:       model,
@@ -530,11 +545,9 @@ func (s *Service) resolveTestParams(ctx context.Context, req TestRequest) (strin
 	return baseURL, apiKey, model, nil
 }
 
-// functionalTestPrompts holds a per-purpose probe that exercises the exact task
-// the model is configured for, so a Test "pass" means the model can do the job.
 var functionalTestPrompts = map[string]functionalProbe{
 	"translate": {
-		system: "You are a professional translator. Translate the user's text. Return ONLY the translated text with no explanations, notes, or quotes.",
+		system: translateSystemPrompt("Simplified Chinese"),
 		user:   "Trạm nội thất bị bụi bẩn trên bàn làm việc, tệp tài liệu rơi lộn xộn dưới sàn",
 	},
 	"summary": {
@@ -553,7 +566,7 @@ type functionalProbe struct {
 }
 
 // testImageRedPNG is a 64x64 solid red PNG for the vision probe (data URI).
-const testImageRedPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACahnXAAAAAOElEQVR4nO3PQQ0AMAgEQXCf7l1QN2ZgIKDzb0YzAwCQmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZkBJ04C4AF+dwEAAAAASUVORK5CYII="
+const testImageRedPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAYklEQVR42u3QMREAAAgAoe9fWnN4MlCApuazBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAgPsWQ4jh0jwfLk0AAAAASUVORK5CYII="
 
 func isRefusalLike(reply string) bool {
 	r := strings.ToLower(strings.TrimSpace(reply))
@@ -606,34 +619,69 @@ func (s *Service) runFunctionalTest(ctx context.Context, baseURL, apiKey, model,
 	return s.pingConnection(ctx, baseURL, apiKey, model)
 }
 
-// probeTranslate checks the model can produce Chinese text from a Vietnamese source.
+// probeTranslate checks translation across supported language pairs.
 func (s *Service) probeTranslate(ctx context.Context, client openai.Client, model, purpose string, probe functionalProbe) (TestResponse, error) {
 	start := time.Now()
-	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(probe.system),
-			openai.UserMessage(probe.user),
-		},
-		Model:       model,
-		Temperature: openai.Float(0.1),
-	})
-	latencyMs := time.Since(start).Milliseconds()
-	if err != nil {
-		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: err.Error()}, nil
+	pairs := []struct{ source, target, targetName, text string }{
+		{"vi", "en", "English", probe.user},
+		{"vi", "zh", "Simplified Chinese", probe.user},
+		{"en", "vi", "Vietnamese", "The work station has dust on the desk and documents are scattered on the floor."},
 	}
-	reply := extractMessageContent(completion)
-	switch {
-	case strings.TrimSpace(reply) == "":
-		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: "empty response"}, nil
-	case isRefusalLike(reply):
-		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: "model refused the task"}, nil
-	case hasCJK(reply):
-		return TestResponse{Success: true, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Reply: reply}, nil
-	case countWords(reply) >= 6:
-		return TestResponse{Success: false, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Error: "reply is not Chinese text", Reply: reply}, nil
+	checks := make([]TranslationTestResult, 0, len(pairs))
+	for i, pair := range pairs {
+		if i > 0 {
+			if err := s.waitRateLimit(ctx); err != nil {
+				return TestResponse{}, err
+			}
+		}
+		completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+			Messages: []openai.ChatCompletionMessageParamUnion{
+				openai.SystemMessage(translateSystemPrompt(pair.targetName)),
+				openai.UserMessage("Source language: " + pair.source + ". Translate into " + pair.targetName + ".\nText: " + pair.text),
+			}, Model: model, Temperature: openai.Float(0.1),
+		})
+		check := TranslationTestResult{Source: pair.source, Target: pair.target}
+		if err != nil {
+			check.Error = err.Error()
+		} else {
+			check.Reply = extractMessageContent(completion)
+			check.Success = validTranslationProbeReply(check.Reply, pair.target, pair.text)
+			if !check.Success {
+				check.Error = "reply does not match target language"
+			}
+		}
+		checks = append(checks, check)
+	}
+	allSuccess := true
+	for _, check := range checks {
+		allSuccess = allSuccess && check.Success
+	}
+	resp := TestResponse{Success: allSuccess, LatencyMs: time.Since(start).Milliseconds(), ModelUsed: model, Purpose: purpose, Check: "multilingual translation", TranslationChecks: checks}
+	if !allSuccess {
+		for _, check := range checks {
+			if !check.Success {
+				resp.Error = check.Source + "→" + check.Target + ": " + check.Error
+				break
+			}
+		}
+	}
+	return resp, nil
+}
+
+func validTranslationProbeReply(reply, target, original string) bool {
+	reply = strings.TrimSpace(reply)
+	if reply == "" || isRefusalLike(reply) || strings.EqualFold(reply, original) {
+		return false
+	}
+	switch target {
+	case "zh":
+		return hasCJK(reply)
+	case "vi":
+		return strings.ContainsAny(strings.ToLower(reply), "ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ")
+	case "en":
+		return strings.ContainsAny(strings.ToLower(reply), "abcdefghijklmnopqrstuvwxyz")
 	default:
-		// ponytail: accept short non-CJK replies (romanized/edge output); upgrade path: language-detect library.
-		return TestResponse{Success: true, LatencyMs: latencyMs, ModelUsed: model, Purpose: purpose, Check: "vi→zh translation", Reply: reply}, nil
+		return false
 	}
 }
 

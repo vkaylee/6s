@@ -381,6 +381,14 @@ export interface AITranslateResponse {
   translated_text: string;
 }
 
+export interface AITranslationCheck {
+  source: string;
+  target: string;
+  success: boolean;
+  reply?: string;
+  error?: string;
+}
+
 export interface AITestResponse {
   success: boolean;
   latency_ms?: number;
@@ -389,6 +397,7 @@ export interface AITestResponse {
   check?: string;
   reply?: string;
   error?: string;
+  translation_checks?: AITranslationCheck[];
 }
 
 export interface AIDNSTestResponse {

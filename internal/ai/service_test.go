@@ -1,10 +1,13 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +28,22 @@ import (
 // testCategory1S mirrors issue.Category1S; importing the issue package here
 // would create an import cycle in tests.
 const testCategory1S = "1S"
+
+func TestVisionProbeImageIsValidPNG(t *testing.T) {
+	encoded := strings.TrimPrefix(testImageRedPNG, "data:image/png;base64,")
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("decode vision probe image: %v", err)
+	}
+	image, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("vision probe image must be valid PNG: %v", err)
+	}
+	r, g, b, a := image.At(0, 0).RGBA()
+	if r != 0xffff || g != 0 || b != 0 || a != 0xffff {
+		t.Fatalf("vision probe image pixel = (%#x, %#x, %#x, %#x), want solid red", r, g, b, a)
+	}
+}
 
 type mockStore struct {
 	cfg       db.AiConfig
@@ -361,15 +380,14 @@ func TestTestConnection_Success(t *testing.T) {
 		t.Errorf("expected testedModel 'claude-3-5-sonnet', got %s", testedModel)
 	}
 
-	// Test purpose translate fallback
-	resTrans, err := svc.TestConnection(context.Background(), TestRequest{
-		Purpose: "translate",
-	})
-	if err != nil || !resTrans.Success {
+	// Purpose-specific translation now runs three language-pair probes; this
+	// connectivity fixture returns pong, so verify model selection only.
+	resTrans, err := svc.TestConnection(context.Background(), TestRequest{Purpose: "translate"})
+	if err != nil {
 		t.Fatalf("unexpected error on translate purpose test: %v, %+v", err, resTrans)
 	}
-	if testedModel != "deepseek-chat" {
-		t.Errorf("expected testedModel 'deepseek-chat', got %s", testedModel)
+	if resTrans.ModelUsed != "deepseek-chat" {
+		t.Errorf("expected testedModel 'deepseek-chat', got %s", resTrans.ModelUsed)
 	}
 }
 
@@ -415,9 +433,20 @@ func TestTestConnection_FunctionalProbes(t *testing.T) {
 				}
 			}
 		}
+		responseReply := reply
+		if strings.Contains(lastSystem, "professional factory 6S issue translator") && !strings.HasPrefix(reply, "Tram ") {
+			switch {
+			case strings.Contains(lastSystem, "Simplified Chinese"):
+				responseReply = "室内站工作台上布满灰尘，文件散落一地"
+			case strings.Contains(lastSystem, "Vietnamese"):
+				responseReply = "Trạm làm việc có bụi trên bàn và tài liệu nằm rải rác trên sàn"
+			default:
+				responseReply = "The work station has dust on the desk and documents are scattered on the floor"
+			}
+		}
 		resp := map[string]any{
 			"choices": []map[string]any{
-				{"message": map[string]string{"content": reply}},
+				{"message": map[string]string{"content": responseReply}},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -436,17 +465,17 @@ func TestTestConnection_FunctionalProbes(t *testing.T) {
 	svc := NewService(store, nil, mockServer.Client(), "")
 	ctx := context.Background()
 
-	t.Run("translate success with Chinese output", func(t *testing.T) {
+	t.Run("translate succeeds across language pairs", func(t *testing.T) {
 		reply = "室内站工作台上布满灰尘，文件散落一地"
 		res, err := svc.TestConnection(ctx, TestRequest{Purpose: "translate"})
 		if err != nil || !res.Success {
 			t.Fatalf("expected success, got err=%v res=%+v", err, res)
 		}
-		if lastUserText == "ping" || !strings.Contains(lastSystem, "ranslator") {
-			t.Errorf("expected functional translate prompt, got system=%q user=%q", lastSystem, lastUserText)
+		if lastUserText == "ping" {
+			t.Errorf("expected functional translation prompt")
 		}
-		if res.Check != "vi→zh translation" {
-			t.Errorf("expected check label, got %q", res.Check)
+		if len(res.TranslationChecks) != 3 || res.Check != "multilingual translation" {
+			t.Fatalf("expected three checks, got %+v", res)
 		}
 	})
 
