@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
+import { loadAiStatus } from "../hooks/useAiStatus.ts";
 import { type SupportedLocale, useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { IssueCategory, resolveI18n, S_CATEGORIES } from "../types/index.ts";
@@ -220,6 +221,7 @@ function CreateTagModal({
   );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiFailed, setAiFailed] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const translateNames = async () => {
@@ -259,11 +261,23 @@ function CreateTagModal({
       setAiLoading(false);
     }
   };
-
   useEffect(() => {
-    if (!editingTag) {
-      void translateNames();
-    }
+    if (editingTag) return;
+    void loadAiStatus().then((enabled) => {
+      setAiEnabled(enabled);
+      if (enabled) {
+        void translateNames();
+        return;
+      }
+      // AI off: seed the source language and let the user type the rest.
+      const text = initialInput.trim();
+      setNames({
+        vi: source === "vi" ? text : "",
+        en: source === "en" ? text : "",
+        zh: source === "zh" ? text : "",
+      });
+      setEditable({ vi: true, en: true, zh: true });
+    });
   }, [editingTag]);
 
   const editName = async (lang: TagLocale) => {
@@ -390,7 +404,7 @@ function CreateTagModal({
             </div>
 
             {/* Translations */}
-            {!names && !aiLoading && (
+            {aiEnabled && !names && !aiLoading && (
               <button
                 type="button"
                 onClick={translateNames}
@@ -410,14 +424,16 @@ function CreateTagModal({
                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("admin.tag_translations_label")}
                   </span>
-                  <button
-                    type="button"
-                    onClick={translateNames}
-                    disabled={aiLoading}
-                    className="text-xs font-bold text-blue-600 hover:underline disabled:opacity-40"
-                  >
-                    {t("admin.tag_retranslate_btn")}
-                  </button>
+                  {aiEnabled && (
+                    <button
+                      type="button"
+                      onClick={translateNames}
+                      disabled={aiLoading}
+                      className="text-xs font-bold text-blue-600 hover:underline disabled:opacity-40"
+                    >
+                      {t("admin.tag_retranslate_btn")}
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {nameField("vi", t("admin.tag_name_vi"))}
@@ -443,7 +459,7 @@ function CreateTagModal({
               </button>
               <button
                 type="submit"
-                disabled={saving || aiLoading || !names}
+                disabled={saving || aiLoading}
                 className="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-xl min-h-[48px] disabled:opacity-50"
               >
                 {saving

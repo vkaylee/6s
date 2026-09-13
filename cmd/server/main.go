@@ -327,7 +327,7 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 	aiHandler := ai.NewHandler(aiSvc)
 	r.Route("/api/config/ai", func(air chi.Router) {
 		air.Use(authMw.Authenticate)
-		air.Use(auth.RequireRole(auth.RoleAdmin))
+		air.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleSuperadmin))
 		air.Get("/", aiHandler.GetConfig)
 		air.Put("/", aiHandler.UpdateConfig)
 		air.Post("/test", aiHandler.TestConnection)

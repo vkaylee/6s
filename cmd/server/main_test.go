@@ -10,7 +10,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"6s/internal/auth"
 	"6s/internal/config"
 	"6s/internal/crypto"
 )
@@ -63,6 +65,7 @@ func (d *mockDriver) Open(_ string) (driver.Conn, error) {
 func init() {
 	sql.Register("mock_sql_driver", &mockDriver{})
 	sql.Register("unavailable_sql_driver", &unavailableDriver{})
+	sql.Register("scripted_sql_driver", &scriptedDriver{})
 }
 
 func TestReadinessUnavailableDBReturnsSafeError(t *testing.T) {
@@ -185,5 +188,134 @@ func TestUploadsRouteRemoved(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected removed uploads route to return 404, got %d", rec.Code)
+	}
+}
+
+// scriptedDriver returns canned rows keyed by SQL text so route-level RBAC can be
+// exercised with real auth middleware and sqlc-generated queries.
+type scriptedDriver struct{}
+
+func (d *scriptedDriver) Open(string) (driver.Conn, error) { return &scriptedConn{}, nil }
+
+type scriptedConn struct{}
+
+func (c *scriptedConn) Prepare(query string) (driver.Stmt, error) {
+	return &scriptedStmt{query: query}, nil
+}
+func (c *scriptedConn) Close() error              { return nil }
+func (c *scriptedConn) Begin() (driver.Tx, error) { return nil, nil }
+
+type scriptedStmt struct{ query string }
+
+func (s *scriptedStmt) Close() error  { return nil }
+func (s *scriptedStmt) NumInput() int { return -1 }
+func (s *scriptedStmt) Exec(_ []driver.Value) (driver.Result, error) {
+	return driver.RowsAffected(1), nil
+}
+func (s *scriptedStmt) Query(args []driver.Value) (driver.Rows, error) {
+	cols, rows := scriptedRowsFor(s.query, args)
+	return &scriptedRows{cols: cols, rows: rows}, nil
+}
+
+type scriptedRows struct {
+	cols []string
+	rows [][]driver.Value
+	pos  int
+}
+
+func (r *scriptedRows) Columns() []string { return r.cols }
+func (r *scriptedRows) Close() error      { return nil }
+func (r *scriptedRows) Next(dest []driver.Value) error {
+	if r.pos >= len(r.rows) {
+		return io.EOF
+	}
+	copy(dest, r.rows[r.pos])
+	r.pos++
+	return nil
+}
+
+const scriptedUserColumns = "id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, site_id, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at"
+
+var userColumns = strings.Split(scriptedUserColumns, ", ")
+
+func scriptedRowsFor(query string, args []driver.Value) ([]string, [][]driver.Value) {
+	switch {
+	case strings.Contains(query, "FROM users"):
+		return userColumns, [][]driver.Value{userRowFor(args)}
+	case strings.Contains(query, "JOIN users u ON u.id = $1"):
+		return []string{"code"}, [][]driver.Value{{"issue:create"}, {"issue:view_all"}}
+	case strings.Contains(query, "FROM ai_configs"):
+		return strings.Split("id, is_enabled, base_url, api_key, default_model, model_translate, model_vision, model_summary, updated_at, updated_by", ", "),
+			[][]driver.Value{{int64(1), true, "https://ai.example/v1", "secret", "model-a", "", "", "", time.Now(), nil}}
+	default:
+		return []string{"id"}, nil
+	}
+}
+
+func userRowFor(args []driver.Value) []driver.Value {
+	role := "USER"
+	username := "worker"
+	if len(args) > 0 {
+		switch args[0] {
+		case int64(1):
+			role, username = "ADMIN", "admin"
+		case int64(3):
+			role, username = "SUPERADMIN", "superadmin"
+		}
+	}
+	id := int64(2)
+	if len(args) > 0 {
+		if v, ok := args[0].(int64); ok {
+			id = v
+		}
+	}
+	return []driver.Value{id, username, nil, "LOCAL", nil, nil, nil, "Full Name", nil, role, int64(1), nil, nil, nil, "en", true, time.Now(), nil}
+}
+
+func TestAIConfigRouteRequiresAdminOrSuperadmin(t *testing.T) {
+	cfg := &config.Config{
+		Port:           "8080",
+		DataDir:        t.TempDir(),
+		JWTSecret:      "test-secret-at-least-32-bytes-long-key!",
+		TrustedProxies: "127.0.0.1",
+	}
+	scriptedDB, err := sql.Open("scripted_sql_driver", "test")
+	if err != nil {
+		t.Fatalf("failed to open scripted db: %v", err)
+	}
+	defer scriptedDB.Close()
+
+	enc, err := crypto.NewEncryptor("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+
+	r := setupRouter(scriptedDB, cfg, enc, nil)
+	tm := auth.NewTokenManager([]byte(cfg.JWTSecret))
+
+	cases := []struct {
+		name       string
+		userID     int64
+		wantStatus int
+	}{
+		{"admin", 1, http.StatusOK},
+		{"superadmin", 3, http.StatusOK},
+		{"regular user", 2, http.StatusForbidden},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			token, _, err := tm.GenerateAccessToken(tc.userID)
+			if err != nil {
+				t.Fatalf("failed to generate token: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "/api/config/ai", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("GET /api/config/ai as %s: want %d, got %d (%s)", tc.name, tc.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }

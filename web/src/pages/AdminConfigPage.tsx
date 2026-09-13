@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
+import { invalidateAiStatus } from "../hooks/useAiStatus.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import type { AIConfigData, AIDNSTestResponse, AITestResponse } from "../types/index.ts";
@@ -367,6 +368,7 @@ export function AdminConfigPage() {
         }),
       });
       haptics.success();
+      invalidateAiStatus();
       setAiApiKey("");
       await loadAIConfig();
       await modalDialog.alert(t("admin.save_ai_success"));

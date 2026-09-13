@@ -8,6 +8,7 @@ import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { TagLabel } from "../components/TagLabel.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
+import { loadAiStatus } from "../hooks/useAiStatus.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
@@ -67,56 +68,16 @@ export function IssueDetailModal({
     setShowOriginal(false);
   }, [issue, locale]);
 
-  useEffect(() => {
-    if (!isOpen || !aiEnabled || !currentIssue.description) {
-      return;
-    }
-    if (translatedDesc && translatedLangRef.current === locale) {
-      return;
-    }
-    let isMounted = true;
-    setTranslatedDesc(null);
-    setShowOriginal(false);
-    apiClient<{ cached: boolean; translated_text?: string }>("/api/ai/cached", {
-      method: "POST",
-      body: JSON.stringify({
-        text: currentIssue.description,
-        target_lang: locale,
-      }),
-    })
-      .then((res: { cached: boolean; translated_text?: string }) => {
-        if (isMounted && res?.cached && res.translated_text) {
-          setTranslatedDesc(res.translated_text);
-          translatedLangRef.current = locale;
-          setShowOriginal(false);
-        }
-      })
-      .catch(() => {
-        // Cache lookup failed, keep original text
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [isOpen, currentIssue.description, locale, translatedDesc]);
   // AIReviewResult is rendered by AIReviewPanel.
   useEffect(() => {
     if (!isOpen) {
-      setAiEnabled(false);
       setAiReview(null);
       return;
     }
     let isMounted = true;
-    apiClient<{ enabled: boolean }>("/api/ai/status")
-      .then((res: { enabled: boolean }) => {
-        if (isMounted) {
-          setAiEnabled(res?.enabled === true);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAiEnabled(false);
-        }
-      });
+    void loadAiStatus().then((enabled) => {
+      if (isMounted) setAiEnabled(enabled);
+    });
     return () => {
       isMounted = false;
     };
@@ -208,6 +169,35 @@ export function IssueDetailModal({
   const [followUpQuestion, setFollowUpQuestion] = useState("");
   const [followUpAnswer, setFollowUpAnswer] = useState<string | null>(null);
   const [isAskingFollowUp, setIsAskingFollowUp] = useState(false);
+
+  // Prefetch the cached translation once the AI status resolves.
+  useEffect(() => {
+    if (!isOpen || !aiEnabled || !currentIssue.description) return;
+    if (translatedDesc && translatedLangRef.current === locale) return;
+    let isMounted = true;
+    setTranslatedDesc(null);
+    setShowOriginal(false);
+    apiClient<{ cached: boolean; translated_text?: string }>("/api/ai/cached", {
+      method: "POST",
+      body: JSON.stringify({
+        text: currentIssue.description,
+        target_lang: locale,
+      }),
+    })
+      .then((res: { cached: boolean; translated_text?: string }) => {
+        if (isMounted && res?.cached && res.translated_text) {
+          setTranslatedDesc(res.translated_text);
+          translatedLangRef.current = locale;
+          setShowOriginal(false);
+        }
+      })
+      .catch(() => {
+        // Cache lookup failed, keep original text
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, aiEnabled, currentIssue.description, locale, translatedDesc]);
 
   const handleTranslate = async () => {
     if (!aiEnabled || !currentIssue.description || isTranslating) return;
