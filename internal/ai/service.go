@@ -391,7 +391,6 @@ func (s *Service) getDecryptedAPIKey(apiKey string) string {
 	return apiKey
 }
 
-
 // translateSystemPrompt builds the production translation instruction for a target language.
 func translateSystemPrompt(langName string, translationContext *TranslationContext) string {
 	prompt := "You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations."
@@ -1028,7 +1027,7 @@ func (s *Service) FollowUp(ctx context.Context, req FollowUpRequest) (FollowUpRe
 	}
 	images := s.collectReviewImages(issue)
 	system := buildReviewPrompt(issue, selected, catalog, resolveTargetLang(req.Lang), len(images) > 0)
-	system += "\n\nAnswer the user's follow-up question about this review. Use the previous conversation turns for context. Do not modify the issue. Keep the answer concise and write entirely in the requested language.\n"
+	system += "\n\nAnswer user's follow-up question about this review. Use previous conversation turns for context. Do not modify issue. Return only concise plain text in requested language; never return JSON, markdown fences, or the original review object.\n"
 	answer, err := s.completeFollowUp(ctx, baseURL, cfg.ApiKey, model, system, question, req.History, images)
 	if err != nil {
 		return FollowUpResponse{}, err
@@ -1059,28 +1058,28 @@ func (s *Service) completeFollowUp(ctx context.Context, baseURL, apiKey, model, 
 	if err != nil {
 		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
 	}
-\tanswer := normalizeFollowUpAnswer(extractMessageContent(completion))
-\tif runes := []rune(answer); len(runes) > reviewMaxFeedbackRunes {
-\t\tanswer = string(runes[:reviewMaxFeedbackRunes])
-\t}
-\treturn answer, nil
+	answer := normalizeFollowUpAnswer(extractMessageContent(completion))
+	if runes := []rune(answer); len(runes) > reviewMaxFeedbackRunes {
+		answer = string(runes[:reviewMaxFeedbackRunes])
+	}
+	return answer, nil
+}
 
 func normalizeFollowUpAnswer(raw string) string {
-\tanswer := strings.TrimSpace(raw)
-\tvar payload struct {
-\t\tAnswer   string `json:"answer"`
-\t\tFeedback string `json:"feedback"`
-\t}
-\tif err := json.Unmarshal([]byte(extractJSONObject(answer)), &payload); err == nil {
-\t\tif value := strings.TrimSpace(payload.Answer); value != "" {
-\t\t\treturn value
-\t\t}
-\t\tif value := strings.TrimSpace(payload.Feedback); value != "" {
-\t\t\treturn value
-\t\t}
-\t}
-\treturn answer
- }
+	answer := strings.TrimSpace(raw)
+	var payload struct {
+		Answer   string `json:"answer"`
+		Feedback string `json:"feedback"`
+	}
+	if err := json.Unmarshal([]byte(extractJSONObject(answer)), &payload); err == nil {
+		if value := strings.TrimSpace(payload.Answer); value != "" {
+			return value
+		}
+		if value := strings.TrimSpace(payload.Feedback); value != "" {
+			return value
+		}
+	}
+	return answer
 }
 
 // completeReview performs the rate-limited vision chat completion for a review.
@@ -1128,18 +1127,16 @@ func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTags
 	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &out); err != nil {
 		return ReviewResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, "model returned invalid review JSON")
 	}
-
 	verdict := strings.ToUpper(strings.TrimSpace(out.Verdict))
 	switch verdict {
 	case ReviewVerdictOK, ReviewVerdictReview, ReviewVerdictMismatch:
 	default:
 		verdict = ReviewVerdictReview
 	}
-	feedback := strings.TrimSpace(out.Feedback)
+	feedback := normalizeFollowUpAnswer(out.Feedback)
 	if r := []rune(feedback); len(r) > reviewMaxFeedbackRunes {
 		feedback = string(r[:reviewMaxFeedbackRunes])
 	}
-
 	resp := ReviewResponse{Verdict: verdict, Feedback: feedback, Model: model, UsedVision: usedVision}
 	if cat := strings.ToUpper(strings.TrimSpace(out.SuggestedCategory)); cat != issue.Category && validReviewCategory(cat) {
 		resp.Suggestion.Category = cat
@@ -1150,8 +1147,6 @@ func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTags
 	resp.Suggestion.Tags = filterReviewTags(out.SuggestedTags, selected, catalog)
 	return resp, nil
 }
-
-// filterReviewTags keeps only catalog codes the report does not already have.
 func filterReviewTags(suggested []string, selected []db.ListTagsForIssueRow, catalog []db.Tag) []string {
 	have := make(map[string]bool, len(selected))
 	for _, t := range selected {

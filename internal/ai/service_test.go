@@ -733,6 +733,18 @@ func TestExtractMessageContent_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestNormalizeFollowUpAnswer(t *testing.T) {
+	if got := normalizeFollowUpAnswer(`{"verdict":"OK","feedback":"Move gloves to designated storage.","suggested_tags":[]}`); got != "Move gloves to designated storage." {
+		t.Fatalf("JSON review answer = %q, want feedback text", got)
+	}
+	if got := normalizeFollowUpAnswer(`{"answer":"Keep the current category."}`); got != "Keep the current category." {
+		t.Fatalf("JSON follow-up answer = %q, want answer text", got)
+	}
+	if got := normalizeFollowUpAnswer("Plain answer"); got != "Plain answer" {
+		t.Fatalf("plain answer = %q, want unchanged text", got)
+	}
+}
+
 func TestWaitRateLimit_Spacing(t *testing.T) {
 	svc := NewService(&mockStore{}, nil, nil, "")
 	interval := 50 * time.Millisecond

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type IssueItem, resolveTagLabel, type TagItem } from "../types/index.ts";
 
@@ -28,6 +28,87 @@ type AIReviewPanelProps = {
 
 const actionClass =
   "inline-flex min-h-7 items-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-1 text-[11px] font-semibold text-violet-700 shadow-2xs transition hover:border-violet-400 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-700 dark:bg-zinc-800 dark:text-violet-300 dark:hover:bg-violet-950/60";
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const pattern =
+    /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\(https?:\/\/[^)]+\))/g;
+  let lastIndex = 0;
+  for (const match of text.matchAll(pattern)) {
+    const value = match[0];
+    const index = match.index ?? 0;
+    if (index > lastIndex) parts.push(text.slice(lastIndex, index));
+    if (value.startsWith("`") && value.endsWith("`")) {
+      parts.push(
+        <code
+          key={`${index}-code`}
+          className="rounded bg-zinc-200/70 px-1 py-0.5 font-mono text-[0.9em] dark:bg-zinc-700/70"
+        >
+          {value.slice(1, -1)}
+        </code>,
+      );
+    } else if (
+      (value.startsWith("**") && value.endsWith("**")) ||
+      (value.startsWith("__") && value.endsWith("__"))
+    ) {
+      parts.push(<strong key={`${index}-strong`}>{value.slice(2, -2)}</strong>);
+    } else if (
+      (value.startsWith("*") && value.endsWith("*")) ||
+      (value.startsWith("_") && value.endsWith("_"))
+    ) {
+      parts.push(<em key={`${index}-em`}>{value.slice(1, -1)}</em>);
+    } else {
+      const link = value.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/);
+      parts.push(
+        link ? (
+          <a
+            key={`${index}-link`}
+            href={link[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            {link[1]}
+          </a>
+        ) : (
+          value
+        ),
+      );
+    }
+    lastIndex = index + value.length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
+
+function MarkdownText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <span className="block space-y-1">
+      {lines.map((line) => {
+        const heading = line.match(/^\s{0,3}#{1,3}\s+(.+)$/);
+        const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        const content = heading?.[1] ?? bullet?.[1] ?? ordered?.[1] ?? line;
+        const rendered = renderInlineMarkdown(content);
+        return (
+          <Fragment key={line}>
+            {heading ? (
+              <strong className="block">{rendered}</strong>
+            ) : bullet ? (
+              <span className="block pl-3 before:mr-1 before:content-['•']">{rendered}</span>
+            ) : ordered ? (
+              <span className="block pl-3">{rendered}</span>
+            ) : (
+              rendered
+            )}
+            {line !== lines[lines.length - 1] && !heading && !bullet && !ordered && <br />}
+          </Fragment>
+        );
+      })}
+    </span>
+  );
+}
 
 export function AIReviewPanel({
   review,
@@ -96,7 +177,9 @@ export function AIReviewPanel({
         {t(`issue_detail.ai_review_verdict_${review.verdict.toLowerCase()}`)}
       </span>
       {review.feedback && (
-        <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">{displayedFeedback}</p>
+        <p className="text-zinc-800 dark:text-zinc-200">
+          <MarkdownText text={displayedFeedback} />
+        </p>
       )}
       {(review.suggestion.category || review.suggestion.cause_type) && (
         <div className="flex flex-wrap gap-1.5">
@@ -151,8 +234,8 @@ export function AIReviewPanel({
               <p className="ml-4 rounded-lg bg-violet-100 px-3 py-2 text-zinc-800 dark:bg-violet-950/50 dark:text-zinc-200">
                 {turn.question}
               </p>
-              <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
-                {turn.answer}
+              <p className="mr-4 rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+                <MarkdownText text={turn.answer} />
               </p>
             </div>
           ))}
@@ -166,8 +249,10 @@ export function AIReviewPanel({
             </p>
           )}
           {isAskingFollowUp && (
-            <p className="mr-4 whitespace-pre-wrap rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
-              {streamingFollowUpAnswer || t("issue_detail.ai_follow_up_loading")}
+            <p className="mr-4 rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+              <MarkdownText
+                text={streamingFollowUpAnswer || t("issue_detail.ai_follow_up_loading")}
+              />
             </p>
           )}
         </div>

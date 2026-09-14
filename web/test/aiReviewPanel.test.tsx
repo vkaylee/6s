@@ -66,3 +66,56 @@ describe("AIReviewPanel follow-up controls", () => {
     expect(html).toContain("Gửi");
   });
 });
+
+it("renders markdown formatting in AI feedback and follow-up answers", () => {
+  const html = renderToString(
+    <AIReviewPanel
+      review={{ ...review, feedback: "" }}
+      currentIssue={issue}
+      tags={[]}
+      value=""
+      isAskingFollowUp={false}
+      pendingFollowUpQuestion={null}
+      streamingFollowUpAnswer=""
+      followUpCount={1}
+      followUpLimit={5}
+      followUpHistory={[
+        { question: "What next?", answer: "*Check* the box\n- Confirm location\n1. Close report" },
+      ]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+
+  expect(html).toContain("<em>Check</em>");
+  expect(html).toContain("Confirm location");
+  expect(html).toContain("Close report");
+  expect(html).not.toContain("*Check*");
+});
+
+it("allows only HTTPS markdown links in AI answers", () => {
+  const html = renderToString(
+    <AIReviewPanel
+      review={review}
+      currentIssue={issue}
+      tags={[]}
+      value=""
+      isAskingFollowUp={false}
+      pendingFollowUpQuestion={null}
+      streamingFollowUpAnswer=""
+      followUpCount={1}
+      followUpLimit={5}
+      followUpHistory={[
+        { question: "Links", answer: "[Guide](https://example.com) [Unsafe](javascript:alert(1))" },
+      ]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+
+  expect(html).toContain('href="https://example.com"');
+  expect(html).toContain("[Unsafe](javascript:alert(1))");
+  expect(html).not.toContain('href="javascript:alert(1)"');
+});
