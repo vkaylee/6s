@@ -58,11 +58,11 @@ export const useI18nStore = create<I18nState>((set, get) => {
   return {
     locale: initialLocale,
     setLocale: (locale: SupportedLocale) => {
+      set({ locale });
       if (typeof window !== "undefined") {
         localStorage.setItem(STORAGE_KEY, locale);
         document.documentElement.lang = locale;
       }
-      set({ locale });
     },
     t: (path: string, params?: Record<string, string | number>) => {
       const { locale } = get();

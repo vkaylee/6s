@@ -30,6 +30,15 @@ describe("Browser locale detection", () => {
     expect(detectBrowserLocale(["zh-TW"])).toBe("zh");
     expect(detectBrowserLocale(["fr-FR", "de-DE"])).toBe("vi");
   });
+
+  it("keeps selected locale after repeated store reads", () => {
+    const { setLocale } = useI18nStore.getState();
+    setLocale("en");
+    expect(useI18nStore.getState().locale).toBe("en");
+    expect(useI18nStore.getState().t("common.save")).toBe("Save");
+    expect(useI18nStore.getState().locale).toBe("en");
+    setLocale("vi");
+  });
 });
 function extractKeys(obj: Record<string, unknown>, prefix = ""): string[] {
   let keys: string[] = [];
