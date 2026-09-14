@@ -26,7 +26,7 @@ const review: AIReviewResult = {
   used_vision: false,
 };
 
-function renderPanel(isAskingFollowUp: boolean) {
+function renderPanel(isAskingFollowUp: boolean, streamingAnswer?: string) {
   return renderToString(
     <AIReviewPanel
       review={review}
@@ -35,7 +35,7 @@ function renderPanel(isAskingFollowUp: boolean) {
       value=""
       isAskingFollowUp={isAskingFollowUp}
       pendingFollowUpQuestion={isAskingFollowUp ? "Explain this result" : null}
-      streamingFollowUpAnswer={isAskingFollowUp ? "Working" : ""}
+      streamingFollowUpAnswer={streamingAnswer ?? (isAskingFollowUp ? "Working" : "")}
       followUpCount={isAskingFollowUp ? 1 : 0}
       followUpLimit={5}
       followUpHistory={[]}
@@ -65,6 +65,14 @@ describe("AIReviewPanel follow-up controls", () => {
     expect(html).toContain('placeholder="Nhập câu hỏi..."');
     expect(html).toContain("Gửi");
   });
+});
+
+it("shows animated dots while waiting for follow-up response", () => {
+  const html = renderPanel(true, "");
+
+  expect(html).toContain("Đang trả lời");
+  expect(html).toContain("animate-bounce");
+  expect(html).toContain('style="animation-delay:0ms"');
 });
 
 it("renders markdown formatting in AI feedback and follow-up answers", () => {

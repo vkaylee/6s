@@ -110,6 +110,26 @@ function MarkdownText({ text }: { text: string }) {
   );
 }
 
+function AnimatedLoadingText({ text }: { text: string }) {
+  const label = text.replace(/\.{3,}$/, "");
+  return (
+    <span className="inline-flex items-baseline">
+      {label}
+      <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+        {[0, 1, 2].map((dot) => (
+          <span
+            key={dot}
+            className="inline-block animate-bounce text-violet-500"
+            style={{ animationDelay: `${dot * 150}ms` }}
+          >
+            .
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function AIReviewPanel({
   review,
   currentIssue,
@@ -250,9 +270,17 @@ export function AIReviewPanel({
           )}
           {isAskingFollowUp && (
             <p className="mr-4 rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
-              <MarkdownText
-                text={streamingFollowUpAnswer || t("issue_detail.ai_follow_up_loading")}
-              />
+              {streamingFollowUpAnswer ? (
+                <>
+                  <MarkdownText text={streamingFollowUpAnswer} />
+                  <span
+                    className="ml-0.5 inline-block h-3 w-0.5 animate-pulse bg-violet-500 align-text-bottom"
+                    aria-hidden="true"
+                  />
+                </>
+              ) : (
+                <AnimatedLoadingText text={t("issue_detail.ai_follow_up_loading")} />
+              )}
             </p>
           )}
         </div>
