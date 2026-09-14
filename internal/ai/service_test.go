@@ -190,6 +190,41 @@ func TestTranslate_FallbackToDefaultModel(t *testing.T) {
 	}
 }
 
+func TestTranslateWithContext_IncludesIssueContextAndSeparatesCache(t *testing.T) {
+	var requests []map[string]any
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode gateway request: %v", err)
+		}
+		requests = append(requests, body)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": "translated"}}}})
+	}))
+	defer mockServer.Close()
+
+	store := &mockStore{cfg: db.AiConfig{ID: 1, IsEnabled: true, BaseUrl: mockServer.URL, DefaultModel: "test-model"}}
+	svc := NewService(store, nil, mockServer.Client(), "")
+	ctx := &TranslationContext{Category: "3S", CauseType: "CONDITION", LocationCode: "LINE_A1", LocationName: "Chuyền A1", Tags: []string{"oil_leak"}}
+	if _, err := svc.TranslateWithContext(context.Background(), "Ground is dirty", "vi", ctx); err != nil {
+		t.Fatalf("context translation failed: %v", err)
+	}
+	if _, err := svc.TranslateWithContext(context.Background(), "Ground is dirty", "vi", &TranslationContext{Category: "1S"}); err != nil {
+		t.Fatalf("second context translation failed: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("expected separate gateway calls for different contexts, got %d", len(requests))
+	}
+	messages, ok := requests[0]["messages"].([]any)
+	if !ok || len(messages) < 1 {
+		t.Fatalf("gateway request missing messages: %#v", requests[0]["messages"])
+	}
+	system, ok := messages[0].(map[string]any)
+	if !ok || !strings.Contains(system["content"].(string), "LINE_A1") {
+		t.Fatalf("system prompt missing location context: %#v", messages[0])
+	}
+}
+
 func TestTranslate_UsePurposeModelWhenConfigured(t *testing.T) {
 	var requestedModel string
 

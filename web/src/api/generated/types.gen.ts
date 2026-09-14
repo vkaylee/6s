@@ -16,6 +16,14 @@ export type ErrorEnvelope = {
     error: ErrorDetail;
 };
 
+export type TranslationContext = {
+    category?: string;
+    cause_type?: string;
+    location_code?: string;
+    location_name?: string;
+    tags?: Array<string>;
+};
+
 export type PaginationMeta = {
     page: number;
     limit: number;
@@ -1132,6 +1140,7 @@ export type TranslateTextData = {
     body: {
         text: string;
         target_lang: string;
+        context?: TranslationContext;
     };
     path?: never;
     query?: never;
@@ -1164,6 +1173,7 @@ export type GetCachedTranslationData = {
     body: {
         text: string;
         target_lang: string;
+        context?: TranslationContext;
     };
     path?: never;
     query?: never;
@@ -1242,7 +1252,7 @@ export type StreamIssueEventsResponses = {
 
 export type StreamIssueEventsResponse = StreamIssueEventsResponses[keyof StreamIssueEventsResponses];
 
-export type ExportIssuesCsvData = {
+export type ExportIssuesXlsxData = {
     body?: never;
     path?: never;
     query?: {
@@ -1253,7 +1263,7 @@ export type ExportIssuesCsvData = {
     url: '/issues/export';
 };
 
-export type ExportIssuesCsvErrors = {
+export type ExportIssuesXlsxErrors = {
     /**
      * Chưa xác thực
      */
@@ -1264,16 +1274,16 @@ export type ExportIssuesCsvErrors = {
     403: ErrorEnvelope;
 };
 
-export type ExportIssuesCsvError = ExportIssuesCsvErrors[keyof ExportIssuesCsvErrors];
+export type ExportIssuesXlsxError = ExportIssuesXlsxErrors[keyof ExportIssuesXlsxErrors];
 
-export type ExportIssuesCsvResponses = {
+export type ExportIssuesXlsxResponses = {
     /**
-     * CSV file containing only issues visible to the authenticated user
+     * XLSX file chứa danh sách issue trong phạm vi người dùng
      */
     200: string;
 };
 
-export type ExportIssuesCsvResponse = ExportIssuesCsvResponses[keyof ExportIssuesCsvResponses];
+export type ExportIssuesXlsxResponse = ExportIssuesXlsxResponses[keyof ExportIssuesXlsxResponses];
 
 export type GetIssueScoreLogsData = {
     body?: never;

@@ -391,13 +391,38 @@ func (s *Service) getDecryptedAPIKey(apiKey string) string {
 	return apiKey
 }
 
+
 // translateSystemPrompt builds the production translation instruction for a target language.
-func translateSystemPrompt(langName string) string {
-	return "You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations."
+func translateSystemPrompt(langName string, translationContext *TranslationContext) string {
+	prompt := "You are a professional factory 6S issue translator. Translate the text into " + langName + ". Maintain manufacturing terminology, location codes, and tags. Return ONLY the translated text without extra formatting, notes, or explanations."
+	if translationContext == nil {
+		return prompt
+	}
+	contextJSON, err := json.Marshal(translationContext)
+	if err != nil {
+		return prompt
+	}
+	return prompt + " Use this issue context only to resolve meaning; do not translate or include the context itself: " + string(contextJSON)
+}
+
+func translationCacheHash(text string, translationContext *TranslationContext) string {
+	if translationContext == nil {
+		return computeContentHash(text)
+	}
+	contextJSON, err := json.Marshal(translationContext)
+	if err != nil {
+		return computeContentHash(text)
+	}
+	return computeContentHash(text + "\n[translation-context]\n" + string(contextJSON))
 }
 
 // Translate translates the given text into targetLang using OpenAI-compatible chat completion.
 func (s *Service) Translate(ctx context.Context, text, targetLang string) (string, error) {
+	return s.TranslateWithContext(ctx, text, targetLang, nil)
+}
+
+// TranslateWithContext translates text using optional issue metadata for disambiguation.
+func (s *Service) TranslateWithContext(ctx context.Context, text, targetLang string, translationContext *TranslationContext) (string, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", nil
@@ -407,8 +432,7 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 	if err != nil || !cfg.IsEnabled {
 		return "", apperror.BadRequest(i18n.ErrAINotEnabled)
 	}
-
-	contentHash := computeContentHash(text)
+	contentHash := translationCacheHash(text, translationContext)
 	langCode := normalizeLangCode(targetLang)
 
 	if cached, cacheErr := s.store.GetTranslationCache(ctx, db.GetTranslationCacheParams{
@@ -441,7 +465,7 @@ func (s *Service) Translate(ctx context.Context, text, targetLang string) (strin
 
 	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(translateSystemPrompt(langName)),
+			openai.SystemMessage(translateSystemPrompt(langName, translationContext)),
 			openai.UserMessage(text),
 		},
 		Model:       model,
@@ -547,7 +571,7 @@ func (s *Service) resolveTestParams(ctx context.Context, req TestRequest) (strin
 
 var functionalTestPrompts = map[string]functionalProbe{
 	"translate": {
-		system: translateSystemPrompt("Simplified Chinese"),
+		system: translateSystemPrompt("Simplified Chinese", nil),
 		user:   "Trạm nội thất bị bụi bẩn trên bàn làm việc, tệp tài liệu rơi lộn xộn dưới sàn",
 	},
 	"summary": {
@@ -636,7 +660,7 @@ func (s *Service) probeTranslate(ctx context.Context, client openai.Client, mode
 		}
 		completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 			Messages: []openai.ChatCompletionMessageParamUnion{
-				openai.SystemMessage(translateSystemPrompt(pair.targetName)),
+				openai.SystemMessage(translateSystemPrompt(pair.targetName, nil)),
 				openai.UserMessage("Source language: " + pair.source + ". Translate into " + pair.targetName + ".\nText: " + pair.text),
 			}, Model: model, Temperature: openai.Float(0.1),
 		})
@@ -1035,11 +1059,28 @@ func (s *Service) completeFollowUp(ctx context.Context, baseURL, apiKey, model, 
 	if err != nil {
 		return "", apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
 	}
-	answer := strings.TrimSpace(extractMessageContent(completion))
-	if runes := []rune(answer); len(runes) > reviewMaxFeedbackRunes {
-		answer = string(runes[:reviewMaxFeedbackRunes])
-	}
-	return answer, nil
+\tanswer := normalizeFollowUpAnswer(extractMessageContent(completion))
+\tif runes := []rune(answer); len(runes) > reviewMaxFeedbackRunes {
+\t\tanswer = string(runes[:reviewMaxFeedbackRunes])
+\t}
+\treturn answer, nil
+
+func normalizeFollowUpAnswer(raw string) string {
+\tanswer := strings.TrimSpace(raw)
+\tvar payload struct {
+\t\tAnswer   string `json:"answer"`
+\t\tFeedback string `json:"feedback"`
+\t}
+\tif err := json.Unmarshal([]byte(extractJSONObject(answer)), &payload); err == nil {
+\t\tif value := strings.TrimSpace(payload.Answer); value != "" {
+\t\t\treturn value
+\t\t}
+\t\tif value := strings.TrimSpace(payload.Feedback); value != "" {
+\t\t\treturn value
+\t\t}
+\t}
+\treturn answer
+ }
 }
 
 // completeReview performs the rate-limited vision chat completion for a review.

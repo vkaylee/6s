@@ -108,11 +108,20 @@ func (h *Handler) TestDNS(w http.ResponseWriter, r *http.Request) {
 
 	writeAIJSON(w, http.StatusOK, res)
 }
+// TranslationContext carries issue metadata for disambiguating short descriptions.
+type TranslationContext struct {
+	Category     string   `json:"category,omitempty"`
+	CauseType    string   `json:"cause_type,omitempty"`
+	LocationCode string   `json:"location_code,omitempty"`
+	LocationName string   `json:"location_name,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+}
 
 // TranslateRequest defines input for POST /api/ai/translate.
 type TranslateRequest struct {
-	Text       string `json:"text"`
-	TargetLang string `json:"target_lang"`
+	Text       string              `json:"text"`
+	TargetLang string              `json:"target_lang"`
+	Context    *TranslationContext `json:"context,omitempty"`
 }
 
 // TranslateResponse defines output for POST /api/ai/translate.
@@ -145,7 +154,12 @@ func (h *Handler) Translate(w http.ResponseWriter, r *http.Request) {
 		targetLang = i18n.FromContext(r.Context())
 	}
 
-	translated, err := h.svc.Translate(r.Context(), trimmedText, targetLang)
+	var translationContext *TranslationContext
+	if req.Context != nil {
+		translationContext = req.Context
+	}
+	translated, err := h.svc.TranslateWithContext(r.Context(), trimmedText, targetLang, translationContext)
+
 	if err != nil {
 		if appErr, ok := err.(*apperror.AppError); ok {
 			writeAIAppError(w, r, appErr)

@@ -40,6 +40,22 @@ components:
         error:
           $ref: '#/components/schemas/ErrorDetail'
 
+    TranslationContext:
+      type: object
+      properties:
+        category:
+          type: string
+        cause_type:
+          type: string
+        location_code:
+          type: string
+        location_name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
     PaginationMeta:
       type: object
       required:
@@ -1655,6 +1671,8 @@ paths:
                 target_lang:
                   type: string
                   example: vi
+                context:
+                  $ref: '#/components/schemas/TranslationContext'
       responses:
         '200':
           description: Kết quả dịch
@@ -1693,6 +1711,8 @@ paths:
                   type: string
                 target_lang:
                   type: string
+                context:
+                  $ref: '#/components/schemas/TranslationContext'
       responses:
         '200':
           description: Kết quả cache

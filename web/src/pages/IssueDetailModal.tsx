@@ -218,6 +218,13 @@ export function IssueDetailModal({
       body: JSON.stringify({
         text: currentIssue.description,
         target_lang: locale,
+        context: {
+          category: currentIssue.category,
+          cause_type: currentIssue.cause_type,
+          location_code: currentIssue.location_code,
+          location_name: currentIssue.location_name,
+          tags: currentIssue.tags,
+        },
       }),
     })
       .then((res: { cached: boolean; translated_text?: string }) => {
@@ -248,6 +255,13 @@ export function IssueDetailModal({
         body: JSON.stringify({
           text: currentIssue.description,
           target_lang: locale,
+          context: {
+            category: currentIssue.category,
+            cause_type: currentIssue.cause_type,
+            location_code: currentIssue.location_code,
+            location_name: currentIssue.location_name,
+            tags: currentIssue.tags,
+          },
         }),
       });
       if (res?.translated_text) {
