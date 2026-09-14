@@ -238,7 +238,7 @@ describe("ReportsPage & Export CSV UI", () => {
         </Router>
       </WithMockState>,
     );
-    expect(html).toContain("Danh sách sự cố An toàn 6S khẩn cấp");
+    expect(html).toContain("Danh sách sự cố an toàn 6S khẩn cấp");
   });
 
   it("renders TRENDS empty state and tag drilldown buttons when topTags loaded", () => {

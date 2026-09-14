@@ -213,9 +213,10 @@ describe("UI Components i18n Integration", () => {
     setLocale("vi");
     let html = renderToString(<HealthGauge score={90} openCount={2} overdueCount={1} />);
     expect(html).toContain("ĐIỂM");
-    expect(html).toContain("Sức khỏe 6S Xưởng");
+    expect(html).toContain("Sức khỏe 6S xưởng");
     expect(html).toContain("Đang mở: 2");
-    expect(html).toContain("Quá hạn 48h: 1");
+    expect(html).toContain("Quá hạn");
+    expect(html).toContain("48h: 1");
 
     // EN
     setLocale("en");

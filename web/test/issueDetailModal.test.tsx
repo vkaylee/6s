@@ -454,7 +454,7 @@ describe("IssueDetailModal Component", () => {
       <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
     );
     expect(conditionHtml).toContain("📦");
-    expect(conditionHtml).toContain("Đồ đạc / Vật chất");
+    expect(conditionHtml).toContain("Vật chất / Thiết bị");
 
     const behaviorIssue: IssueItem = {
       ...mockIssue,
@@ -502,9 +502,9 @@ describe("IssueDetailModal Component", () => {
       </WithMockState>,
     );
 
-    expect(html).toContain("Xác nhận duyệt đạt issue?");
+    expect(html).toContain("Xác nhận duyệt đạt sự cố?");
     expect(html).toContain("Kaizen");
-    expect(html).toContain("🏆 Kaizen Xuất Sắc (+5 điểm)");
+    expect(html).toContain("🏆 Kaizen Xuất sắc (+5 điểm)");
   });
 
   it("renders invalid confirmation dialog with warning when showConfirmAction is INVALID", () => {
@@ -536,7 +536,7 @@ describe("IssueDetailModal Component", () => {
       </WithMockState>,
     );
 
-    expect(html).toContain("Xác nhận bác bỏ issue?");
+    expect(html).toContain("Xác nhận bác bỏ sự cố?");
     expect(html).toContain("Nhập lý do bắt buộc...");
   });
 
@@ -601,7 +601,7 @@ describe("IssueDetailModal Component", () => {
       </WithMockState>,
     );
 
-    expect(html).toContain("Xác nhận mở lại issue?");
+    expect(html).toContain("Xác nhận mở lại sự cố?");
   });
 
   it("renders in-place category and location editor when enabled", () => {

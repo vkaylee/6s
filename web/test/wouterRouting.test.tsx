@@ -189,7 +189,7 @@ describe("Wouter UX & Routing Verification", () => {
       </Router>,
     );
     expect(locationsHtml).toContain("Vị trí xưởng");
-    expect(tagsHtml).toContain("Danh mục Thẻ");
+    expect(tagsHtml).toContain("Danh mục thẻ sự cố");
   });
 
   it("renders /leaderboard/locations/:code route within App", () => {

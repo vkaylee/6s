@@ -83,6 +83,6 @@ describe("ConflictModal Component", () => {
       </WithMockState>,
     );
 
-    expect(html).toContain("Không có ảnh máy chủ");
+    expect(html).toContain("Không có ảnh trên máy chủ");
   });
 });

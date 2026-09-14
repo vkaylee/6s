@@ -117,8 +117,8 @@ describe("Enterprise CreateIssuePage UIUX", () => {
         />
       </WithMockState>,
     );
-    expect(html).toContain("Không tìm thấy nhãn phù hợp");
-    expect(html).toContain("+ Dùng nhãn mới:");
+    expect(html).toContain("Không tìm thấy thẻ phù hợp");
+    expect(html).toContain("+ Dùng thẻ mới:");
   });
 
   it("renders TaxonomySelectorModal in closed state", () => {
@@ -241,7 +241,7 @@ describe("Enterprise CreateIssuePage UIUX", () => {
         <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
       </Router>,
     );
-    expect(pageHtml).toContain("Đồ đạc / Thiết bị");
+    expect(pageHtml).toContain("Vật chất / Thiết bị");
     expect(pageHtml).toContain("Con người / Thao tác");
     expect(pageHtml).toContain("📦");
     expect(pageHtml).toContain("👤");

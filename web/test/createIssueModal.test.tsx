@@ -103,7 +103,7 @@ describe("CreateIssueModal Component", () => {
         tags={mockTags}
       />,
     );
-    expect(html).toContain("Tạo báo cáo lỗi 6S");
+    expect(html).toContain("Tạo báo cáo sự cố 6S");
     expect(html).toContain("Chuyền May A1");
     expect(html).toContain("1S");
     expect(html).toContain("3S");
@@ -121,7 +121,7 @@ describe("CreateIssueModal Component", () => {
         initialIssue={mockIssue}
       />,
     );
-    expect(html).toContain("Chỉnh sửa báo cáo 6S");
+    expect(html).toContain("Chỉnh sửa báo cáo sự cố 6S");
     expect(html).toContain("Cần sắp xếp lại vật tư");
     expect(html).toContain("before-101.jpg");
     expect(html).toContain("detail-101.jpg");
