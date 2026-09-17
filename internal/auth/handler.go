@@ -639,10 +639,6 @@ type SetupSuperadminRequest struct {
 
 // SetupSuperadmin handles POST /api/auth/setup.
 func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
-	if _, ok := GetUserFromContext(r.Context()); !ok {
-		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
-		return
-	}
 	adminCount, err := h.store.CountAdmins(r.Context())
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))

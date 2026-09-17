@@ -239,14 +239,18 @@ func (m *mockFullStore) UpsertADConfig(_ context.Context, arg db.UpsertADConfigP
 }
 
 func (m *mockFullStore) InsertAuditLog(_ context.Context, arg db.InsertAuditLogParams) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.auditLogs = append(m.auditLogs, arg)
 	return nil
 }
 
 func (m *mockFullStore) CountAdmins(_ context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var count int64
 	for _, u := range m.users {
-		if u.Role == RoleAdmin.String() && u.IsActive {
+		if (u.Role == RoleAdmin.String() || u.Role == RoleSuperadmin.String()) && u.IsActive {
 			count++
 		}
 	}
@@ -254,6 +258,8 @@ func (m *mockFullStore) CountAdmins(_ context.Context) (int64, error) {
 }
 
 func (m *mockFullStore) CreateLocalAdmin(_ context.Context, arg db.CreateLocalAdminParams) (db.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	u := db.User{
 		ID:           int64(len(m.users) + 1),
 		Username:     arg.Username,
@@ -261,7 +267,7 @@ func (m *mockFullStore) CreateLocalAdmin(_ context.Context, arg db.CreateLocalAd
 		AuthSource:   "LOCAL",
 		FullName:     arg.FullName,
 		Email:        arg.Email,
-		Role:         RoleAdmin.String(),
+		Role:         RoleSuperadmin.String(),
 		IsActive:     true,
 	}
 	m.users[u.ID] = u
@@ -489,11 +495,45 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 		Email:    "admin@factory.lan",
 	})
 	reqSetup := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodySetup))
-	reqSetup = reqSetup.WithContext(context.WithValue(reqSetup.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrSetup := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrSetup, reqSetup)
 	if rrSetup.Code != http.StatusOK {
 		t.Fatalf("expected 200 on setup, got %d: %s", rrSetup.Code, rrSetup.Body.String())
+	}
+
+	var setupResp struct {
+		Data struct {
+			RefreshToken string       `json:"refresh_token"`
+			User         UserResponse `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(rrSetup.Body).Decode(&setupResp); err != nil {
+		t.Fatalf("decode setup response: %v", err)
+	}
+	if setupResp.Data.User.Username != "admin" || setupResp.Data.User.Role != RoleSuperadmin.String() {
+		t.Fatalf("expected initial superadmin identity, got %+v", setupResp.Data.User)
+	}
+
+	// The bootstrap session must work without an existing login.
+	bodyRefresh, err := json.Marshal(RefreshRequest{RefreshToken: setupResp.Data.RefreshToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rrRefresh := httptest.NewRecorder()
+	handler.Refresh(rrRefresh, httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(bodyRefresh)))
+	if rrRefresh.Code != http.StatusOK {
+		t.Fatalf("expected usable bootstrap refresh token, got %d: %s", rrRefresh.Code, rrRefresh.Body.String())
+	}
+
+	// Persisted credentials must also support a fresh login.
+	bodyLogin, err := json.Marshal(LoginRequest{Username: "admin", Password: "SuperAdminPassword123!"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rrLogin := httptest.NewRecorder()
+	handler.Login(rrLogin, httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(bodyLogin)))
+	if rrLogin.Code != http.StatusOK {
+		t.Fatalf("expected login after bootstrap, got %d: %s", rrLogin.Code, rrLogin.Body.String())
 	}
 
 	// 3. Subsequent check: NeedsSetup should be false
@@ -507,11 +547,94 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 		t.Error("expected NeedsSetup to be false after setup")
 	}
 	rrSetupRepeat := httptest.NewRecorder()
-	reqSetupRepeat := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodySetup))
-	reqSetupRepeat = reqSetupRepeat.WithContext(context.WithValue(reqSetupRepeat.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
+	bodyRepeat, err := json.Marshal(SetupSuperadminRequest{
+		Username: "second-admin",
+		Password: "AnotherAdminPassword123!",
+		FullName: "Second Admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqSetupRepeat := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyRepeat))
 	handler.SetupSuperadmin(rrSetupRepeat, reqSetupRepeat)
 	if rrSetupRepeat.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 on repeated setup, got %d", rrSetupRepeat.Code)
+	}
+	if _, err := store.GetUserByUsername(context.Background(), "second-admin"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("rejected setup must not create another account, got %v", err)
+	}
+}
+
+// Hold both count results until both requests have observed the initial state.
+type concurrentSetupStore struct {
+	*mockFullStore
+	counted chan struct{}
+	release chan struct{}
+}
+
+func (s *concurrentSetupStore) CountAdmins(ctx context.Context) (int64, error) {
+	count, err := s.mockFullStore.CountAdmins(ctx)
+	s.counted <- struct{}{}
+	select {
+	case <-s.release:
+		return count, err
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func TestHandler_SetupSuperadmin_ConcurrentRequests(t *testing.T) {
+	store := &concurrentSetupStore{
+		mockFullStore: newMockFullStore(),
+		counted:       make(chan struct{}, 2),
+		release:       make(chan struct{}),
+	}
+	handler := NewHandler(store, NewTokenManager([]byte("super-secret-jwt-key-1234567890123")), NewLoginLimiter(nil), nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	for _, username := range []string{"first-admin", "second-admin"} {
+		body, err := json.Marshal(SetupSuperadminRequest{
+			Username: username,
+			Password: "SuperAdminPassword123!",
+			FullName: "Bootstrap Admin",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(body)).WithContext(ctx)
+			handler.SetupSuperadmin(rr, req)
+			responses <- rr
+		}()
+	}
+	for range 2 {
+		select {
+		case <-store.counted:
+		case <-ctx.Done():
+			t.Fatal("setup requests did not reach the initial admin check")
+		}
+	}
+	close(store.release)
+	statuses := make(map[int]int)
+	for range 2 {
+		select {
+		case rr := <-responses:
+			statuses[rr.Code]++
+		case <-ctx.Done():
+			t.Fatal("concurrent setup requests did not complete")
+		}
+	}
+	if statuses[http.StatusOK] != 1 || statuses[http.StatusForbidden] != 1 {
+		t.Errorf("expected one successful setup and one forbidden setup, got statuses %v", statuses)
+	}
+	count, err := store.mockFullStore.CountAdmins(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("concurrent setup must persist exactly one admin, got %d", count)
 	}
 }
 
@@ -892,7 +1015,6 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 
 	// 2. SetupSuperadmin with bad JSON
 	reqBad := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader([]byte("{bad")))
-	reqBad = reqBad.WithContext(context.WithValue(reqBad.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrBad := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrBad, reqBad)
 	if rrBad.Code != http.StatusBadRequest {
@@ -903,7 +1025,6 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 	badSetup := SetupSuperadminRequest{Username: "superadmin", Password: ""}
 	bodyBad, _ := json.Marshal(badSetup)
 	reqMiss := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyBad))
-	reqMiss = reqMiss.WithContext(context.WithValue(reqMiss.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrMiss := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrMiss, reqMiss)
 	if rrMiss.Code != http.StatusBadRequest {
@@ -919,7 +1040,6 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 	}
 	bodyValid, _ := json.Marshal(validSetup)
 	reqValid := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyValid))
-	reqValid = reqValid.WithContext(context.WithValue(reqValid.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrValid := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrValid, reqValid)
 	if rrValid.Code != http.StatusOK {
@@ -937,7 +1057,6 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 
 	// 6. SetupSuperadmin when admin already exists (403)
 	reqDuplicate := httptest.NewRequest("POST", "/api/auth/setup", bytes.NewReader(bodyValid))
-	reqDuplicate = reqDuplicate.WithContext(context.WithValue(reqDuplicate.Context(), UserContextKey, db.User{ID: 99, IsActive: true}))
 	rrDuplicate := httptest.NewRecorder()
 	handler.SetupSuperadmin(rrDuplicate, reqDuplicate)
 	if rrDuplicate.Code != http.StatusForbidden {

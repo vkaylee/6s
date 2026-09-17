@@ -69,6 +69,11 @@ internal CA certificate as described above. `.env.prod` is git-ignored; never
 commit real secrets. Stop and remove the stack (including volumes) with
 `podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml down -v`.
 
+On first launch, create the initial superadmin through the setup dialog; no
+existing login is required. Setup is rejected once an active admin exists.
+Restrict network access to trusted operators until initialization is complete,
+because the setup endpoint is public during this bootstrap window.
+
 ## Verification
 
 ```sh

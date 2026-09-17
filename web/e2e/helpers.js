@@ -22,8 +22,7 @@ export function getE2EConfig() {
 }
 /**
  * Performs actual UI login via React surface.
- * The isolated E2E database must be bootstrapped with a local account; the
- * production setup endpoint intentionally requires an authenticated context.
+ * The isolated E2E database must be seeded with the configured login account.
  */
 export async function loginViaUI(page, customUser, customPass) {
   const { baseURL, username, password } = getE2EConfig();
@@ -35,7 +34,7 @@ export async function loginViaUI(page, customUser, customPass) {
   const setupUsername = page.locator("#setup-username");
   if (await setupUsername.isVisible({ timeout: 1200 }).catch(() => false)) {
     throw new Error(
-      "E2E database needs bootstrap account; SetupSuperadminModal requires an authenticated context",
+      "E2E database needs the configured bootstrap account before login tests",
     );
   }
 
