@@ -30,7 +30,7 @@ type UserProvisioning interface {
 	UpdateUserLastLogin(ctx context.Context, id int64) error
 	CreateUserJIT(ctx context.Context, arg db.CreateUserJITParams) (db.User, error)
 	UpdateUserADLogin(ctx context.Context, arg db.UpdateUserADLoginParams) (db.User, error)
-	CreateLocalAdmin(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error)
+	CreateLocalAdminAtomic(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error)
 	CountAdmins(ctx context.Context) (int64, error)
 }
 
@@ -683,13 +683,17 @@ func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
 		emailVal = sql.NullString{String: req.Email, Valid: true}
 	}
 
-	user, err := h.store.CreateLocalAdmin(r.Context(), db.CreateLocalAdminParams{
+	user, err := h.store.CreateLocalAdminAtomic(r.Context(), db.CreateLocalAdminParams{
 		Username:     req.Username,
 		PasswordHash: sql.NullString{String: hash, Valid: true},
 		FullName:     req.FullName,
 		Email:        emailVal,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrSetupAlreadyInitialized) {
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrAdminExists))
+			return
+		}
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrSetupFailed).WithCause(err))
 		return
 	}

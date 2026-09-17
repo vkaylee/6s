@@ -65,10 +65,12 @@ SELECT COUNT(*) FROM users
 WHERE role = 'SUPERADMIN' AND is_active = TRUE;
 
 -- name: CreateLocalAdmin :one
+-- users.site_id is NOT NULL with no database default, so the bootstrap admin
+-- must be placed in the governed default site created by migration 15.
 INSERT INTO users (
-    username, password_hash, auth_source, full_name, email, role, is_active
+    username, password_hash, auth_source, full_name, email, role, site_id, is_active
 ) VALUES (
-    $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', TRUE
+    $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', (SELECT id FROM sites WHERE code = 'DEFAULT'), TRUE
 )
 RETURNING *;
 

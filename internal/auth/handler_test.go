@@ -20,6 +20,7 @@ import (
 
 type mockFullStore struct {
 	mu           sync.Mutex
+	bootstrap    sync.Mutex
 	users        map[int64]db.User
 	usersByName  map[string]db.User
 	usersByBadge map[string]db.User
@@ -273,6 +274,22 @@ func (m *mockFullStore) CreateLocalAdmin(_ context.Context, arg db.CreateLocalAd
 	m.users[u.ID] = u
 	m.usersByName[u.Username] = u
 	return u, nil
+}
+
+// CreateLocalAdminAtomic mirrors the production serialized bootstrap: the
+// initial admin count and the insert are evaluated under one critical section,
+// so concurrent setups observe one winner.
+func (m *mockFullStore) CreateLocalAdminAtomic(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error) {
+	m.bootstrap.Lock()
+	defer m.bootstrap.Unlock()
+	count, err := m.CountAdmins(ctx)
+	if err != nil {
+		return db.User{}, err
+	}
+	if count > 0 {
+		return db.User{}, db.ErrSetupAlreadyInitialized
+	}
+	return m.CreateLocalAdmin(ctx, arg)
 }
 
 func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
@@ -565,22 +582,22 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 	}
 }
 
-// Hold both count results until both requests have observed the initial state.
+// Hold both atomic setup attempts until both requests are ready, then let the
+// mock's serialized critical section choose exactly one winner.
 type concurrentSetupStore struct {
 	*mockFullStore
 	counted chan struct{}
 	release chan struct{}
 }
 
-func (s *concurrentSetupStore) CountAdmins(ctx context.Context) (int64, error) {
-	count, err := s.mockFullStore.CountAdmins(ctx)
+func (s *concurrentSetupStore) CreateLocalAdminAtomic(ctx context.Context, arg db.CreateLocalAdminParams) (db.User, error) {
 	s.counted <- struct{}{}
 	select {
 	case <-s.release:
-		return count, err
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return db.User{}, ctx.Err()
 	}
+	return s.mockFullStore.CreateLocalAdminAtomic(ctx, arg)
 }
 
 func TestHandler_SetupSuperadmin_ConcurrentRequests(t *testing.T) {

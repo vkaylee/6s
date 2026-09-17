@@ -309,9 +309,9 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 
 const createLocalAdmin = `-- name: CreateLocalAdmin :one
 INSERT INTO users (
-    username, password_hash, auth_source, full_name, email, role, is_active
+    username, password_hash, auth_source, full_name, email, role, site_id, is_active
 ) VALUES (
-    $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', TRUE
+    $1, $2, 'LOCAL', $3, $4, 'SUPERADMIN', (SELECT id FROM sites WHERE code = 'DEFAULT'), TRUE
 )
 RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, site_id, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at
 `
@@ -323,6 +323,8 @@ type CreateLocalAdminParams struct {
 	Email        sql.NullString
 }
 
+// users.site_id is NOT NULL with no database default, so the bootstrap admin
+// must be placed in the governed default site created by migration 15.
 func (q *Queries) CreateLocalAdmin(ctx context.Context, arg CreateLocalAdminParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, createLocalAdmin,
 		arg.Username,

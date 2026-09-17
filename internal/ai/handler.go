@@ -108,6 +108,7 @@ func (h *Handler) TestDNS(w http.ResponseWriter, r *http.Request) {
 
 	writeAIJSON(w, http.StatusOK, res)
 }
+
 // TranslationContext carries issue metadata for disambiguating short descriptions.
 type TranslationContext struct {
 	Category     string   `json:"category,omitempty"`
