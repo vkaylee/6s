@@ -1,0 +1,46 @@
+# Production/staging edge proxy.
+#
+# The application binary serves BOTH the API and the embedded SPA on :8080,
+# so a single reverse_proxy covers every path (no per-route splitting needed).
+# Caddy terminates TLS with its internal CA (self-signed), matching the dev
+# stack's proven on-demand-TLS pattern. For a public deployment, replace
+# `tls internal` with real certs / ACME and drop on_demand.
+#
+# {$PROD_HTTPS_PORT} is injected by docker-compose.prod.yml so the HTTP->HTTPS
+# redirect preserves the host-mapped port (defaults to 443 if unset).
+
+{
+	servers :443 {
+		protocols h1 h2
+	}
+	# Authorize on-demand cert issuance via the app liveness endpoint (same
+	# protection the dev stack uses; avoids the deprecated rate_limit form).
+	on_demand_tls {
+		ask http://server:8080/api/health
+	}
+}
+
+# Plain HTTP -> HTTPS (preserve the mapped HTTPS port)
+:80 {
+	redir https://{host}:{$PROD_HTTPS_PORT:443}{uri} permanent
+}
+
+:443 {
+	tls internal {
+		on_demand
+	}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		# Hide the proxy banner.
+		-Server
+	}
+
+	reverse_proxy server:8080
+}

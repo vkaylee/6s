@@ -1,0 +1,38 @@
+# Build context exclusions for production image builds.
+# Keep this in sync with what the web/server build stages actually need.
+# The web stage runs `COPY web/ ./` + `bun install` + `bun run build`, so do
+# NOT exclude web source, package.json, or bun.lock — only generated/heavy dirs.
+
+# VCS & CI
+.git
+.github
+
+# Tooling / agent scaffolding (never needed inside the image)
+.leedevkit
+.leedevkit.bak
+.claude
+.agent
+.config
+
+# Local caches, logs, and test output
+.cache
+.test_logs
+tmp
+artifacts
+**/*.log
+web/test-results
+
+# Generated dependencies & assets (rebuilt inside the image)
+**/node_modules
+web/dist
+
+# Runtime data and local material — must never be baked into the image
+data
+uploads
+certs
+
+# Secrets / local env (placeholders only; real values are injected at runtime)
+.env
+.env.*
+!.env.example
+!.env.prod.example

@@ -104,3 +104,57 @@ jobs:
           name: security-reports
           path: artifacts/security/
           if-no-files-found: ignore
+
+  image:
+    name: Build & scan app image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Capture build metadata
+        run: echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: Build app image (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: .compose/Dockerfile.app
+          # load:true keeps the image in the local daemon for trivy + SBOM.
+          # Registry push is intentionally NOT wired yet (build & attest only).
+          push: false
+          load: true
+          tags: |
+            6s-app:ci-${{ github.sha }}
+            6s-app:ci
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+            REVISION=${{ github.sha }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            SOURCE=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Scan image (CRITICAL/HIGH block)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 6s-app:ci-${{ github.sha }}
+          format: sarif
+          output: artifacts/security/trivy-image.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Generate image SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 6s-app:ci-${{ github.sha }}
+          format: cyclonedx
+          output: artifacts/security/image-sbom.cdx.json
+      - name: Upload image scan artifacts
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: image-reports
+          path: artifacts/security/
+          if-no-files-found: ignore
