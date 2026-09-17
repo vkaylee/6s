@@ -20,7 +20,7 @@ Hệ thống webapp mobile-first hỗ trợ nhân viên nhà xưởng ghi nhận
   │  ├── TLS Termination (Internal CA / Caddy / Reverse Proxy)
   │  ├── Auth & Identity:
   │  │   ├── Internal DB Auth (Argon2id, QR badge)
-  │  │   └── Active Directory / LDAP (LDAPS/StartTLS, bind authentication, auto-provision user, sync role/group)
+  │  │   └── Active Directory / LDAP (LDAPS/StartTLS, bind authentication, JIT provisioning, role map on first provision)
   │  ├── Business Logic (RBAC 4 cấp, JWT Access + Refresh Token, Rate Limiting)
   │  ├── Concurrency Control: database/sql connection pool (`pgx/v5/stdlib`) + Optimistic Locking
   │  ├── Storage: PostgreSQL 18 (pg_dump 6h) + Local File System ./uploads (rsync delta lên NAS mỗi giờ; Strict Sanitized UUIDs)
@@ -521,18 +521,22 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
     - Role và quyền được tra cứu trực tiếp theo `sub` từ PostgreSQL/cache tại middleware xác thực.
     - Thời hạn Access Token: tối đa `3600` giây (60 phút) cho mobile/web. Refresh Token: tối đa 30 ngày.
   - Luồng xác thực linh hoạt (Hybrid Auth Flow):
-    1. Đọc cấu hình AD từ bảng `ad_configs` trong DB:
+    1. Thử xác thực nội bộ trước (`auth_source='LOCAL'` bằng Argon2id, hoặc `badge_code`) để tài khoản quản trị local luôn dùng được khi AD bật hoặc AD gặp sự cố.
+    2. Nếu không khớp nội bộ, đọc cấu hình AD từ bảng `ad_configs` trong DB:
        - Nếu `is_enabled = 1`:
          - Backend kết nối tới AD Domain Controller theo cấu hình trong DB qua LDAPS (`port 636`) hoặc StartTLS (`port 389`).
          - Sử dụng service bind (`bind_dn` / `bind_password` sau khi giải mã AES-256-GCM) để tìm kiếm người dùng theo `user_filter`, sau đó bind auth bằng mật khẩu người dùng cung cấp.
-         - **Xác thực thành công**:
-           - Nếu user chưa tồn tại trong PostgreSQL: Tự động khởi tạo (JIT - Just-In-Time Provisioning) với `auth_source = 'AD'`, map `displayName` -> `full_name`, `mail` -> `email`. Gán role theo nhóm AD (`group_admin_dn`, `group_safety_dn`, `group_leader_dn`, mặc định `USER`).
-           - Nếu user đã tồn tại: Cập nhật `last_login_at`, cập nhật lại `role` nếu có thay đổi group mapping.
+         - **Xác thực thành công** — đối chiếu danh tính theo LDAP DN trước, KHÔNG tạo tài khoản theo tên người dùng nhập vào:
+           - Tìm bản ghi theo `ad_dn` (không phân biệt hoa/thường). Nếu có từ 2 bản ghi trở lên khớp DN -> từ chối (401) vì danh tính mơ hồ.
+           - Nếu bản ghi AD đã tồn tại: dùng lại đúng bản ghi đó và chỉ cập nhật `full_name`, `email`, `last_login_at`. Giữ nguyên `role`, `site_id` và các gán kèm do Admin thiết lập; KHÔNG đồng bộ lại `role` từ nhóm AD ở mỗi lần đăng nhập.
+           - Nếu `username` đã tồn tại nhưng thuộc `auth_source='LOCAL'` hoặc có `ad_dn` khác -> từ chối (401), không tự ghép danh tính AD với tài khoản local.
+           - Nếu chưa có bản ghi nào: tự động khởi tạo (JIT) với `auth_source='AD'`, `site_id` = site `DEFAULT`, map `displayName` -> `full_name`, `mail` -> `email`, role theo nhóm AD (`group_admin_dn`, `group_safety_dn`, `group_leader_dn`, mặc định `USER`). Tranh chấp tạo đồng thời được xử lý bằng cách đọc lại theo DN và chỉ chấp nhận khi đúng danh tính AD.
            - Cấp Access Token (1h) + Refresh Token (30 ngày).
-        - **Xác thực thất bại** — phân biệt 2 nhóm lỗi, không gộp chung:
-          - `LDAP Result Code 49 (Invalid Credentials)`: sai mật khẩu/DN thật -> trả 401, KHÔNG fallback local (chống attacker dùng mật khẩu AD sai rồi lọt qua mật khẩu local cũ chưa đổi).
-          - Lỗi kết nối (timeout, DNS, TLS handshake, AD down): cho phép fallback tài khoản `auth_source='LOCAL'` còn `is_active` bằng Argon2id — kênh cứu hộ khẩn cấp cho Admin local. Ghi `system_audit_logs` (`action='AD_UNREACHABLE_FALLBACK'`).
        - Nếu `is_enabled = 0`: So khớp hoàn toàn bằng Argon2id trong PostgreSQL (tài khoản nội bộ).
+    3. **Phân loại thất bại** (không gộp chung, nhưng luôn trả thông báo trung tính cho client):
+       - `LDAP Result Code 49 (Invalid Credentials)` hoặc không tìm thấy user trong AD: trả 401 và tính vào bộ đếm khóa theo tài khoản.
+       - Lỗi vận hành (DNS, timeout, TLS handshake, AD down, sai/không giải mã được `bind_password`, đọc cấu hình AD lỗi, lỗi ghi JIT vào PostgreSQL): trả 500, chỉ giới hạn theo IP, KHÔNG tính vào bộ đếm khóa tài khoản và KHÔNG ghi `LOGIN_LOCKED`. Lý do thất bại được ghi log theo bước (`ad_config`, `ad_config_decrypt`, `ldap_authentication`, `jit_provision`) không kèm mật khẩu hay DN thô.
+       - Không có fallback từ tài khoản AD sang mật khẩu local cho cùng `username`; kênh cứu hộ là tài khoản `auth_source='LOCAL'` riêng.
   - Trả về (HTTP 200 - Envelope):
     ```json
     {
@@ -831,13 +835,16 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
     }
     ```
   - Xử lý:
+    - Trường bị bỏ khỏi body được giữ nguyên theo cấu hình đã lưu (kể cả `skip_tls_verify`, `user_filter`, các `group_*_dn`); muốn xóa một trường phải gửi chuỗi rỗng một cách tường minh. Lỗi đọc cấu hình hiện hành (khác `sql.ErrNoRows`) trả 500 và KHÔNG ghi gì.
+    - `bind_password` để trống nghĩa là giữ mật khẩu đã lưu; chỉ gửi khi thực sự đổi.
     - Upsert vào bảng `ad_configs` (`id = 1`).
     - Ghi nhận `system_audit_logs` (`action = 'UPDATE_AD_CONFIG'`).
-    - Backend lập tức reload connection pool / client LDAP mà không cần khởi động lại Go server.
+    - Backend đọc cấu hình từ DB ở mỗi lần đăng nhập, không cần khởi động lại Go server.
 - `POST /api/config/ad/test` (Kiểm tra kết nối và bind thử với AD)
   - Header: Role Admin
   - Body: Gửi kèm cấu hình muốn test hoặc để trống để test cấu hình hiện hành trong DB.
   - Trả về: `{"data": {"success": true, "message": "LDAP connection & service bind OK"}}` hoặc HTTP 400 (Error Envelope) kèm lỗi chi tiết (`Lỗi DNS`, `Sai TLS certificate`, `Sai thông tin Bind DN`).
+- Lưu ý: endpoint test chỉ kiểm tra service bind và quyền tìm kiếm user bằng filter tổng quát. Test thành công KHÔNG xác nhận `user_filter` đã cấu hình, mật khẩu của người đăng nhập, hay bước JIT vào PostgreSQL. Dùng để chẩn đoán kết nối, không dùng để xác nhận đăng nhập.
 
 ### 6.6. Users Admin & Cấu hình Kênh Thông Báo (Admin)
 - `PATCH /api/admin/users/{id}` (Admin): Body `{"role": "...", "assigned_location_code": "LINE_A2", "is_active": false}` — BẮT BUỘC cho luồng AD JIT: group mapping chỉ quyết định `role`, còn `assigned_location_code` luôn rỗng lúc provision -> Line Leader đồng bộ từ AD phải được Admin gán chuyền qua endpoint này thì các rule "duyệt/reopen chuyền mình" mới hoạt động. Ghi `system_audit_logs` (`action='USER_UPDATED'`).
@@ -1141,9 +1148,10 @@ func StartOutboxWorker(ctx context.Context, db *sql.DB, notifyCh <-chan struct{}
   - Base DN (`DC=factory,DC=lan`), Bind DN (`CN=svc_6s_auth,OU=Services,...`), Bind Password (ẩn dạng `••••••••`, có nút xem/đổi).
   - Filter User và Mapping DN cho 3 nhóm quyền: `Admin Group`, `Safety Officer Group`, `Line Leader Group`.
 - **Nút kiểm tra kết nối 1 chạm `[ Kiểm tra kết nối AD ]`**:
-  - Gọi `POST /api/config/ad/test` để test ping & bind tài khoản dịch vụ.
+  - Gọi `POST /api/config/ad/test` để test ping, service bind và quyền tìm kiếm user (filter tổng quát).
   - Báo trạng thái xanh kèm thời gian phản hồi (ví dụ: `Đã kết nối thành công (24ms)`) hoặc báo đỏ kèm lỗi chi tiết giúp admin khắc phục ngay mà không cần tra cứu log server.
-- Nút `[ Lưu cấu hình ]`: Ghi trực tiếp vào bảng `ad_configs` trong DB, kích hoạt hot-reload tức thì.
+  - Nút test dùng giá trị đang nhập trên form (kể cả chưa lưu); muốn kiểm tra cấu hình đã lưu thì tải lại trang rồi test mà không nhập lại mật khẩu bind.
+- Nút `[ Lưu cấu hình ]`: Ghi trực tiếp vào bảng `ad_configs` trong DB, có hiệu lực ngay ở lần đăng nhập kế tiếp (backend đọc DB mỗi lần đăng nhập). Khi lưu, UI gửi đầy đủ các trường filter, skip TLS và 3 group DN để không vô tình xóa cấu hình; mật khẩu bind để trống nghĩa là giữ nguyên.
 ### 9.9. Chuẩn hóa Enterprise Premium UX (Môi trường Điều hành & Nhà xưởng Chuyên sâu)
 
 #### A. High-Contrast Dark Mode & Chống lóa ánh sáng mạnh (Factory Glare Resistance)

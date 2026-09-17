@@ -22,6 +22,18 @@ jobs:
           go-version-file: go.mod
           cache: true
           check-latest: false
+      - name: Install LeeDevKit 0.7.7 source distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(mktemp)"
+          curl -fsSL https://github.com/vkaylee/leedevkit/archive/refs/tags/v0.7.7.tar.gz -o "$archive"
+          mkdir .leedevkit
+          tar -xzf "$archive" --strip-components=1 -C .leedevkit
+          rm "$archive"
+          DEVKIT_HOME="$PWD/.leedevkit" python3 .leedevkit/scripts/_devkit_integrity.py checksum
+          printf '%s\n' '#!/bin/bash' 'exec "$(cd "$(dirname "$0")" && pwd)/.leedevkit/bin/leedevkit" "$@"' > leedevkit
+          chmod +x leedevkit
       - name: Install Go vulnerability scanner
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
       - name: Server lint

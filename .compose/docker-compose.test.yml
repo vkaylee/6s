@@ -13,9 +13,27 @@ services:
     working_dir: /workspace
     environment:
       CGO_ENABLED: "0"
+      TEST_DB_DSN: "postgres://test:test_password@test-db:5432/test?sslmode=disable"
+    networks: [test]
     command: ["sleep", "infinity"]
     healthcheck:
       test: ["CMD", "go", "version"]
+
+  test-db:
+    profiles: ["go"]
+    image: docker.io/library/postgres:18-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test
+    networks: [test]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql
 
   e2e-server:
     profiles: ["e2e-web"]
@@ -118,4 +136,5 @@ volumes:
   e2e-bun-install-cache:
 
 networks:
+  test:
   e2e:

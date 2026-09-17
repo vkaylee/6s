@@ -103,9 +103,14 @@ export function AdminConfigPage() {
   const [adServer, setAdServer] = useState("ad.factory.lan");
   const [adPort, setAdPort] = useState(636);
   const [adUseTls, setAdUseTls] = useState(true);
+  const [adSkipTlsVerify, setAdSkipTlsVerify] = useState(false);
   const [adBaseDn, setAdBaseDn] = useState("DC=factory,DC=lan");
   const [adBindDn, setAdBindDn] = useState("CN=svc_6s_auth,OU=Services,DC=factory,DC=lan");
   const [adBindPassword, setAdBindPassword] = useState("");
+  const [adUserFilter, setAdUserFilter] = useState("");
+  const [adGroupAdminDn, setAdGroupAdminDn] = useState("");
+  const [adGroupSafetyDn, setAdGroupSafetyDn] = useState("");
+  const [adGroupLeaderDn, setAdGroupLeaderDn] = useState("");
   const [adTestResult, setAdTestResult] = useState<string | null>(null);
 
   // Notification config state
@@ -192,16 +197,26 @@ export function AdminConfigPage() {
         server: string;
         port: number;
         use_tls: boolean;
+        skip_tls_verify: boolean;
         base_dn: string;
         bind_dn: string;
+        user_filter: string;
+        group_admin_dn?: string;
+        group_safety_dn?: string;
+        group_leader_dn?: string;
       }>("/api/config/ad");
       if (data) {
         setAdEnabled(data.is_enabled);
         setAdServer(data.server);
         setAdPort(data.port);
         setAdUseTls(data.use_tls);
+        setAdSkipTlsVerify(data.skip_tls_verify);
         setAdBaseDn(data.base_dn);
         setAdBindDn(data.bind_dn);
+        setAdUserFilter(data.user_filter);
+        setAdGroupAdminDn(data.group_admin_dn || "");
+        setAdGroupSafetyDn(data.group_safety_dn || "");
+        setAdGroupLeaderDn(data.group_leader_dn || "");
       }
     } catch {
       // ignore
@@ -284,9 +299,11 @@ export function AdminConfigPage() {
           server: adServer,
           port: adPort,
           use_tls: adUseTls,
+          skip_tls_verify: adSkipTlsVerify,
           base_dn: adBaseDn,
           bind_dn: adBindDn,
           bind_password: adBindPassword,
+          user_filter: adUserFilter,
         }),
       });
       setAdTestResult(res.message || "OK");
@@ -299,20 +316,50 @@ export function AdminConfigPage() {
   const handleSaveAD = async () => {
     setIsSaving(true);
     try {
-      await apiClient("/api/config/ad", {
+      const payload = {
+        is_enabled: adEnabled,
+        server: adServer,
+        port: adPort,
+        use_tls: adUseTls,
+        skip_tls_verify: adSkipTlsVerify,
+        base_dn: adBaseDn,
+        bind_dn: adBindDn,
+        bind_password: adBindPassword || undefined,
+        user_filter: adUserFilter,
+        group_admin_dn: adGroupAdminDn,
+        group_safety_dn: adGroupSafetyDn,
+        group_leader_dn: adGroupLeaderDn,
+      };
+      const saved = await apiClient<{
+        is_enabled: boolean;
+        server: string;
+        port: number;
+        use_tls: boolean;
+        skip_tls_verify: boolean;
+        base_dn: string;
+        bind_dn: string;
+        user_filter: string;
+        group_admin_dn?: string;
+        group_safety_dn?: string;
+        group_leader_dn?: string;
+      }>("/api/config/ad", {
         method: "PUT",
-        body: JSON.stringify({
-          is_enabled: adEnabled,
-          server: adServer,
-          port: adPort,
-          use_tls: adUseTls,
-          base_dn: adBaseDn,
-          bind_dn: adBindDn,
-          bind_password: adBindPassword || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
+      setAdEnabled(saved.is_enabled);
+      setAdServer(saved.server);
+      setAdPort(saved.port);
+      setAdUseTls(saved.use_tls);
+      setAdSkipTlsVerify(saved.skip_tls_verify);
+      setAdBaseDn(saved.base_dn);
+      setAdBindDn(saved.bind_dn);
+      setAdUserFilter(saved.user_filter);
+      setAdGroupAdminDn(saved.group_admin_dn || "");
+      setAdGroupSafetyDn(saved.group_safety_dn || "");
+      setAdGroupLeaderDn(saved.group_leader_dn || "");
+      setAdBindPassword("");
       haptics.success();
-      modalDialog.alert(t("admin.save_ad_success"));
+      await modalDialog.alert(t("admin.save_ad_success"));
     } catch {
       modalDialog.alert(t("admin.save_ad_error"));
     } finally {
@@ -726,6 +773,55 @@ export function AdminConfigPage() {
                     {adUseTls ? t("admin.on") : t("admin.off")}
                   </button>
                 </div>
+              </div>
+
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={adSkipTlsVerify}
+                  onChange={(e) => setAdSkipTlsVerify(e.target.checked)}
+                  className="w-5 h-5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-bold">{t("admin.skip_tls_verify_label")}</span>
+              </label>
+
+              <div>
+                <span className="block text-xs font-bold text-zinc-500 mb-1">
+                  {t("admin.user_filter_label")}
+                </span>
+                <input
+                  type="text"
+                  value={adUserFilter}
+                  onChange={(e) => setAdUserFilter(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <input
+                  type="text"
+                  aria-label={t("admin.group_admin_dn_label")}
+                  value={adGroupAdminDn}
+                  onChange={(e) => setAdGroupAdminDn(e.target.value)}
+                  placeholder={t("admin.group_admin_dn_label")}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+                <input
+                  type="text"
+                  aria-label={t("admin.group_safety_dn_label")}
+                  value={adGroupSafetyDn}
+                  onChange={(e) => setAdGroupSafetyDn(e.target.value)}
+                  placeholder={t("admin.group_safety_dn_label")}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
+                <input
+                  type="text"
+                  aria-label={t("admin.group_leader_dn_label")}
+                  value={adGroupLeaderDn}
+                  onChange={(e) => setAdGroupLeaderDn(e.target.value)}
+                  placeholder={t("admin.group_leader_dn_label")}
+                  className="w-full p-2.5 rounded-xl border bg-zinc-50 dark:bg-zinc-800 text-sm font-mono"
+                />
               </div>
 
               <div>

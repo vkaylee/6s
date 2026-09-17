@@ -30,7 +30,8 @@ export function LoginPage() {
   }, [user, returnTo, setLocation]);
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername || !password.trim()) {
       setErrorMsg(t("auth.required_fields"));
       return;
     }
@@ -46,10 +47,7 @@ export function LoginPage() {
       }>("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: username.trim(),
-          password: password.trim(),
-        }),
+        body: JSON.stringify({ username: trimmedUsername, password }),
         skipAuth: true,
       });
 

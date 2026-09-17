@@ -26,11 +26,17 @@ WHERE id = $1;
 
 -- name: CreateUserJIT :one
 INSERT INTO users (
-    username, auth_source, ad_dn, full_name, email, role, is_active, last_login_at
+    username, auth_source, ad_dn, full_name, email, role, site_id, is_active, last_login_at
 ) VALUES (
-    $1, 'AD', $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP
+    $1, 'AD', $2, $3, $4, $5, (SELECT id FROM sites WHERE code = 'DEFAULT'), TRUE, CURRENT_TIMESTAMP
 )
 RETURNING *;
+
+-- name: GetUsersByADDN :many
+SELECT * FROM users
+WHERE LOWER(ad_dn) = LOWER($1)
+ORDER BY id ASC
+LIMIT 2;
 
 -- name: UpdateUserADLogin :one
 UPDATE users

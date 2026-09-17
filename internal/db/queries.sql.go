@@ -475,9 +475,9 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 
 const createUserJIT = `-- name: CreateUserJIT :one
 INSERT INTO users (
-    username, auth_source, ad_dn, full_name, email, role, is_active, last_login_at
+    username, auth_source, ad_dn, full_name, email, role, site_id, is_active, last_login_at
 ) VALUES (
-    $1, 'AD', $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP
+    $1, 'AD', $2, $3, $4, $5, (SELECT id FROM sites WHERE code = 'DEFAULT'), TRUE, CURRENT_TIMESTAMP
 )
 RETURNING id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, site_id, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at
 `
@@ -1459,6 +1459,55 @@ func (q *Queries) GetUserPermissions(ctx context.Context, id int64) ([]string, e
 			return nil, err
 		}
 		items = append(items, code)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUsersByADDN = `-- name: GetUsersByADDN :many
+SELECT id, username, password_hash, auth_source, ad_dn, pin_hash, badge_code, full_name, email, role, site_id, assigned_location_code, wx_uid, timezone, locale, is_active, created_at, last_login_at FROM users
+WHERE LOWER(ad_dn) = LOWER($1)
+ORDER BY id ASC
+LIMIT 2
+`
+
+func (q *Queries) GetUsersByADDN(ctx context.Context, lower string) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, getUsersByADDN, lower)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.PasswordHash,
+			&i.AuthSource,
+			&i.AdDn,
+			&i.PinHash,
+			&i.BadgeCode,
+			&i.FullName,
+			&i.Email,
+			&i.Role,
+			&i.SiteID,
+			&i.AssignedLocationCode,
+			&i.WxUid,
+			&i.Timezone,
+			&i.Locale,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

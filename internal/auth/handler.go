@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,6 +23,7 @@ import (
 type UserReader interface {
 	GetUserByID(ctx context.Context, id int64) (db.User, error)
 	GetUserByUsername(ctx context.Context, username string) (db.User, error)
+	GetUsersByADDN(ctx context.Context, adDN string) ([]db.User, error)
 	GetUserByBadgeCode(ctx context.Context, badgeCode sql.NullString) (db.User, error)
 	GetUserPermissions(ctx context.Context, id int64) ([]string, error)
 }
@@ -164,6 +167,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Username = strings.TrimSpace(req.Username)
+	req.BadgeCode = strings.TrimSpace(req.BadgeCode)
 	accountKey := req.Username
 	if accountKey == "" {
 		accountKey = req.BadgeCode
@@ -177,10 +182,25 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := h.authenticateUser(r.Context(), req, clientIP, r.UserAgent())
-	if !ok {
-		h.recordFailureAndLock(r.Context(), clientIP, accountKey, r.UserAgent())
-		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidCreds))
+	user, authErr := h.authenticateUser(r.Context(), req)
+	if authErr != nil {
+		switch {
+		case errors.Is(authErr, errInvalidCredentials):
+			h.recordFailureAndLock(r.Context(), clientIP, accountKey, r.UserAgent())
+			_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidCreds))
+		case errors.Is(authErr, errIdentityCollision):
+			// A directory identity colliding with a local/different AD row is
+			// rejected without revealing which account owns the name or DN.
+			h.limiter.RecordIPFailure(clientIP)
+			log.Printf("auth: identity collision")
+			_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidCreds))
+		default:
+			// Operational failures are throttled by IP only, never charged to
+			// the account lockout bucket.
+			h.limiter.RecordIPFailure(clientIP)
+			log.Printf("auth: operational failure stage=%s", authFailureStage(authErr))
+			_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
+		}
 		return
 	}
 
@@ -214,112 +234,247 @@ func (h *Handler) checkRateAndLockout(w http.ResponseWriter, r *http.Request, cl
 	return true
 }
 
-func (h *Handler) authenticateUser(ctx context.Context, req LoginRequest, clientIP, userAgent string) (db.User, bool) {
-	// Local administrators must remain usable when AD is enabled or unavailable.
-	if user, ok := h.authenticateLocal(ctx, req); ok {
-		return user, true
-	}
+var (
+	errInvalidCredentials = errors.New("invalid credentials")
+	errIdentityCollision  = errors.New("AD identity collision")
+	errInvalidADIdentity  = errors.New("invalid AD identity")
+)
 
-	if adCfg, err := h.store.GetADConfig(ctx); err == nil && adCfg.IsEnabled && req.Username != "" && req.Password != "" {
-		u, ok, isCredError := h.authenticateAD(ctx, adCfg, req.Username, req.Password)
-		if ok {
-			return u, true
-		}
-		if isCredError {
-			return db.User{}, false
-		}
-		ip, ua := maskedAuditSource(clientIP, userAgent)
-		if aErr := h.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-			Action: "AD_UNREACHABLE_FALLBACK", TargetTable: "users", TargetID: maskAuditValue(req.Username),
-			IpAddress: ip, UserAgent: ua,
-		}); aErr != nil {
-			return db.User{}, false
-		}
-	}
-	return db.User{}, false
+type authOperationalError struct {
+	stage string
+	err   error
 }
 
-func (h *Handler) authenticateAD(ctx context.Context, adCfg db.AdConfig, username, password string) (db.User, bool, bool) {
-	client := h.resolveLDAPClient(adCfg)
+func (e *authOperationalError) Error() string { return e.stage }
+func (e *authOperationalError) Unwrap() error { return e.err }
+
+func operationalAuthError(stage string, err error) error {
+	return &authOperationalError{stage: stage, err: err}
+}
+
+func authFailureStage(err error) string {
+	stage := "authentication"
+	identityCollision := false
+	invalidIdentity := false
+	for err != nil {
+		if errors.Is(err, errIdentityCollision) {
+			identityCollision = true
+		}
+		if errors.Is(err, errInvalidADIdentity) {
+			invalidIdentity = true
+		}
+		var operational *authOperationalError
+		if errors.As(err, &operational) {
+			stage = operational.stage
+			err = operational.Unwrap()
+			continue
+		}
+		err = errors.Unwrap(err)
+	}
+	switch {
+	case identityCollision:
+		return "identity_collision"
+	case invalidIdentity:
+		return "identity_validation"
+	default:
+		return stage
+	}
+}
+func (h *Handler) authenticateUser(ctx context.Context, req LoginRequest) (db.User, error) {
+	if user, found, err := h.authenticateLocal(ctx, req); err != nil {
+		if errors.Is(err, errInvalidCredentials) {
+			return db.User{}, errInvalidCredentials
+		}
+		return db.User{}, operationalAuthError("local_lookup", err)
+	} else if found {
+		return user, nil
+	}
+	if req.Username == "" || req.Password == "" {
+		return db.User{}, errInvalidCredentials
+	}
+	adCfg, err := h.store.GetADConfig(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return db.User{}, errInvalidCredentials
+	}
+	if err != nil {
+		return db.User{}, operationalAuthError("ad_config", err)
+	}
+	if !adCfg.IsEnabled {
+		return db.User{}, errInvalidCredentials
+	}
+	u, err := h.authenticateAD(ctx, adCfg, req.Username, req.Password)
+	if err == nil {
+		return u, nil
+	}
+	if errors.Is(err, errInvalidCredentials) {
+		return db.User{}, errInvalidCredentials
+	}
+	return db.User{}, err
+}
+
+func (h *Handler) authenticateAD(ctx context.Context, adCfg db.AdConfig, username, password string) (db.User, error) {
+	client, err := h.resolveLDAPClient(adCfg)
+	if err != nil {
+		return db.User{}, operationalAuthError("ad_config_decrypt", err)
+	}
 	ldapUser, ldapErr := client.Authenticate(username, password)
-	if ldapErr == nil && ldapUser != nil {
-		u, err := h.jitProvisionUser(ctx, username, ldapUser)
-		return u, err == nil, false
+	if ldapErr != nil {
+		if errors.Is(ldapErr, ErrLDAPInvalidCredentials) || errors.Is(ldapErr, ErrLDAPUserNotFound) {
+			return db.User{}, errInvalidCredentials
+		}
+		return db.User{}, operationalAuthError("ldap_authentication", ldapErr)
 	}
-	if errors.Is(ldapErr, ErrLDAPInvalidCredentials) {
-		return db.User{}, false, true
+	if ldapUser == nil {
+		return db.User{}, errInvalidADIdentity
 	}
-	return db.User{}, false, false
+	u, err := h.jitProvisionUser(ctx, username, ldapUser)
+	if err != nil {
+		if errors.Is(err, errIdentityCollision) || errors.Is(err, errInvalidADIdentity) {
+			return db.User{}, err
+		}
+		return db.User{}, operationalAuthError("jit_provision", err)
+	}
+	return u, nil
 }
 
-func (h *Handler) resolveLDAPClient(adCfg db.AdConfig) LDAPClient {
+func (h *Handler) resolveLDAPClient(adCfg db.AdConfig) (LDAPClient, error) {
 	if h.ldapClient != nil {
-		return h.ldapClient
+		return h.ldapClient, nil
 	}
 	var plainBindPass string
-	if adCfg.BindPassword != "" && h.cipher != nil {
-		if dec, decErr := h.cipher.Decrypt(adCfg.BindPassword); decErr == nil {
-			plainBindPass = dec
+	if adCfg.BindPassword != "" {
+		if h.cipher == nil {
+			return nil, errors.New("encrypted AD bind password cannot be decrypted")
 		}
+		dec, decErr := h.cipher.Decrypt(adCfg.BindPassword)
+		if decErr != nil {
+			return nil, fmt.Errorf("decrypt AD bind password: %w", decErr)
+		}
+		plainBindPass = dec
 	}
 	return NewLiveLDAPClient(LDAPConfig{
-		Server:        adCfg.Server,
-		Port:          int(adCfg.Port),
-		UseTLS:        adCfg.UseTls,
-		SkipTLSVerify: adCfg.SkipTlsVerify,
-		BaseDN:        adCfg.BaseDn,
-		BindDN:        adCfg.BindDn,
-		BindPassword:  plainBindPass,
-		UserFilter:    adCfg.UserFilter,
-		GroupAdminDN:  adCfg.GroupAdminDn,
-		GroupSafetyDN: adCfg.GroupSafetyDn,
-		GroupLeaderDN: adCfg.GroupLeaderDn,
-	})
+		Server: adCfg.Server, Port: int(adCfg.Port), UseTLS: adCfg.UseTls, SkipTLSVerify: adCfg.SkipTlsVerify,
+		BaseDN: adCfg.BaseDn, BindDN: adCfg.BindDn, BindPassword: plainBindPass, UserFilter: adCfg.UserFilter,
+		GroupAdminDN: adCfg.GroupAdminDn, GroupSafetyDN: adCfg.GroupSafetyDn, GroupLeaderDN: adCfg.GroupLeaderDn,
+	}), nil
 }
 
 func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUser *LDAPUser) (db.User, error) {
-	existingUser, findErr := h.store.GetUserByUsername(ctx, username)
+	adDN := strings.TrimSpace(ldapUser.DN)
+	if adDN == "" {
+		return db.User{}, errInvalidADIdentity
+	}
+	jitUsername := strings.TrimSpace(ldapUser.Username)
+	if jitUsername == "" {
+		jitUsername = normalizeADUsername(username)
+	}
+	existingByDNS, findErr := h.store.GetUsersByADDN(ctx, adDN)
+	if errors.Is(findErr, sql.ErrNoRows) {
+		existingByDNS = nil
+		findErr = nil
+	}
+	if findErr != nil {
+		return db.User{}, operationalAuthError("jit_dn_lookup", findErr)
+	}
+	if len(existingByDNS) > 1 {
+		return db.User{}, errIdentityCollision
+	}
+	if len(existingByDNS) == 1 {
+		existingByDN := existingByDNS[0]
+		if existingByDN.AuthSource != "AD" || !sameADIdentity(existingByDN.AdDn, adDN) {
+			return db.User{}, errIdentityCollision
+		}
+		return h.updateADUser(ctx, existingByDN, ldapUser)
+	}
+
+	existingByName, findErr := h.store.GetUserByUsername(ctx, jitUsername)
+	if findErr == nil {
+		if existingByName.AuthSource != "AD" || !sameADIdentity(existingByName.AdDn, adDN) {
+			return db.User{}, errIdentityCollision
+		}
+		return h.updateADUser(ctx, existingByName, ldapUser)
+	}
+	if !errors.Is(findErr, sql.ErrNoRows) {
+		return db.User{}, operationalAuthError("jit_username_lookup", findErr)
+	}
+
 	var emailVal sql.NullString
 	if ldapUser.Email != "" {
 		emailVal = sql.NullString{String: ldapUser.Email, Valid: true}
 	}
-
-	if errors.Is(findErr, sql.ErrNoRows) {
-		return h.store.CreateUserJIT(ctx, db.CreateUserJITParams{
-			Username: username,
-			AdDn:     sql.NullString{String: ldapUser.DN, Valid: true},
-			FullName: ldapUser.FullName,
-			Email:    emailVal,
-			Role:     ldapProvisioningRole(ldapUser.MatchedRole),
-		})
+	created, createErr := h.store.CreateUserJIT(ctx, db.CreateUserJITParams{
+		Username: jitUsername, AdDn: sql.NullString{String: adDN, Valid: true}, FullName: ldapUser.FullName, Email: emailVal,
+		Role: ldapProvisioningRole(ldapUser.MatchedRole),
+	})
+	if createErr == nil {
+		return created, nil
 	}
-
-	if findErr == nil {
-		return h.store.UpdateUserADLogin(ctx, db.UpdateUserADLoginParams{
-			ID:       existingUser.ID,
-			FullName: ldapUser.FullName,
-			Email:    emailVal,
-		})
+	if !isUniqueViolation(createErr) {
+		return db.User{}, operationalAuthError("jit_create", createErr)
 	}
-
-	return db.User{}, findErr
+	concurrent, reloadErr := h.store.GetUsersByADDN(ctx, adDN)
+	if reloadErr != nil {
+		return db.User{}, operationalAuthError("jit_reload", reloadErr)
+	}
+	if len(concurrent) != 1 {
+		return db.User{}, errIdentityCollision
+	}
+	if concurrent[0].AuthSource != "AD" || !sameADIdentity(concurrent[0].AdDn, adDN) {
+		return db.User{}, errIdentityCollision
+	}
+	return h.updateADUser(ctx, concurrent[0], ldapUser)
 }
 
-func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.User, bool) {
+func (h *Handler) updateADUser(ctx context.Context, user db.User, ldapUser *LDAPUser) (db.User, error) {
+	var emailVal sql.NullString
+	if ldapUser.Email != "" {
+		emailVal = sql.NullString{String: ldapUser.Email, Valid: true}
+	}
+	return h.store.UpdateUserADLogin(ctx, db.UpdateUserADLoginParams{ID: user.ID, FullName: ldapUser.FullName, Email: emailVal})
+}
+
+func sameADIdentity(stored sql.NullString, dn string) bool {
+	return stored.Valid && strings.EqualFold(strings.TrimSpace(stored.String), strings.TrimSpace(dn))
+}
+
+func isUniqueViolation(err error) bool {
+	var stateErr interface{ SQLState() string }
+	return errors.As(err, &stateErr) && stateErr.SQLState() == "23505"
+}
+
+func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.User, bool, error) {
 	if req.Username != "" {
 		u, err := h.store.GetUserByUsername(ctx, req.Username)
-		if err == nil && u.AuthSource == "LOCAL" && u.PasswordHash.Valid {
-			if match, vErr := VerifyPassword(req.Password, u.PasswordHash.String); vErr == nil && match {
-				return u, true
-			}
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.User{}, false, nil
 		}
-	} else if req.BadgeCode != "" {
-		u, err := h.store.GetUserByBadgeCode(ctx, sql.NullString{String: req.BadgeCode, Valid: true})
-		if err == nil {
-			return u, true
+		if err != nil {
+			return db.User{}, false, fmt.Errorf("find local user: %w", err)
 		}
+		if u.AuthSource != "LOCAL" || !u.PasswordHash.Valid {
+			return db.User{}, false, nil
+		}
+
+		match, vErr := VerifyPassword(req.Password, u.PasswordHash.String)
+		if vErr != nil {
+			return db.User{}, false, fmt.Errorf("verify local password: %w", vErr)
+		}
+		if !match {
+			return db.User{}, false, errInvalidCredentials
+		}
+		return u, true, nil
 	}
-	return db.User{}, false
+	if req.BadgeCode != "" {
+		u, err := h.store.GetUserByBadgeCode(ctx, sql.NullString{String: req.BadgeCode, Valid: true})
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.User{}, false, nil
+		}
+		if err != nil {
+			return db.User{}, false, fmt.Errorf("find badge user: %w", err)
+		}
+		return u, true, nil
+	}
+	return db.User{}, false, nil
 }
 
 func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, user db.User) {

@@ -28,6 +28,8 @@ type mockFullStore struct {
 	tokens       map[string]db.RefreshToken
 	adConfig     db.AdConfig
 	auditLogs    []db.InsertAuditLogParams
+	jitArgs      []db.CreateUserJITParams
+	adConfigErr  error
 }
 
 func newMockFullStore() *mockFullStore {
@@ -79,6 +81,19 @@ func (m *mockFullStore) GetUserByUsername(_ context.Context, username string) (d
 	return u, nil
 }
 
+func (m *mockFullStore) GetUsersByADDN(_ context.Context, adDN string) ([]db.User, error) {
+	var matches []db.User
+	for _, u := range m.users {
+		if u.AdDn.Valid && strings.EqualFold(strings.TrimSpace(u.AdDn.String), strings.TrimSpace(adDN)) {
+			matches = append(matches, u)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return matches, nil
+}
+
 func (m *mockFullStore) GetUserByBadgeCode(_ context.Context, badgeCode sql.NullString) (db.User, error) {
 	if !badgeCode.Valid {
 		return db.User{}, sql.ErrNoRows
@@ -95,15 +110,10 @@ func (m *mockFullStore) UpdateUserLastLogin(_ context.Context, _ int64) error {
 }
 
 func (m *mockFullStore) CreateUserJIT(_ context.Context, arg db.CreateUserJITParams) (db.User, error) {
+	m.jitArgs = append(m.jitArgs, arg)
 	u := db.User{
-		ID:         int64(len(m.users) + 1),
-		Username:   arg.Username,
-		AuthSource: "AD",
-		AdDn:       arg.AdDn,
-		FullName:   arg.FullName,
-		Email:      arg.Email,
-		Role:       arg.Role,
-		IsActive:   true,
+		ID: int64(len(m.users) + 1), Username: arg.Username, AuthSource: "AD", AdDn: arg.AdDn,
+		FullName: arg.FullName, Email: arg.Email, Role: arg.Role, IsActive: true,
 	}
 	m.users[u.ID] = u
 	m.usersByName[u.Username] = u
@@ -216,25 +226,22 @@ func (m *mockFullStore) ListUserActiveSessions(_ context.Context, userID int64) 
 }
 
 func (m *mockFullStore) GetADConfig(_ context.Context) (db.AdConfig, error) {
+	if m.adConfigErr != nil {
+		return db.AdConfig{}, m.adConfigErr
+	}
 	return m.adConfig, nil
 }
 
 func (m *mockFullStore) UpsertADConfig(_ context.Context, arg db.UpsertADConfigParams) (db.AdConfig, error) {
+	bindPassword := arg.BindPassword
+	if bindPassword == "" {
+		bindPassword = m.adConfig.BindPassword
+	}
 	m.adConfig = db.AdConfig{
-		ID:            1,
-		IsEnabled:     arg.IsEnabled,
-		Server:        arg.Server,
-		Port:          arg.Port,
-		UseTls:        arg.UseTls,
-		SkipTlsVerify: arg.SkipTlsVerify,
-		BaseDn:        arg.BaseDn,
-		BindDn:        arg.BindDn,
-		BindPassword:  arg.BindPassword,
-		UserFilter:    arg.UserFilter,
-		GroupAdminDn:  arg.GroupAdminDn,
-		GroupSafetyDn: arg.GroupSafetyDn,
-		GroupLeaderDn: arg.GroupLeaderDn,
-		UpdatedAt:     time.Now(),
+		ID: 1, IsEnabled: arg.IsEnabled, Server: arg.Server, Port: arg.Port, UseTls: arg.UseTls,
+		SkipTlsVerify: arg.SkipTlsVerify, BaseDn: arg.BaseDn, BindDn: arg.BindDn, BindPassword: bindPassword,
+		UserFilter: arg.UserFilter, GroupAdminDn: arg.GroupAdminDn, GroupSafetyDn: arg.GroupSafetyDn,
+		GroupLeaderDn: arg.GroupLeaderDn, UpdatedAt: time.Now(),
 	}
 	return m.adConfig, nil
 }
@@ -1080,20 +1087,20 @@ func TestHandler_SetupAndErrors(t *testing.T) {
 		t.Errorf("expected 403 for duplicate superadmin setup, got %d", rrDuplicate.Code)
 	}
 
-	// 7. Login with inactive user (401)
-	store.usersByName["inactive"] = db.User{
-		ID:           99,
-		Username:     "inactive",
-		PasswordHash: sql.NullString{String: "$2a$10$validhashplaceholder", Valid: true},
-		AuthSource:   "LOCAL",
-		IsActive:     false,
+	// 7. Login with inactive user (403 after valid credential verification)
+	inactiveHash, err := HashPassword("inactive-password")
+	if err != nil {
+		t.Fatalf("hash inactive password: %v", err)
 	}
-	loginInactive, _ := json.Marshal(LoginRequest{Username: "inactive", Password: "any"})
+	store.usersByName["inactive"] = db.User{
+		ID: 99, Username: "inactive", PasswordHash: sql.NullString{String: inactiveHash, Valid: true}, AuthSource: "LOCAL", IsActive: false,
+	}
+	loginInactive, _ := json.Marshal(LoginRequest{Username: "inactive", Password: "inactive-password"})
 	reqInactive := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(loginInactive))
 	rrInactive := httptest.NewRecorder()
 	handler.Login(rrInactive, reqInactive)
-	if rrInactive.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 for inactive user login, got %d", rrInactive.Code)
+	if rrInactive.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for inactive user login, got %d", rrInactive.Code)
 	}
 
 	// 8. Login with wrong password (401)

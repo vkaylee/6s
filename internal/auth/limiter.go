@@ -167,6 +167,17 @@ func (l *LoginLimiter) RecordFailure(ip, accountKey string) bool {
 	return false
 }
 
+// RecordIPFailure records an operational authentication failure against the
+// source IP without charging the account lockout bucket.
+func (l *LoginLimiter) RecordIPFailure(ip string) {
+	if ip == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.ipFailures[ip] = append(l.ipFailures[ip], time.Now())
+}
+
 // RecordSuccess clears failures for the account when login succeeds.
 func (l *LoginLimiter) RecordSuccess(accountKey string) {
 	l.mu.Lock()

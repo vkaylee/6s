@@ -4,6 +4,7 @@ package auth
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -93,44 +94,125 @@ func (h *ADConfigHandler) GetADConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateADConfigRequest payload to update AD settings.
 type UpdateADConfigRequest struct {
-	IsEnabled     bool   `json:"is_enabled"`
-	Server        string `json:"server"`
-	Port          int    `json:"port"`
-	UseTLS        bool   `json:"use_tls"`
-	SkipTLSVerify bool   `json:"skip_tls_verify"`
-	BaseDN        string `json:"base_dn"`
-	BindDN        string `json:"bind_dn"`
-	BindPassword  string `json:"bind_password"`
-	UserFilter    string `json:"user_filter"`
-	GroupAdminDN  string `json:"group_admin_dn"`
-	GroupSafetyDN string `json:"group_safety_dn"`
-	GroupLeaderDN string `json:"group_leader_dn"`
-	useTLSSet     bool
-	skipTLSSet    bool
+	IsEnabled      bool   `json:"is_enabled"`
+	Server         string `json:"server"`
+	Port           int    `json:"port"`
+	UseTLS         bool   `json:"use_tls"`
+	SkipTLSVerify  bool   `json:"skip_tls_verify"`
+	BaseDN         string `json:"base_dn"`
+	BindDN         string `json:"bind_dn"`
+	BindPassword   string `json:"bind_password"`
+	UserFilter     string `json:"user_filter"`
+	GroupAdminDN   string `json:"group_admin_dn"`
+	GroupSafetyDN  string `json:"group_safety_dn"`
+	GroupLeaderDN  string `json:"group_leader_dn"`
+	isEnabledSet   bool
+	serverSet      bool
+	portSet        bool
+	useTLSSet      bool
+	skipTLSSet     bool
+	baseDNSet      bool
+	bindDNSet      bool
+	userFilterSet  bool
+	groupAdminSet  bool
+	groupSafetySet bool
+	groupLeaderSet bool
 }
 
-// UnmarshalJSON records whether boolean fields were supplied. This preserves
-// explicit false values when testing a stored configuration.
+// UnmarshalJSON records supplied fields so PUT can preserve omitted settings.
 func (q *UpdateADConfigRequest) UnmarshalJSON(data []byte) error {
 	type alias UpdateADConfigRequest
 	var v struct {
 		alias
-		UseTLS        *bool `json:"use_tls"`
-		SkipTLSVerify *bool `json:"skip_tls_verify"`
+		IsEnabled     *bool   `json:"is_enabled"`
+		Server        *string `json:"server"`
+		Port          *int    `json:"port"`
+		UseTLS        *bool   `json:"use_tls"`
+		SkipTLSVerify *bool   `json:"skip_tls_verify"`
+		BaseDN        *string `json:"base_dn"`
+		BindDN        *string `json:"bind_dn"`
+		UserFilter    *string `json:"user_filter"`
+		GroupAdminDN  *string `json:"group_admin_dn"`
+		GroupSafetyDN *string `json:"group_safety_dn"`
+		GroupLeaderDN *string `json:"group_leader_dn"`
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
 	*q = UpdateADConfigRequest(v.alias)
+	if v.IsEnabled != nil {
+		q.IsEnabled, q.isEnabledSet = *v.IsEnabled, true
+	}
+	if v.Server != nil {
+		q.Server, q.serverSet = *v.Server, true
+	}
+	if v.Port != nil {
+		q.Port, q.portSet = *v.Port, true
+	}
 	if v.UseTLS != nil {
 		q.UseTLS, q.useTLSSet = *v.UseTLS, true
 	}
 	if v.SkipTLSVerify != nil {
 		q.SkipTLSVerify, q.skipTLSSet = *v.SkipTLSVerify, true
 	}
+	if v.BaseDN != nil {
+		q.BaseDN, q.baseDNSet = *v.BaseDN, true
+	}
+	if v.BindDN != nil {
+		q.BindDN, q.bindDNSet = *v.BindDN, true
+	}
+	if v.UserFilter != nil {
+		q.UserFilter, q.userFilterSet = *v.UserFilter, true
+	}
+	if v.GroupAdminDN != nil {
+		q.GroupAdminDN, q.groupAdminSet = *v.GroupAdminDN, true
+	}
+	if v.GroupSafetyDN != nil {
+		q.GroupSafetyDN, q.groupSafetySet = *v.GroupSafetyDN, true
+	}
+	if v.GroupLeaderDN != nil {
+		q.GroupLeaderDN, q.groupLeaderSet = *v.GroupLeaderDN, true
+	}
 	return nil
 }
 
+// applyStoredDefaults fills every field the client omitted so a partial PUT
+// cannot silently clear stored settings such as the user filter or group DNs.
+func (q *UpdateADConfigRequest) applyStoredDefaults(current db.AdConfig) {
+	if !q.isEnabledSet {
+		q.IsEnabled = current.IsEnabled
+	}
+	if !q.serverSet {
+		q.Server = current.Server
+	}
+	if !q.portSet {
+		q.Port = int(current.Port)
+	}
+	if !q.useTLSSet {
+		q.UseTLS = current.UseTls
+	}
+	if !q.skipTLSSet {
+		q.SkipTLSVerify = current.SkipTlsVerify
+	}
+	if !q.baseDNSet {
+		q.BaseDN = current.BaseDn
+	}
+	if !q.bindDNSet {
+		q.BindDN = current.BindDn
+	}
+	if !q.userFilterSet {
+		q.UserFilter = current.UserFilter
+	}
+	if !q.groupAdminSet {
+		q.GroupAdminDN = current.GroupAdminDn
+	}
+	if !q.groupSafetySet {
+		q.GroupSafetyDN = current.GroupSafetyDn
+	}
+	if !q.groupLeaderSet {
+		q.GroupLeaderDN = current.GroupLeaderDn
+	}
+}
 func validateLDAPConfig(req UpdateADConfigRequest) error {
 	server := strings.TrimSpace(req.Server)
 	if server == "" || strings.ContainsAny(server, "/?#\\") || strings.IndexFunc(server, func(r rune) bool { return r <= ' ' }) >= 0 {
@@ -163,6 +245,13 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	current, err := h.store.GetADConfig(r.Context())
+	if err == nil {
+		req.applyStoredDefaults(current)
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
 	if req.Port < 0 || req.Port > 65535 {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
 		return
@@ -170,7 +259,6 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 	if req.Port == 0 {
 		req.Port = 636
 	}
-
 	if strings.TrimSpace(req.Server) != "" {
 		if err := validateLDAPConfig(req); err != nil {
 			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
@@ -194,7 +282,6 @@ func (h *ADConfigHandler) UpdateADConfig(w http.ResponseWriter, r *http.Request)
 		}
 		encryptedBindPass = enc
 	}
-
 	portVal := int32(req.Port) //nolint:gosec
 	saved, err := h.store.UpsertADConfig(r.Context(), db.UpsertADConfigParams{
 		IsEnabled:     req.IsEnabled,

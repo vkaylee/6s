@@ -28,6 +28,10 @@ all = ["server", "webdashboard"]
 
 [test.dependencies]
 e2e-web = ["db", "e2e-server"]
+go = ["test-db"]
+unit-go = ["test-db"]
+int-go = ["test-db"]
+all = ["test-db"]
 
 [ai]
 extra_rules = []
