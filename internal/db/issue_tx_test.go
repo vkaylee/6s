@@ -37,8 +37,10 @@ func TestPatchIssueWithTagsAtomic_UnsupportedDB(t *testing.T) {
 type atomicIssueStore struct {
 	issue     Issue
 	tags      []string
+	audits    []InsertAuditLogParams
 	deleteErr bool
 	insertErr bool
+	auditErr  bool
 	commits   int
 	rollbacks int
 }
@@ -73,9 +75,10 @@ func (c *atomicIssueConn) BeginTx(context.Context, *driver.TxOptions) (driver.Tx
 }
 func (c *atomicIssueConn) beginTx() (driver.Tx, error) {
 	c.tx = &atomicIssueTx{
-		conn:  c,
-		issue: c.store.issue,
-		tags:  append([]string(nil), c.store.tags...),
+		conn:   c,
+		issue:  c.store.issue,
+		tags:   append([]string(nil), c.store.tags...),
+		audits: append([]InsertAuditLogParams(nil), c.store.audits...),
 	}
 	return c.tx, nil
 }
@@ -89,33 +92,43 @@ func (c *atomicIssueConn) exec(query string, args []driver.Value) (driver.Result
 	if c.tx == nil {
 		return nil, errors.New("write outside transaction")
 	}
+	normalized := strings.Join(strings.Fields(query), " ")
 	switch {
-	case strings.Contains(query, "DeleteIssueTags"):
+	case strings.Contains(normalized, "DELETE FROM issue_tags"):
 		if c.store.deleteErr {
 			return nil, errors.New("delete issue tags")
 		}
 		c.tx.tags = nil
-	case strings.Contains(query, "InsertIssueTag"):
+	case strings.Contains(normalized, "INSERT INTO issue_tags"):
 		if c.store.insertErr {
 			return nil, errors.New("insert issue tag")
 		}
 		c.tx.tags = append(c.tx.tags, args[1].(string))
+	case strings.Contains(normalized, "INSERT INTO system_audit_logs"):
+		if c.store.auditErr {
+			return nil, errors.New("insert audit log")
+		}
+		c.tx.audits = append(c.tx.audits, InsertAuditLogParams{
+			Action:      args[1].(string),
+			TargetTable: args[2].(string),
+			TargetID:    args[3].(string),
+		})
 	default:
-		return nil, errors.New("unexpected exec query")
+		return nil, errors.New("unexpected exec query: " + normalized)
 	}
 	return driver.RowsAffected(1), nil
 }
 func (c *atomicIssueConn) query(query string, args []driver.Value) (driver.Rows, error) {
-	if c.tx == nil || !strings.Contains(query, "PatchIssue") {
+	if c.tx == nil || !strings.Contains(query, "UPDATE issues") {
 		return nil, errors.New("unexpected query")
 	}
-	if category, ok := args[1].(string); ok {
+	// PatchIssue binds category as the first parameter after the new asset/cause columns.
+	if category, ok := args[0].(string); ok {
 		c.tx.issue.Category = category
 	}
 	c.tx.issue.Version++
 	return &atomicIssueRows{values: issueValues(c.tx.issue)}, nil
 }
-
 func namedValues(args []driver.NamedValue) []driver.Value {
 	values := make([]driver.Value, len(args))
 	for i := range args {
@@ -139,14 +152,16 @@ func (s *atomicIssueStmt) Query(args []driver.Value) (driver.Rows, error) {
 }
 
 type atomicIssueTx struct {
-	conn  *atomicIssueConn
-	issue Issue
-	tags  []string
+	conn   *atomicIssueConn
+	issue  Issue
+	tags   []string
+	audits []InsertAuditLogParams
 }
 
 func (tx *atomicIssueTx) Commit() error {
 	tx.conn.store.issue = tx.issue
 	tx.conn.store.tags = append([]string(nil), tx.tags...)
+	tx.conn.store.audits = append([]InsertAuditLogParams(nil), tx.audits...)
 	tx.conn.store.commits++
 	tx.conn.tx = nil
 	return nil
@@ -183,7 +198,7 @@ func issueValues(issue Issue) []driver.Value {
 	return []driver.Value{
 		issue.ID, issue.ClientUuid, issue.Version, issue.SiteID, issue.CreatorID,
 		nil, nil, nil, issue.Category, issue.CauseType, issue.VisibilityClass,
-		issue.LocationCode, nil, nil, issue.PhotoBefore, nil, nil, nil,
+		issue.LocationCode, nil, nil, "UNVERIFIED", nil, nil, issue.PhotoBefore, nil, nil, nil,
 		issue.Status, issue.CreatedAt, nil, nil,
 	}
 }
@@ -241,6 +256,60 @@ func TestPatchIssueWithTagsAtomic_RollsBackAndCommits(t *testing.T) {
 			}
 			if got := atomicIssueTestStore.tags; len(got) != len(tc.wantTags) || got[0] != tc.wantTags[0] {
 				t.Fatalf("unexpected tags: want=%v got=%v", tc.wantTags, got)
+			}
+		})
+	}
+}
+
+// TestPatchIssueWithAuditAtomic_CommitsAndRollsBackAudit proves the responsibility transfer and its
+// audit row are one transaction: a failing audit insert must leave neither behind.
+func TestPatchIssueWithAuditAtomic_CommitsAndRollsBackAudit(t *testing.T) {
+	baseIssue := Issue{ID: 1, ClientUuid: "client-1", Version: 3, SiteID: 1, CreatorID: 10, Category: "1S", Status: "OPEN", CreatedAt: time.Now()}
+	patch := PatchIssueParams{ID: 1, SetAssignedTeamID: true, AssignedTeamID: sql.NullInt64{Int64: 5, Valid: true}}
+	audit := []InsertAuditLogParams{{Action: "ASSIGN_ISSUE_TEAM", TargetTable: "issues", TargetID: "1"}}
+
+	for _, tc := range []struct {
+		name      string
+		auditErr  bool
+		wantError bool
+		wantAudit int
+	}{
+		{name: "audit failure rolls back", auditErr: true, wantError: true, wantAudit: 0},
+		{name: "audit committed with patch", wantAudit: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			atomicIssueTestStore = &atomicIssueStore{issue: baseIssue, auditErr: tc.auditErr}
+			dbConn, err := sql.Open("issue_atomic_test", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dbConn.Close()
+			q := New(dbConn)
+
+			_, err = q.PatchIssueWithAuditAtomic(context.Background(), patch, nil, audit)
+			if tc.wantError && err == nil {
+				t.Fatal("expected transaction failure when audit insert fails")
+			}
+			if !tc.wantError && err != nil {
+				t.Fatalf("unexpected failure: %v", err)
+			}
+			if got := len(atomicIssueTestStore.audits); got != tc.wantAudit {
+				t.Fatalf("audit rows: want=%d got=%d", tc.wantAudit, got)
+			}
+			if tc.wantError {
+				if atomicIssueTestStore.issue.Version != baseIssue.Version {
+					t.Fatalf("issue committed without audit: %+v", atomicIssueTestStore.issue)
+				}
+				if atomicIssueTestStore.commits != 0 || atomicIssueTestStore.rollbacks != 1 {
+					t.Fatalf("transaction counts: commits=%d rollbacks=%d", atomicIssueTestStore.commits, atomicIssueTestStore.rollbacks)
+				}
+			} else {
+				if atomicIssueTestStore.issue.Version != baseIssue.Version+1 {
+					t.Fatalf("issue not committed: %+v", atomicIssueTestStore.issue)
+				}
+				if atomicIssueTestStore.commits != 1 || atomicIssueTestStore.rollbacks != 0 {
+					t.Fatalf("transaction counts: commits=%d rollbacks=%d", atomicIssueTestStore.commits, atomicIssueTestStore.rollbacks)
+				}
 			}
 		})
 	}

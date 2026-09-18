@@ -84,3 +84,41 @@ func NormalizeCauseType(causeType string, category string) string {
 	}
 	return string(CauseTypeCondition)
 }
+
+// CauseStatus values match the issues.cause_status check constraint.
+const (
+	// CauseStatusUnverified means no cause team has been confirmed yet.
+	CauseStatusUnverified = "UNVERIFIED"
+	// CauseStatusConfirmed means a cause team has been verified as responsible.
+	CauseStatusConfirmed = "CONFIRMED"
+	// CauseStatusNotApplicable means the issue carries no cause responsibility.
+	CauseStatusNotApplicable = "NOT_APPLICABLE"
+)
+
+// isValidCauseStatus reports whether the value satisfies the database constraint.
+func isValidCauseStatus(status string) bool {
+	switch status {
+	case CauseStatusUnverified, CauseStatusConfirmed, CauseStatusNotApplicable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Audit actions recorded in system_audit_logs for responsibility changes.
+const (
+	auditActionAssignResponsibility = "ASSIGN_RESPONSIBILITY"
+	auditActionVerifyCause          = "VERIFY_CAUSE"
+)
+
+// Responsibility actions exposed by the API; these are stable client-facing values.
+const (
+	// HistoryActionAssign means the issue received its first team/assignee.
+	HistoryActionAssign = "ASSIGN"
+	// HistoryActionTransfer means handling moved to another team or assignee.
+	HistoryActionTransfer = "TRANSFER"
+	// HistoryActionCauseVerify means cause responsibility was verified.
+	HistoryActionCauseVerify = "CAUSE_VERIFY"
+	// HistoryActionOther covers audit rows that carry no known responsibility action.
+	HistoryActionOther = "OTHER"
+)

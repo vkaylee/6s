@@ -183,6 +183,11 @@ components:
         - client_uuid
         - version
         - creator_id
+        - asset_id
+        - assigned_team_id
+        - assignee_id
+        - cause_team_id
+        - cause_status
         - category
         - location_code
         - tags
@@ -207,6 +212,30 @@ components:
           type: integer
           nullable: true
           example: 15
+        asset_id:
+          type: [integer, 'null']
+          description: Luôn có mặt; null khi issue không gắn tài sản
+        assigned_team_id:
+          type: [integer, 'null']
+          description: Team xử lý; luôn có mặt, null khi chưa phân công
+        assignee_id:
+          type: [integer, 'null']
+          description: Người xử lý trực tiếp; luôn có mặt, null khi chưa phân công
+        cause_team_id:
+          type: [integer, 'null']
+          description: Team chịu trách nhiệm nguyên nhân; luôn có mặt, không tự suy ra từ team xử lý
+        cause_status:
+          type: string
+          enum: [UNVERIFIED, CONFIRMED, NOT_APPLICABLE]
+          description: Trạng thái xác minh nguyên nhân; luôn có mặt, độc lập với cause_type
+        responsibility_history:
+          type: array
+          description: Chỉ có ở GET /api/issues/{id}
+          items:
+            $ref: '#/components/schemas/ResponsibilityHistoryEntry'
+        allowed_actions:
+          description: Chỉ có ở GET /api/issues/{id}
+          $ref: '#/components/schemas/IssueAllowedActions'
         category:
           type: string
           enum: [1S, 2S, 3S, 4S, 5S, 6S]
@@ -347,6 +376,118 @@ components:
         created_at:
           type: string
           format: date-time
+
+    Asset:
+      type: object
+      required: [id, site_id, location_code, asset_code, name, default_team_id, is_active]
+      properties:
+        id:
+          type: integer
+        site_id:
+          type: integer
+        location_code:
+          type: string
+        asset_code:
+          type: string
+        name:
+          type: string
+        asset_type:
+          type: [string, 'null']
+        default_team_id:
+          type: [integer, 'null']
+        is_active:
+          type: boolean
+
+    Team:
+      type: object
+      required: [id, site_id, code, name, is_active]
+      properties:
+        id:
+          type: integer
+        site_id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        is_active:
+          type: boolean
+
+    TeamMember:
+      type: object
+      required: [id, username, full_name, role, is_active]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [USER, LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN]
+        is_active:
+          type: boolean
+
+    ResponsibilityHistoryEntry:
+      type: object
+      required: [id, action, changed_by, changed_by_name, old_value, new_value, created_at]
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+          enum: [ASSIGN, TRANSFER, CAUSE_VERIFY, OTHER]
+          description: ASSIGN khi có người/đơn vị nhận xử lý; TRANSFER khi đổi người/đơn vị; CAUSE_VERIFY khi xác minh nguyên nhân; OTHER cho thay đổi trách nhiệm khác (ví dụ chỉ đổi tài sản)
+        changed_by:
+          type: [integer, 'null']
+        changed_by_name:
+          type: [string, 'null']
+        old_value:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        new_value:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+
+    IssueAllowedActions:
+      type: object
+      required: [assign, verify_cause, resolve, close]
+      properties:
+        assign:
+          type: boolean
+        verify_cause:
+          type: boolean
+        resolve:
+          type: boolean
+        close:
+          type: boolean
+
+    TeamKPI:
+      type: object
+      required: [team_id, team_name, assigned_count, open_count, overdue_count, closed_count, confirmed_cause_count]
+      properties:
+        team_id:
+          type: integer
+        team_name:
+          type: string
+        assigned_count:
+          type: integer
+        open_count:
+          type: integer
+        overdue_count:
+          type: integer
+        closed_count:
+          type: integer
+        confirmed_cause_count:
+          type: integer
     AIConfig:
       type: object
       required: [is_enabled, base_url, has_api_key, default_model, model_translate, model_vision, model_summary]
@@ -755,6 +896,137 @@ paths:
                   data:
                     $ref: '#/components/schemas/Tag'
 
+  /assets:
+    get:
+      operationId: listAssets
+      summary: Danh mục thiết bị/tài sản theo vị trí (yêu cầu đăng nhập)
+      parameters:
+        - name: site_id
+          in: query
+          required: false
+          description: Chỉ được khác site hiện tại với SUPERADMIN; nếu không sẽ trả 403
+          schema:
+            type: integer
+        - name: location_code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Danh sách thiết bị
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: site_id không thuộc phạm vi người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /teams:
+    get:
+      operationId: listTeams
+      summary: Danh mục team của site (yêu cầu đăng nhập)
+      parameters:
+        - name: site_id
+          in: query
+          required: false
+          description: Chỉ được khác site hiện tại với SUPERADMIN; nếu không sẽ trả 403
+          schema:
+            type: integer
+        - name: location_code
+          in: query
+          required: false
+          description: Lọc team có gán khu vực này
+          schema:
+            type: string
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Danh sách team
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: site_id không thuộc phạm vi người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /teams/{id}/members:
+    get:
+      operationId: listAssignableTeamMembers
+      summary: Thành viên team phục vụ chọn người xử lý (Requires `issue:assign`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Danh sách thành viên team
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+        '403':
+          description: Thiếu permission `issue:assign`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Team không thuộc site của người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /issues:
     get:
       operationId: listIssues
@@ -762,18 +1034,39 @@ paths:
       parameters:
         - name: status
           in: query
+          description: Chấp nhận cả alias số nhiều `statuses` (giá trị lặp lại hoặc phân tách bằng dấu phẩy)
           schema:
             type: string
             enum: [OPEN, PENDING_REVIEW, CLOSED, INVALID]
         - name: category
           in: query
+          description: Chấp nhận cả alias số nhiều `categories`
           schema:
             type: string
             enum: [1S, 2S, 3S, 4S, 5S, 6S]
         - name: location_code
           in: query
+          description: Chấp nhận cả alias số nhiều `location_codes`
           schema:
             type: string
+        - name: overdue
+          in: query
+          required: false
+          description: Chỉ issue OPEN quá 48 giờ
+          schema:
+            type: boolean
+        - name: assigned_team_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Lọc theo team xử lý
+        - name: mine_team
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Chỉ issues được giao cho một team hiện tại của người dùng
         - name: page
           in: query
           schema:
@@ -832,7 +1125,7 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
     patch:
       operationId: updateIssue
-      summary: Sửa nhanh phân loại S hoặc tags khi phát hiện sai
+      summary: Sửa nhanh phân loại S, tags hoặc trách nhiệm; multipart chỉ nhận các trường phân loại/ảnh, trường trách nhiệm và expected_version chỉ qua JSON
       parameters:
         - name: id
           in: path
@@ -846,6 +1139,9 @@ paths:
             schema:
               type: object
               properties:
+                expected_version:
+                  type: integer
+                  description: Bắt buộc khi payload có bất kỳ trường trách nhiệm nào; thiếu thì 400, lệch phiên bản thì 409 ISSUE_CONFLICT
                 category:
                   type: string
                   enum: [1S, 2S, 3S, 4S, 5S, 6S]
@@ -855,6 +1151,30 @@ paths:
                   type: array
                   items:
                     type: string
+                asset_id:
+                  type: [integer, 'null']
+                  description: null để xóa; bỏ qua để giữ nguyên
+                assigned_team_id:
+                  type: [integer, 'null']
+                  description: null để xóa; bỏ qua để giữ nguyên
+                assignee_id:
+                  type: [integer, 'null']
+                  description: null để xóa; bỏ qua để giữ nguyên
+                cause_team_id:
+                  type: [integer, 'null']
+                  description: >-
+                    Bắt buộc có issue:verify_cause khi gửi (kể cả null), nếu không trả 403. Bỏ qua để giữ nguyên.
+                    Nếu cause_status hiệu lực là UNVERIFIED/NOT_APPLICABLE, cột này bị xóa cùng lúc; gửi kèm giá trị
+                    khác null với hai trạng thái đó trả 400. CONFIRMED đòi hỏi team đang hoạt động thuộc site của issue, nếu không 400.
+                cause_status:
+                  anyOf:
+                    - type: string
+                      enum: [UNVERIFIED, CONFIRMED, NOT_APPLICABLE]
+                    - type: 'null'
+                  description: >-
+                    Bắt buộc có issue:verify_cause khi gửi (kể cả null hoặc UNVERIFIED), nếu không trả 403. Bỏ qua để
+                    giữ nguyên. null đặt lại UNVERIFIED; UNVERIFIED/NOT_APPLICABLE luôn xóa cause_team_id trong cùng
+                    giao dịch; CONFIRMED giữ nguyên team hiện có nếu hợp lệ. Giá trị ngoài enum trả 400.
       responses:
         '200':
           description: Cập nhật thành công
@@ -867,8 +1187,23 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Issue'
+        '400':
+          description: >-
+            Thiếu expected_version cho thay đổi trách nhiệm; cause_status ngoài enum; tổ hợp nguyên nhân không nhất quán
+            (UNVERIFIED/NOT_APPLICABLE kèm cause_team_id khác null, hoặc CONFIRMED thiếu team hợp lệ); tài sản/team không
+            khớp site hoặc vị trí của issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Phiên bản issue đã thay đổi (expected_version lệch)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '403':
-          description: Không có quyền sửa issue này
+          description: Không có quyền sửa issue này, hoặc thiếu `issue:verify_cause` khi gửi trường nguyên nhân, hoặc thiếu `issue:assign` khi đổi phân công
           content:
             application/json:
               schema:
@@ -914,6 +1249,18 @@ paths:
                   type: string
                   format: binary
                   description: Ảnh cận cảnh / chú thích (<= 2MB, JPEG/PNG)
+                cause_type:
+                  type: string
+                  enum: [CONDITION, BEHAVIOR]
+                asset_id:
+                  type: integer
+                  description: Tùy chọn; không cần issue:assign, nhưng 400 nếu tài sản không tồn tại/không hoạt động/khác site. Tài sản hợp lệ sẽ gợi ý default_team_id đang hoạt động khi không gửi assigned_team_id.
+                assigned_team_id:
+                  type: integer
+                  description: Tùy chọn; gửi trường này cần issue:assign, nếu không trả 403. Team không hoạt động hoặc khác site trả 400.
+                assignee_id:
+                  type: integer
+                  description: Tùy chọn; gửi trường này cần issue:assign, nếu không trả 403. Người dùng phải thuộc team hiệu lực, nếu không trả 400.
       responses:
         '201':
           description: Issue tạo mới thành công
@@ -937,6 +1284,18 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Issue'
+        '400':
+          description: Tài sản/team/người xử lý không hợp lệ, không hoạt động, khác site, hoặc người xử lý không thuộc team hiệu lực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Gửi assigned_team_id hoặc assignee_id nhưng thiếu permission `issue:assign`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '413':
           description: File vượt quá dung lượng quy định (Ảnh > 2MB)
           content:
@@ -1417,6 +1776,297 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /admin/assets:
+    post:
+      operationId: createAdminAsset
+      summary: Tạo tài sản/thiết bị (Requires `masterdata:manage`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [location_code, asset_code, name]
+              properties:
+                location_code:
+                  type: string
+                asset_code:
+                  type: string
+                name:
+                  type: string
+                asset_type:
+                  type: [string, 'null']
+                default_team_id:
+                  type: [integer, 'null']
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Tài sản đã được tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+        '400':
+          description: Vị trí hoặc team mặc định không thuộc site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Không có quyền quản lý master data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/assets/{id}:
+    put:
+      operationId: updateAdminAsset
+      summary: Cập nhật tài sản/thiết bị (Requires `masterdata:manage`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location_code:
+                  type: string
+                  description: Chuỗi rỗng giữ nguyên giá trị hiện tại
+                asset_code:
+                  type: string
+                  description: Chuỗi rỗng giữ nguyên giá trị hiện tại
+                name:
+                  type: string
+                  description: Chuỗi rỗng giữ nguyên giá trị hiện tại
+                asset_type:
+                  type: [string, 'null']
+                  description: null để xóa; bỏ qua để giữ nguyên
+                default_team_id:
+                  type: [integer, 'null']
+                  description: null để xóa; bỏ qua để giữ nguyên
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Tài sản đã được cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+        '400':
+          description: Vị trí hoặc team mặc định không thuộc site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy tài sản trong site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/teams:
+    post:
+      operationId: createAdminTeam
+      summary: Tạo team (Requires `user:manage`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code:
+                  type: string
+                name:
+                  type: string
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Team đã được tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Team'
+
+  /admin/teams/{id}:
+    put:
+      operationId: updateAdminTeam
+      summary: Cập nhật team (Requires `user:manage`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: null hoặc bỏ qua để giữ nguyên; đổi mã được phép
+                name:
+                  type: string
+                  description: null hoặc bỏ qua để giữ nguyên
+                is_active:
+                  type: [boolean, 'null']
+                  description: null hoặc bỏ qua để giữ nguyên
+      responses:
+        '200':
+          description: Team đã được cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Team'
+        '404':
+          description: Không tìm thấy team trong site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/teams/{id}/members:
+    get:
+      operationId: listTeamMembers
+      summary: Danh sách thành viên team (Requires `user:manage`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Danh sách thành viên
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+        '403':
+          description: Thiếu permission `user:manage`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Team không thuộc site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/teams/{id}/members/{userID}:
+    put:
+      operationId: addTeamMember
+      summary: Thêm người dùng vào team (Requires `user:manage`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        description: Không yêu cầu trường nào; có thể gửi JSON rỗng
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Đã thêm thành viên
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [team_id, user_id]
+                    properties:
+                      team_id:
+                        type: integer
+                      user_id:
+                        type: integer
+        '400':
+          description: Người dùng không hoạt động trong site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Team hoặc người dùng không thuộc site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      operationId: deleteTeamMember
+      summary: Xóa người dùng khỏi team (Requires `user:manage`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Đã xóa thành viên
+        '404':
+          description: Team hoặc người dùng không thuộc site hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /admin/locations/{code}/members:
     get:
       operationId: listLocationMembers
@@ -1810,6 +2460,18 @@ paths:
           required: false
           schema:
             type: string
+        - name: assigned_team_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Lọc theo team xử lý
+        - name: mine_team
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Chỉ issues thuộc team hiện tại của người dùng
       responses:
         '200':
           description: XLSX file chứa danh sách issue trong phạm vi người dùng
@@ -1937,6 +2599,40 @@ paths:
             application/json:
               schema:
                 type: object
+
+  /reports/teams:
+    get:
+      operationId: getTeamReport
+      summary: KPI xử lý theo team (Requires `reports:view`)
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: Số ngày thống kê; mặc định 14, giới hạn 1 đến 90
+          schema:
+            type: integer
+            default: 14
+            minimum: 1
+            maximum: 90
+      responses:
+        '200':
+          description: KPI theo team
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamKPI'
+        '403':
+          description: Thiếu permission `reports:view`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /admin/permissions:
     get:

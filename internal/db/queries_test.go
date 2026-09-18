@@ -91,7 +91,7 @@ func rowValuesForQuery(query string) []driver.Value {
 	case strings.Contains(query, "ListIssuesFiltered"):
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
-			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil,
+			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil, "UNVERIFIED", nil, nil,
 			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
 			int64(1), "LOC1", "creator", "Creator A", nil, nil,
 		}
@@ -162,7 +162,7 @@ func rowValuesForQuery(query string) []driver.Value {
 		// reject reason, photos, score, status, timestamps.
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
-			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil,
+			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil, "UNVERIFIED", nil, nil,
 			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
 		}
 	}

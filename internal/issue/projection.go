@@ -6,11 +6,12 @@ import (
 	"6s/internal/db"
 	"6s/internal/i18n"
 	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,8 +25,6 @@ func (s *ServiceImpl) OpenMedia(ctx context.Context, id int64, folder, basename 
 	return s.storageManager.OpenAttachment(folder, basename)
 }
 
-// broadcast emits an event to all active SSE subscribers.
-
 func (s *ServiceImpl) canViewIssue(ctx context.Context, issue db.Issue) bool {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
@@ -36,6 +35,11 @@ func (s *ServiceImpl) canViewIssue(ctx context.Context, issue db.Issue) bool {
 	}
 	if issue.VisibilityClass == "SITE_PUBLIC" {
 		return true
+	}
+	if issue.AssignedTeamID.Valid && user.IsActive {
+		if _, err := s.store.GetTeamMembership(ctx, db.GetTeamMembershipParams{TeamID: issue.AssignedTeamID.Int64, UserID: user.ID}); err == nil {
+			return true
+		}
 	}
 	if issue.CreatorID == user.ID || (issue.AssigneeID.Valid && issue.AssigneeID.Int64 == user.ID) {
 		return true
@@ -52,8 +56,6 @@ func (s *ServiceImpl) canViewIssue(ctx context.Context, issue db.Issue) bool {
 	}
 	return false
 }
-
-// GetIssueByID retrieves detailed issue response with the same visibility policy as list.
 
 // GetIssueByID retrieves detailed issue response with the same visibility policy as list.
 func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, error) {
@@ -92,53 +94,24 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 			resp.TranslatedDescription = &cachedRows[0].TranslatedText
 		}
 	}
+	resp.ResponsibilityHistory = s.responsibilityHistory(ctx, issue.ID)
+	resp.AllowedActions = s.allowedActionsFor(ctx, issue)
 	return resp, nil
 }
 
 // ListIssuesFiltered lists issues with filter criteria.
-
-// ListIssuesFiltered lists issues with filter criteria.
-func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, overdue bool, page, limit int) ([]Response, int64, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-	offset := (page - 1) * limit
-
-	if statuses == nil {
-		statuses = []string{}
-	}
-	if categories == nil {
-		categories = []string{}
-	}
-	if locationCodes == nil {
-		locationCodes = []string{}
-	}
-
-	var overdueParam sql.NullBool
-	if overdue {
-		overdueParam = sql.NullBool{Bool: true, Valid: true}
-	}
-
-	if limit > math.MaxInt32 || offset > math.MaxInt32 {
+func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, filter ListFilter) ([]Response, int64, error) {
+	filter = normalizeListFilter(filter)
+	if filter.Limit > math.MaxInt32 || filter.Offset() > math.MaxInt32 {
 		return nil, 0, fmt.Errorf("pagination exceeds database limit")
 	}
 	currentUser := userFromContext(ctx)
-	rows, err := s.store.ListIssuesFiltered(ctx, db.ListIssuesFilteredParams{
-		Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdueParam,
-		SiteID: currentUser.SiteID, UserID: currentUser.ID, Role: currentUser.Role,
-		Limit: int32(limit), Offset: int32(offset), //nolint:gosec // bounded above
-	})
+	rows, err := s.store.ListIssuesFiltered(ctx, filter.toListParams(currentUser))
 	if err != nil {
 		return nil, 0, fmt.Errorf("list issues failed: %w", err)
 	}
 
-	total, err := s.store.CountIssuesFiltered(ctx, db.CountIssuesFilteredParams{
-		Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdueParam,
-		SiteID: userFromContext(ctx).SiteID, UserID: userFromContext(ctx).ID, Role: userFromContext(ctx).Role,
-	})
+	total, err := s.store.CountIssuesFiltered(ctx, filter.toCountParams(currentUser))
 	if err != nil {
 		total = int64(len(rows))
 	}
@@ -168,6 +141,155 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, statuses, categori
 	}
 
 	return items, total, nil
+}
+
+// normalizeListFilter applies list defaults shared by list, count, and export.
+func normalizeListFilter(filter ListFilter) ListFilter {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.Limit < 1 || filter.Limit > 100 {
+		filter.Limit = 20
+	}
+	if filter.Statuses == nil {
+		filter.Statuses = []string{}
+	}
+	if filter.Categories == nil {
+		filter.Categories = []string{}
+	}
+	if filter.LocationCodes == nil {
+		filter.LocationCodes = []string{}
+	}
+	return filter
+}
+
+// responsibilityHistory loads the audited assignment and cause changes for an issue.
+func (s *ServiceImpl) responsibilityHistory(ctx context.Context, issueID int64) []ResponsibilityHistoryEntry {
+	rows, err := s.store.GetIssueResponsibilityHistory(ctx, strconv.FormatInt(issueID, 10))
+	if err != nil {
+		log.Printf("failed to load responsibility history for issue %d: %v", issueID, err)
+		return nil
+	}
+	entries := make([]ResponsibilityHistoryEntry, 0, len(rows))
+	for _, r := range rows {
+		entry := ResponsibilityHistoryEntry{
+			ID: r.ID, Action: historyAction(r), OldValue: r.OldValue, NewValue: r.NewValue,
+			CreatedAt: r.CreatedAt.Format(time.RFC3339),
+		}
+		if r.UserID.Valid {
+			u := r.UserID.Int64
+			entry.ChangedBy = &u
+		}
+		if r.ChangedByName.Valid {
+			n := r.ChangedByName.String
+			entry.ChangedByName = &n
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+// historyAction maps an audited responsibility row to the stable API action enum.
+// Rows written before this mapping existed, or by a store using other actions,
+// degrade to HistoryActionOther instead of leaking raw audit names.
+func historyAction(row db.ListIssueResponsibilityHistoryRow) string {
+	switch row.Action {
+	case auditActionAssignResponsibility:
+		return ownerChangeAction(row.OldValue, row.NewValue)
+	case auditActionVerifyCause:
+		return HistoryActionCauseVerify
+	default:
+		return HistoryActionOther
+	}
+}
+
+// ownerChangeAction classifies an assignment audit by what happened to the handling owner.
+// Only a new owner (ASSIGN) or a replaced owner (TRANSFER) is named; an asset-only edit or a
+// cleared owner that leaves handling unchanged stays generic.
+func ownerChangeAction(oldValue, newValue json.RawMessage) string {
+	oldOwner, oldOK := decodeOwnerSnapshot(oldValue)
+	newOwner, newOK := decodeOwnerSnapshot(newValue)
+	if !oldOK || !newOK || newOwner.empty() {
+		return HistoryActionOther
+	}
+	if oldOwner.empty() {
+		return HistoryActionAssign
+	}
+	if !oldOwner.equal(newOwner) {
+		return HistoryActionTransfer
+	}
+	return HistoryActionOther
+}
+
+// ownerSnapshot is the assigned team and assignee pair recorded in a responsibility audit.
+type ownerSnapshot struct {
+	TeamID     *int64 `json:"assigned_team_id"`
+	AssigneeID *int64 `json:"assignee_id"`
+}
+
+// decodeOwnerSnapshot decodes a responsibility snapshot; ok is false when the payload is not JSON.
+func decodeOwnerSnapshot(raw json.RawMessage) (ownerSnapshot, bool) {
+	var decoded ownerSnapshot
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return ownerSnapshot{}, false
+	}
+	return decoded, true
+}
+
+// empty reports whether neither a team nor an assignee owns handling.
+func (o ownerSnapshot) empty() bool { return o.TeamID == nil && o.AssigneeID == nil }
+
+// equal reports whether two snapshots name the same handling owner.
+func (o ownerSnapshot) equal(other ownerSnapshot) bool {
+	return sameOptionalID(o.TeamID, other.TeamID) && sameOptionalID(o.AssigneeID, other.AssigneeID)
+}
+
+// sameOptionalID compares two nullable identifiers.
+func sameOptionalID(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// allowedActionsFor reports which lifecycle actions the caller may perform on this issue.
+func (s *ServiceImpl) allowedActionsFor(ctx context.Context, issue db.Issue) *AllowedActions {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	open := issue.Status == StatusOpen.String()
+	review := issue.Status == StatusPendingReview.String()
+	return &AllowedActions{
+		Assign:      (open || review) && auth.HasPermission(ctx, auth.PermissionIssueAssign),
+		VerifyCause: (open || review) && auth.HasPermission(ctx, auth.PermissionIssueVerifyCause),
+		Resolve:     open && s.canResolveIssue(ctx, user, issue),
+		Close:       review && s.canCloseIssue(ctx, user, issue) && !(issue.ResolverID.Valid && issue.ResolverID.Int64 == user.ID),
+	}
+}
+
+// canResolveIssue reports whether the caller may resolve this issue: the assignee, a member of the
+// assigned team (any location within the site), or a resolver whose location scope covers it.
+func (s *ServiceImpl) canResolveIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
+	if !auth.HasPermission(ctx, auth.PermissionIssueResolve) {
+		return false
+	}
+	if issue.CreatorID == currentUser.ID {
+		return true
+	}
+	if issue.AssigneeID.Valid && issue.AssigneeID.Int64 == currentUser.ID {
+		return true
+	}
+	if issue.AssignedTeamID.Valid {
+		if _, err := s.store.GetTeamMembership(ctx, db.GetTeamMembershipParams{TeamID: issue.AssignedTeamID.Int64, UserID: currentUser.ID}); err == nil {
+			return true
+		}
+	}
+	scope, err := auth.LocationScope(ctx, s.store, currentUser)
+	if err != nil {
+		return false
+	}
+	return scope.CanAccessLocation(issue.LocationCode)
 }
 
 func (s *ServiceImpl) loadTranslationsForRows(ctx context.Context, rows []db.ListIssuesFilteredRow) map[int]string {
@@ -221,6 +343,9 @@ func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *str
 		CauseType:       r.CauseType,
 		VisibilityClass: r.VisibilityClass,
 		LocationCode:    r.LocationCode,
+		AssetID:         r.AssetID,
+		CauseTeamID:     r.CauseTeamID,
+		CauseStatus:     r.CauseStatus,
 		Description:     r.Description,
 		RejectReason:    r.RejectReason,
 		PhotoBefore:     r.PhotoBefore,
@@ -266,6 +391,19 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 	if issue.AssignedTeamID.Valid {
 		v := issue.AssignedTeamID.Int64
 		resp.AssignedTeamID = &v
+	}
+	if issue.AssetID.Valid {
+		v := issue.AssetID.Int64
+		resp.AssetID = &v
+	}
+	if issue.CauseTeamID.Valid {
+		v := issue.CauseTeamID.Int64
+		resp.CauseTeamID = &v
+	}
+	if issue.CauseStatus == "" {
+		resp.CauseStatus = CauseStatusUnverified
+	} else {
+		resp.CauseStatus = issue.CauseStatus
 	}
 
 	if issue.Description.Valid {

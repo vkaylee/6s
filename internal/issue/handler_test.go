@@ -83,7 +83,7 @@ func (m *mockIssueService) OpenMedia(_ context.Context, _ int64, _, _ string) (*
 	return nil, ErrIssueNotFound
 }
 
-func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _, _, _ []string, _ bool, _, _ int) ([]Response, int64, error) {
+func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _ ListFilter) ([]Response, int64, error) {
 	if m.err != nil {
 		return nil, 0, m.err
 	}

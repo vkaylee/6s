@@ -47,6 +47,20 @@ func (q *Queries) AddTeamLocation(ctx context.Context, arg AddTeamLocationParams
 	return err
 }
 
+const addTeamMembership = `-- name: AddTeamMembership :exec
+INSERT INTO team_memberships (team_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING
+`
+
+type AddTeamMembershipParams struct {
+	TeamID int64
+	UserID int64
+}
+
+func (q *Queries) AddTeamMembership(ctx context.Context, arg AddTeamMembershipParams) error {
+	_, err := q.db.ExecContext(ctx, addTeamMembership, arg.TeamID, arg.UserID)
+	return err
+}
+
 const claimOutboxTasks = `-- name: ClaimOutboxTasks :many
 UPDATE notification_outbox
 SET status = 'SENDING',
@@ -117,7 +131,7 @@ SET status = 'CLOSED',
 WHERE id = $1 
   AND status = 'PENDING_REVIEW' 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type CloseIssueParams struct {
@@ -142,6 +156,9 @@ func (q *Queries) CloseIssue(ctx context.Context, arg CloseIssueParams) (Issue, 
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -174,18 +191,22 @@ WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar
   AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR i.category = ANY($2::varchar[]))
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
   AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
-  AND ($5::bigint = 0 OR i.site_id = $5)
-  AND ($5::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $7::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
+  AND ($5::bigint IS NULL OR i.assigned_team_id = $5::bigint)
+  AND ($6::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $7::bigint AND tm.team_id = i.assigned_team_id))
+  AND ($8::bigint = 0 OR i.site_id = $8)
+  AND ($8::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $7::bigint OR i.assignee_id = $7::bigint OR $9::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $7::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $7::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $7::bigint AND tm2.team_id = i.assigned_team_id))
 `
 
 type CountIssuesFilteredParams struct {
-	Statuses      []string
-	Categories    []string
-	LocationCodes []string
-	Overdue       sql.NullBool
-	SiteID        int64
-	UserID        int64
-	Role          string
+	Statuses       []string
+	Categories     []string
+	LocationCodes  []string
+	Overdue        sql.NullBool
+	AssignedTeamID sql.NullInt64
+	MineTeam       sql.NullBool
+	UserID         int64
+	SiteID         int64
+	Role           string
 }
 
 func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilteredParams) (int64, error) {
@@ -194,8 +215,10 @@ func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilter
 		pq.Array(arg.Categories),
 		pq.Array(arg.LocationCodes),
 		arg.Overdue,
-		arg.SiteID,
+		arg.AssignedTeamID,
+		arg.MineTeam,
 		arg.UserID,
+		arg.SiteID,
 		arg.Role,
 	)
 	var count int64
@@ -244,13 +267,54 @@ func (q *Queries) CountSuperadmins(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const createAsset = `-- name: CreateAsset :one
+INSERT INTO assets (site_id, location_code, asset_code, name, asset_type, default_team_id, is_active)
+VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, TRUE))
+RETURNING id, site_id, location_code, asset_code, name, asset_type, default_team_id, is_active, created_at
+`
+
+type CreateAssetParams struct {
+	SiteID        int64
+	LocationCode  string
+	AssetCode     string
+	Name          string
+	AssetType     sql.NullString
+	DefaultTeamID sql.NullInt64
+	IsActive      interface{}
+}
+
+func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset, error) {
+	row := q.db.QueryRowContext(ctx, createAsset,
+		arg.SiteID,
+		arg.LocationCode,
+		arg.AssetCode,
+		arg.Name,
+		arg.AssetType,
+		arg.DefaultTeamID,
+		arg.IsActive,
+	)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.LocationCode,
+		&i.AssetCode,
+		&i.Name,
+		&i.AssetType,
+		&i.DefaultTeamID,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createIssue = `-- name: CreateIssue :one
 INSERT INTO issues (
-    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code, description, photo_before, photo_detail, status
+    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code, asset_id, assigned_team_id, assignee_id, cause_team_id, cause_status, description, photo_before, photo_detail, status
 ) VALUES (
-    $1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'OPEN'
+    $1, 1, $2, $3, $4, $5, $6, $7, $11, $12, $13, $14, COALESCE($15::varchar, 'UNVERIFIED'), $8, $9, $10, 'OPEN'
 )
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type CreateIssueParams struct {
@@ -264,6 +328,11 @@ type CreateIssueParams struct {
 	Description     sql.NullString
 	PhotoBefore     string
 	PhotoDetail     sql.NullString
+	AssetID         sql.NullInt64
+	AssignedTeamID  sql.NullInt64
+	AssigneeID      sql.NullInt64
+	CauseTeamID     sql.NullInt64
+	CauseStatus     sql.NullString
 }
 
 func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue, error) {
@@ -278,6 +347,11 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		arg.Description,
 		arg.PhotoBefore,
 		arg.PhotoDetail,
+		arg.AssetID,
+		arg.AssignedTeamID,
+		arg.AssigneeID,
+		arg.CauseTeamID,
+		arg.CauseStatus,
 	)
 	var i Issue
 	err := row.Scan(
@@ -293,6 +367,9 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -473,6 +550,36 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	return i, err
 }
 
+const createTeam = `-- name: CreateTeam :one
+INSERT INTO teams (site_id, code, name, is_active) VALUES ($1, $2, $3, COALESCE($4, TRUE)) RETURNING id, site_id, code, name, is_active, created_at
+`
+
+type CreateTeamParams struct {
+	SiteID   int64
+	Code     string
+	Name     string
+	IsActive interface{}
+}
+
+func (q *Queries) CreateTeam(ctx context.Context, arg CreateTeamParams) (Team, error) {
+	row := q.db.QueryRowContext(ctx, createTeam,
+		arg.SiteID,
+		arg.Code,
+		arg.Name,
+		arg.IsActive,
+	)
+	var i Team
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.Code,
+		&i.Name,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createUserJIT = `-- name: CreateUserJIT :one
 INSERT INTO users (
     username, auth_source, ad_dn, full_name, email, role, site_id, is_active, last_login_at
@@ -572,6 +679,20 @@ func (q *Queries) DeleteTeamLocation(ctx context.Context, arg DeleteTeamLocation
 	return err
 }
 
+const deleteTeamMembership = `-- name: DeleteTeamMembership :exec
+DELETE FROM team_memberships WHERE team_id = $1 AND user_id = $2
+`
+
+type DeleteTeamMembershipParams struct {
+	TeamID int64
+	UserID int64
+}
+
+func (q *Queries) DeleteTeamMembership(ctx context.Context, arg DeleteTeamMembershipParams) error {
+	_, err := q.db.ExecContext(ctx, deleteTeamMembership, arg.TeamID, arg.UserID)
+	return err
+}
+
 const forceResolveIssue = `-- name: ForceResolveIssue :one
 UPDATE issues
 SET status = 'PENDING_REVIEW',
@@ -580,7 +701,7 @@ SET status = 'PENDING_REVIEW',
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
 WHERE id = $1
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ForceResolveIssueParams struct {
@@ -605,6 +726,9 @@ func (q *Queries) ForceResolveIssue(ctx context.Context, arg ForceResolveIssuePa
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -670,6 +794,27 @@ func (q *Queries) GetAIConfig(ctx context.Context) (AiConfig, error) {
 	return i, err
 }
 
+const getAssetByID = `-- name: GetAssetByID :one
+SELECT id, site_id, location_code, asset_code, name, asset_type, default_team_id, is_active, created_at FROM assets WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetAssetByID(ctx context.Context, id int64) (Asset, error) {
+	row := q.db.QueryRowContext(ctx, getAssetByID, id)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.LocationCode,
+		&i.AssetCode,
+		&i.Name,
+		&i.AssetType,
+		&i.DefaultTeamID,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getCategoryBreakdown = `-- name: GetCategoryBreakdown :many
 SELECT category, COUNT(*)::bigint AS count
 FROM issues
@@ -706,7 +851,7 @@ func (q *Queries) GetCategoryBreakdown(ctx context.Context, locationCode sql.Nul
 }
 
 const getIssueByID = `-- name: GetIssueByID :one
-SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE id = $1 LIMIT 1
 `
 
@@ -726,6 +871,9 @@ func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -741,7 +889,7 @@ func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
 }
 
 const getIssueByUUID = `-- name: GetIssueByUUID :one
-SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE client_uuid = $1 LIMIT 1
 `
 
@@ -761,6 +909,9 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -1224,6 +1375,22 @@ func (q *Queries) GetTeamLocation(ctx context.Context, arg GetTeamLocationParams
 	return i, err
 }
 
+const getTeamMembership = `-- name: GetTeamMembership :one
+SELECT team_id, user_id, created_at FROM team_memberships WHERE team_id = $1 AND user_id = $2 LIMIT 1
+`
+
+type GetTeamMembershipParams struct {
+	TeamID int64
+	UserID int64
+}
+
+func (q *Queries) GetTeamMembership(ctx context.Context, arg GetTeamMembershipParams) (TeamMembership, error) {
+	row := q.db.QueryRowContext(ctx, getTeamMembership, arg.TeamID, arg.UserID)
+	var i TeamMembership
+	err := row.Scan(&i.TeamID, &i.UserID, &i.CreatedAt)
+	return i, err
+}
+
 const getTopViolatedTags = `-- name: GetTopViolatedTags :many
 SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
 FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
@@ -1645,7 +1812,7 @@ SET status = 'INVALID',
 WHERE id = $1 
   AND status IN ('OPEN', 'PENDING_REVIEW') 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type InvalidateIssueParams struct {
@@ -1670,6 +1837,9 @@ func (q *Queries) InvalidateIssue(ctx context.Context, arg InvalidateIssueParams
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -1838,8 +2008,109 @@ func (q *Queries) ListAllTags(ctx context.Context) ([]Tag, error) {
 	return items, nil
 }
 
+const listAssets = `-- name: ListAssets :many
+SELECT id, site_id, location_code, asset_code, name, asset_type, default_team_id, is_active, created_at FROM assets
+WHERE ($1::bigint IS NULL OR site_id = $1::bigint)
+  AND ($2::varchar IS NULL OR location_code = $2)
+  AND ($3::boolean IS NULL OR is_active = $3::boolean)
+ORDER BY id ASC
+`
+
+type ListAssetsParams struct {
+	SiteID       sql.NullInt64
+	LocationCode sql.NullString
+	IsActive     sql.NullBool
+}
+
+func (q *Queries) ListAssets(ctx context.Context, arg ListAssetsParams) ([]Asset, error) {
+	rows, err := q.db.QueryContext(ctx, listAssets, arg.SiteID, arg.LocationCode, arg.IsActive)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Asset
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.SiteID,
+			&i.LocationCode,
+			&i.AssetCode,
+			&i.Name,
+			&i.AssetType,
+			&i.DefaultTeamID,
+			&i.IsActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssueResponsibilityHistory = `-- name: ListIssueResponsibilityHistory :many
+SELECT sal.id, sal.user_id, u.username AS changed_by_username, u.full_name AS changed_by_name,
+       sal.action, sal.old_value, sal.new_value, sal.created_at
+FROM system_audit_logs sal
+LEFT JOIN users u ON u.id = sal.user_id
+WHERE sal.target_table = 'issues'
+  AND sal.target_id = $1
+  AND sal.action IN ('ASSIGN_RESPONSIBILITY', 'VERIFY_CAUSE')
+ORDER BY sal.created_at ASC, sal.id ASC
+`
+
+type ListIssueResponsibilityHistoryRow struct {
+	ID                int64
+	UserID            sql.NullInt64
+	ChangedByUsername sql.NullString
+	ChangedByName     sql.NullString
+	Action            string
+	OldValue          json.RawMessage
+	NewValue          json.RawMessage
+	CreatedAt         time.Time
+}
+
+func (q *Queries) ListIssueResponsibilityHistory(ctx context.Context, targetID string) ([]ListIssueResponsibilityHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIssueResponsibilityHistory, targetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIssueResponsibilityHistoryRow
+	for rows.Next() {
+		var i ListIssueResponsibilityHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ChangedByUsername,
+			&i.ChangedByName,
+			&i.Action,
+			&i.OldValue,
+			&i.NewValue,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
-SELECT i.id, i.client_uuid, i.version, i.site_id, i.creator_id, i.resolver_id, i.assignee_id, i.assigned_team_id, i.category, i.cause_type, i.visibility_class, i.location_code, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
+SELECT i.id, i.client_uuid, i.version, i.site_id, i.creator_id, i.resolver_id, i.assignee_id, i.assigned_team_id, i.category, i.cause_type, i.visibility_class, i.location_code, i.asset_id, i.cause_team_id, i.cause_status, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
        COALESCE((
            SELECT SUM(CASE WHEN sl.points < 0 THEN -sl.points ELSE 0 END)
            FROM score_logs sl
@@ -1858,24 +2129,28 @@ WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar
   AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR i.category = ANY($2::varchar[]))
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
   AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
-  AND ($5::bigint = 0 OR i.site_id = $5)
-  AND ($5::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $7::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($7::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
+  AND ($5::bigint IS NULL OR i.assigned_team_id = $5::bigint)
+  AND ($6::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $7::bigint AND tm.team_id = i.assigned_team_id))
+  AND ($8::bigint = 0 OR i.site_id = $8)
+  AND ($8::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $7::bigint OR i.assignee_id = $7::bigint OR $9::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $7::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $7::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $7::bigint AND tm2.team_id = i.assigned_team_id))
 ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
-LIMIT $9 OFFSET $8
+LIMIT $11 OFFSET $10
 `
 
 type ListIssuesFilteredParams struct {
-	Statuses      []string
-	Categories    []string
-	LocationCodes []string
-	Overdue       sql.NullBool
-	SiteID        int64
-	UserID        int64
-	Role          string
-	Offset        int32
-	Limit         int32
+	Statuses       []string
+	Categories     []string
+	LocationCodes  []string
+	Overdue        sql.NullBool
+	AssignedTeamID sql.NullInt64
+	MineTeam       sql.NullBool
+	UserID         int64
+	SiteID         int64
+	Role           string
+	Offset         int32
+	Limit          int32
 }
 
 type ListIssuesFilteredRow struct {
@@ -1891,6 +2166,9 @@ type ListIssuesFilteredRow struct {
 	CauseType        string
 	VisibilityClass  string
 	LocationCode     string
+	AssetID          sql.NullInt64
+	CauseTeamID      sql.NullInt64
+	CauseStatus      string
 	Description      sql.NullString
 	RejectReason     sql.NullString
 	PhotoBefore      string
@@ -1915,8 +2193,10 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 		pq.Array(arg.Categories),
 		pq.Array(arg.LocationCodes),
 		arg.Overdue,
-		arg.SiteID,
+		arg.AssignedTeamID,
+		arg.MineTeam,
 		arg.UserID,
+		arg.SiteID,
 		arg.Role,
 		arg.Offset,
 		arg.Limit,
@@ -1941,6 +2221,9 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 			&i.CauseType,
 			&i.VisibilityClass,
 			&i.LocationCode,
+			&i.AssetID,
+			&i.CauseTeamID,
+			&i.CauseStatus,
 			&i.Description,
 			&i.RejectReason,
 			&i.PhotoBefore,
@@ -1977,18 +2260,22 @@ FROM issues i JOIN locations loc ON i.location_code = loc.code JOIN users u ON i
 WHERE ($1::varchar IS NULL OR i.status = $1)
   AND ($2::varchar IS NULL OR i.category = $2)
   AND ($3::varchar IS NULL OR i.location_code = $3)
-  AND ($4::bigint = 0 OR i.site_id = $4)
-  AND ($4::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $5::bigint OR i.assignee_id = $5::bigint OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($6::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $5::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($6::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $5::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)))
+  AND ($4::bigint IS NULL OR i.assigned_team_id = $4::bigint)
+  AND ($5::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $6::bigint AND tm.team_id = i.assigned_team_id))
+  AND ($7::bigint = 0 OR i.site_id = $7)
+  AND ($7::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $8::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($8::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($8::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $6::bigint AND tm2.team_id = i.assigned_team_id))
 GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000
 `
 
 type ListIssuesForExportParams struct {
-	Status       sql.NullString
-	Category     sql.NullString
-	LocationCode sql.NullString
-	SiteID       int64
-	UserID       int64
-	Role         string
+	Status         sql.NullString
+	Category       sql.NullString
+	LocationCode   sql.NullString
+	AssignedTeamID sql.NullInt64
+	MineTeam       sql.NullBool
+	UserID         int64
+	SiteID         int64
+	Role           string
 }
 
 type ListIssuesForExportRow struct {
@@ -2018,8 +2305,10 @@ func (q *Queries) ListIssuesForExport(ctx context.Context, arg ListIssuesForExpo
 		arg.Status,
 		arg.Category,
 		arg.LocationCode,
-		arg.SiteID,
+		arg.AssignedTeamID,
+		arg.MineTeam,
 		arg.UserID,
+		arg.SiteID,
 		arg.Role,
 	)
 	if err != nil {
@@ -2592,6 +2881,71 @@ func (q *Queries) ListTagsForIssues(ctx context.Context, issueIds []int64) ([]Li
 	return items, nil
 }
 
+const listTeamKPIs = `-- name: ListTeamKPIs :many
+SELECT t.id AS team_id,
+       t.name AS team_name,
+       COUNT(DISTINCT a.id)::bigint AS assigned_count,
+       COUNT(DISTINCT a.id) FILTER (WHERE a.status = 'OPEN')::bigint AS open_count,
+       COUNT(DISTINCT a.id) FILTER (WHERE a.status = 'OPEN' AND a.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours')::bigint AS overdue_count,
+       COUNT(DISTINCT a.id) FILTER (WHERE a.status = 'CLOSED')::bigint AS closed_count,
+       COUNT(DISTINCT c.id)::bigint AS confirmed_cause_count
+FROM teams t
+LEFT JOIN issues a ON a.assigned_team_id = t.id
+    AND a.created_at >= CURRENT_TIMESTAMP - make_interval(days => $1::int)
+LEFT JOIN issues c ON c.cause_team_id = t.id
+    AND c.cause_status = 'CONFIRMED'
+    AND c.created_at >= CURRENT_TIMESTAMP - make_interval(days => $1::int)
+WHERE t.site_id = $2
+GROUP BY t.id, t.name
+ORDER BY t.name ASC, t.id ASC
+`
+
+type ListTeamKPIsParams struct {
+	Days   int32
+	SiteID int64
+}
+
+type ListTeamKPIsRow struct {
+	TeamID              int64
+	TeamName            string
+	AssignedCount       int64
+	OpenCount           int64
+	OverdueCount        int64
+	ClosedCount         int64
+	ConfirmedCauseCount int64
+}
+
+func (q *Queries) ListTeamKPIs(ctx context.Context, arg ListTeamKPIsParams) ([]ListTeamKPIsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTeamKPIs, arg.Days, arg.SiteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTeamKPIsRow
+	for rows.Next() {
+		var i ListTeamKPIsRow
+		if err := rows.Scan(
+			&i.TeamID,
+			&i.TeamName,
+			&i.AssignedCount,
+			&i.OpenCount,
+			&i.OverdueCount,
+			&i.ClosedCount,
+			&i.ConfirmedCauseCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTeamLocations = `-- name: ListTeamLocations :many
 SELECT tl.team_id, tl.location_code, tl.created_at,
        l.name_vi, l.name_zh, l.name_en
@@ -2626,6 +2980,48 @@ func (q *Queries) ListTeamLocations(ctx context.Context, teamID int64) ([]ListTe
 			&i.NameVi,
 			&i.NameZh,
 			&i.NameEn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTeamMembers = `-- name: ListTeamMembers :many
+SELECT u.id, u.username, u.full_name, u.role, u.is_active
+FROM users u JOIN team_memberships tm ON tm.user_id = u.id WHERE tm.team_id = $1 ORDER BY u.id
+`
+
+type ListTeamMembersRow struct {
+	ID       int64
+	Username string
+	FullName string
+	Role     string
+	IsActive bool
+}
+
+func (q *Queries) ListTeamMembers(ctx context.Context, teamID int64) ([]ListTeamMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTeamMembers, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTeamMembersRow
+	for rows.Next() {
+		var i ListTeamMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.FullName,
+			&i.Role,
+			&i.IsActive,
 		); err != nil {
 			return nil, err
 		}
@@ -2886,36 +3282,63 @@ func (q *Queries) MarkOutboxSent(ctx context.Context, id int64) error {
 
 const patchIssue = `-- name: PatchIssue :one
 UPDATE issues
-SET category = COALESCE($2, category),
-    cause_type = COALESCE($3, cause_type),
-    location_code = COALESCE($4, location_code),
-    description = COALESCE($5, description),
-    photo_before = COALESCE($6, photo_before),
-    photo_detail = COALESCE($7, photo_detail),
+SET category = COALESCE($1, category),
+    cause_type = COALESCE($2, cause_type),
+    location_code = COALESCE($3, location_code),
+    description = COALESCE($4, description),
+    photo_before = COALESCE($5, photo_before),
+    photo_detail = COALESCE($6, photo_detail),
+    asset_id = CASE WHEN $7::boolean THEN $8::bigint ELSE asset_id END,
+    assigned_team_id = CASE WHEN $9::boolean THEN $10::bigint ELSE assigned_team_id END,
+    assignee_id = CASE WHEN $11::boolean THEN $12::bigint ELSE assignee_id END,
+    cause_team_id = CASE WHEN $13::boolean THEN $14::bigint ELSE cause_team_id END,
+    cause_status = CASE WHEN $15::boolean THEN COALESCE($16, 'UNVERIFIED') ELSE cause_status END,
     version = version + 1
-WHERE id = $1
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+WHERE id = $17 AND ($18::int IS NULL OR version = $18::int)
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type PatchIssueParams struct {
-	ID           int64
-	Category     sql.NullString
-	CauseType    sql.NullString
-	LocationCode sql.NullString
-	Description  sql.NullString
-	PhotoBefore  sql.NullString
-	PhotoDetail  sql.NullString
+	Category          sql.NullString
+	CauseType         sql.NullString
+	LocationCode      sql.NullString
+	Description       sql.NullString
+	PhotoBefore       sql.NullString
+	PhotoDetail       sql.NullString
+	SetAssetID        bool
+	AssetID           sql.NullInt64
+	SetAssignedTeamID bool
+	AssignedTeamID    sql.NullInt64
+	SetAssigneeID     bool
+	AssigneeID        sql.NullInt64
+	SetCauseTeamID    bool
+	CauseTeamID       sql.NullInt64
+	SetCauseStatus    bool
+	CauseStatus       sql.NullString
+	ID                int64
+	ExpectedVersion   sql.NullInt32
 }
 
 func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, error) {
 	row := q.db.QueryRowContext(ctx, patchIssue,
-		arg.ID,
 		arg.Category,
 		arg.CauseType,
 		arg.LocationCode,
 		arg.Description,
 		arg.PhotoBefore,
 		arg.PhotoDetail,
+		arg.SetAssetID,
+		arg.AssetID,
+		arg.SetAssignedTeamID,
+		arg.AssignedTeamID,
+		arg.SetAssigneeID,
+		arg.AssigneeID,
+		arg.SetCauseTeamID,
+		arg.CauseTeamID,
+		arg.SetCauseStatus,
+		arg.CauseStatus,
+		arg.ID,
+		arg.ExpectedVersion,
 	)
 	var i Issue
 	err := row.Scan(
@@ -2931,6 +3354,9 @@ func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, 
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -2953,7 +3379,7 @@ SET status = 'OPEN',
 WHERE id = $1 
   AND status = 'PENDING_REVIEW' 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ReopenIssueParams struct {
@@ -2978,6 +3404,9 @@ func (q *Queries) ReopenIssue(ctx context.Context, arg ReopenIssueParams) (Issue
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -3020,7 +3449,7 @@ SET status = 'PENDING_REVIEW',
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
 WHERE id = $1 AND status = 'OPEN' AND version = $4
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ResolveIssueParams struct {
@@ -3051,6 +3480,9 @@ func (q *Queries) ResolveIssue(ctx context.Context, arg ResolveIssueParams) (Iss
 		&i.CauseType,
 		&i.VisibilityClass,
 		&i.LocationCode,
+		&i.AssetID,
+		&i.CauseTeamID,
+		&i.CauseStatus,
 		&i.Description,
 		&i.RejectReason,
 		&i.PhotoBefore,
@@ -3115,6 +3547,46 @@ SET is_active = $1
 func (q *Queries) SetAllTagsActiveStatus(ctx context.Context, isActive bool) error {
 	_, err := q.db.ExecContext(ctx, setAllTagsActiveStatus, isActive)
 	return err
+}
+
+const updateAsset = `-- name: UpdateAsset :one
+UPDATE assets SET location_code = COALESCE($2, location_code), asset_code = COALESCE($3, asset_code), name = COALESCE($4, name), asset_type = $5, default_team_id = $6, is_active = COALESCE($7, is_active)
+WHERE id = $1 RETURNING id, site_id, location_code, asset_code, name, asset_type, default_team_id, is_active, created_at
+`
+
+type UpdateAssetParams struct {
+	ID            int64
+	LocationCode  sql.NullString
+	AssetCode     sql.NullString
+	Name          sql.NullString
+	AssetType     sql.NullString
+	DefaultTeamID sql.NullInt64
+	IsActive      sql.NullBool
+}
+
+func (q *Queries) UpdateAsset(ctx context.Context, arg UpdateAssetParams) (Asset, error) {
+	row := q.db.QueryRowContext(ctx, updateAsset,
+		arg.ID,
+		arg.LocationCode,
+		arg.AssetCode,
+		arg.Name,
+		arg.AssetType,
+		arg.DefaultTeamID,
+		arg.IsActive,
+	)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.LocationCode,
+		&i.AssetCode,
+		&i.Name,
+		&i.AssetType,
+		&i.DefaultTeamID,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateLocation = `-- name: UpdateLocation :one
@@ -3236,6 +3708,36 @@ func (q *Queries) UpdateTagActiveStatus(ctx context.Context, arg UpdateTagActive
 		&i.UseCount,
 		&i.IsPreset,
 		&i.IsActive,
+	)
+	return i, err
+}
+
+const updateTeam = `-- name: UpdateTeam :one
+UPDATE teams SET code = COALESCE($2, code), name = COALESCE($3, name), is_active = COALESCE($4, is_active) WHERE id = $1 RETURNING id, site_id, code, name, is_active, created_at
+`
+
+type UpdateTeamParams struct {
+	ID       int64
+	Code     sql.NullString
+	Name     sql.NullString
+	IsActive sql.NullBool
+}
+
+func (q *Queries) UpdateTeam(ctx context.Context, arg UpdateTeamParams) (Team, error) {
+	row := q.db.QueryRowContext(ctx, updateTeam,
+		arg.ID,
+		arg.Code,
+		arg.Name,
+		arg.IsActive,
+	)
+	var i Team
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.Code,
+		&i.Name,
+		&i.IsActive,
+		&i.CreatedAt,
 	)
 	return i, err
 }

@@ -40,13 +40,50 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	_ = response.JSON(w, http.StatusOK, summary)
 }
 
-// ExportXLSX handles GET /api/issues/export as an XLSX workbook.
+// GetTeams handles GET /api/reports/teams?days=14.
+func (h *Handler) GetTeams(w http.ResponseWriter, r *http.Request) {
+	days := 14
+	if value := r.URL.Query().Get("days"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 1 && parsed <= 90 {
+			days = parsed
+		}
+	}
+	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+	rows, err := h.service.GetTeamKPIs(r.Context(), days)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	_ = response.JSON(w, http.StatusOK, rows)
+}
+
+// ExportXLSX streams the filtered issue export as an XLSX attachment.
 func (h *Handler) ExportXLSX(w http.ResponseWriter, r *http.Request) {
 	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
 		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
-	rows, err := h.service.GetExportData(r.Context(), r.URL.Query().Get("status"), r.URL.Query().Get("category"), r.URL.Query().Get("location_code"))
+	var filters ExportTeamFilter
+	if value := r.URL.Query().Get("assigned_team_id"); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed <= 0 {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "assigned_team_id must be a positive integer"))
+			return
+		}
+		filters.AssignedTeamID = &parsed
+	}
+	if value := r.URL.Query().Get("mine_team"); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "mine_team must be boolean"))
+			return
+		}
+		filters.MineTeam = &parsed
+	}
+	rows, err := h.service.GetExportData(r.Context(), r.URL.Query().Get("status"), r.URL.Query().Get("category"), r.URL.Query().Get("location_code"), filters)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return

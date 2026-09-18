@@ -41,6 +41,18 @@ type AiConfig struct {
 	UpdatedBy      sql.NullInt64
 }
 
+type Asset struct {
+	ID            int64
+	SiteID        int64
+	LocationCode  string
+	AssetCode     string
+	Name          string
+	AssetType     sql.NullString
+	DefaultTeamID sql.NullInt64
+	IsActive      bool
+	CreatedAt     time.Time
+}
+
 type CronTaskLog struct {
 	ID        int64
 	TaskName  string
@@ -62,6 +74,9 @@ type Issue struct {
 	CauseType       string
 	VisibilityClass string
 	LocationCode    string
+	AssetID         sql.NullInt64
+	CauseTeamID     sql.NullInt64
+	CauseStatus     string
 	Description     sql.NullString
 	RejectReason    sql.NullString
 	PhotoBefore     string

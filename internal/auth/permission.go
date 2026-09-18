@@ -17,6 +17,8 @@ const (
 	PermissionIssueCloseOwn    = "issue:close_own"
 	PermissionIssueCloseLine   = "issue:close_line"
 	PermissionIssueCloseAny    = "issue:close_any"
+	PermissionIssueAssign      = "issue:assign"
+	PermissionIssueVerifyCause = "issue:verify_cause"
 	PermissionIssueCloseSafety = "issue:close_safety"
 	PermissionIssueReopen      = "issue:reopen"
 	PermissionIssueInvalidate  = "issue:invalidate"
@@ -36,6 +38,7 @@ var CatalogCapabilities = []string{
 	PermissionIssueCreate, PermissionIssueViewAll, PermissionIssueResolve,
 	PermissionIssueCloseOwn, PermissionIssueCloseLine, PermissionIssueCloseAny,
 	PermissionIssueCloseSafety, PermissionIssueReopen, PermissionIssueInvalidate,
+	PermissionIssueAssign, PermissionIssueVerifyCause,
 	PermissionScoringManage, PermissionADManage, PermissionUserManage,
 	PermissionManage, PermissionMasterdataManage, PermissionReportsView,
 	PermissionReportsExport, PermissionSettingsManage,

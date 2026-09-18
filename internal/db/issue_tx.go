@@ -8,13 +8,19 @@ import (
 
 // PatchIssueWithTagsAtomic commits an issue patch and full tag replacement together.
 func (q *Queries) PatchIssueWithTagsAtomic(ctx context.Context, patch PatchIssueParams, tags []string) (Issue, error) {
+	return q.PatchIssueWithAuditAtomic(ctx, patch, tags, nil)
+}
+
+// PatchIssueWithAuditAtomic commits an issue patch, full tag replacement, and audit rows together.
+// A nil or empty audit slice skips audit writes; any failure rolls the entire mutation back so a
+// responsibility transfer can never be persisted without its history.
+func (q *Queries) PatchIssueWithAuditAtomic(ctx context.Context, patch PatchIssueParams, tags []string, audit []InsertAuditLogParams) (Issue, error) {
 	beginner, ok := q.db.(interface {
 		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 	})
 	if !ok {
 		return Issue{}, fmt.Errorf("database does not support transactions")
 	}
-
 	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
 		return Issue{}, fmt.Errorf("begin issue patch transaction: %w", err)
@@ -31,15 +37,22 @@ func (q *Queries) PatchIssueWithTagsAtomic(ctx context.Context, patch PatchIssue
 	if err != nil {
 		return rollback(fmt.Errorf("patch issue: %w", err))
 	}
-	if err := txQueries.DeleteIssueTags(ctx, patch.ID); err != nil {
-		return rollback(fmt.Errorf("delete issue tags: %w", err))
-	}
-	for _, tag := range tags {
-		if tag == "" {
-			continue
+	if tags != nil {
+		if err := txQueries.DeleteIssueTags(ctx, patch.ID); err != nil {
+			return rollback(fmt.Errorf("delete issue tags: %w", err))
 		}
-		if err := txQueries.InsertIssueTag(ctx, InsertIssueTagParams{IssueID: patch.ID, TagCode: tag}); err != nil {
-			return rollback(fmt.Errorf("insert issue tag: %w", err))
+		for _, tag := range tags {
+			if tag == "" {
+				continue
+			}
+			if err := txQueries.InsertIssueTag(ctx, InsertIssueTagParams{IssueID: patch.ID, TagCode: tag}); err != nil {
+				return rollback(fmt.Errorf("insert issue tag: %w", err))
+			}
+		}
+	}
+	for _, entry := range audit {
+		if err := txQueries.InsertAuditLog(ctx, entry); err != nil {
+			return rollback(fmt.Errorf("insert issue audit: %w", err))
 		}
 	}
 	if err := tx.Commit(); err != nil {

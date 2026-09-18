@@ -63,8 +63,6 @@ func writeJSON(w http.ResponseWriter, status int, payload Envelope) error {
 	return nil
 }
 
-// (Deprecated direct error helpers removed to enforce AppError with i18n)
-
 // AppError writes an application error response translated for the request locale.
 func AppError(w http.ResponseWriter, r *http.Request, appErr *apperror.AppError) error {
 	locale := i18n.FromContext(r.Context())

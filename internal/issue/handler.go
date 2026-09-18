@@ -33,7 +33,7 @@ type Service interface {
 	PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error)
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
 	OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error)
-	ListIssuesFiltered(ctx context.Context, statuses, categories, locationCodes []string, overdue bool, page, limit int) ([]Response, int64, error)
+	ListIssuesFiltered(ctx context.Context, filter ListFilter) ([]Response, int64, error)
 	SubscribeEvents() (<-chan Event, func())
 }
 
@@ -64,21 +64,26 @@ func parseQueryValues(q map[string][]string, singularKey, pluralKey string) []st
 // List handles GET /api/issues.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-
 	statuses := parseQueryValues(q, "status", "statuses")
 	categories := parseQueryValues(q, "category", "categories")
 	locationCodes := parseQueryValues(q, "location_code", "location_codes")
-
-	overdue := q.Get("overdue") == "true"
-
+	overdue := q.Get("overdue") == "true" || q.Get("overdue") == "1"
 	page, limit := response.ParsePageLimit(q, 20, 100)
-
-	items, total, err := h.service.ListIssuesFiltered(r.Context(), statuses, categories, locationCodes, overdue, page, limit)
+	filter := ListFilter{Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdue, Page: page, Limit: limit}
+	if raw := q.Get("assigned_team_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+			return
+		}
+		filter.AssignedTeamID = &id
+	}
+	filter.MineTeam = q.Get("mine_team") == "true" || q.Get("mine_team") == "1"
+	items, total, err := h.service.ListIssuesFiltered(r.Context(), filter)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrIssueListFailed).WithCause(err))
 		return
 	}
-
 	_ = response.Paginated(w, http.StatusOK, items, page, limit, int(total))
 }
 
@@ -179,16 +184,36 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	if fhs := r.MultipartForm.File["photo_detail"]; len(fhs) > 0 {
 		photoDetailHeader = fhs[0]
 	}
-
+	parseOptionalID := func(key string) (*int64, error) {
+		raw := strings.TrimSpace(r.FormValue(key))
+		if raw == "" {
+			return nil, nil
+		}
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("invalid %s", key)
+		}
+		return &v, nil
+	}
+	assetID, idErr := parseOptionalID("asset_id")
+	if idErr != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(idErr))
+		return
+	}
+	assignedTeamID, idErr := parseOptionalID("assigned_team_id")
+	if idErr != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(idErr))
+		return
+	}
+	assigneeID, idErr := parseOptionalID("assignee_id")
+	if idErr != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(idErr))
+		return
+	}
 	syncReq := SyncIssueRequest{
-		ClientUUID:   clientUUID,
-		Category:     category,
-		CauseType:    causeType,
-		LocationCode: locationCode,
-		Tags:         tags,
-		Description:  description,
-		PhotoBefore:  photoBeforeHeader,
-		PhotoDetail:  photoDetailHeader,
+		ClientUUID: clientUUID, Category: category, CauseType: causeType, LocationCode: locationCode,
+		Tags: tags, Description: description, AssetID: assetID, AssignedTeamID: assignedTeamID,
+		AssigneeID: assigneeID, PhotoBefore: photoBeforeHeader, PhotoDetail: photoDetailHeader,
 	}
 
 	resp, created, err := h.service.SyncIssue(r.Context(), syncReq, currentUser)
@@ -443,11 +468,17 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 
 // PatchRequest defines payload for in-place quick editing of an issue.
 type PatchRequest struct {
-	Category     *string  `json:"category"`
-	CauseType    *string  `json:"cause_type"`
-	LocationCode *string  `json:"location_code"`
-	Description  *string  `json:"description"`
-	Tags         []string `json:"tags"`
+	Category        *string  `json:"category"`
+	CauseType       *string  `json:"cause_type"`
+	LocationCode    *string  `json:"location_code"`
+	Description     *string  `json:"description"`
+	Tags            []string `json:"tags"`
+	AssetID         **int64  `json:"asset_id"`
+	AssignedTeamID  **int64  `json:"assigned_team_id"`
+	AssigneeID      **int64  `json:"assignee_id"`
+	CauseTeamID     **int64  `json:"cause_team_id"`
+	CauseStatus     **string `json:"cause_status"`
+	ExpectedVersion *int32   `json:"expected_version"`
 }
 
 func (h *Handler) parseMultipartPatch(r *http.Request) (PatchIssueRequest, error) {
@@ -488,11 +519,10 @@ func (h *Handler) parseJSONPatch(r *http.Request) (PatchIssueRequest, error) {
 		return PatchIssueRequest{}, decErr
 	}
 	return PatchIssueRequest{
-		Category:     req.Category,
-		CauseType:    req.CauseType,
-		LocationCode: req.LocationCode,
-		Description:  req.Description,
-		Tags:         req.Tags,
+		Category: req.Category, CauseType: req.CauseType, LocationCode: req.LocationCode,
+		Description: req.Description, Tags: req.Tags, AssetID: req.AssetID,
+		AssignedTeamID: req.AssignedTeamID, AssigneeID: req.AssigneeID,
+		CauseTeamID: req.CauseTeamID, CauseStatus: req.CauseStatus, ExpectedVersion: req.ExpectedVersion,
 	}, nil
 }
 
@@ -536,14 +566,17 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssuePatchForbidden))
 			return
 		}
-		if errors.Is(err, ErrInvalidCategory) {
-			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidCategory))
+		if errors.Is(err, ErrIssueConflict) {
+			_ = response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueVersionChanged).WithCause(err))
+			return
+		}
+		if errors.Is(err, ErrInvalidCategory) || errors.Is(err, ErrInvalidResponsibility) || errors.Is(err, ErrMissingExpectedVersion) {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 			return
 		}
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
-
 	_ = response.JSON(w, http.StatusOK, resp)
 }
 

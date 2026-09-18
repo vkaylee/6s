@@ -255,6 +255,31 @@ func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Midd
 		tr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Patch("/{code}/status", mdHandler.UpdateTagStatus)
 		tr.With(auth.RequirePermission(auth.PermissionMasterdataManage)).Post("/batch-status", mdHandler.BatchUpdateTagsStatus)
 	})
+	respHandler := masterdata.NewResponsibilityHandler(queries)
+	r.Route("/api/assets", func(ar chi.Router) {
+		ar.Use(authMw.Authenticate)
+		ar.Get("/", respHandler.ListAssets)
+	})
+	r.Route("/api/teams", func(tr chi.Router) {
+		tr.Use(authMw.Authenticate)
+		tr.Get("/", respHandler.ListTeams)
+		tr.With(auth.RequirePermission(auth.PermissionIssueAssign)).Get("/{id}/members", respHandler.ListMembers)
+	})
+	r.Route("/api/admin/assets", func(ar chi.Router) {
+		ar.Use(authMw.Authenticate)
+		ar.Use(auth.RequirePermission(auth.PermissionMasterdataManage))
+		ar.Post("/", respHandler.CreateAsset)
+		ar.Put("/{id}", respHandler.UpdateAsset)
+	})
+	r.Route("/api/admin/teams", func(tr chi.Router) {
+		tr.Use(authMw.Authenticate)
+		tr.Use(auth.RequirePermission(auth.PermissionUserManage))
+		tr.Post("/", respHandler.CreateTeam)
+		tr.Put("/{id}", respHandler.UpdateTeam)
+		tr.Get("/{id}/members", respHandler.ListMembers)
+		tr.Put("/{id}/members/{userID}", respHandler.AddMember)
+		tr.Delete("/{id}/members/{userID}", respHandler.DeleteMember)
+	})
 }
 
 func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Manager, authMw *auth.Middleware, notifyCh chan struct{}) {
@@ -285,6 +310,7 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 		rr.Use(authMw.Authenticate)
 		rr.Use(auth.RequirePermission(auth.PermissionReportsView))
 		rr.Get("/summary", reportHandler.GetSummary)
+		rr.Get("/teams", reportHandler.GetTeams)
 	})
 
 	// Reports and exports require the reports capability.

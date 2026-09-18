@@ -25,6 +25,7 @@ type mockReportStore struct {
 	trends     []db.GetIssueTrendsRow
 	tags       []db.GetTopViolatedTagsRow
 	exports    []db.ListIssuesForExportRow
+	teamKPIs   []db.ListTeamKPIsRow
 	err        error
 }
 
@@ -46,6 +47,10 @@ func (m *mockReportStore) GetTopViolatedTags(_ context.Context, _ db.GetTopViola
 
 func (m *mockReportStore) ListIssuesForExport(_ context.Context, _ db.ListIssuesForExportParams) ([]db.ListIssuesForExportRow, error) {
 	return m.exports, m.err
+}
+
+func (m *mockReportStore) ListTeamKPIs(_ context.Context, _ db.ListTeamKPIsParams) ([]db.ListTeamKPIsRow, error) {
+	return m.teamKPIs, m.err
 }
 
 func TestReportService_GetSummary(t *testing.T) {

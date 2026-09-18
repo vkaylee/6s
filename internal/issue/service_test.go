@@ -1,6 +1,11 @@
 package issue
 
 import (
+	"6s/internal/ai"
+	"6s/internal/auth"
+	"6s/internal/db"
+	"6s/internal/i18n"
+	"6s/internal/storage"
 	"bytes"
 	"context"
 	"database/sql"
@@ -9,14 +14,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
-
-	"6s/internal/ai"
-	"6s/internal/auth"
-	"6s/internal/db"
-	"6s/internal/i18n"
-	"6s/internal/storage"
 )
 
 // seededPermissions mirrors migration 000009 defaults (SPEC.md 5.2 matrix).
@@ -45,6 +45,10 @@ type mockIssueStore struct {
 	locations    map[string]db.Location
 	tags         map[int64][]string
 	users        map[int64]db.User
+	assets       map[int64]db.Asset
+	teams        map[int64]db.Team
+	memberships  map[int64]map[int64]struct{}
+	history      map[int64][]db.ListIssueResponsibilityHistoryRow
 	outbox       []db.CreateOutboxEntryParams
 	scoreLogs    []db.InsertScoreLogParams
 	auditLogs    []db.InsertAuditLogParams
@@ -52,6 +56,7 @@ type mockIssueStore struct {
 	rules        map[string]int32
 	tagDeleteErr error
 	tagInsertErr error
+	auditErr     error
 }
 
 func newMockIssueStore() *mockIssueStore {
@@ -60,6 +65,10 @@ func newMockIssueStore() *mockIssueStore {
 		locations:    make(map[string]db.Location),
 		tags:         make(map[int64][]string),
 		users:        make(map[int64]db.User),
+		assets:       make(map[int64]db.Asset),
+		teams:        make(map[int64]db.Team),
+		memberships:  make(map[int64]map[int64]struct{}),
+		history:      make(map[int64][]db.ListIssueResponsibilityHistoryRow),
 		translations: make(map[string]string),
 		rules:        make(map[string]int32),
 	}
@@ -84,18 +93,25 @@ func (m *mockIssueStore) GetIssueByUUID(_ context.Context, clientUUID string) (d
 
 func (m *mockIssueStore) CreateIssue(_ context.Context, arg db.CreateIssueParams) (db.Issue, error) {
 	iss := db.Issue{
-		ID:           int64(len(m.issues) + 1),
-		ClientUuid:   arg.ClientUuid,
-		Version:      1,
-		CreatorID:    arg.CreatorID,
-		Category:     arg.Category,
-		CauseType:    arg.CauseType,
-		LocationCode: arg.LocationCode,
-		Description:  arg.Description,
-		PhotoBefore:  arg.PhotoBefore,
-		PhotoDetail:  arg.PhotoDetail,
-		Status:       StatusOpen.String(),
-		CreatedAt:    time.Now(),
+		ID:              int64(len(m.issues) + 1),
+		ClientUuid:      arg.ClientUuid,
+		Version:         1,
+		SiteID:          arg.SiteID,
+		CreatorID:       arg.CreatorID,
+		Category:        arg.Category,
+		CauseType:       arg.CauseType,
+		VisibilityClass: arg.VisibilityClass,
+		LocationCode:    arg.LocationCode,
+		Description:     arg.Description,
+		PhotoBefore:     arg.PhotoBefore,
+		PhotoDetail:     arg.PhotoDetail,
+		AssetID:         arg.AssetID,
+		AssignedTeamID:  arg.AssignedTeamID,
+		AssigneeID:      arg.AssigneeID,
+		CauseTeamID:     arg.CauseTeamID,
+		CauseStatus:     arg.CauseStatus.String,
+		Status:          StatusOpen.String(),
+		CreatedAt:       time.Now(),
 	}
 	m.issues[iss.ID] = iss
 	return iss, nil
@@ -175,7 +191,7 @@ func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
 	store.tags[2] = []string{"SCRAP"}
 
 	svc := NewService(store, nil, nil)
-	items, total, err := svc.ListIssuesFiltered(ctxFor(store.users[1]), nil, nil, nil, false, 1, 20)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(store.users[1]), ListFilter{Page: 1, Limit: 20})
 	if err != nil {
 		t.Fatalf("ListIssuesFiltered error: %v", err)
 	}
@@ -477,6 +493,77 @@ func (m *mockIssueStore) ListActiveLocationCodesForUser(_ context.Context, arg d
 	return nil, nil
 }
 
+func (m *mockIssueStore) GetAssetByID(_ context.Context, id int64) (db.Asset, error) {
+	a, ok := m.assets[id]
+	if !ok {
+		return db.Asset{}, sql.ErrNoRows
+	}
+	return a, nil
+}
+
+func (m *mockIssueStore) GetTeamByID(_ context.Context, id int64) (db.Team, error) {
+	t, ok := m.teams[id]
+	if !ok {
+		return db.Team{}, sql.ErrNoRows
+	}
+	return t, nil
+}
+
+func (m *mockIssueStore) GetTeamMembership(_ context.Context, arg db.GetTeamMembershipParams) (db.TeamMembership, error) {
+	if _, ok := m.memberships[arg.TeamID][arg.UserID]; !ok {
+		return db.TeamMembership{}, sql.ErrNoRows
+	}
+	return db.TeamMembership{TeamID: arg.TeamID, UserID: arg.UserID}, nil
+}
+
+func (m *mockIssueStore) GetIssueResponsibilityHistory(_ context.Context, targetID string) ([]db.ListIssueResponsibilityHistoryRow, error) {
+	issueID, err := strconv.ParseInt(targetID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return m.history[issueID], nil
+}
+
+func (m *mockIssueStore) PatchIssueWithAuditAtomic(ctx context.Context, patch db.PatchIssueParams, tags []string, audit []db.InsertAuditLogParams) (db.Issue, error) {
+	if m.auditErr != nil {
+		return db.Issue{}, m.auditErr
+	}
+	issueBefore := m.issues[patch.ID]
+	tagsBefore := append([]string(nil), m.tags[patch.ID]...)
+	auditsBefore := len(m.auditLogs)
+	updated, err := m.PatchIssue(ctx, patch)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	if tags != nil {
+		if err := m.DeleteIssueTags(ctx, patch.ID); err != nil {
+			m.issues[patch.ID] = issueBefore
+			m.tags[patch.ID] = tagsBefore
+			return db.Issue{}, err
+		}
+		for _, tag := range tags {
+			if tag == "" {
+				continue
+			}
+			if err := m.InsertIssueTag(ctx, db.InsertIssueTagParams{IssueID: patch.ID, TagCode: tag}); err != nil {
+				m.issues[patch.ID] = issueBefore
+				m.tags[patch.ID] = tagsBefore
+				m.auditLogs = m.auditLogs[:auditsBefore]
+				return db.Issue{}, err
+			}
+		}
+	}
+	for _, entry := range audit {
+		if err := m.InsertAuditLog(ctx, entry); err != nil {
+			m.issues[patch.ID] = issueBefore
+			m.tags[patch.ID] = tagsBefore
+			m.auditLogs = m.auditLogs[:auditsBefore]
+			return db.Issue{}, err
+		}
+	}
+	return updated, nil
+}
+
 func createTestFileHeader(t *testing.T, fieldName, filename string, content []byte) *multipart.FileHeader {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -771,7 +858,7 @@ func TestIssueService_ListIssuesFiltered(t *testing.T) {
 	storageMgr, _ := storage.NewManager(t.TempDir())
 	svc := NewService(mockStore, storageMgr, make(chan struct{}, 1))
 
-	items, total, err := svc.ListIssuesFiltered(ctxFor(worker), []string{StatusOpen.String()}, []string{Category1S.String()}, []string{"LINE_A1"}, false, 1, 10)
+	items, total, err := svc.ListIssuesFiltered(ctxFor(worker), ListFilter{Statuses: []string{StatusOpen.String()}, Categories: []string{Category1S.String()}, LocationCodes: []string{"LINE_A1"}, Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListIssuesFiltered err: %v", err)
 	}
@@ -927,7 +1014,7 @@ func TestListIssuesFiltered_AttachTranslationCache(t *testing.T) {
 		t.Errorf("expected translated description 'Cluttered storage area', got %v", resp.TranslatedDescription)
 	}
 
-	items, _, err := svc.ListIssuesFiltered(ctx, nil, nil, nil, false, 1, 10)
+	items, _, err := svc.ListIssuesFiltered(ctx, ListFilter{Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatalf("unexpected list error: %v", err)
 	}
@@ -988,6 +1075,35 @@ func TestIssueService_PermissionParity(t *testing.T) {
 		}
 		return updated
 	}
+	newPendingIssueWithResolver := func(t *testing.T, resolver db.User) *Response {
+		t.Helper()
+		jpeg := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+		fhBefore := createTestFileHeader(t, "photo_before", "before.jpg", jpeg)
+		fhAfter := createTestFileHeader(t, "photo_after", "after.jpg", jpeg)
+		resp, _, err := svc.SyncIssue(ctxFor(creator), SyncIssueRequest{
+			ClientUUID:   nextUUID(),
+			Category:     Category1S.String(),
+			LocationCode: "LINE_A1",
+			PhotoBefore:  fhBefore,
+		}, creator)
+		if err != nil {
+			t.Fatalf("sync issue failed: %v", err)
+		}
+		stored, _ := svc.GetIssueByID(context.Background(), resp.ID)
+		if _, err := svc.ResolveIssue(ctxFor(resolver), ResolveIssueRequest{
+			IssueID:            resp.ID,
+			ResolvedClientUUID: nextUUID(),
+			ExpectedVersion:    resp.Version,
+			PhotoAfter:         fhAfter,
+		}, resolver); err != nil {
+			t.Fatalf("resolve issue by %s failed: %v (resp version %d stored %+v)", resolver.Username, err, resp.Version, stored)
+		}
+		updated, err := svc.GetIssueByID(context.Background(), resp.ID)
+		if err != nil {
+			t.Fatalf("reload issue failed: %v", err)
+		}
+		return updated
+	}
 
 	deny := func(t *testing.T, err error, who, what string) {
 		t.Helper()
@@ -1001,10 +1117,20 @@ func TestIssueService_PermissionParity(t *testing.T) {
 	_, err := svc.CloseIssue(ctxFor(stranger), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, stranger)
 	deny(t, err, "USER stranger", "close others' 1S issue")
 
-	// Close: creator closes own issue.
-	ownClosed, err := svc.CloseIssue(ctxFor(creator), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, creator)
+	// Close: creator cannot close own issue when they are also the resolver (no self-approval).
+	_, err = svc.CloseIssue(ctxFor(creator), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, creator)
+	deny(t, err, "USER creator (self resolver)", "close own-resolved issue")
+	// Close: creator may close own issue resolved by another party (approval separate from fix).
+	resolver := db.User{ID: 44, Username: "resolver", Role: "USER", IsActive: true, AssignedLocationCode: sql.NullString{String: "LINE_A1", Valid: true}}
+	mockStore.users[resolver.ID] = resolver
+	normal2 := newPendingIssueWithResolver(t, resolver)
+	// Regression: resolver cannot approve own work by closing it.
+	_, err = svc.CloseIssue(ctxFor(resolver), CloseIssueRequest{IssueID: normal2.ID, ScoreRating: 3}, resolver)
+	deny(t, err, "USER resolver", "close own-resolved issue")
+	normal3 := newPendingIssueWithResolver(t, resolver)
+	ownClosed, err := svc.CloseIssue(ctxFor(creator), CloseIssueRequest{IssueID: normal3.ID, ScoreRating: 3}, creator)
 	if err != nil || ownClosed.Status != StatusClosed.String() {
-		t.Errorf("creator close own issue failed: %v", err)
+		t.Errorf("creator close own issue (resolved by other) failed: %v", err)
 	}
 
 	// Close: LINE_LEADER closes issue on assigned line, not other lines.
@@ -1116,5 +1242,43 @@ func TestIssueService_ResolveFailureRemovesOrphanAfterPhoto(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("orphan after photo not removed: %v", entries)
+	}
+}
+
+func TestIssueService_ResponsibilityHistoryActions(t *testing.T) {
+	store := newMockIssueStore()
+	admin := db.User{ID: 1, Username: "admin", FullName: "Admin", Role: "ADMIN", SiteID: 1, IsActive: true}
+	store.users[admin.ID] = admin
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	store.issues[1] = db.Issue{
+		ID: 1, ClientUuid: "c0a80101-0000-4000-8000-0000000000a1", Version: 2, SiteID: 1,
+		CreatorID: admin.ID, LocationCode: "LINE_A1", Category: "3S", VisibilityClass: "SITE_PUBLIC",
+		Status: StatusOpen.String(), CauseStatus: CauseStatusConfirmed, CreatedAt: time.Now(),
+	}
+	store.history[1] = []db.ListIssueResponsibilityHistoryRow{
+		{ID: 1, Action: auditActionAssignResponsibility, OldValue: []byte(`{"assigned_team_id":null,"assignee_id":null}`), NewValue: []byte(`{"assigned_team_id":5,"assignee_id":10}`), CreatedAt: time.Now()},
+		{ID: 2, Action: auditActionAssignResponsibility, OldValue: []byte(`{"assigned_team_id":5,"assignee_id":10}`), NewValue: []byte(`{"assigned_team_id":6,"assignee_id":null}`), CreatedAt: time.Now()},
+		{ID: 3, Action: auditActionAssignResponsibility, OldValue: []byte(`{"asset_id":7,"assigned_team_id":6,"assignee_id":null}`), NewValue: []byte(`{"asset_id":8,"assigned_team_id":6,"assignee_id":null}`), CreatedAt: time.Now()},
+		{ID: 4, Action: auditActionVerifyCause, OldValue: []byte(`{"cause_status":"UNVERIFIED"}`), NewValue: []byte(`{"cause_status":"CONFIRMED"}`), CreatedAt: time.Now()},
+	}
+
+	tempDir := t.TempDir()
+	storageMgr, _ := storage.NewManager(tempDir)
+	svc := NewService(store, storageMgr, make(chan struct{}, 1))
+
+	resp, err := svc.GetIssueByID(ctxFor(admin), 1)
+	if err != nil {
+		t.Fatalf("GetIssueByID error: %v", err)
+	}
+	actions := make([]string, 0, len(resp.ResponsibilityHistory))
+	for _, entry := range resp.ResponsibilityHistory {
+		actions = append(actions, entry.Action)
+	}
+	want := []string{HistoryActionAssign, HistoryActionTransfer, HistoryActionOther, HistoryActionCauseVerify}
+	if fmt.Sprint(actions) != fmt.Sprint(want) {
+		t.Fatalf("history actions = %v, want %v", actions, want)
+	}
+	if got := resp.ResponsibilityHistory[3].NewValue; string(got) != `{"cause_status":"CONFIRMED"}` {
+		t.Fatalf("cause verification payload not preserved: %s", got)
 	}
 }

@@ -47,6 +47,23 @@ type TagReportItem struct {
 	Count    int64  `json:"count"`
 }
 
+// TeamKPI is the site-scoped processing KPI for one team.
+type TeamKPI struct {
+	TeamID              int64  `json:"team_id"`
+	TeamName            string `json:"team_name"`
+	AssignedCount       int64  `json:"assigned_count"`
+	OpenCount           int64  `json:"open_count"`
+	OverdueCount        int64  `json:"overdue_count"`
+	ClosedCount         int64  `json:"closed_count"`
+	ConfirmedCauseCount int64  `json:"confirmed_cause_count"`
+}
+
+// ExportTeamFilter contains optional team filters for issue exports.
+type ExportTeamFilter struct {
+	AssignedTeamID *int64
+	MineTeam       *bool
+}
+
 // SummaryResponse formats the complete aggregation payload for ReportsPage.
 type SummaryResponse struct {
 	KPI        KPISummary              `json:"kpi"`
@@ -62,12 +79,14 @@ type Store interface {
 	GetIssueTrends(ctx context.Context, arg db.GetIssueTrendsParams) ([]db.GetIssueTrendsRow, error)
 	GetTopViolatedTags(ctx context.Context, arg db.GetTopViolatedTagsParams) ([]db.GetTopViolatedTagsRow, error)
 	ListIssuesForExport(ctx context.Context, arg db.ListIssuesForExportParams) ([]db.ListIssuesForExportRow, error)
+	ListTeamKPIs(ctx context.Context, arg db.ListTeamKPIsParams) ([]db.ListTeamKPIsRow, error)
 }
 
 // Service provides reporting and analytics aggregations.
 type Service interface {
 	GetSummary(ctx context.Context, days int, locationCode string) (*SummaryResponse, error)
-	GetExportData(ctx context.Context, status, category, locationCode string) ([]db.ListIssuesForExportRow, error)
+	GetExportData(ctx context.Context, status, category, locationCode string, teamFilters ...ExportTeamFilter) ([]db.ListIssuesForExportRow, error)
+	GetTeamKPIs(ctx context.Context, days int) ([]TeamKPI, error)
 }
 
 // ServiceImpl implements Service interface.
@@ -185,7 +204,7 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 
 // GetExportData fetches at most maxExportRows issues visible to the authenticated user.
 // The SQL query applies the same site and visibility policy as issue listing; the service cap protects alternate stores.
-func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locationCode string) ([]db.ListIssuesForExportRow, error) {
+func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locationCode string, teamFilters ...ExportTeamFilter) ([]db.ListIssuesForExportRow, error) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok || user.ID <= 0 || user.SiteID <= 0 {
 		return nil, fmt.Errorf("authenticated user with site scope required for export")
@@ -201,14 +220,21 @@ func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locat
 	if locationCode != "" {
 		locParam = sql.NullString{String: locationCode, Valid: true}
 	}
+	var assignedTeamID sql.NullInt64
+	var mineTeam sql.NullBool
+	if len(teamFilters) > 0 {
+		if teamFilters[0].AssignedTeamID != nil {
+			assignedTeamID = sql.NullInt64{Int64: *teamFilters[0].AssignedTeamID, Valid: true}
+		}
+		if teamFilters[0].MineTeam != nil {
+			mineTeam = sql.NullBool{Bool: *teamFilters[0].MineTeam, Valid: true}
+		}
+	}
 
 	rows, err := s.store.ListIssuesForExport(ctx, db.ListIssuesForExportParams{
-		Status:       statusParam,
-		Category:     catParam,
-		LocationCode: locParam,
-		SiteID:       user.SiteID,
-		UserID:       user.ID,
-		Role:         user.Role,
+		Status: statusParam, Category: catParam, LocationCode: locParam,
+		AssignedTeamID: assignedTeamID, MineTeam: mineTeam,
+		SiteID: user.SiteID, UserID: user.ID, Role: user.Role,
 	})
 	if err != nil {
 		return nil, err
@@ -217,4 +243,28 @@ func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locat
 		rows = rows[:maxExportRows]
 	}
 	return rows, nil
+}
+
+// GetTeamKPIs returns site-scoped team processing metrics for the requested window.
+func (s *ServiceImpl) GetTeamKPIs(ctx context.Context, days int) ([]TeamKPI, error) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok || user.ID <= 0 || user.SiteID <= 0 {
+		return nil, fmt.Errorf("authenticated user with site scope required for team report")
+	}
+	if days < 1 || days > 90 {
+		days = 14
+	}
+	rows, err := s.store.ListTeamKPIs(ctx, db.ListTeamKPIsParams{Days: int32(days), SiteID: user.SiteID}) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("list team kpis: %w", err)
+	}
+	out := make([]TeamKPI, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, TeamKPI{
+			TeamID: row.TeamID, TeamName: row.TeamName, AssignedCount: row.AssignedCount,
+			OpenCount: row.OpenCount, OverdueCount: row.OverdueCount,
+			ClosedCount: row.ClosedCount, ConfirmedCauseCount: row.ConfirmedCauseCount,
+		})
+	}
+	return out, nil
 }

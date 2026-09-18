@@ -16,17 +16,105 @@ import (
 
 // SyncIssueRequest parameters for POST /api/issues/sync.
 type SyncIssueRequest struct {
-	ClientUUID   string
-	Category     string
-	CauseType    string
-	LocationCode string
-	Tags         []string
-	Description  string
-	PhotoBefore  *multipart.FileHeader
-	PhotoDetail  *multipart.FileHeader
+	ClientUUID     string
+	Category       string
+	CauseType      string
+	LocationCode   string
+	Tags           []string
+	Description    string
+	AssetID        *int64
+	AssignedTeamID *int64
+	AssigneeID     *int64
+	PhotoBefore    *multipart.FileHeader
+	PhotoDetail    *multipart.FileHeader
 }
 
-// SyncIssue handles creating or idempotently returning an issue.
+// resolveCreateResponsibility validates optional asset/team/assignee references and applies the
+// asset default team suggestion. Explicit team or assignee selection requires issue:assign; the
+// asset's configured default team is a validated suggestion and needs no extra capability.
+func (s *ServiceImpl) resolveCreateResponsibility(ctx context.Context, req SyncIssueRequest, currentUser db.User) (sql.NullInt64, sql.NullInt64, sql.NullInt64, error) {
+	assetID := nullInt64(req.AssetID)
+	teamID := nullInt64(req.AssignedTeamID)
+	if req.AssetID != nil {
+		asset, err := s.loadSiteAsset(ctx, currentUser, *req.AssetID)
+		if err != nil {
+			return assetID, teamID, sql.NullInt64{}, err
+		}
+		if req.AssignedTeamID != nil && asset.DefaultTeamID.Valid && asset.DefaultTeamID.Int64 != *req.AssignedTeamID {
+			return assetID, teamID, sql.NullInt64{}, fmt.Errorf("%w: asset default team does not match requested team", ErrInvalidResponsibility)
+		}
+		if !teamID.Valid && asset.DefaultTeamID.Valid {
+			teamID = asset.DefaultTeamID
+		}
+	}
+	if (req.AssignedTeamID != nil || req.AssigneeID != nil) && !auth.HasPermission(ctx, auth.PermissionIssueAssign) {
+		return assetID, teamID, sql.NullInt64{}, ErrPermissionDenied
+	}
+	if teamID.Valid {
+		team, err := s.loadSiteTeam(ctx, currentUser, teamID.Int64)
+		if err != nil {
+			return assetID, teamID, sql.NullInt64{}, err
+		}
+		if !team.IsActive {
+			return assetID, teamID, sql.NullInt64{}, fmt.Errorf("%w: team is inactive", ErrInvalidResponsibility)
+		}
+	}
+	assigneeID := nullInt64(req.AssigneeID)
+	if assigneeID.Valid {
+		if _, err := s.loadSiteUser(ctx, currentUser, assigneeID.Int64); err != nil {
+			return assetID, teamID, assigneeID, err
+		}
+		if !teamID.Valid {
+			return assetID, teamID, assigneeID, fmt.Errorf("%w: assignee requires an assigned team", ErrInvalidResponsibility)
+		}
+		if _, err := s.store.GetTeamMembership(ctx, db.GetTeamMembershipParams{TeamID: teamID.Int64, UserID: assigneeID.Int64}); err != nil {
+			return assetID, teamID, assigneeID, fmt.Errorf("%w: assignee is not a member of the assigned team", ErrInvalidResponsibility)
+		}
+	}
+	return assetID, teamID, assigneeID, nil
+}
+
+// loadSiteAsset loads an asset that belongs to the current user's site.
+func (s *ServiceImpl) loadSiteAsset(ctx context.Context, currentUser db.User, id int64) (db.Asset, error) {
+	asset, err := s.store.GetAssetByID(ctx, id)
+	if err != nil {
+		return db.Asset{}, fmt.Errorf("%w: unknown asset", ErrInvalidResponsibility)
+	}
+	if !asset.IsActive {
+		return db.Asset{}, fmt.Errorf("%w: asset is inactive", ErrInvalidResponsibility)
+	}
+	if currentUser.SiteID != 0 && asset.SiteID != currentUser.SiteID {
+		return db.Asset{}, fmt.Errorf("%w: asset belongs to another site", ErrInvalidResponsibility)
+	}
+	return asset, nil
+}
+
+// loadSiteTeam loads a team that belongs to the current user's site.
+func (s *ServiceImpl) loadSiteTeam(ctx context.Context, currentUser db.User, id int64) (db.Team, error) {
+	team, err := s.store.GetTeamByID(ctx, id)
+	if err != nil {
+		return db.Team{}, fmt.Errorf("%w: unknown team", ErrInvalidResponsibility)
+	}
+	if currentUser.SiteID != 0 && team.SiteID != currentUser.SiteID {
+		return db.Team{}, fmt.Errorf("%w: team belongs to another site", ErrInvalidResponsibility)
+	}
+	return team, nil
+}
+
+// loadSiteUser loads an active user that belongs to the current user's site.
+func (s *ServiceImpl) loadSiteUser(ctx context.Context, currentUser db.User, id int64) (db.User, error) {
+	user, err := s.store.GetUserByID(ctx, id)
+	if err != nil {
+		return db.User{}, fmt.Errorf("%w: unknown assignee", ErrInvalidResponsibility)
+	}
+	if !user.IsActive {
+		return db.User{}, fmt.Errorf("%w: assignee is inactive", ErrInvalidResponsibility)
+	}
+	if currentUser.SiteID != 0 && user.SiteID != currentUser.SiteID {
+		return db.User{}, fmt.Errorf("%w: assignee belongs to another site", ErrInvalidResponsibility)
+	}
+	return user, nil
+}
 
 // SyncIssue handles creating or idempotently returning an issue.
 func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, currentUser db.User) (*Response, bool, error) {
@@ -35,10 +123,16 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 		resp, gErr := s.GetIssueByID(ctx, existing.ID)
 		return resp, false, gErr
 	}
-
 	atomicStore, ok := s.store.(Atomic)
 	if !ok {
 		return nil, false, errors.New("issue store does not support atomic creation")
+	}
+	if _, err := s.store.GetLocationByCode(ctx, req.LocationCode); err != nil {
+		return nil, false, fmt.Errorf("%w: unknown location", ErrInvalidResponsibility)
+	}
+	assetID, teamID, assigneeID, respErr := s.resolveCreateResponsibility(ctx, req, currentUser)
+	if respErr != nil {
+		return nil, false, respErr
 	}
 	beforeBasename, detailBasename, err := s.saveSyncPhotos(req)
 	if err != nil {
@@ -80,6 +174,7 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 		ClientUuid: req.ClientUUID, SiteID: currentUser.SiteID, CreatorID: currentUser.ID,
 		Category: req.Category, CauseType: NormalizeCauseType(req.CauseType, req.Category), VisibilityClass: visibilityForCategory(req.Category),
 		LocationCode: req.LocationCode, Description: descVal, PhotoBefore: beforeBasename, PhotoDetail: detailBasename,
+		AssetID: assetID, AssignedTeamID: teamID, AssigneeID: assigneeID,
 	}, req.Tags, buildOutbox, func(issueID int64) []db.InsertScoreLogParams {
 		score.IssueID = issueID
 		return []db.InsertScoreLogParams{score}
@@ -126,9 +221,6 @@ func (s *ServiceImpl) saveSyncPhotos(req SyncIssueRequest) (string, sql.NullStri
 	return beforeBasename, detailBasename, nil
 }
 
-// recordConfiguredScore awards a score from the admin-configured rule; a missing
-// rule falls back to the safe default and a sign-violating rule awards nothing.
-
 // ResolveIssueRequest parameters for POST /api/issues/{id}/resolve.
 type ResolveIssueRequest struct {
 	IssueID            int64
@@ -139,12 +231,13 @@ type ResolveIssueRequest struct {
 }
 
 // ResolveIssue handles resolving an open issue with after photo.
-
-// ResolveIssue handles resolving an open issue with after photo.
 func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest, currentUser db.User) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
 	if err != nil {
 		return nil, ErrIssueNotFound
+	}
+	if !s.canResolveIssue(ctx, currentUser, issue) {
+		return nil, ErrPermissionDenied
 	}
 	if issue.Status != StatusOpen.String() {
 		return nil, fmt.Errorf("%w: current status %s", ErrIssueConflict, issue.Status)
@@ -181,15 +274,11 @@ func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest,
 }
 
 // CloseIssueRequest parameters for POST /api/issues/{id}/close.
-
-// CloseIssueRequest parameters for POST /api/issues/{id}/close.
 type CloseIssueRequest struct {
 	IssueID         int64
 	ScoreRating     int16
 	ExpectedVersion *int32
 }
-
-// canCloseIssue applies permission scope plus creator/location/category constraints.
 
 // canCloseIssue applies permission scope plus creator/location/category constraints.
 func (s *ServiceImpl) canCloseIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
@@ -214,8 +303,6 @@ func (s *ServiceImpl) canReviewIssue(ctx context.Context, currentUser db.User, i
 }
 
 // CloseIssue handles closing and scoring a resolved issue.
-
-// CloseIssue handles closing and scoring a resolved issue.
 func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, currentUser db.User) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
 	if err != nil {
@@ -226,6 +313,10 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 	}
 
 	if !s.canCloseIssue(ctx, currentUser, issue) {
+		return nil, ErrPermissionDenied
+	}
+	// Approving one's own fix is never allowed: resolving and approving stay separate duties.
+	if issue.ResolverID.Valid && issue.ResolverID.Int64 == currentUser.ID {
 		return nil, ErrPermissionDenied
 	}
 
@@ -261,8 +352,6 @@ type ReopenIssueRequest struct {
 }
 
 // ReopenIssue handles rejecting review and reopening issue.
-
-// ReopenIssue handles rejecting review and reopening issue.
 func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, currentUser db.User) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
 	if err != nil {
@@ -296,15 +385,11 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 }
 
 // InvalidateIssueRequest parameters for POST /api/issues/{id}/invalid.
-
-// InvalidateIssueRequest parameters for POST /api/issues/{id}/invalid.
 type InvalidateIssueRequest struct {
 	IssueID         int64
 	Reason          string
 	ExpectedVersion *int32
 }
-
-// InvalidateIssue handles discarding invalid issues.
 
 // InvalidateIssue handles discarding invalid issues.
 func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRequest, currentUser db.User) (*Response, error) {
@@ -362,19 +447,26 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 }
 
 // PatchIssueRequest parameters for PATCH /api/issues/{id}.
-
-// PatchIssueRequest parameters for PATCH /api/issues/{id}.
+// The double pointers distinguish "absent" (nil) from "explicit null" (non-nil pointer to nil),
+// so a client can clear a responsibility link on purpose.
 type PatchIssueRequest struct {
-	IssueID      int64
-	Category     *string
-	CauseType    *string
-	LocationCode *string
-	Description  *string
-	Tags         []string
-	PhotoBefore  *multipart.FileHeader
-	PhotoDetail  *multipart.FileHeader
+	IssueID         int64
+	Category        *string
+	CauseType       *string
+	LocationCode    *string
+	Description     *string
+	Tags            []string
+	PhotoBefore     *multipart.FileHeader
+	PhotoDetail     *multipart.FileHeader
+	AssetID         **int64
+	AssignedTeamID  **int64
+	AssigneeID      **int64
+	CauseTeamID     **int64
+	CauseStatus     **string
+	ExpectedVersion *int32
 }
 
+// canPatchIssue reports whether the user may modify editable issue fields.
 func canPatchIssue(ctx context.Context, currentUser db.User, issue db.Issue) bool {
 	if (currentUser.ID == issue.CreatorID || (issue.ResolverID.Valid && currentUser.ID == issue.ResolverID.Int64)) && auth.HasPermission(ctx, auth.PermissionIssueCloseOwn) {
 		return true
@@ -382,9 +474,7 @@ func canPatchIssue(ctx context.Context, currentUser db.User, issue db.Issue) boo
 	return auth.HasPermission(ctx, auth.PermissionIssueCloseAny)
 }
 
-// PatchIssue handles quick or full edit of an issue.
-
-// PatchIssue handles quick or full edit of an issue.
+// parsePatchParams resolves the editable issue fields and reports a 6S escalation.
 func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullString, bool, error) {
 	var catVal sql.NullString
 	var causeVal sql.NullString
@@ -433,9 +523,7 @@ func (s *ServiceImpl) parsePatchParams(req PatchIssueRequest, issue db.Issue) (s
 	return catVal, causeVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, nil
 }
 
-// PatchIssue handles edit of issue properties.
-
-// PatchIssue handles edit of issue properties.
+// PatchIssue handles edit of issue properties with assignment, cause, and concurrency rules.
 func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
 	if err != nil {
@@ -444,38 +532,277 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 	if !canPatchIssue(ctx, currentUser, issue) {
 		return nil, ErrPermissionDenied
 	}
-
-	catVal, causeVal, locVal, descVal, beforeVal, detailVal, escalatedToSafety, parseErr := s.parsePatchParams(req, issue)
-	if parseErr != nil {
-		return nil, parseErr
+	if !hasResponsibilityPatch(req) && req.CauseStatus == nil && req.CauseTeamID == nil {
+		if err := s.applyNonResponsibilityPatch(ctx, req, issue, currentUser); err != nil {
+			return nil, err
+		}
+		return s.GetIssueByID(ctx, issue.ID)
 	}
+	if req.ExpectedVersion == nil {
+		return nil, ErrMissingExpectedVersion
+	}
+	patch, audit, changed, err := s.buildResponsibilityPatch(ctx, req, issue, currentUser)
+	if err != nil {
+		return nil, err
+	}
+	if !changed {
+		return s.GetIssueByID(ctx, issue.ID)
+	}
+	updated, err := s.store.PatchIssueWithAuditAtomic(ctx, patch, patchTags(req), audit)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: stale version", ErrIssueConflict)
+		}
+		return nil, fmt.Errorf("failed to patch issue: %w", err)
+	}
+	if escalatedToSafety(issue, patch) {
+		s.queueNotification(ctx, issue.ID, "SAFETY_ESCALATED", "6S", updated.LocationCode, currentUser.FullName)
+	}
+	res, err := s.GetIssueByID(ctx, updated.ID)
+	if err == nil {
+		s.broadcast(Event{Type: EventIssueUpdated, IssueID: updated.ID})
+	}
+	return res, err
+}
 
+// hasResponsibilityPatch reports whether the request mutates assignment fields.
+func hasResponsibilityPatch(req PatchIssueRequest) bool {
+	return req.AssetID != nil || req.AssignedTeamID != nil || req.AssigneeID != nil
+}
+
+// patchTags returns the replacement tag set, or nil when the request left tags untouched.
+func patchTags(req PatchIssueRequest) []string {
+	if len(req.Tags) == 0 {
+		return nil
+	}
+	return req.Tags
+}
+
+// escalatedToSafety reports whether this patch promotes the issue to the 6S category.
+func escalatedToSafety(issue db.Issue, patch db.PatchIssueParams) bool {
+	return patch.Category.Valid && patch.Category.String == Category6S.String() && issue.Category != Category6S.String()
+}
+
+// applyNonResponsibilityPatch handles legacy field edits that carry no responsibility semantics.
+func (s *ServiceImpl) applyNonResponsibilityPatch(ctx context.Context, req PatchIssueRequest, issue db.Issue, currentUser db.User) error {
+	catVal, causeVal, locVal, descVal, beforeVal, detailVal, escalated, parseErr := s.parsePatchParams(req, issue)
+	if parseErr != nil {
+		return parseErr
+	}
+	if locVal.Valid {
+		if _, err := s.store.GetLocationByCode(ctx, locVal.String); err != nil {
+			return fmt.Errorf("%w: unknown location", ErrInvalidResponsibility)
+		}
+	}
 	patch := db.PatchIssueParams{
-		ID:           issue.ID,
-		Category:     catVal,
-		CauseType:    causeVal,
-		LocationCode: locVal,
-		Description:  descVal,
-		PhotoBefore:  beforeVal,
-		PhotoDetail:  detailVal,
+		ID: issue.ID, Category: catVal, CauseType: causeVal, LocationCode: locVal,
+		Description: descVal, PhotoBefore: beforeVal, PhotoDetail: detailVal,
+		ExpectedVersion: nullInt32(req.ExpectedVersion),
 	}
 	var updated db.Issue
+	var err error
 	if len(req.Tags) > 0 {
 		updated, err = s.store.PatchIssueWithTagsAtomic(ctx, patch, req.Tags)
 	} else {
 		updated, err = s.store.PatchIssue(ctx, patch)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to patch issue: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: stale version", ErrIssueConflict)
+		}
+		return fmt.Errorf("failed to patch issue: %w", err)
 	}
-
-	if escalatedToSafety {
+	if escalated {
 		s.queueNotification(ctx, issue.ID, "SAFETY_ESCALATED", "6S", updated.LocationCode, currentUser.FullName)
 	}
+	return nil
+}
 
-	res, err := s.GetIssueByID(ctx, updated.ID)
-	if err == nil {
-		s.broadcast(Event{Type: EventIssueUpdated, IssueID: updated.ID})
+// buildResponsibilityPatch validates assignment and cause changes and produces the atomic write.
+func (s *ServiceImpl) buildResponsibilityPatch(ctx context.Context, req PatchIssueRequest, issue db.Issue, currentUser db.User) (db.PatchIssueParams, []db.InsertAuditLogParams, bool, error) {
+	patch := db.PatchIssueParams{
+		ID: issue.ID, ExpectedVersion: nullInt32(req.ExpectedVersion),
 	}
-	return res, err
+	before := responsibilitySnapshot(issue)
+	if hasResponsibilityPatch(req) {
+		if !auth.HasPermission(ctx, auth.PermissionIssueAssign) {
+			return patch, nil, false, ErrPermissionDenied
+		}
+		if err := s.applyAssignmentPatch(ctx, req, currentUser, &patch); err != nil {
+			return patch, nil, false, err
+		}
+	}
+	if err := s.applyCausePatch(ctx, req, issue, currentUser, &patch); err != nil {
+		return patch, nil, false, err
+	}
+	if !patch.SetAssetID && !patch.SetAssignedTeamID && !patch.SetAssigneeID && !patch.SetCauseStatus && !patch.SetCauseTeamID {
+		return patch, nil, false, nil
+	}
+	next := db.Issue{
+		ID: issue.ID, AssetID: issue.AssetID, AssignedTeamID: issue.AssignedTeamID,
+		AssigneeID: issue.AssigneeID, CauseTeamID: issue.CauseTeamID, CauseStatus: issue.CauseStatus,
+	}
+	if patch.SetAssetID {
+		next.AssetID = patch.AssetID
+	}
+	if patch.SetAssignedTeamID {
+		next.AssignedTeamID = patch.AssignedTeamID
+	}
+	if patch.SetAssigneeID {
+		next.AssigneeID = patch.AssigneeID
+	}
+	if patch.SetCauseTeamID {
+		next.CauseTeamID = patch.CauseTeamID
+	}
+	if patch.SetCauseStatus {
+		next.CauseStatus = patch.CauseStatus.String
+	}
+	after := responsibilitySnapshot(next)
+	if sameResponsibility(before, after) {
+		return patch, nil, false, nil
+	}
+	audit := []db.InsertAuditLogParams{{
+		UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
+		Action:      auditActionAssignResponsibility,
+		TargetTable: "issues",
+		TargetID:    strconv.FormatInt(issue.ID, 10),
+		OldValue:    mustJSON(before),
+		NewValue:    mustJSON(after),
+	}}
+	if patch.SetCauseStatus || (patch.SetCauseTeamID && next.CauseStatus != "") {
+		audit = append(audit, db.InsertAuditLogParams{
+			UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
+			Action:      auditActionVerifyCause,
+			TargetTable: "issues",
+			TargetID:    strconv.FormatInt(issue.ID, 10),
+			OldValue:    mustJSON(map[string]any{"cause_status": issue.CauseStatus}),
+			NewValue:    mustJSON(map[string]any{"cause_status": next.CauseStatus}),
+		})
+	}
+	return patch, audit, true, nil
+}
+
+// applyAssignmentPatch validates asset, team, and assignee references for the patch.
+func (s *ServiceImpl) applyAssignmentPatch(ctx context.Context, req PatchIssueRequest, currentUser db.User, patch *db.PatchIssueParams) error {
+	if req.AssetID != nil {
+		if *req.AssetID != nil {
+			if _, err := s.loadSiteAsset(ctx, currentUser, **req.AssetID); err != nil {
+				return err
+			}
+		}
+		patch.SetAssetID = true
+		patch.AssetID = nullInt64(*req.AssetID)
+	}
+	if req.AssignedTeamID != nil {
+		if *req.AssignedTeamID != nil {
+			team, err := s.loadSiteTeam(ctx, currentUser, **req.AssignedTeamID)
+			if err != nil {
+				return err
+			}
+			if !team.IsActive {
+				return fmt.Errorf("%w: team is inactive", ErrInvalidResponsibility)
+			}
+		}
+		patch.SetAssignedTeamID = true
+		patch.AssignedTeamID = nullInt64(*req.AssignedTeamID)
+	}
+	if req.AssigneeID != nil {
+		if *req.AssigneeID != nil {
+			if _, err := s.loadSiteUser(ctx, currentUser, **req.AssigneeID); err != nil {
+				return err
+			}
+		}
+		patch.SetAssigneeID = true
+		patch.AssigneeID = nullInt64(*req.AssigneeID)
+	}
+	return nil
+}
+
+// responsibilitySnapshot captures the auditable responsibility state of an issue.
+func responsibilitySnapshot(issue db.Issue) map[string]any {
+	return map[string]any{
+		"asset_id":         nullableInt64(issue.AssetID),
+		"assigned_team_id": nullableInt64(issue.AssignedTeamID),
+		"assignee_id":      nullableInt64(issue.AssigneeID),
+		"cause_team_id":    nullableInt64(issue.CauseTeamID),
+		"cause_status":     issue.CauseStatus,
+	}
+}
+
+// sameResponsibility reports whether two snapshots are equivalent.
+func sameResponsibility(before, after map[string]any) bool {
+	for _, key := range []string{"asset_id", "assigned_team_id", "assignee_id", "cause_team_id", "cause_status"} {
+		if fmt.Sprint(before[key]) != fmt.Sprint(after[key]) {
+			return false
+		}
+	}
+	return true
+}
+
+// nullableInt64 converts a nullable column to a JSON-friendly pointer.
+func nullableInt64(v sql.NullInt64) any {
+	if !v.Valid {
+		return nil
+	}
+	return v.Int64
+}
+
+// mustJSON marshals an audit payload, degrading to a null literal on failure.
+func mustJSON(value any) json.RawMessage {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		log.Printf("failed to marshal audit payload: %v", err)
+		return json.RawMessage(`null`)
+	}
+
+	return encoded
+}
+
+// applyCausePatch validates a cause-status/team mutation and writes it onto the patch.
+// Every cause mutation requires issue:verify_cause; UNVERIFIED and NOT_APPLICABLE clear the
+// cause team, while CONFIRMED requires an active team within the caller's site.
+func (s *ServiceImpl) applyCausePatch(ctx context.Context, req PatchIssueRequest, issue db.Issue, currentUser db.User, patch *db.PatchIssueParams) error {
+	if req.CauseStatus == nil && req.CauseTeamID == nil {
+		return nil
+	}
+	if !auth.HasPermission(ctx, auth.PermissionIssueVerifyCause) {
+		return ErrPermissionDenied
+	}
+	status := issue.CauseStatus
+	if req.CauseStatus != nil {
+		if *req.CauseStatus == nil {
+			status = CauseStatusUnverified
+		} else {
+			status = **req.CauseStatus
+		}
+	}
+	if !isValidCauseStatus(status) {
+		return fmt.Errorf("%w: invalid cause status", ErrInvalidResponsibility)
+	}
+	team := issue.CauseTeamID
+	if req.CauseTeamID != nil {
+		team = nullInt64(*req.CauseTeamID)
+	}
+	if status != CauseStatusConfirmed {
+		if req.CauseTeamID != nil && team.Valid {
+			return fmt.Errorf("%w: cause team requires CONFIRMED status", ErrInvalidResponsibility)
+		}
+		team = sql.NullInt64{}
+	} else {
+		if !team.Valid {
+			return fmt.Errorf("%w: CONFIRMED cause requires a cause team", ErrInvalidResponsibility)
+		}
+		resolved, err := s.loadSiteTeam(ctx, currentUser, team.Int64)
+		if err != nil {
+			return err
+		}
+		if !resolved.IsActive {
+			return fmt.Errorf("%w: cause team is inactive", ErrInvalidResponsibility)
+		}
+	}
+	patch.SetCauseStatus = true
+	patch.CauseStatus = sql.NullString{String: status, Valid: true}
+	patch.SetCauseTeamID = true
+	patch.CauseTeamID = team
+	return nil
 }

@@ -82,7 +82,20 @@ CREATE TABLE IF NOT EXISTS team_locations (
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     PRIMARY KEY (team_id, location_code)
 );
-
+CREATE TABLE IF NOT EXISTS assets (
+    id BIGSERIAL PRIMARY KEY,
+    site_id BIGINT NOT NULL REFERENCES sites(id),
+    location_code VARCHAR(50) NOT NULL REFERENCES locations(code),
+    asset_code VARCHAR(100) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    asset_type VARCHAR(100),
+    default_team_id BIGINT REFERENCES teams(id),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, asset_code)
+);
+CREATE INDEX IF NOT EXISTS idx_assets_location ON assets(location_code);
+CREATE INDEX IF NOT EXISTS idx_assets_default_team ON assets(default_team_id);
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id BIGSERIAL PRIMARY KEY,
@@ -120,6 +133,9 @@ CREATE TABLE IF NOT EXISTS issues (
     cause_type VARCHAR(20) NOT NULL DEFAULT 'CONDITION',
     visibility_class VARCHAR(30) NOT NULL DEFAULT 'SITE_PUBLIC',
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code),
+    asset_id BIGINT REFERENCES assets(id),
+    cause_team_id BIGINT REFERENCES teams(id),
+    cause_status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED' CHECK (cause_status IN ('UNVERIFIED', 'CONFIRMED', 'NOT_APPLICABLE')),
     description TEXT,
     reject_reason TEXT,
     photo_before VARCHAR(500) NOT NULL,

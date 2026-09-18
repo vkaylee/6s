@@ -37,8 +37,6 @@ func (s *ServiceImpl) recordConfiguredScore(ctx context.Context, issueID int64, 
 }
 
 // buildOutboxEntries builds notification outbox rows for both channels with a shared payload.
-
-// buildOutboxEntries builds notification outbox rows for both channels with a shared payload.
 func buildOutboxEntries(issueID int64, eventType, category, locCode, reporterName string) []db.CreateOutboxEntryParams {
 	payload, err := json.Marshal(map[string]any{"issue_id": issueID, "event_type": eventType, "category": category, "location_code": locCode, "reporter_name": reporterName})
 	if err != nil {
