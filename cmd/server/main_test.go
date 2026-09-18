@@ -253,7 +253,11 @@ func scriptedRowsFor(query string, args []driver.Value) ([]string, [][]driver.Va
 	case strings.Contains(query, "FROM users"):
 		return userColumns, [][]driver.Value{userRowFor(args)}
 	case strings.Contains(query, "JOIN users u ON u.id = $1"):
-		return []string{"code"}, [][]driver.Value{{"issue:create"}, {"issue:view_all"}}
+		permissions := [][]driver.Value{{"issue:create"}, {"issue:view_all"}}
+		if len(args) > 0 && (args[0] == int64(1) || args[0] == int64(3)) {
+			permissions = append(permissions, []driver.Value{"reports:view"})
+		}
+		return []string{"code"}, permissions
 	case strings.Contains(query, "FROM ai_configs"):
 		return strings.Split("id, is_enabled, base_url, api_key, default_model, model_translate, model_vision, model_summary, updated_at, updated_by", ", "),
 			[][]driver.Value{{int64(1), true, "https://ai.example/v1", "secret", "model-a", "", "", "", time.Now(), nil}}
@@ -325,6 +329,59 @@ func TestAIConfigRouteRequiresAdminOrSuperadmin(t *testing.T) {
 			r.ServeHTTP(rec, req)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("GET /api/config/ai as %s: want %d, got %d (%s)", tc.name, tc.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+func TestLeaderboardRoutesRequireReportsView(t *testing.T) {
+	cfg := &config.Config{
+		Port:           "8080",
+		DataDir:        t.TempDir(),
+		JWTSecret:      "test-secret-at-least-32-bytes-long-key!",
+		TrustedProxies: "127.0.0.1",
+	}
+	database, err := sql.Open("scripted_sql_driver", "test")
+	if err != nil {
+		t.Fatalf("failed to open scripted db: %v", err)
+	}
+	defer database.Close()
+
+	enc, err := crypto.NewEncryptor("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+	r := setupRouter(database, cfg, enc, nil)
+	tm := auth.NewTokenManager([]byte(cfg.JWTSecret))
+
+	paths := []string{
+		"/api/leaderboard/locations",
+		"/api/leaderboard/reporters",
+		"/api/leaderboard/score-logs?target_type=LOCATION&target_id=LINE_A1",
+	}
+	for _, tc := range []struct {
+		name       string
+		userID     int64
+		wantStatus int
+	}{
+		{name: "user without reports view", userID: 2, wantStatus: http.StatusForbidden},
+		{name: "admin with reports view", userID: 1, wantStatus: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			token, _, err := tm.GenerateAccessToken(tc.userID)
+			if err != nil {
+				t.Fatalf("failed to generate token: %v", err)
+			}
+			for _, path := range paths {
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				rec := httptest.NewRecorder()
+				r.ServeHTTP(rec, req)
+				if tc.wantStatus >= 0 && rec.Code != tc.wantStatus {
+					t.Errorf("GET %s: want %d, got %d (%s)", path, tc.wantStatus, rec.Code, rec.Body.String())
+				}
+				if tc.wantStatus < 0 && rec.Code == http.StatusForbidden {
+					t.Errorf("GET %s: authorized user was denied: %s", path, rec.Body.String())
+				}
 			}
 		})
 	}

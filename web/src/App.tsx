@@ -23,7 +23,7 @@ import { LoginPage } from "./pages/LoginPage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
 import { ScoreLedgerPage } from "./pages/ScoreLedgerPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
-import { useAuthStore } from "./store/authStore.ts";
+import { hasCapability, useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
 import { useRouteHistoryStore } from "./store/routeHistoryStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
@@ -111,6 +111,7 @@ export function App() {
     totalOpen,
     totalOverdue,
   } = dashboard;
+  const canViewHealth = hasCapability(user ?? useAuthStore.getState().user, "reports:view");
   const dashboardErrors =
     dashboardErrorsState &&
     typeof dashboardErrorsState === "object" &&
@@ -246,7 +247,7 @@ export function App() {
           </Route>
           <Route path="/leaderboard/locations/:code">
             {(params) => (
-              <ProtectedRoute>
+              <ProtectedRoute allowedCapability="reports:view">
                 <ScoreLedgerPage
                   targetType="LOCATION"
                   id={params.code}
@@ -260,7 +261,7 @@ export function App() {
           </Route>
           <Route path="/leaderboard/reporters/:id">
             {(params) => (
-              <ProtectedRoute>
+              <ProtectedRoute allowedCapability="reports:view">
                 <ScoreLedgerPage
                   targetType="USER"
                   id={params.id}
@@ -325,183 +326,188 @@ export function App() {
                         </button>
                       </div>
                     )}
-                    <HealthGauge
-                      score={overallScore}
-                      openCount={totalOpen}
-                      overdueCount={totalOverdue}
-                      onClick={() => setActiveFacet("ALL")}
-                    />
+                    {canViewHealth && (
+                      <>
+                        <HealthGauge
+                          score={overallScore}
+                          openCount={totalOpen}
+                          overdueCount={totalOverdue}
+                          onClick={() => setActiveFacet("ALL")}
+                        />
 
-                    {/* Leaderboards widget (Tabs) */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-                        <div className="flex space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLeaderboardTab("LOCATIONS");
-                              setShowAllLeaderboard(false);
-                            }}
-                            className={`text-xs font-black px-3 py-1.5 rounded-lg ${
-                              leaderboardTab === "LOCATIONS"
-                                ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                                : "text-zinc-500"
-                            }`}
-                          >
-                            {t("leaderboard.location_health")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLeaderboardTab("REPORTERS");
-                              setShowAllLeaderboard(false);
-                            }}
-                            className={`text-xs font-black px-3 py-1.5 rounded-lg ${
-                              leaderboardTab === "REPORTERS"
-                                ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                                : "text-zinc-500"
-                            }`}
-                          >
-                            {t("leaderboard.top_reporters")}
-                          </button>
-                        </div>
-                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md">
-                          {leaderboardTab === "LOCATIONS"
-                            ? t("leaderboard.cycle_weekly")
-                            : t("leaderboard.cycle_monthly")}
-                        </span>
-                      </div>
-                      {dashboardErrors.leaderboards && (
-                        <div
-                          role="alert"
-                          className="mt-2 mb-3 flex items-center justify-between gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300 rounded-xl px-3 py-2 text-xs font-bold"
-                        >
-                          <span className="flex-1">{t("app.leaderboard_error_desc")}</span>
-                          <button
-                            type="button"
-                            onClick={retryLeaderboards}
-                            className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold uppercase"
-                          >
-                            {t("common.retry")}
-                          </button>
-                        </div>
-                      )}
-                      {leaderboardTab === "LOCATIONS" ? (
-                        <div className="space-y-2">
-                          {locationHealth.length === 0 ? (
-                            <div className="text-xs text-zinc-400 py-2 text-center">
-                              {t("leaderboard.no_location_data")}
+                        {/* Leaderboards widget (Tabs) */}
+                        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
+                            <div className="flex space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLeaderboardTab("LOCATIONS");
+                                  setShowAllLeaderboard(false);
+                                }}
+                                className={`text-xs font-black px-3 py-1.5 rounded-lg ${
+                                  leaderboardTab === "LOCATIONS"
+                                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                                    : "text-zinc-500"
+                                }`}
+                              >
+                                {t("leaderboard.location_health")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLeaderboardTab("REPORTERS");
+                                  setShowAllLeaderboard(false);
+                                }}
+                                className={`text-xs font-black px-3 py-1.5 rounded-lg ${
+                                  leaderboardTab === "REPORTERS"
+                                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                                    : "text-zinc-500"
+                                }`}
+                              >
+                                {t("leaderboard.top_reporters")}
+                              </button>
                             </div>
-                          ) : (
-                            (showAllLeaderboard ? locationHealth : locationHealth.slice(0, 3)).map(
-                              (loc) => (
-                                <Link
-                                  key={loc.location_code}
-                                  href={`/leaderboard/locations/${encodeURIComponent(loc.location_code)}`}
-                                  className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
-                                >
-                                  <div className="flex items-center space-x-2 min-w-0">
-                                    <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 truncate">
-                                      {resolveLocationNameByCode(
-                                        locations,
-                                        loc.location_code,
-                                        loc.location_name,
-                                        locale,
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md">
+                              {leaderboardTab === "LOCATIONS"
+                                ? t("leaderboard.cycle_weekly")
+                                : t("leaderboard.cycle_monthly")}
+                            </span>
+                          </div>
+                          {dashboardErrors.leaderboards && (
+                            <div
+                              role="alert"
+                              className="mt-2 mb-3 flex items-center justify-between gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300 rounded-xl px-3 py-2 text-xs font-bold"
+                            >
+                              <span className="flex-1">{t("app.leaderboard_error_desc")}</span>
+                              <button
+                                type="button"
+                                onClick={retryLeaderboards}
+                                className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold uppercase"
+                              >
+                                {t("common.retry")}
+                              </button>
+                            </div>
+                          )}
+                          {leaderboardTab === "LOCATIONS" ? (
+                            <div className="space-y-2">
+                              {locationHealth.length === 0 ? (
+                                <div className="text-xs text-zinc-400 py-2 text-center">
+                                  {t("leaderboard.no_location_data")}
+                                </div>
+                              ) : (
+                                (showAllLeaderboard
+                                  ? locationHealth
+                                  : locationHealth.slice(0, 3)
+                                ).map((loc) => (
+                                  <Link
+                                    key={loc.location_code}
+                                    href={`/leaderboard/locations/${encodeURIComponent(loc.location_code)}`}
+                                    className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                                  >
+                                    <div className="flex items-center space-x-2 min-w-0">
+                                      <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 truncate">
+                                        {resolveLocationNameByCode(
+                                          locations,
+                                          loc.location_code,
+                                          loc.location_name,
+                                          locale,
+                                        )}
+                                      </span>
+                                      {loc.overdue_count > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse shrink-0">
+                                          {loc.overdue_count}{" "}
+                                          {t("health_gauge.overdue_count").split(":")[0]}
+                                        </span>
                                       )}
-                                    </span>
-                                    {loc.overdue_count > 0 && (
-                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse shrink-0">
-                                        {loc.overdue_count}{" "}
-                                        {t("health_gauge.overdue_count").split(":")[0]}
+                                      {loc.open_count > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
+                                          {loc.open_count} {t("status.OPEN")}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="font-black text-blue-600 dark:text-blue-400">
+                                        {loc.health_score} {t("leaderboard.points_unit")}
                                       </span>
-                                    )}
-                                    {loc.open_count > 0 && (
-                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
-                                        {loc.open_count} {t("status.OPEN")}
+                                      <span className="text-[10px] text-zinc-400 font-medium group-hover:text-zinc-600">
+                                        →
                                       </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className="font-black text-blue-600 dark:text-blue-400">
-                                      {loc.health_score} {t("leaderboard.points_unit")}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-400 font-medium group-hover:text-zinc-600">
-                                      →
-                                    </span>
-                                  </div>
-                                </Link>
-                              ),
-                            )
-                          )}
-                          {locationHealth.length > 3 && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAllLeaderboard((prev) => !prev)}
-                              className="w-full text-center py-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                            >
-                              {showAllLeaderboard
-                                ? t("common.collapse")
-                                : t("leaderboard.view_all").replace(
-                                    "{count}",
-                                    String(locationHealth.length),
-                                  )}
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {reporters.length === 0 ? (
-                            <div className="text-xs text-zinc-400 py-2 text-center">
-                              {t("leaderboard.no_reporter_data")}
+                                    </div>
+                                  </Link>
+                                ))
+                              )}
+                              {locationHealth.length > 3 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAllLeaderboard((prev) => !prev)}
+                                  className="w-full text-center py-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  {showAllLeaderboard
+                                    ? t("common.collapse")
+                                    : t("leaderboard.view_all").replace(
+                                        "{count}",
+                                        String(locationHealth.length),
+                                      )}
+                                </button>
+                              )}
                             </div>
                           ) : (
-                            (showAllLeaderboard ? reporters : reporters.slice(0, 3)).map(
-                              (rep, idx) => (
-                                <Link
-                                  key={rep.user_id}
-                                  href={`/leaderboard/reporters/${encodeURIComponent(String(rep.user_id))}`}
-                                  className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                            <div className="space-y-2">
+                              {reporters.length === 0 ? (
+                                <div className="text-xs text-zinc-400 py-2 text-center">
+                                  {t("leaderboard.no_reporter_data")}
+                                </div>
+                              ) : (
+                                (showAllLeaderboard ? reporters : reporters.slice(0, 3)).map(
+                                  (rep, idx) => (
+                                    <Link
+                                      key={rep.user_id}
+                                      href={`/leaderboard/reporters/${encodeURIComponent(String(rep.user_id))}`}
+                                      className="w-full flex items-center justify-between text-xs p-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                                    >
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-amber-600">
+                                          {idx === 0
+                                            ? "🥇"
+                                            : idx === 1
+                                              ? "🥈"
+                                              : idx === 2
+                                                ? "🥉"
+                                                : `#${idx + 1}`}{" "}
+                                          {rep.full_name}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-400 font-medium">
+                                          (🔍 {t("leaderboard.view_history")})
+                                        </span>
+                                      </div>
+                                      <span className="font-black text-amber-600">
+                                        {rep.points} {t("leaderboard.points_unit")} (
+                                        {rep.valid_count} {t("leaderboard.issues_unit")})
+                                      </span>
+                                    </Link>
+                                  ),
+                                )
+                              )}
+                              {reporters.length > 3 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAllLeaderboard((prev) => !prev)}
+                                  className="w-full text-center py-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline"
                                 >
-                                  <div className="flex items-center space-x-2">
-                                    <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-amber-600">
-                                      {idx === 0
-                                        ? "🥇"
-                                        : idx === 1
-                                          ? "🥈"
-                                          : idx === 2
-                                            ? "🥉"
-                                            : `#${idx + 1}`}{" "}
-                                      {rep.full_name}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-400 font-medium">
-                                      (🔍 {t("leaderboard.view_history")})
-                                    </span>
-                                  </div>
-                                  <span className="font-black text-amber-600">
-                                    {rep.points} {t("leaderboard.points_unit")} ({rep.valid_count}{" "}
-                                    {t("leaderboard.issues_unit")})
-                                  </span>
-                                </Link>
-                              ),
-                            )
-                          )}
-                          {reporters.length > 3 && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAllLeaderboard((prev) => !prev)}
-                              className="w-full text-center py-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline"
-                            >
-                              {showAllLeaderboard
-                                ? t("common.collapse")
-                                : t("leaderboard.view_all").replace(
-                                    "{count}",
-                                    String(reporters.length),
-                                  )}
-                            </button>
+                                  {showAllLeaderboard
+                                    ? t("common.collapse")
+                                    : t("leaderboard.view_all").replace(
+                                        "{count}",
+                                        String(reporters.length),
+                                      )}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
+                      </>
+                    )}
 
                     {/* Quick Facets Bar */}
                     <QuickFacets
@@ -772,7 +778,7 @@ export function App() {
                     resolveItem={conflictItem}
                     serverVersion={2}
                     onOverwrite={() => {
-                      modalDialog.alert(t("conflict.overwrite_requested"));
+                      modalDialog.success(t("conflict.overwrite_requested"));
                       setConflictItem(null);
                     }}
                     onDiscard={() => {

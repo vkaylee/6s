@@ -3,7 +3,7 @@ import { apiClient } from "../api/client.ts";
 import type { Tag } from "../api/generated/index.ts";
 import type { FilterState } from "../components/FilterDrawer.tsx";
 import type { FacetKey } from "../components/QuickFacets.tsx";
-import type { UserProfile } from "../store/authStore.ts";
+import { hasCapability, type UserProfile } from "../store/authStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
   IssueCategory,
@@ -107,6 +107,7 @@ export function useDashboardData({
   const issuesRequest = useRef(0);
   const masterDataRequest = useRef(0);
   const leaderboardsRequest = useRef(0);
+  const canViewHealth = hasCapability(user, "reports:view");
 
   const openIssueById = async (issueId: number) => {
     const existing = issues.find((issue) => issue.id === issueId);
@@ -242,6 +243,13 @@ export function useDashboardData({
   };
 
   const loadLeaderboards = async () => {
+    if (!canViewHealth) {
+      ++leaderboardsRequest.current;
+      setLocationHealth([]);
+      setReporters([]);
+      setDashboardErrors((prev) => ({ ...prev, leaderboards: false }));
+      return;
+    }
     const requestId = ++leaderboardsRequest.current;
     setDashboardErrors((prev) => ({ ...prev, leaderboards: false }));
     try {
@@ -321,6 +329,12 @@ export function useDashboardData({
       }
     }
   }, [locale, user, selectedIssue]);
+  useEffect(() => {
+    if (!canViewHealth) {
+      setLocationHealth([]);
+      setReporters([]);
+    }
+  }, [canViewHealth]);
 
   const filteredIssues = issues.filter((issue) => {
     if (activeFacet === "MY_ISSUES" && issue.creator_id !== user?.id) return false;

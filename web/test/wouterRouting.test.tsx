@@ -41,6 +41,7 @@ describe("Wouter UX & Routing Verification", () => {
         username: "operator_a",
         full_name: "Operator A",
         role: UserRole.LINE_LEADER,
+        capabilities: ["reports:view"],
       },
       accessToken: "valid-token",
       isOfflineGrace: false,
@@ -199,6 +200,53 @@ describe("Wouter UX & Routing Verification", () => {
       </Router>,
     );
     expect(html).toContain("LINE_A1");
+  });
+
+  it("hides health gauge, leaderboard and score ledger from users without reports:view", () => {
+    useAuthStore.setState({
+      user: {
+        id: 2,
+        username: "worker",
+        full_name: "Worker",
+        role: UserRole.USER,
+        capabilities: [],
+      },
+      accessToken: "worker-token",
+    });
+
+    const dashboardHtml = renderToString(
+      <WithMockState
+        values={[
+          [], // issues
+          [], // locations
+          [], // tags
+          [
+            {
+              location_code: "LINE_A1",
+              location_name: "Chuyền may A1",
+              health_score: 95,
+              open_count: 1,
+              overdue_count: 0,
+            },
+          ], // locationHealth
+          [], // reporters
+          "LOCATIONS", // leaderboardTab
+        ]}
+      >
+        <Router ssrPath="/">
+          <App />
+        </Router>
+      </WithMockState>,
+    );
+    expect(dashboardHtml).not.toContain("Sức khỏe 6S xưởng");
+    expect(dashboardHtml).not.toContain("Chuyền may A1");
+
+    const ledgerHtml = renderToString(
+      <Router ssrPath="/leaderboard/locations/LINE_A1">
+        <App />
+      </Router>,
+    );
+    expect(ledgerHtml).toContain("Không có quyền truy cập");
   });
 
   it("renders populated issues and leaderboard items in App main feed", () => {
