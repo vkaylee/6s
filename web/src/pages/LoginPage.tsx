@@ -1,3 +1,4 @@
+import { UserRoundPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { apiClient } from "../api/client.ts";
@@ -119,30 +120,38 @@ export function LoginPage() {
             )}
 
             {rememberedUser ? (
-              <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-2xl">
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center shrink-0 text-base uppercase">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-zinc-700/80 dark:bg-zinc-800/60">
+                <div className="flex items-center gap-3 p-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600/10 text-base font-bold uppercase text-blue-600 dark:text-blue-400">
                     {rememberedUser.full_name?.[0] || rememberedUser.username[0]}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                    <div className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                      {t("auth.welcome_back")}
+                    </div>
+                    <div className="break-words text-sm font-bold text-zinc-900 dark:text-zinc-100">
                       {rememberedUser.full_name || rememberedUser.username}
                     </div>
-                    <div className="text-xs text-zinc-500 truncate">{`@${rememberedUser.username}`}</div>
+                    <div className="break-all text-xs text-zinc-500">
+                      @{rememberedUser.username}
+                    </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearRememberedUser();
-                    setRememberedUser(null);
-                    setUsername("");
-                    setPassword("");
-                  }}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 p-2 shrink-0"
-                >
-                  {t("auth.switch_account")}
-                </button>
+                <div className="border-t border-zinc-200 p-3 dark:border-zinc-700/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearRememberedUser();
+                      setRememberedUser(null);
+                      setUsername("");
+                      setPassword("");
+                    }}
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-600 dark:border-blue-900 dark:bg-zinc-900 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                  >
+                    <UserRoundPlus aria-hidden="true" className="h-4 w-4" />
+                    <span>{t("auth.switch_account")}</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div>
