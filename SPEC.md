@@ -47,9 +47,9 @@ Hệ thống webapp mobile-first hỗ trợ nhân viên nhà xưởng ghi nhận
 //   db.SetConnMaxIdleTime(5 * time.Minute)
 ```
 ### 3.2. Quản lý Migration & Rollback (Tuân thủ .agent/rules/migration-and-rollback.md)
-- Sử dụng migration embedded trong `internal/database/migrations/`; runtime hiện chạy các file `.up.sql` theo thứ tự.
-- Mọi migration mới phải có `.down.sql` tương ứng để rollback vận hành thủ công; runtime hiện chưa có migration version table hoặc rollback command.
-- Khi cần rollback tự động/versioned: thay thế runner hiện tại bằng migration library có tracking version trước khi triển khai production.
+- Sử dụng migration embedded trong `internal/database/migrations/`; runtime chạy các file `.up.sql` theo thứ tự và ghi nhận `schema_migrations(version, name, checksum, applied_at)`.
+- Migration đã áp dụng không được sửa nội dung; checksum khác biệt làm startup thất bại. Mọi thay đổi tiếp theo phải dùng migration với số phiên bản mới.
+- Mọi migration mới phải có `.down.sql` tương ứng để rollback vận hành thủ công; runtime chưa tự động rollback.
 - **Nguyên tắc bắt buộc**: Mỗi migration file `.up.sql` luôn đi kèm file `.down.sql` có khả năng rollback hoàn toàn.
 - **Mã hóa dữ liệu nhạy cảm at-rest**: Các cột credential (`ad_configs.bind_password`, `notification_configs.wxpusher_app_token`, `notification_configs.lan_webhook_url`) phải được mã hóa bằng thuật toán `AES-256-GCM` trước khi lưu vào PostgreSQL, sử dụng master key đọc từ biến môi trường `APP_ENCRYPTION_KEY` (32 bytes base64). Tuyệt đối không lưu plaintext credential trong database.
 ### 3.3. Chi tiết Schema DDL
@@ -141,6 +141,9 @@ CREATE TABLE IF NOT EXISTS issues (
     resolver_id BIGINT REFERENCES users(id), -- Người upload ảnh khắc phục
     assignee_id BIGINT REFERENCES users(id), -- Cá nhân đang chịu trách nhiệm xử lý
     assigned_team_id BIGINT REFERENCES teams(id), -- Đội/bộ phận chịu trách nhiệm chính
+    asset_id BIGINT REFERENCES assets(id),  -- Tài sản/thiết bị tùy chọn; độc lập với nơi phát hiện
+    cause_team_id BIGINT REFERENCES teams(id), -- Đơn vị chịu trách nhiệm nguyên nhân, độc lập với assigned_team_id
+    cause_status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED' CHECK (cause_status IN ('UNVERIFIED','CONFIRMED','NOT_APPLICABLE')),
     category VARCHAR(10) NOT NULL CHECK (category IN ('1S','2S','3S','4S','5S','6S')),
     visibility_class VARCHAR(30) NOT NULL DEFAULT 'SITE_PUBLIC' CHECK (visibility_class IN ('SITE_PUBLIC','SAFETY_RESTRICTED')),
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code), -- Chuẩn hóa theo Master Data
@@ -156,16 +159,19 @@ CREATE TABLE IF NOT EXISTS issues (
     closed_at TIMESTAMPTZ
 );
 
--- Đội/bộ phận xử lý; không dùng text tự do để tránh phân mảnh assignment.
-CREATE TABLE IF NOT EXISTS teams (
+-- Bảng tài sản/thiết bị tùy chọn; location_code là nơi phát hiện, không phải nơi xử lý.
+CREATE TABLE IF NOT EXISTS assets (
     id BIGSERIAL PRIMARY KEY,
     site_id BIGINT NOT NULL REFERENCES sites(id),
-    code VARCHAR(50) NOT NULL,
+    location_code VARCHAR(50) NOT NULL REFERENCES locations(code),
+    asset_code VARCHAR(100) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    asset_type VARCHAR(100),
+    default_team_id BIGINT REFERENCES teams(id), -- Gợi ý team xử lý khi tạo issue gắn tài sản
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (site_id, code)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, asset_code)
 );
-***
 
 -- Bảng liên kết tags (Normalized Junction Table - Tối ưu truy vấn lọc tags, tránh LIKE scan)
 CREATE TABLE IF NOT EXISTS issue_tags (
@@ -269,6 +275,10 @@ CREATE INDEX IF NOT EXISTS idx_issues_location_code ON issues(location_code);
 CREATE INDEX IF NOT EXISTS idx_issues_category ON issues(category);
 CREATE INDEX IF NOT EXISTS idx_issues_created_at ON issues(created_at);
 CREATE INDEX IF NOT EXISTS idx_issues_composite ON issues(location_code, status, category);
+CREATE INDEX IF NOT EXISTS idx_issues_asset ON issues(asset_id);
+CREATE INDEX IF NOT EXISTS idx_issues_cause_team ON issues(cause_team_id);
+CREATE INDEX IF NOT EXISTS idx_assets_location ON assets(location_code);
+CREATE INDEX IF NOT EXISTS idx_assets_default_team ON assets(default_team_id);
 CREATE INDEX IF NOT EXISTS idx_issue_tags_tag ON issue_tags(tag_code);
 CREATE INDEX IF NOT EXISTS idx_tags_use_count ON tags(use_count DESC);
 CREATE INDEX IF NOT EXISTS idx_score_logs_target ON score_logs(target_type, target_id, created_at);
@@ -353,10 +363,10 @@ Màn hình chính hiển thị 3 chỉ số nhanh giúp cấp quản lý nhận 
 - **Visibility class:** `SITE_PUBLIC` áp dụng cho issue 1S-5S; user trong cùng site được xem để tránh báo trùng và hỗ trợ Gemba. `SAFETY_RESTRICTED` áp dụng cho 6S hoặc issue được đánh dấu nhạy cảm.
 - **Restricted readers:** `SAFETY_OFFICER`, `ADMIN`, `SUPERADMIN`; `LINE_LEADER` chỉ khi issue thuộc location/team mình quản lý; creator, assignee, team member được xem issue của mình. Người ngoài phạm vi nhận `404` để tránh lộ sự tồn tại.
 - **Action scope độc lập read scope:** Xem được không đồng nghĩa được sửa, nhận việc, upload ảnh, duyệt, reopen hoặc invalidate.
-- **Assignment:** `assigned_team_id` là đơn vị chịu trách nhiệm; `assignee_id` là cá nhân nhận xử lý. Assignment thay đổi phải ghi audit; không xóa lịch sử.
+- **Responsibility model:** `location_code` là nơi phát hiện issue; `asset_id` là tài sản/thiết bị tùy chọn (bảng `assets`); `assigned_team_id`/`assignee_id` là đơn vị/người xử lý; `cause_team_id`/`cause_status` là trách nhiệm nguyên nhân độc lập (`UNVERIFIED` | `CONFIRMED` | `NOT_APPLICABLE`). Mọi thay đổi trách nhiệm ghi audit (`ASSIGN_RESPONSIBILITY` / `VERIFY_CAUSE`), không xóa lịch sử; `GET /api/issues/{id}` trả `responsibility_history` đã chuẩn hóa (`ASSIGN` | `TRANSFER` | `CAUSE_VERIFY` | `OTHER`) kèm `allowed_actions`.
 - **Default workspace:** UI mở tab `Cần tôi xử lý`; tab `Hiện trường chung` cho issue `SITE_PUBLIC`; tab `An toàn hạn chế` chỉ hiện khi user đủ scope.
 - **Location & Team Memberships:** Một location có thể có nhiều user (`location_memberships`) và nhiều team (`team_locations`) phụ trách. User có thể quản lý nhiều khu vực với các vai trò `OWNER`, `BACKUP`, `REVIEWER`. Line Leader có quyền trên các khu vực mà user là thành viên trực tiếp còn hiệu lực hoặc thông qua team mà user là thành viên. Phân quyền không phụ thuộc vào cột đơn `users.assigned_location_code` (giữ lại chỉ để tương thích ngược).
-- **Permission Split:** `reports:view` để xem thống kê báo cáo; `reports:export` để tải dữ liệu CSV. Quyền export được cấp cho LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN.
+- **Permission Split:** `reports:view` để xem thống kê báo cáo; `reports:export` để tải dữ liệu CSV (LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN). `issue:assign` và `issue:verify_cause` cấp cho SAFETY_OFFICER, ADMIN, SUPERADMIN; `user:manage` và `masterdata:manage` chỉ ADMIN/SUPERADMIN. Quản trị tài sản dùng `masterdata:manage`, không có permission riêng.
 
 ### 5.3. Ma trận quyền theo vai trò
 | Hành động | USER | LINE_LEADER | SAFETY_OFFICER | ADMIN/SUPERADMIN |
@@ -364,13 +374,16 @@ Màn hình chính hiển thị 3 chỉ số nhanh giúp cấp quản lý nhận 
 | Tạo issue | Site | Site | Site | Site |
 | Xem `SITE_PUBLIC` | Site | Site | Site | Site |
 | Xem `SAFETY_RESTRICTED` | Creator/assignee/team | Location/team phụ trách | Toàn site | Toàn site |
-| Nhận/gán issue | Bản thân | Team/location phụ trách | Toàn site | Toàn site |
+| Gán đơn vị/người xử lý (`issue:assign`) | Chặn (403) | Chặn (403) | Toàn site | Toàn site |
+| Xác minh nguyên nhân (`issue:verify_cause`) | Chặn (403) | Chặn (403) | Toàn site | Toàn site |
 | Upload `photo_after` | Assignee/team/creator | Scope phụ trách | Toàn site | Toàn site |
 | Đóng issue 1S-5S | Creator hoặc assignee sau kiểm tra | Scope phụ trách | Toàn site | Toàn site |
 | Export báo cáo CSV | USER không có | LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN | LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN | LINE_LEADER, SAFETY_OFFICER, ADMIN, SUPERADMIN |
 | REOPEN | Creator/assignee | Scope phụ trách | Toàn site | Toàn site |
 | INVALID | Chặn (403) | Chặn (403) | Cho phép | Cho phép |
 | Xem audit/score logs | Theo capability và scope | Theo capability và scope | Toàn site | Toàn site |
+| Quản lý team & thành viên (`user:manage`) | Chặn (403) | Chặn (403) | Chặn (403) | Cho phép |
+| Quản lý vị trí/tag/tài sản (`masterdata:manage`) | Chặn (403) | Chặn (403) | Chặn (403) | Cho phép |
 
 ### 5.4. Query/security contract
 - List/detail/export dùng cùng policy predicate; không tạo endpoint bypass scope.
@@ -612,9 +625,27 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
   - Xử lý: Insert hoặc update bản dịch vào bảng `tags`.
   - Trả về (HTTP 200/201 - Envelope): `{"data": {"code": "fire_hazard", ...}}`.
 
+- `GET /api/assets` (yêu cầu đăng nhập): danh mục tài sản/thiết bị phục vụ gắn `asset_id` khi tạo/sửa issue.
+  - Query: `?site_id=&location_code=&is_active=`. `site_id` chỉ được khác site hiện tại với SUPERADMIN, nếu không trả 403.
+  - Trả về (HTTP 200 - Envelope):
+    ```json
+    {
+      "data": [
+        {"id": 4, "site_id": 1, "location_code": "LINE_A1", "asset_code": "SEW_01", "name": "Máy may 01", "asset_type": "MACHINE", "default_team_id": 2, "is_active": true}
+      ]
+    }
+    ```
+- `GET /api/teams` (yêu cầu đăng nhập): danh mục team của site phục vụ chọn đơn vị xử lý.
+  - Query: `?site_id=&is_active=`.
+  - Trả về (HTTP 200 - Envelope): `{"data": [{"id": 2, "site_id": 1, "code": "ELEC", "name": "Điện", "is_active": true}]}`.
+- `GET /api/teams/{id}/members` (yêu cầu `issue:assign`): thành viên team phục vụ chọn `assignee_id`; team không thuộc site của người dùng trả 404.
+  - Trả về (HTTP 200 - Envelope): `{"data": [{"id": 10, "username": "worker_01", "full_name": "Nguyễn Văn A", "role": "USER", "is_active": true}]}`.
+- `POST /api/admin/assets` (yêu cầu `masterdata:manage`): tạo tài sản trong site hiện tại. Body: `{"location_code": "LINE_A1", "asset_code": "SEW_01", "name": "Máy may 01", "asset_type": "MACHINE", "default_team_id": 2, "is_active": true}`; `location_code` và `default_team_id` phải thuộc site hiện tại, nếu không trả 400. Trả về (HTTP 201 - Envelope): `{"data": {...}}`.
+- `PUT /api/admin/assets/{id}` (yêu cầu `masterdata:manage`): cập nhật một phần — bỏ khóa để giữ nguyên, chuỗi rỗng giữ nguyên, `null` xóa `asset_type`/`default_team_id`. Tài sản ngoài site hiện tại trả 404.
+
 ### 6.3. Issues
 - `GET /api/issues`
-  - Query: `?status=OPEN&category=1S&location_code=LINE_A1&page=1&limit=20`
+  - Query: `?status=OPEN&category=1S&location_code=LINE_A1&overdue=true&assigned_team_id=2&mine_team=true&page=1&limit=20` (`status`/`category`/`location_code` chấp nhận alias số nhiều `statuses`/`categories`/`location_codes`; `mine_team` chỉ lọc issue thuộc team hiện tại của người dùng).
   - Trả về (HTTP 200 - Pagination Envelope):
     ```json
     {
@@ -627,6 +658,11 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
           "location_code": "LINE_A1",
           "location_name": "Chuyền May A1",
           "tags": ["oil_leak"],
+          "asset_id": null,
+          "assigned_team_id": 2,
+          "assignee_id": 10,
+          "cause_team_id": null,
+          "cause_status": "UNVERIFIED",
           "description": "Rò rỉ dầu dưới chân máy",
           "reject_reason": null,
           "photo_before": "/uploads/before/c0a80101-0000-4000-8000-000000000001_wide.jpg",
@@ -664,6 +700,11 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
         "location_code": "LINE_A1",
         "location_name": "Chuyền May A1",
         "tags": ["oil_leak"],
+        "asset_id": null,
+        "assigned_team_id": 2,
+        "assignee_id": 10,
+        "cause_team_id": null,
+        "cause_status": "UNVERIFIED",
         "description": "Rò rỉ dầu dưới chân máy",
         "reject_reason": null,
         "photo_before": "/uploads/before/c0a80101-0000-4000-8000-000000000001_wide.jpg",
@@ -679,10 +720,23 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
         "resolver": null,
         "created_at": "2026-09-04T08:00:00Z",
         "resolved_at": null,
-        "closed_at": null
+        "closed_at": null,
+        "responsibility_history": [
+          {
+            "id": 7,
+            "action": "ASSIGN",
+            "changed_by": 1,
+            "changed_by_name": "Quản trị viên",
+            "old_value": {"asset_id": null, "assigned_team_id": null, "assignee_id": null, "cause_team_id": null, "cause_status": "UNVERIFIED"},
+            "new_value": {"asset_id": null, "assigned_team_id": 2, "assignee_id": 10, "cause_team_id": null, "cause_status": "UNVERIFIED"},
+            "created_at": "2026-09-04T08:05:00Z"
+          }
+        ],
+        "allowed_actions": {"assign": true, "verify_cause": true, "resolve": false, "close": false}
       }
     }
     ```
+  - `responsibility_history` chỉ có ở endpoint chi tiết, đọc từ `system_audit_logs` (`ASSIGN_RESPONSIBILITY`, `VERIFY_CAUSE`) và chuẩn hóa thành action ổn định: `ASSIGN` (lần đầu có đơn vị/người xử lý), `TRANSFER` (đổi đơn vị/người xử lý), `CAUSE_VERIFY` (xác minh nguyên nhân), `OTHER` (thay đổi trách nhiệm khác, ví dụ chỉ đổi tài sản). `allowed_actions` cho biết người gọi hiện được gán/xác minh/khắc phục/duyệt issue này.
 - `POST /api/issues/sync` (Đồng bộ tạo mới từ client - Bảo mật Upload & Outbox)
   - Content-Type: `multipart/form-data`
   - Form fields:
@@ -693,6 +747,10 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
     - `description` (string, tùy chọn)
     - `photo_before` (file ảnh toàn cảnh/bối cảnh, bắt buộc)
     - `photo_detail` (file ảnh cận cảnh/annotation, tùy chọn)
+    - `cause_type` (string, tùy chọn: `CONDITION` | `BEHAVIOR`)
+    - `asset_id` (integer, tùy chọn): tài sản đang hoạt động thuộc site; KHÔNG cần `issue:assign`. Tài sản có `default_team_id` đang hoạt động sẽ gợi ý team xử lý khi request không gửi `assigned_team_id`.
+    - `assigned_team_id` (integer, tùy chọn): gửi trường này cần `issue:assign`, nếu không trả 403; team phải đang hoạt động và thuộc site (400 nếu không).
+    - `assignee_id` (integer, tùy chọn): gửi trường này cần `issue:assign`; user phải đang hoạt động, thuộc site và là thành viên của team xử lý hiệu lực (400 nếu không).
   - Kiểm tra an toàn File Upload (Server-side File Sanitization & Sniffing):
     - **Dung lượng**: Mỗi Photo ≤ 2MB. Vượt quá trả HTTP 413 Payload Too Large.
     - **Magic Bytes Verification**: Đọc 512 bytes đầu tiên. Ảnh bắt buộc là `image/jpeg` (`FF D8 FF`) hoặc `image/png` (`89 50 4E 47`). Mime-type không khớp -> từ chối với HTTP 415 Unsupported Media Type.
@@ -739,8 +797,13 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
   - Kết quả: UPDATE guard theo status + version: `status = 'INVALID'`, `reject_reason = body.reason`, `version = version + 1`, ghi `system_audit_logs`, ghi `score_logs` phạt Creator theo `penalty_reporter_invalid` (`target_type='USER'`).
 - `PATCH /api/issues/{id}` (Sửa nhanh phân loại hoặc tags khi phát hiện sai)
   - Điều kiện: `current_user.id == issue.creator_id` HOẶC `current_user.id == issue.resolver_id` HOẶC `current_user.role IN ('ADMIN', 'SAFETY_OFFICER')`.
-  - Body: `{"category": "6S", "location_code": "LINE_A1", "tags": ["nguy_hiểm", "dây_điện"]}`.
-  - Kết quả: Cập nhật DB, tăng `version = version + 1`. Nếu đổi sang `6S`, ghi nhận outbox để kích hoạt thông báo khẩn cấp WeChat / Webhook.
+  - Body (JSON): `{"category": "6S", "location_code": "LINE_A1", "tags": ["nguy_hiểm", "dây_điện"], "asset_id": 4, "assigned_team_id": 2, "assignee_id": 10, "cause_team_id": 3, "cause_status": "CONFIRMED", "expected_version": 2}`.
+  - Ngữ nghĩa trách nhiệm (độc lập với `location_code` là nơi phát hiện):
+    - `asset_id`: tài sản phải đang hoạt động và thuộc site của issue; `location_code` của issue là lịch sử phát hiện nên KHÔNG ràng buộc theo vị trí tài sản.
+    - `assigned_team_id` / `assignee_id`: gửi bất kỳ trường nào (kể cả `null`) yêu cầu `issue:assign` (thiếu -> 403); team phải đang hoạt động và thuộc site (400 nếu không); `assignee_id` khác `null` cần team xử lý hiệu lực (team hiện có hoặc gửi kèm trong cùng request) và user phải là thành viên team đó (400 nếu không).
+    - `cause_team_id` / `cause_status`: gửi bất kỳ trường nào (kể cả `null`) yêu cầu `issue:verify_cause` (thiếu -> 403); `UNVERIFIED`/`NOT_APPLICABLE` luôn xóa `cause_team_id` trong cùng giao dịch, `CONFIRMED` bắt buộc có team đang hoạt động thuộc site, `null` đặt lại `UNVERIFIED`; gửi `cause_team_id` khác `null` kèm trạng thái không phải `CONFIRMED` trả 400.
+    - `null` xóa liên kết, bỏ khóa để giữ nguyên. Mọi thay đổi trách nhiệm bắt buộc có `expected_version` (thiếu -> 400, lệch -> 409 `ISSUE_CONFLICT`); request không có trường trách nhiệm nào giữ nguyên luồng sửa nhanh hiện tại.
+  - Kết quả: cập nhật DB, tăng `version = version + 1`; ghi `system_audit_logs` (`ASSIGN_RESPONSIBILITY` / `VERIFY_CAUSE`) và phản hồi lịch sử đã chuẩn hóa qua `GET /api/issues/{id}`. Nếu đổi sang `6S`, ghi nhận outbox để kích hoạt thông báo khẩn cấp WeChat / Webhook.
 - **Tên endpoint thực tế**: User administration dùng `PATCH /api/admin/users/{id}` và `GET /api/admin/users/`; issue invalidation dùng `/api/issues/{id}/invalid`.
 - **Sự kiện realtime**: `GET /api/issues/events` dùng Server-Sent Events (SSE), yêu cầu xác thực.
 - **Export**: `GET /api/issues/export` xuất XLSX, yêu cầu xác thực.
@@ -855,9 +918,20 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
 - `GET /api/admin/teams/{id}/locations` (Admin): liệt kê các location mà team phụ trách.
 - `PUT /api/admin/teams/{id}/locations/{code}` (Admin): gán team vào location. Ghi `TEAM_LOCATION_ADD`.
 - `DELETE /api/admin/teams/{id}/locations/{code}` (Admin): gỡ team khỏi location. Ghi `TEAM_LOCATION_DELETE`.
+- `POST /api/admin/teams` (Admin - yêu cầu `user:manage`): Body `{"code": "ELEC", "name": "Điện", "is_active": true}`; tạo team trong site hiện tại, trả 201.
+- `PUT /api/admin/teams/{id}` (Admin - yêu cầu `user:manage`): cập nhật `code`, `name`, `is_active`; khóa bỏ qua hoặc `null` giữ nguyên. Team ngoài site hiện tại trả 404.
+- `GET /api/admin/teams/{id}/members` (Admin - yêu cầu `user:manage`): danh sách thành viên team cho màn quản trị.
+- `PUT /api/admin/teams/{id}/members/{user_id}` (Admin - yêu cầu `user:manage`): thêm thành viên; user phải đang hoạt động và thuộc site hiện tại (400/404 nếu không). Trả `{"data": {"team_id": 2, "user_id": 10}}`.
+- `DELETE /api/admin/teams/{id}/members/{user_id}` (Admin - yêu cầu `user:manage`): gỡ thành viên, trả 204.
+
 ### 6.7. Reports & Export
 - `GET /api/issues/reports/summary` — Xem báo cáo thống kê (yêu cầu `reports:view`). Backend áp dụng site scope và location scope dựa trên user. USER không có quyền.
 - `GET /api/reports/export` — Xuất CSV (yêu cầu `reports:export`). Cùng scope với summary. Export bị giới hạn bởi `maxExportRows` (~10,000 dòng).
+- `GET /api/reports/teams` — KPI xử lý theo team trong site của người dùng (yêu cầu `reports:view`). Query `?days=` (mặc định 14, hợp lệ 1–90). Trả về (HTTP 200 - Envelope):
+  ```json
+  {"data": [{"team_id": 2, "team_name": "Điện", "assigned_count": 8, "open_count": 3, "overdue_count": 1, "closed_count": 5, "confirmed_cause_count": 2}]}
+  ```
+  `overdue_count` chỉ tính issue `OPEN` quá 48h; `confirmed_cause_count` chỉ tính issue có `cause_team_id` = team và `cause_status = 'CONFIRMED'` trong cửa sổ thống kê.
 
 ---
 
