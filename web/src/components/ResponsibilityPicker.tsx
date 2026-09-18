@@ -58,7 +58,15 @@ export function ResponsibilityPicker({
   const visibleTeams = teams.filter((team) => team.is_active);
   const selectedAsset = assets.find((asset) => asset.id === assetId);
   const selectedTeam = teams.find((team) => team.id === assignedTeamId);
-  const selectable = disabled || status === "error";
+  const referenceLoading = status === "loading" || status === "idle";
+  const referenceError = status === "error";
+  const assetsAvailable = visibleAssets.length > 0 || selectedAsset != null;
+  const teamsAvailable = visibleTeams.length > 0 || selectedTeam != null;
+  const memberOptions = (members || []).filter((member) => member.is_active);
+  const membersLoading =
+    assignedTeamId != null && (membersStatus == null || membersStatus === "loading");
+  const membersAvailable = memberOptions.length > 0;
+  const selectable = disabled || referenceLoading || referenceError;
 
   const handleAssetChange = (value: string) => {
     const nextId = value ? Number(value) : null;
@@ -73,6 +81,8 @@ export function ResponsibilityPicker({
     <section
       className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/50"
       aria-labelledby="responsibility-picker-title"
+      aria-busy={status === "loading" || status === "idle"}
+      aria-live="polite"
     >
       <div>
         <h3
@@ -110,9 +120,15 @@ export function ResponsibilityPicker({
             onChange={(event) => handleAssetChange(event.target.value)}
             disabled={selectable}
             aria-label={t("issue.asset_optional")}
-            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900"
+            aria-busy={referenceLoading}
+            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           >
-            <option value="">{t("issue.no_asset")}</option>
+            <option value="">{referenceLoading ? t("common.loading") : t("issue.no_asset")}</option>
+            {status === "ready" && !assetsAvailable && (
+              <option value="" disabled>
+                {t("admin.empty_assets")}
+              </option>
+            )}
             {selectedAsset && !visibleAssets.some((asset) => asset.id === selectedAsset.id) && (
               <option value={selectedAsset.id}>
                 {selectedAsset.asset_code} — {selectedAsset.name}
@@ -138,9 +154,17 @@ export function ResponsibilityPicker({
           }}
           disabled={selectable || !canAssign}
           aria-label={t("issue.assigned_team")}
-          className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900"
+          aria-busy={referenceLoading}
+          className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
         >
-          <option value="">{t("issue.no_assigned_team")}</option>
+          <option value="">
+            {referenceLoading ? t("common.loading") : t("issue.no_assigned_team")}
+          </option>
+          {status === "ready" && !teamsAvailable && (
+            <option value="" disabled>
+              {t("admin.empty_teams")}
+            </option>
+          )}
           {selectedTeam && !visibleTeams.some((team) => team.id === selectedTeam.id) && (
             <option value={selectedTeam.id}>
               {selectedTeam.name} ({selectedTeam.code})
@@ -168,24 +192,38 @@ export function ResponsibilityPicker({
             onChange={(event) =>
               onAssigneeChange(event.target.value ? Number(event.target.value) : null)
             }
-            disabled={selectable || membersStatus === "loading"}
+            disabled={selectable || membersLoading}
             aria-label={t("issue.assignee_optional")}
-            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900"
+            aria-busy={membersLoading}
+            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           >
             <option value="">{t("issue.no_assignee")}</option>
-            {(members || [])
-              .filter((member) => member.is_active)
-              .map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.full_name}
-                  {member.username ? ` (@${member.username})` : ""}
-                </option>
-              ))}
+            {membersLoading && <option value="">{t("common.loading")}</option>}
+            {membersStatus === "ready" && !membersAvailable && (
+              <option value="" disabled>
+                {t("admin.team_members_empty")}
+              </option>
+            )}
+            {memberOptions.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.full_name}
+                {member.username ? ` (@${member.username})` : ""}
+              </option>
+            ))}
           </select>
           {membersStatus === "error" && (
-            <span role="alert" className="block text-[11px] font-semibold text-rose-600">
-              {t("issue.responsibility_member_error")}
-            </span>
+            <div className="flex items-center justify-between gap-2">
+              <span role="alert" className="block text-[11px] font-semibold text-rose-600">
+                {t("issue.responsibility_member_error")}
+              </span>
+              <button
+                type="button"
+                onClick={() => assignedTeamId != null && loadMembers(assignedTeamId, true)}
+                className="min-h-[36px] shrink-0 rounded-lg border border-rose-300 px-3 text-[11px] font-bold text-rose-700 dark:border-rose-800 dark:text-rose-300"
+              >
+                {t("common.retry")}
+              </button>
+            </div>
           )}
         </label>
       )}

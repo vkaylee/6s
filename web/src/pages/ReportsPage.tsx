@@ -10,7 +10,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -121,6 +121,52 @@ export function ReportsPage() {
   const [drilldownTotal, setDrilldownTotal] = useState(0);
   const [drilldownPage, setDrilldownPage] = useState(1);
   const [isLoadingDrilldown, setIsLoadingDrilldown] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const closeDrilldown = useCallback(() => {
+    setDrilldownType(null);
+    setSelectedLocationDrill(null);
+    setSelectedCategoryDrill(null);
+    setSelectedTagDrill(null);
+  }, []);
+  useEffect(() => {
+    if (!drilldownType) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    return () => previouslyFocused?.focus();
+  }, [drilldownType]);
+  useEffect(() => {
+    if (!drilldownType) return;
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    const focusables = () =>
+      drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
+    focusables()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closeDrilldown();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || !drawer.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !drawer.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [closeDrilldown, drilldownType]);
   const DRILLDOWN_PAGE_SIZE = 15;
   useEffect(() => {
     setDrilldownPage(1);
@@ -209,6 +255,9 @@ export function ReportsPage() {
           params.set("category", IssueCategory.S6);
         } else if (drilldownType === "OVERDUE") {
           params.set("overdue", "true");
+        }
+        if (drilldownType === "TAG" && selectedTagDrill) {
+          params.set("tag_code", selectedTagDrill);
         }
 
         const res = await apiClient<IssueItem[]>(`/api/issues?${params.toString()}`, {
@@ -588,9 +637,17 @@ export function ReportsPage() {
           </div>
 
           {/* Tầng 2: Meeting Navigation Segmented Tabs (Progressive Disclosure) */}
-          <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex items-center gap-1.5">
+          <div
+            role="tablist"
+            aria-label={t("reports.title")}
+            className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex items-center gap-1.5"
+          >
             <button
+              id="reports-tab-locations"
               type="button"
+              role="tab"
+              aria-selected={activeTab === "LOCATIONS"}
+              aria-controls="reports-panel-locations"
               onClick={() => setActiveTab("LOCATIONS")}
               className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
                 activeTab === "LOCATIONS"
@@ -602,7 +659,11 @@ export function ReportsPage() {
               <span>{t("reports.tab_locations")}</span>
             </button>
             <button
+              id="reports-tab-people"
               type="button"
+              role="tab"
+              aria-selected={activeTab === "PEOPLE"}
+              aria-controls="reports-panel-people"
               onClick={() => setActiveTab("PEOPLE")}
               className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
                 activeTab === "PEOPLE"
@@ -614,7 +675,11 @@ export function ReportsPage() {
               <span>{t("reports.tab_people")}</span>
             </button>
             <button
+              id="reports-tab-trends"
               type="button"
+              role="tab"
+              aria-selected={activeTab === "TRENDS"}
+              aria-controls="reports-panel-trends"
               data-testid="reports-tab-trends"
               onClick={() => setActiveTab("TRENDS")}
               className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
@@ -627,7 +692,11 @@ export function ReportsPage() {
               <span>{t("reports.tab_trends")}</span>
             </button>
             <button
+              id="reports-tab-teams"
               type="button"
+              role="tab"
+              aria-selected={activeTab === "TEAMS"}
+              aria-controls="reports-panel-teams"
               data-testid="reports-tab-teams"
               onClick={() => setActiveTab("TEAMS")}
               className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
@@ -643,7 +712,12 @@ export function ReportsPage() {
 
           {/* Tab 1: Plant & Hotspots (Horizontal Bar + Dropdown Filter) */}
           {activeTab === "LOCATIONS" && (
-            <div className="space-y-4 animate-fade-in">
+            <div
+              id="reports-panel-locations"
+              role="tabpanel"
+              aria-labelledby="reports-tab-locations"
+              className="space-y-4 animate-fade-in"
+            >
               <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                   <div>
@@ -853,7 +927,12 @@ export function ReportsPage() {
 
           {/* Tab 2: People & Honor Roll (Khen thưởng & Trách nhiệm cá nhân) */}
           {activeTab === "PEOPLE" && (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in">
+            <div
+              id="reports-panel-people"
+              role="tabpanel"
+              aria-labelledby="reports-tab-people"
+              className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -935,7 +1014,12 @@ export function ReportsPage() {
 
           {/* Tab 3: Trends & Strategic Category Breakdown */}
           {activeTab === "TRENDS" && (
-            <div className="space-y-4 animate-fade-in">
+            <div
+              id="reports-panel-trends"
+              role="tabpanel"
+              aria-labelledby="reports-tab-trends"
+              className="space-y-4 animate-fade-in"
+            >
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* 1S - 6S Category Breakdown */}
                 <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col">
@@ -1169,7 +1253,12 @@ export function ReportsPage() {
           )}
           {/* Tab 4: Team handling performance & confirmed causes */}
           {activeTab === "TEAMS" && (
-            <div className="space-y-4 animate-fade-in">
+            <div
+              id="reports-panel-teams"
+              role="tabpanel"
+              aria-labelledby="reports-tab-teams"
+              className="space-y-4 animate-fade-in"
+            >
               <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
@@ -1197,12 +1286,27 @@ export function ReportsPage() {
                   </label>
                 </div>
                 {teamReportError ? (
-                  <p role="alert" className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                    {t("reports.teams_load_error")}
-                  </p>
+                  <div role="alert" className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                      {t("reports.teams_load_error")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={loadTeamReport}
+                      disabled={isLoadingTeams}
+                      className="min-h-[40px] px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold disabled:opacity-50"
+                    >
+                      {t("common.retry")}
+                    </button>
+                  </div>
                 ) : isLoadingTeams ? (
-                  <div className="py-8 flex items-center justify-center">
+                  <div
+                    className="py-8 flex items-center justify-center gap-2"
+                    role="status"
+                    aria-live="polite"
+                  >
                     <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                    <span className="text-xs text-zinc-500">{t("common.loading")}</span>
                   </div>
                 ) : visibleTeamReport.length === 0 ? (
                   <p className="text-xs text-zinc-400 py-4">{t("reports.teams_empty")}</p>
@@ -1274,11 +1378,21 @@ export function ReportsPage() {
       {/* Tầng 3: Presenter Drill-down Drawer Modal */}
       {drilldownType && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-xl bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col border-l border-zinc-200 dark:border-zinc-800">
+          <div
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reports-drilldown-title"
+            tabIndex={-1}
+            className="w-full max-w-xl bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col border-l border-zinc-200 dark:border-zinc-800"
+          >
             {/* Drawer Header */}
             <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
               <div>
-                <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <h2
+                  id="reports-drilldown-title"
+                  className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2"
+                >
                   <span>🎯</span>
                   <span>
                     {drilldownType === "LOCATION" && selectedLocationDrill
@@ -1296,19 +1410,15 @@ export function ReportsPage() {
                   <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold">
                     {drilldownTotal}
                   </span>
-                </h3>
+                </h2>
                 <p className="text-xs text-zinc-400 mt-0.5">{t("reports.drilldown_subtitle")}</p>
               </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  setDrilldownType(null);
-                  setSelectedLocationDrill(null);
-                  setSelectedCategoryDrill(null);
-                  setSelectedTagDrill(null);
-                }}
-                className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                onClick={closeDrilldown}
+                aria-label={t("common.close")}
+                className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>

@@ -292,10 +292,14 @@ export function FilterDrawer({
 
           {/* Team Selector (single select) + opt-in "my team's work" */}
           <div className="space-y-2">
-            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+            <label
+              htmlFor="filter-team-select"
+              className="block text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
+            >
               {t("filters.team")}
-            </span>
+            </label>
             <select
+              id="filter-team-select"
               value={filters.assignedTeamId ?? ""}
               onChange={(e) =>
                 onApply({
@@ -303,6 +307,7 @@ export function FilterDrawer({
                   assignedTeamId: e.target.value ? Number(e.target.value) : null,
                 })
               }
+              className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             >
               <option value="">{t("filters.all_teams")}</option>
               {teams
@@ -313,12 +318,12 @@ export function FilterDrawer({
                   </option>
                 ))}
             </select>
-            <label className="flex items-center gap-2 min-h-[44px] text-xs font-bold text-zinc-700 dark:text-zinc-300">
+            <label className="flex min-h-[44px] items-center gap-2 text-xs font-bold text-zinc-700 dark:text-zinc-300">
               <input
                 type="checkbox"
                 checked={filters.mineTeam}
                 onChange={(e) => onApply({ ...filters, mineTeam: e.target.checked })}
-                className="w-4 h-4 accent-rose-600"
+                className="h-4 w-4 accent-rose-600"
               />
               <span>{t("filters.mine_team_only")}</span>
             </label>

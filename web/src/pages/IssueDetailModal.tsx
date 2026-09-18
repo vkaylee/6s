@@ -1,6 +1,6 @@
 import { AlertTriangle, Languages, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { apiClient } from "../api/client.ts";
+import { ApiError, apiClient } from "../api/client.ts";
 import { issueOperations } from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
@@ -79,6 +79,7 @@ export function IssueDetailModal({
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
   const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
   const [isResponsibilityEditing, setIsResponsibilityEditing] = useState(false);
+  const [isSavingResponsibility, setIsSavingResponsibility] = useState(false);
   const [assignmentAssetId, setAssignmentAssetId] = useState<number | null>(issue.asset_id ?? null);
   const [assignmentTeamId, setAssignmentTeamId] = useState<number | null>(
     issue.assigned_team_id ?? null,
@@ -95,19 +96,29 @@ export function IssueDetailModal({
       ? undefined
       : state.membersByTeam[currentIssue.assigned_team_id],
   );
+  const membersStatus = useMasterdataStore((state) =>
+    currentIssue.assigned_team_id == null
+      ? "idle"
+      : (state.membersStatusByTeam[currentIssue.assigned_team_id] ?? "idle"),
+  );
   const loadMembers = useMasterdataStore((state) => state.loadMembers);
   const asset = assets.find((item) => item.id === currentIssue.asset_id);
   const team = teams.find((item) => item.id === currentIssue.assigned_team_id);
   const assignee = teamMembers?.find((member) => member.id === currentIssue.assignee_id);
   const causeTeam = teams.find((item) => item.id === currentIssue.cause_team_id);
 
-  // Viewers without issue:assign cannot read the team member list, so show the raw id instead of
-  // claiming the issue is unassigned.
-  const assigneeLabel = assignee
-    ? assignee.full_name
-    : currentIssue.assignee_id == null
+  const assigneeLabel =
+    currentIssue.assignee_id == null
       ? t("issue.unassigned")
-      : `#${currentIssue.assignee_id}`;
+      : !mayAssign
+        ? t("issue.assignee_permission_denied")
+        : membersStatus === "error"
+          ? t("issue.assignee_lookup_error")
+          : membersStatus !== "ready"
+            ? t("issue.assignee_loading")
+            : assignee?.full_name || `#${currentIssue.assignee_id}`;
+  const assigneeLookupError =
+    mayAssign && currentIssue.assignee_id != null && membersStatus === "error";
 
   const [causeStatus, setCauseStatus] = useState(issue.cause_status ?? "UNVERIFIED");
 
@@ -237,7 +248,12 @@ export function IssueDetailModal({
   const touchDistanceRef = useRef<number | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const lastTapRef = useRef<number>(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const photoDialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const photoTriggerRef = useRef<HTMLElement | null>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [isSavingCause, setIsSavingCause] = useState(false);
   const [issueScoreLogs, setIssueScoreLogs] = useState<ScoreLogItem[]>([]);
   const [loadingScores, setLoadingScores] = useState(false);
   const aiEnabled = useAiStatus();
@@ -246,6 +262,78 @@ export function IssueDetailModal({
   const [followUpQuestion, setFollowUpQuestion] = useState("");
   const [pendingFollowUpQuestion, setPendingFollowUpQuestion] = useState<string | null>(null);
   const [streamingFollowUpAnswer, setStreamingFollowUpAnswer] = useState("");
+  const previewIndexRef = useRef<number | null>(null);
+  previewIndexRef.current = previewIndex;
+  useEffect(() => {
+    if (!isOpen) return;
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (previewIndexRef.current !== null || event.key !== "Tab") return;
+      const focusables = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const active = document.activeElement;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    );
+    focusables[0]?.focus();
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      const trigger = previouslyFocusedRef.current;
+      if (trigger?.isConnected) trigger.focus();
+      previouslyFocusedRef.current = null;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || previewIndex === null) return;
+    photoTriggerRef.current = document.activeElement as HTMLElement | null;
+    const dialog = photoDialogRef.current;
+    if (!dialog) return;
+    const focusables = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    focusables[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const active = document.activeElement;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      const trigger = photoTriggerRef.current;
+      if (trigger?.isConnected) trigger.focus();
+      photoTriggerRef.current = null;
+    };
+  }, [isOpen, previewIndex]);
   const [followUpHistory, setFollowUpHistory] = useState<
     Array<{ question: string; answer: string }>
   >([]);
@@ -533,9 +621,9 @@ export function IssueDetailModal({
       // Keep the local copy when the refresh fails (offline or transient error).
     }
   };
-
   const handleSaveResponsibility = async () => {
-    if (!canAssignResponsibility) return;
+    if (!canAssignResponsibility || isSavingResponsibility) return;
+    setIsSavingResponsibility(true);
     try {
       const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
         method: "PATCH",
@@ -551,16 +639,23 @@ export function IssueDetailModal({
       setIsResponsibilityEditing(false);
       haptics.success();
       onRefresh();
-    } catch {
+    } catch (error) {
       haptics.errorOrConflict();
       await reloadCurrentIssue();
-      await modalDialog.alert(t("issue_detail.assignment_update_error"));
+      await modalDialog.alert(
+        error instanceof ApiError && error.status === 409
+          ? t("issue_detail.assignment_update_conflict")
+          : t("issue_detail.assignment_update_error"),
+      );
+    } finally {
+      setIsSavingResponsibility(false);
     }
   };
 
   const handleVerifyCause = async () => {
-    if (!canVerifyCause) return;
+    if (!canVerifyCause || isSavingCause) return;
     if (causeStatus === "CONFIRMED" && causeTeamId == null) return;
+    setIsSavingCause(true);
     try {
       const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
         method: "PATCH",
@@ -575,10 +670,16 @@ export function IssueDetailModal({
       if (updated) setCurrentIssue(updated);
       haptics.success();
       onRefresh();
-    } catch {
+    } catch (error) {
       haptics.errorOrConflict();
       await reloadCurrentIssue();
-      await modalDialog.alert(t("issue_detail.cause_verification_error"));
+      await modalDialog.alert(
+        error instanceof ApiError && error.status === 409
+          ? t("issue_detail.cause_verification_conflict")
+          : t("issue_detail.cause_verification_error"),
+      );
+    } finally {
+      setIsSavingCause(false);
     }
   };
 
@@ -648,7 +749,6 @@ export function IssueDetailModal({
       setIsSubmitting(false);
     }
   };
-
   const handleConfirmInvalid = async () => {
     setIsSubmitting(true);
     try {
@@ -698,11 +798,21 @@ export function IssueDetailModal({
         type="button"
         aria-label={t("common.close")}
         onClick={onClose}
-        className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-hidden"
+        className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10"
         tabIndex={-1}
       />
-      <div className="w-full max-w-lg lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto sm:my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] lg:max-h-[90vh] 2xl:max-h-[85vh]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="issue-detail-modal-title"
+        tabIndex={-1}
+        className="w-full max-w-lg lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto sm:my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] lg:max-h-[90vh] 2xl:max-h-[85vh]"
+      >
         {/* Header */}
+        <h2 id="issue-detail-modal-title" className="sr-only">
+          {t("issue_detail.modal_title", { id: currentIssue.id })}
+        </h2>
         <div className="p-4 pt-5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
             <span className="px-2 py-0.5 rounded-md font-black text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shrink-0">
@@ -1018,14 +1128,17 @@ export function IssueDetailModal({
                       <button
                         type="button"
                         onClick={handleSaveResponsibility}
-                        className="min-h-[44px] flex-1 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white"
+                        disabled={isSavingResponsibility}
+                        aria-busy={isSavingResponsibility}
+                        className="min-h-[44px] flex-1 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {t("common.save")}
+                        {isSavingResponsibility ? t("common.saving") : t("common.save")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setIsResponsibilityEditing(false)}
-                        className="min-h-[44px] rounded-xl bg-zinc-100 px-3 text-xs font-bold dark:bg-zinc-700"
+                        disabled={isSavingResponsibility}
+                        className="min-h-[44px] rounded-xl bg-zinc-100 px-3 text-xs font-bold dark:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {t("common.cancel")}
                       </button>
@@ -1045,7 +1158,23 @@ export function IssueDetailModal({
                       <span className="font-bold text-zinc-500">
                         {t("issue.assignee_optional")}:
                       </span>{" "}
-                      {assigneeLabel}
+                      <span aria-live="polite">{assigneeLabel}</span>
+                      {mayAssign && membersStatus === "loading" && (
+                        <span className="ms-2 text-zinc-400">{t("issue.assignee_loading")}</span>
+                      )}
+                      {assigneeLookupError && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (currentIssue.assigned_team_id != null) {
+                              void loadMembers(currentIssue.assigned_team_id, true);
+                            }
+                          }}
+                          className="ms-2 font-bold text-blue-600 underline"
+                        >
+                          {t("common.retry")}
+                        </button>
+                      )}
                     </p>
                   </div>
                 )}
@@ -1109,9 +1238,13 @@ export function IssueDetailModal({
                         <button
                           type="button"
                           onClick={handleVerifyCause}
-                          className="min-h-[44px] w-full rounded-xl bg-amber-600 px-4 text-xs font-bold text-white"
+                          disabled={isSavingCause}
+                          aria-busy={isSavingCause}
+                          className="min-h-[44px] w-full rounded-xl bg-amber-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {t("issue.verify_cause")}
+                          {isSavingCause
+                            ? t("issue.cause_verification_saving")
+                            : t("issue.verify_cause")}
                         </button>
                       </div>
                     ) : (
@@ -1444,10 +1577,15 @@ export function IssueDetailModal({
         {/* Fullscreen Image Previewer with Zoom */}
         {previewPhoto && (
           <div
+            ref={photoDialogRef}
             className="fixed inset-0 z-70 bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-4 animate-fade-in"
             role="dialog"
             aria-modal="true"
+            aria-labelledby="issue-photo-preview-title"
           >
+            <h2 id="issue-photo-preview-title" className="sr-only">
+              {t("issue_detail.photo_preview")}
+            </h2>
             {/* Backdrop overlay button for a11y click-outside */}
             <button
               type="button"
@@ -1457,7 +1595,7 @@ export function IssueDetailModal({
                 setZoomScale(1);
                 setPanOffset({ x: 0, y: 0 });
               }}
-              className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-hidden"
+              className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10"
               tabIndex={-1}
             />
             {/* Top Bar with High-Contrast Pill Badge & Gallery Indicator */}

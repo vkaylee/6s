@@ -24,7 +24,8 @@
     "loading_more": "加载中...",
     "showing_count": "已显示 {current} / {total} 个问题",
     "all_loaded": "已加载全部 {total} 个问题",
-    "back": "返回"
+    "back": "返回",
+    "saving": "正在保存…"
   },
   "auth": {
     "login": "登录",
@@ -317,6 +318,7 @@
     "edit_responsibility": "调整分配",
     "cause_verification": "原因验证",
     "verify_cause": "保存验证结果",
+    "cause_verification_saving": "正在保存验证结果...",
     "cause_status_UNVERIFIED": "未验证",
     "cause_status_CONFIRMED": "已验证",
     "cause_status_NOT_APPLICABLE": "不适用",
@@ -324,6 +326,9 @@
     "no_cause_team": "未确定原因单位",
     "assignment_requires_permission": "需要调配权限才能选择单位或处理人；仅应用设备建议值。",
     "responsibility_member_error": "无法加载单位成员列表",
+    "assignee_loading": "正在加载处理人信息...",
+    "assignee_lookup_error": "无法加载处理人信息",
+    "assignee_permission_denied": "处理人已隐藏（需要权限）",
     "unassigned": "未指定处理人"
   },
   "admin": {
@@ -555,6 +560,15 @@
     "member_add_error": "添加成员失败",
     "member_remove_success": "成员已移出单位！",
     "member_remove_error": "移除成员失败",
+    "member_remove_confirm": "要将 {name} 移出此单位吗？",
+    "member_adding_btn": "正在添加…",
+    "member_removing_btn": "正在移除…",
+    "team_location_remove_confirm": "要将位置 {code} 从此单位移除吗？",
+    "team_location_add_success": "位置已添加到单位！",
+    "team_location_remove_success": "位置已从单位移除！",
+    "team_details_load_error": "无法加载单位详情",
+    "team_locations_empty": "该单位尚未分配任何位置。",
+    "team_location_adding_btn": "正在添加位置…",
     "assets_page_title": "设备/资产",
     "asset_code_label": "设备编码 *",
     "asset_name_label": "设备名称 *",
@@ -686,6 +700,9 @@
     "changed_by": "变更人",
     "history_action_ASSIGN": "分配单位/处理人",
     "history_action_TRANSFER": "转移处理",
+    "assignment_update_conflict": "该问题已在服务器端发生变化。编辑器保持打开，请重新加载问题后再试。",
+    "cause_verification_conflict": "该问题已在服务器端发生变化，请重新加载后再保存验证结果。",
+    "modal_title": "问题详情 #{id}",
     "history_action_CAUSE_VERIFY": "原因已核实",
     "history_action_OTHER": "责任更新"
   },

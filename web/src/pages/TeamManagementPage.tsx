@@ -1,5 +1,5 @@
 import { Plus, Trash2, Users, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
@@ -40,11 +40,20 @@ export function TeamManagementPage() {
   const [editName, setEditName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
+  const expandedTeamIdRef = useRef<number | null>(null);
+  const detailRequestRef = useRef(0);
+  const memberActionRef = useRef(0);
+  const locationActionRef = useRef(0);
   const [members, setMembers] = useState<TeamMemberItem[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [teamDetailsError, setTeamDetailsError] = useState(false);
   const [memberToAdd, setMemberToAdd] = useState("");
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
   const [teamLocations, setTeamLocations] = useState<TeamLocationItem[]>([]);
   const [locationToAdd, setLocationToAdd] = useState("");
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [removingLocationCode, setRemovingLocationCode] = useState<string | null>(null);
 
   useEffect(() => {
     loadAll();
@@ -70,29 +79,43 @@ export function TeamManagementPage() {
   };
 
   const loadMembers = async (teamId: number) => {
+    const requestId = ++detailRequestRef.current;
     setIsLoadingMembers(true);
+    setTeamDetailsError(false);
     try {
       const [memberData, locationData] = await Promise.all([
         apiClient<TeamMemberItem[]>(`/api/admin/teams/${teamId}/members`),
         apiClient<TeamLocationItem[]>(`/api/admin/teams/${teamId}/locations`),
       ]);
-      setMembers(memberData || []);
-      setTeamLocations(locationData || []);
+      if (requestId !== detailRequestRef.current || expandedTeamIdRef.current !== teamId) return;
+      setMembers(Array.isArray(memberData) ? memberData : []);
+      setTeamLocations(Array.isArray(locationData) ? locationData : []);
     } catch {
-      setMembers([]);
-      setTeamLocations([]);
-      modalDialog.alert(t("admin.member_add_error"));
+      if (requestId !== detailRequestRef.current || expandedTeamIdRef.current !== teamId) return;
+      setTeamDetailsError(true);
     } finally {
-      setIsLoadingMembers(false);
+      if (requestId === detailRequestRef.current && expandedTeamIdRef.current === teamId) {
+        setIsLoadingMembers(false);
+      }
     }
   };
 
   const handleToggleExpand = async (teamId: number) => {
-    if (expandedTeamId === teamId) {
+    if (expandedTeamIdRef.current === teamId) {
+      detailRequestRef.current += 1;
+      expandedTeamIdRef.current = null;
       setExpandedTeamId(null);
+      setMembers([]);
+      setTeamLocations([]);
+      setTeamDetailsError(false);
+      setIsLoadingMembers(false);
       return;
     }
+    expandedTeamIdRef.current = teamId;
     setExpandedTeamId(teamId);
+    setMembers([]);
+    setTeamLocations([]);
+    setTeamDetailsError(false);
     setMemberToAdd("");
     setLocationToAdd("");
     await loadMembers(teamId);
@@ -168,62 +191,107 @@ export function TeamManagementPage() {
   };
 
   const handleAddMember = async () => {
-    if (expandedTeamId == null || !memberToAdd) return;
+    const teamId = expandedTeamId;
+    if (teamId == null || !memberToAdd || isAddingMember || removingMemberId !== null) return;
+    const userId = memberToAdd;
+    const actionId = ++memberActionRef.current;
+    setIsAddingMember(true);
     try {
-      await apiClient(`/api/admin/teams/${expandedTeamId}/members/${memberToAdd}`, {
+      await apiClient(`/api/admin/teams/${teamId}/members/${userId}`, {
         method: "PUT",
       });
-      setMemberToAdd("");
-      await loadMembers(expandedTeamId);
+      if (expandedTeamIdRef.current === teamId) {
+        setMemberToAdd("");
+        await loadMembers(teamId);
+      }
       haptics.success();
       await modalDialog.success(t("admin.member_add_success"));
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("admin.member_add_error"));
+    } finally {
+      if (memberActionRef.current === actionId) setIsAddingMember(false);
     }
   };
 
-  const handleRemoveMember = async (userId: number) => {
-    if (expandedTeamId == null) return;
+  const handleRemoveMember = async (userId: number, memberName: string) => {
+    const teamId = expandedTeamId;
+    if (teamId == null || removingMemberId !== null || isAddingMember) return;
+    const confirmed = await modalDialog.confirm(
+      t("admin.member_remove_confirm", { name: memberName }),
+      undefined,
+      true,
+    );
+    if (!confirmed || expandedTeamIdRef.current !== teamId) return;
+    const actionId = ++memberActionRef.current;
+    setRemovingMemberId(userId);
     try {
-      await apiClient(`/api/admin/teams/${expandedTeamId}/members/${userId}`, {
+      await apiClient(`/api/admin/teams/${teamId}/members/${userId}`, {
         method: "DELETE",
       });
-      setMembers((prev) => prev.filter((member) => member.id !== userId));
+      if (expandedTeamIdRef.current === teamId) {
+        setMembers((prev) => prev.filter((member) => member.id !== userId));
+      }
       haptics.success();
       await modalDialog.success(t("admin.member_remove_success"));
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("admin.member_remove_error"));
+    } finally {
+      if (memberActionRef.current === actionId) setRemovingMemberId(null);
     }
   };
 
   const handleAddTeamLocation = async () => {
-    if (expandedTeamId == null || !locationToAdd) return;
+    const teamId = expandedTeamId;
+    if (teamId == null || !locationToAdd || isAddingLocation || removingLocationCode !== null)
+      return;
+    const code = locationToAdd;
+    const actionId = ++locationActionRef.current;
+    setIsAddingLocation(true);
     try {
-      await apiClient(`/api/admin/teams/${expandedTeamId}/locations/${locationToAdd}`, {
+      await apiClient(`/api/admin/teams/${teamId}/locations/${encodeURIComponent(code)}`, {
         method: "PUT",
       });
-      setLocationToAdd("");
-      await loadMembers(expandedTeamId);
+      if (expandedTeamIdRef.current === teamId) {
+        setLocationToAdd("");
+        await loadMembers(teamId);
+      }
       haptics.success();
+      await modalDialog.success(t("admin.team_location_add_success"));
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("admin.location_add_error"));
+    } finally {
+      if (locationActionRef.current === actionId) setIsAddingLocation(false);
     }
   };
 
   const handleRemoveTeamLocation = async (code: string) => {
-    if (expandedTeamId == null) return;
+    const teamId = expandedTeamId;
+    if (teamId == null || removingLocationCode !== null || isAddingLocation) return;
+    const confirmed = await modalDialog.confirm(
+      t("admin.team_location_remove_confirm", { code }),
+      undefined,
+      true,
+    );
+    if (!confirmed || expandedTeamIdRef.current !== teamId) return;
+    const actionId = ++locationActionRef.current;
+    setRemovingLocationCode(code);
     try {
-      await apiClient(`/api/admin/teams/${expandedTeamId}/locations/${encodeURIComponent(code)}`, {
+      await apiClient(`/api/admin/teams/${teamId}/locations/${encodeURIComponent(code)}`, {
         method: "DELETE",
       });
-      setTeamLocations((prev) => prev.filter((item) => item.location_code !== code));
+      if (expandedTeamIdRef.current === teamId) {
+        setTeamLocations((prev) => prev.filter((item) => item.location_code !== code));
+      }
       haptics.success();
+      await modalDialog.success(t("admin.team_location_remove_success"));
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("admin.location_status_error"));
+    } finally {
+      if (locationActionRef.current === actionId) setRemovingLocationCode(null);
     }
   };
 
@@ -379,9 +447,30 @@ export function TeamManagementPage() {
                   </div>
 
                   {expandedTeamId === team.id && (
-                    <div className="mt-3 space-y-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                    <div
+                      className="mt-3 space-y-4 border-t border-zinc-200 pt-3 dark:border-zinc-800"
+                      aria-busy={isLoadingMembers}
+                    >
                       {isLoadingMembers ? (
-                        <p className="text-xs text-zinc-500">{t("common.loading")}</p>
+                        <p className="text-xs text-zinc-500" role="status">
+                          {t("common.loading")}
+                        </p>
+                      ) : teamDetailsError ? (
+                        <div
+                          role="alert"
+                          className="flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+                        >
+                          <span>{t("admin.team_details_load_error")}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (expandedTeamId !== null) void loadMembers(expandedTeamId);
+                            }}
+                            className="min-h-[40px] rounded-lg bg-rose-600 px-3 font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900"
+                          >
+                            {t("common.retry")}
+                          </button>
+                        </div>
                       ) : (
                         <>
                           <div className="space-y-2">
@@ -405,12 +494,24 @@ export function TeamManagementPage() {
                                     </span>
                                     <button
                                       type="button"
-                                      onClick={() => handleRemoveMember(member.id)}
+                                      onClick={() =>
+                                        handleRemoveMember(
+                                          member.id,
+                                          member.full_name || member.username || String(member.id),
+                                        )
+                                      }
+                                      disabled={
+                                        removingMemberId !== null ||
+                                        isAddingMember ||
+                                        removingMemberId === member.id
+                                      }
                                       aria-label={`${t("common.delete")} ${member.full_name}`}
-                                      className="flex min-h-[36px] items-center gap-1 rounded-lg px-2 font-bold text-rose-600"
+                                      className="flex min-h-[44px] items-center gap-1 rounded-lg px-2 font-bold text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
-                                      {t("common.delete")}
+                                      {removingMemberId === member.id
+                                        ? t("admin.member_removing_btn")
+                                        : t("common.delete")}
                                     </button>
                                   </li>
                                 ))}
@@ -423,7 +524,8 @@ export function TeamManagementPage() {
                               <select
                                 value={memberToAdd}
                                 onChange={(event) => setMemberToAdd(event.target.value)}
-                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                                disabled={isAddingMember || removingMemberId !== null}
+                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <option value="">{t("common.search")}</option>
                                 {users
@@ -442,72 +544,92 @@ export function TeamManagementPage() {
                             <button
                               type="button"
                               onClick={handleAddMember}
-                              disabled={!memberToAdd}
-                              className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white disabled:opacity-50"
+                              disabled={!memberToAdd || isAddingMember || removingMemberId !== null}
+                              className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
                             >
-                              {t("admin.member_add_btn")}
+                              {isAddingMember
+                                ? t("admin.member_adding_btn")
+                                : t("admin.member_add_btn")}
                             </button>
                           </div>
                         </>
                       )}
 
-                      <div className="space-y-2">
-                        <h3 className="text-[11px] font-black uppercase tracking-wider text-zinc-500">
-                          {t("admin.locations_page_title")}
-                        </h3>
-                        <ul className="flex flex-wrap gap-1.5">
-                          {teamLocations.map((item) => (
-                            <li
-                              key={item.location_code}
-                              className="flex items-center gap-1 rounded-lg bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-800"
-                            >
-                              <span>
-                                [{item.location_code}] {resolveLocationName(item, locale)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveTeamLocation(item.location_code)}
-                                aria-label={`${t("common.delete")} ${item.location_code}`}
-                                className="text-rose-600"
+                      {!isLoadingMembers && !teamDetailsError && (
+                        <div className="space-y-2">
+                          <h3 className="text-[11px] font-black uppercase tracking-wider text-zinc-500">
+                            {t("admin.locations_page_title")}
+                          </h3>
+                          {teamLocations.length === 0 ? (
+                            <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-700">
+                              {t("admin.team_locations_empty")}
+                            </p>
+                          ) : (
+                            <ul className="flex flex-wrap gap-1.5">
+                              {teamLocations.map((item) => (
+                                <li
+                                  key={item.location_code}
+                                  className="flex items-center gap-1 rounded-lg bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-800"
+                                >
+                                  <span>
+                                    [{item.location_code}] {resolveLocationName(item, locale)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveTeamLocation(item.location_code)}
+                                    disabled={
+                                      removingLocationCode !== null ||
+                                      isAddingLocation ||
+                                      removingLocationCode === item.location_code
+                                    }
+                                    aria-label={`${t("common.delete")} ${item.location_code}`}
+                                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <div className="flex flex-wrap items-end gap-2">
+                            <label className="min-w-[200px] flex-1 space-y-1 text-xs font-bold">
+                              <span>{t("common.location")}</span>
+                              <select
+                                value={locationToAdd}
+                                onChange={(event) => setLocationToAdd(event.target.value)}
+                                disabled={isAddingLocation || removingLocationCode !== null}
+                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="flex flex-wrap items-end gap-2">
-                          <label className="min-w-[200px] flex-1 space-y-1 text-xs font-bold">
-                            <span>{t("common.location")}</span>
-                            <select
-                              value={locationToAdd}
-                              onChange={(event) => setLocationToAdd(event.target.value)}
-                              className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                                <option value="">{t("issue.location_select")}</option>
+                                {locations
+                                  .filter(
+                                    (location) =>
+                                      !teamLocations.some(
+                                        (item) => item.location_code === location.code,
+                                      ),
+                                  )
+                                  .map((location) => (
+                                    <option key={location.code} value={location.code}>
+                                      [{location.code}] {resolveLocationName(location, locale)}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleAddTeamLocation}
+                              disabled={
+                                !locationToAdd || isAddingLocation || removingLocationCode !== null
+                              }
+                              className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
                             >
-                              <option value="">{t("issue.location_select")}</option>
-                              {locations
-                                .filter(
-                                  (location) =>
-                                    !teamLocations.some(
-                                      (item) => item.location_code === location.code,
-                                    ),
-                                )
-                                .map((location) => (
-                                  <option key={location.code} value={location.code}>
-                                    [{location.code}] {resolveLocationName(location, locale)}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={handleAddTeamLocation}
-                            disabled={!locationToAdd}
-                            className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white disabled:opacity-50"
-                          >
-                            {t("admin.add_location_btn")}
-                          </button>
+                              {isAddingLocation
+                                ? t("admin.team_location_adding_btn")
+                                : t("admin.add_location_btn")}
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </>

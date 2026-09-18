@@ -291,7 +291,9 @@ describe("IssueDetailModal Component", () => {
       photoButton?.click();
     });
     await act(async () => {});
-    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+    expect(
+      container.querySelector("#issue-photo-preview-title")?.closest('[role="dialog"]'),
+    ).not.toBeNull();
     expect(container.textContent).toContain("1 / 2");
     expect(container.textContent).toContain("TRƯỚC");
 
@@ -308,7 +310,9 @@ describe("IssueDetailModal Component", () => {
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(
+      container.querySelector("#issue-photo-preview-title")?.closest('[role="dialog"]'),
+    ).toBeFalsy();
   });
 
   it("renders the responsibility history and saves assignment plus cause verification with the current version", async () => {
@@ -426,6 +430,49 @@ describe("IssueDetailModal Component", () => {
     });
     await act(async () => {});
     expect(mutations().some((call) => call.method === "PATCH")).toBe(false);
+  });
+  it("disables cause verification while saving to prevent double submission", async () => {
+    const issue = baseIssue({
+      allowed_actions: { assign: false, verify_cause: true, resolve: false, close: false },
+      cause_status: "UNVERIFIED",
+    });
+    installFetch({ issue });
+    let resolvePatch!: (response: Response) => void;
+    const patchResponse = new Promise<Response>((resolve) => {
+      resolvePatch = resolve;
+    });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        calls.push({
+          method: "PATCH",
+          url: String(input instanceof Request ? input.url : input),
+          body: typeof init.body === "string" ? init.body : "",
+        });
+        return patchResponse;
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    const container = await mount(
+      <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+    const verifyButton = button(container, "Lưu kết quả xác minh");
+    expect(verifyButton).toBeDefined();
+
+    await act(async () => {
+      verifyButton?.click();
+    });
+    expect((verifyButton as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      verifyButton?.click();
+    });
+    expect(mutations().filter((call) => call.method === "PATCH")).toHaveLength(1);
+
+    resolvePatch(new Response(JSON.stringify({ data: issue }), { status: 200 }));
+    await act(async () => {});
+    expect((button(container, "Lưu kết quả xác minh") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("confirms an approval with the chosen kaizen rating for a permitted resolver", async () => {

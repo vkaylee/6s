@@ -24,7 +24,8 @@
     "loading_more": "Đang tải thêm...",
     "showing_count": "Đang hiển thị {current} / {total} sự cố",
     "all_loaded": "Đã hiển thị tất cả {total} sự cố",
-    "back": "Quay lại"
+    "back": "Quay lại",
+    "saving": "Đang lưu…"
   },
   "auth": {
     "login": "Đăng nhập",
@@ -317,6 +318,7 @@
     "edit_responsibility": "Điều chỉnh phân công",
     "cause_verification": "Xác minh nguyên nhân",
     "verify_cause": "Lưu kết quả xác minh",
+    "cause_verification_saving": "Đang lưu kết quả xác minh...",
     "cause_status_UNVERIFIED": "Chưa xác minh",
     "cause_status_CONFIRMED": "Đã xác minh",
     "cause_status_NOT_APPLICABLE": "Không áp dụng",
@@ -324,6 +326,9 @@
     "no_cause_team": "Chưa xác định đơn vị nguyên nhân",
     "assignment_requires_permission": "Cần quyền điều phối để chọn đơn vị/người xử lý; hệ thống chỉ gợi ý theo thiết bị.",
     "responsibility_member_error": "Không tải được danh sách thành viên đơn vị",
+    "assignee_loading": "Đang tải thông tin người xử lý...",
+    "assignee_lookup_error": "Không tải được thông tin người xử lý",
+    "assignee_permission_denied": "Ẩn người xử lý (cần quyền truy cập)",
     "unassigned": "Chưa gán người xử lý"
   },
   "admin": {
@@ -555,6 +560,15 @@
     "member_add_error": "Lỗi thêm thành viên vào đơn vị",
     "member_remove_success": "Đã xóa thành viên khỏi đơn vị!",
     "member_remove_error": "Lỗi xóa thành viên khỏi đơn vị",
+    "member_remove_confirm": "Xóa {name} khỏi đơn vị?",
+    "member_adding_btn": "Đang thêm…",
+    "member_removing_btn": "Đang xóa…",
+    "team_location_remove_confirm": "Xóa vị trí {code} khỏi đơn vị?",
+    "team_location_add_success": "Đã thêm vị trí vào đơn vị!",
+    "team_location_remove_success": "Đã xóa vị trí khỏi đơn vị!",
+    "team_details_load_error": "Không thể tải chi tiết đơn vị",
+    "team_locations_empty": "Đơn vị chưa được gán vị trí nào.",
+    "team_location_adding_btn": "Đang thêm vị trí…",
     "assets_page_title": "Thiết bị / tài sản",
     "asset_code_label": "Mã thiết bị *",
     "asset_name_label": "Tên thiết bị *",
@@ -686,6 +700,9 @@
     "changed_by": "Người thay đổi",
     "history_action_ASSIGN": "Giao đơn vị/người xử lý",
     "history_action_TRANSFER": "Chuyển giao xử lý",
+    "assignment_update_conflict": "Sự cố đã thay đổi trên máy chủ. Vẫn giữ trình chỉnh sửa; hãy tải lại sự cố rồi thử lại.",
+    "cause_verification_conflict": "Sự cố đã thay đổi trên máy chủ. Hãy tải lại trước khi lưu xác minh lần nữa.",
+    "modal_title": "Chi tiết sự cố #{id}",
     "history_action_CAUSE_VERIFY": "Xác minh nguyên nhân",
     "history_action_OTHER": "Cập nhật trách nhiệm"
   },
