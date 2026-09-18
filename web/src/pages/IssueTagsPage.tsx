@@ -301,9 +301,8 @@ function CreateTagModal({
       });
       haptics.success();
       onCreated(saved);
-      await modalDialog.alert(
+      await modalDialog.success(
         t(editingTag ? "admin.tag_update_success" : "admin.tag_add_success"),
-        t("common.success"),
       );
     } catch {
       haptics.errorOrConflict();
@@ -581,7 +580,7 @@ export function IssueTagsPage() {
     }
     await loadTags();
     haptics.success();
-    await modalDialog.alert(t("admin.industry_activated"));
+    await modalDialog.success(t("admin.industry_activated"));
   };
 
   const handleCreated = (tag: TagItemData) => {

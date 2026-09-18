@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { I18nObject } from "../types/index.ts";
 
-export type DialogType = "alert" | "confirm";
+export type DialogType = "alert" | "confirm" | "success";
 
 export interface DialogOptions {
   title?: string | I18nObject;
@@ -23,6 +23,7 @@ export interface DialogState {
     destructive?: boolean,
   ) => Promise<boolean>;
   alert: (message: string | I18nObject, title?: string | I18nObject) => Promise<void>;
+  success: (message: string | I18nObject, title?: string | I18nObject) => Promise<void>;
   handleConfirm: () => void;
   handleCancel: () => void;
 }
@@ -59,6 +60,14 @@ export const useDialogStore = create<DialogState>((set, get) => ({
     });
   },
 
+  success: async (message: string | I18nObject, title?: string | I18nObject) => {
+    await get().showDialog({
+      title,
+      message,
+      type: "success",
+    });
+  },
+
   handleConfirm: () => {
     const { resolvePromise } = get();
     if (resolvePromise) {
@@ -82,6 +91,8 @@ export const useDialogStore = create<DialogState>((set, get) => ({
 export const modalDialog = {
   alert: (message: string | I18nObject, title?: string | I18nObject) =>
     useDialogStore.getState().alert(message, title),
+  success: (message: string | I18nObject, title?: string | I18nObject) =>
+    useDialogStore.getState().success(message, title),
   confirm: (message: string | I18nObject, title?: string | I18nObject, destructive?: boolean) =>
     useDialogStore.getState().confirm(message, title, destructive),
 };

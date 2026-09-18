@@ -70,7 +70,7 @@ export function FactoryLocationsPage() {
       setNewNameZh("");
       setNewNameEn("");
       setNewQr("");
-      await modalDialog.alert(t("admin.location_add_success"));
+      await modalDialog.success(t("admin.location_add_success"));
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("admin.location_add_error"));
@@ -110,7 +110,7 @@ export function FactoryLocationsPage() {
       haptics.success();
       setLocations((prev) => prev.map((l) => (l.code === updated.code ? { ...l, ...updated } : l)));
       setEditingLocation(null);
-      await modalDialog.alert(t("admin.location_update_success"));
+      await modalDialog.success(t("admin.location_update_success"));
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("admin.location_update_error"));

@@ -490,7 +490,7 @@ export function IssueDetailModal({
       await saveDraftResolve(draft);
       haptics.success();
       syncEngine.triggerSync();
-      await modalDialog.alert(t("issue.sync_resolve_msg"));
+      await modalDialog.success(t("issue.sync_resolve_msg"));
       onRefresh();
       onClose();
     } catch {

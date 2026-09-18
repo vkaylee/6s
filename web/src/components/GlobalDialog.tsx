@@ -79,9 +79,14 @@ export function GlobalDialog(props: GlobalDialogProps = {}) {
   if (!isOpen) return null;
 
   const isConfirm = options.type === "confirm";
+  const isSuccess = options.type === "success";
   const isDestructive = options.destructive;
 
-  const defaultTitle = isConfirm ? t("common.confirm") : t("common.error");
+  const defaultTitle = isConfirm
+    ? t("common.confirm")
+    : isSuccess
+      ? t("common.success")
+      : t("common.error");
   const defaultCancelText = t("common.cancel");
   const defaultConfirmText = isConfirm ? t("common.confirm") : t("common.close");
 

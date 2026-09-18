@@ -95,6 +95,24 @@ describe("Frontend Modal Policy Enforcement", () => {
 
     expect(useDialogStore.getState().isOpen).toBe(false);
   });
+  it("renders success alerts with a success title", () => {
+    const html = renderToString(
+      <GlobalDialog isOpen={true} options={{ message: "Đã lưu cấu hình", type: "success" }} />,
+    );
+
+    expect(html).toContain("Thành công");
+    expect(html).not.toContain(">Lỗi<");
+  });
+
+  it("routes success dialogs through the success type without a caller-supplied title", async () => {
+    const promise = modalDialog.success("Đã lưu cấu hình");
+
+    expect(useDialogStore.getState().options.type).toBe("success");
+    expect(useDialogStore.getState().options.title).toBeUndefined();
+
+    useDialogStore.getState().handleConfirm();
+    await promise;
+  });
 
   it("handles confirm modal promise resolving to true or false", async () => {
     // Case 1: confirm approved

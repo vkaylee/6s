@@ -160,7 +160,7 @@ export function AdminConfigPage() {
         body: JSON.stringify({ timezone: factoryTimezone }),
       });
       haptics.success();
-      await modalDialog.alert(t("admin.factory_timezone_save_success"));
+      await modalDialog.success(t("admin.factory_timezone_save_success"));
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("admin.factory_timezone_save_error"));
@@ -281,7 +281,7 @@ export function AdminConfigPage() {
         }),
       });
       haptics.success();
-      await modalDialog.alert(t("admin.save_success"));
+      await modalDialog.success(t("admin.save_success"));
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("admin.save_error"));
@@ -359,7 +359,7 @@ export function AdminConfigPage() {
       setAdGroupLeaderDn(saved.group_leader_dn || "");
       setAdBindPassword("");
       haptics.success();
-      await modalDialog.alert(t("admin.save_ad_success"));
+      await modalDialog.success(t("admin.save_ad_success"));
     } catch {
       modalDialog.alert(t("admin.save_ad_error"));
     } finally {
@@ -388,7 +388,7 @@ export function AdminConfigPage() {
         setNotifHasWebhook(true);
         setNotifWebhookUrl("");
       }
-      await modalDialog.alert(t("admin.save_notify_success"));
+      await modalDialog.success(t("admin.save_notify_success"));
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("admin.save_notify_error"));
@@ -432,7 +432,7 @@ export function AdminConfigPage() {
       invalidateAiStatus();
       setAiApiKey("");
       await loadAIConfig();
-      await modalDialog.alert(t("admin.save_ai_success"));
+      await modalDialog.success(t("admin.save_ai_success"));
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("admin.save_ai_error"));
