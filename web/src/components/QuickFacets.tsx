@@ -4,6 +4,7 @@ export type FacetKey =
   | "ALL"
   | "MY_ISSUES"
   | "MY_LINE"
+  | "MY_TEAM"
   | "SAFETY_6S"
   | "OVERDUE_48H"
   | "WAITING_MY_REVIEW";
@@ -18,6 +19,7 @@ const FACETS: { key: FacetKey; labelKey: string; isAlert?: boolean }[] = [
   { key: "ALL", labelKey: "facets.all" },
   { key: "MY_ISSUES", labelKey: "facets.my_issues" },
   { key: "MY_LINE", labelKey: "facets.my_line" },
+  { key: "MY_TEAM", labelKey: "facets.my_team" },
   { key: "SAFETY_6S", labelKey: "facets.safety_6s", isAlert: true },
   { key: "OVERDUE_48H", labelKey: "facets.overdue_48h", isAlert: true },
   { key: "WAITING_MY_REVIEW", labelKey: "facets.waiting_my_review" },

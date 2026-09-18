@@ -247,6 +247,16 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
                   )}
                   {hasCapability(user, "masterdata:manage") && (
                     <Link
+                      href="/admin/assets"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>🧰</span>
+                      <span>{t("admin.assets_page_title")}</span>
+                    </Link>
+                  )}
+                  {hasCapability(user, "masterdata:manage") && (
+                    <Link
                       href="/admin/tags"
                       onClick={() => setIsProfileOpen(false)}
                       className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
@@ -273,6 +283,16 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
                     >
                       <span>👥</span>
                       <span>{t("admin.users_tab")}</span>
+                    </Link>
+                  )}
+                  {hasCapability(user, "user:manage") && (
+                    <Link
+                      href="/admin/teams"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center space-x-2 transition-colors min-h-[40px]"
+                    >
+                      <span>🛠️</span>
+                      <span>{t("admin.teams_page_title")}</span>
                     </Link>
                   )}
                   {user?.role === UserRole.SUPERADMIN && (

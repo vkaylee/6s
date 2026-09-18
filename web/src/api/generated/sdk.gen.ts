@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type ServerSentEventsResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddTeamLocationData, AddTeamLocationResponses, BatchUpdateTagStatusData, BatchUpdateTagStatusResponses, CloseIssueData, CloseIssueErrors, CloseIssueResponses, CreateAuthTicketData, CreateAuthTicketResponses, CreateLocationData, CreateLocationErrors, CreateLocationResponses, DeleteLocationMemberData, DeleteLocationMemberResponses, DeleteTeamLocationData, DeleteTeamLocationResponses, ExportIssuesXlsxData, ExportIssuesXlsxErrors, ExportIssuesXlsxResponses, FollowUpAiReviewData, FollowUpAiReviewResponses, GetAdConfigData, GetAdConfigErrors, GetAdConfigResponses, GetAiConfigData, GetAiConfigErrors, GetAiConfigResponses, GetAiStatusData, GetAiStatusResponses, GetCachedTranslationData, GetCachedTranslationResponses, GetHealthData, GetHealthResponses, GetIssueData, GetIssueErrors, GetIssueResponses, GetIssueScoreLogsData, GetIssueScoreLogsResponses, GetLocationLeaderboardData, GetLocationLeaderboardResponses, GetNotificationConfigData, GetNotificationConfigErrors, GetNotificationConfigResponses, GetReporterLeaderboardData, GetReporterLeaderboardResponses, GetReportSummaryData, GetReportSummaryResponses, GetScoringRulesData, GetScoringRulesResponses, GetSetupStatusData, GetSetupStatusResponses, GetTargetScoreLogsData, GetTargetScoreLogsResponses, InvalidateIssueData, InvalidateIssueErrors, InvalidateIssueResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListAllLocationsData, ListAllLocationsResponses, ListAllTagsData, ListAllTagsResponses, ListAuthSessionsData, ListAuthSessionsErrors, ListAuthSessionsResponses, ListIssuesData, ListIssuesResponses, ListLocationMembersData, ListLocationMembersResponses, ListLocationsData, ListLocationsResponses, ListPermissionsData, ListPermissionsResponses, ListTagsData, ListTagsResponses, ListTeamLocationsData, ListTeamLocationsResponses, LoginData, LoginErrors, LoginResponses, RefreshData, RefreshErrors, RefreshResponses, ReopenIssueData, ReopenIssueErrors, ReopenIssueResponses, ResolveIssueData, ResolveIssueErrors, ResolveIssueResponses, ReviewIssueWithAiData, ReviewIssueWithAiResponses, RevokeSessionData, RevokeSessionResponses, SetupSuperadminData, SetupSuperadminResponses, StreamIssueEventsData, StreamIssueEventsResponse, StreamIssueEventsResponses, SyncIssuesData, SyncIssuesErrors, SyncIssuesResponses, TestAdConfigData, TestAdConfigErrors, TestAdConfigResponses, TestAiConnectionData, TestAiConnectionErrors, TestAiConnectionResponses, TestAiDnsData, TestAiDnsResponses, TestNotificationConfigData, TestNotificationConfigErrors, TestNotificationConfigResponses, TranslateTextData, TranslateTextErrors, TranslateTextResponses, UpdateAdConfigData, UpdateAdConfigResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses, UpdateAiConfigData, UpdateAiConfigResponses, UpdateIssueData, UpdateIssueErrors, UpdateIssueResponses, UpdateLocationData, UpdateLocationResponses, UpdateLocationStatusData, UpdateLocationStatusResponses, UpdateNotificationConfigData, UpdateNotificationConfigErrors, UpdateNotificationConfigResponses, UpdateRolePermissionsData, UpdateRolePermissionsResponses, UpdateScoringRulesData, UpdateScoringRulesResponses, UpdateTagStatusData, UpdateTagStatusResponses, UpsertLocationMemberData, UpsertLocationMemberResponses, UpsertTagData, UpsertTagResponses } from './types.gen';
+import type { AddTeamLocationData, AddTeamLocationResponses, AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, BatchUpdateTagStatusData, BatchUpdateTagStatusResponses, CloseIssueData, CloseIssueErrors, CloseIssueResponses, CreateAdminAssetData, CreateAdminAssetErrors, CreateAdminAssetResponses, CreateAdminTeamData, CreateAdminTeamResponses, CreateAuthTicketData, CreateAuthTicketResponses, CreateLocationData, CreateLocationErrors, CreateLocationResponses, DeleteLocationMemberData, DeleteLocationMemberResponses, DeleteTeamLocationData, DeleteTeamLocationResponses, DeleteTeamMemberData, DeleteTeamMemberErrors, DeleteTeamMemberResponses, ExportIssuesXlsxData, ExportIssuesXlsxErrors, ExportIssuesXlsxResponses, FollowUpAiReviewData, FollowUpAiReviewResponses, GetAdConfigData, GetAdConfigErrors, GetAdConfigResponses, GetAiConfigData, GetAiConfigErrors, GetAiConfigResponses, GetAiStatusData, GetAiStatusResponses, GetCachedTranslationData, GetCachedTranslationResponses, GetHealthData, GetHealthResponses, GetIssueData, GetIssueErrors, GetIssueResponses, GetIssueScoreLogsData, GetIssueScoreLogsResponses, GetLocationLeaderboardData, GetLocationLeaderboardResponses, GetNotificationConfigData, GetNotificationConfigErrors, GetNotificationConfigResponses, GetReporterLeaderboardData, GetReporterLeaderboardResponses, GetReportSummaryData, GetReportSummaryResponses, GetScoringRulesData, GetScoringRulesResponses, GetSetupStatusData, GetSetupStatusResponses, GetTargetScoreLogsData, GetTargetScoreLogsResponses, GetTeamReportData, GetTeamReportErrors, GetTeamReportResponses, InvalidateIssueData, InvalidateIssueErrors, InvalidateIssueResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListAllLocationsData, ListAllLocationsResponses, ListAllTagsData, ListAllTagsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAssignableTeamMembersData, ListAssignableTeamMembersErrors, ListAssignableTeamMembersResponses, ListAuthSessionsData, ListAuthSessionsErrors, ListAuthSessionsResponses, ListIssuesData, ListIssuesResponses, ListLocationMembersData, ListLocationMembersResponses, ListLocationsData, ListLocationsResponses, ListPermissionsData, ListPermissionsResponses, ListTagsData, ListTagsResponses, ListTeamLocationsData, ListTeamLocationsResponses, ListTeamMembersData, ListTeamMembersErrors, ListTeamMembersResponses, ListTeamsData, ListTeamsErrors, ListTeamsResponses, LoginData, LoginErrors, LoginResponses, RefreshData, RefreshErrors, RefreshResponses, ReopenIssueData, ReopenIssueErrors, ReopenIssueResponses, ResolveIssueData, ResolveIssueErrors, ResolveIssueResponses, ReviewIssueWithAiData, ReviewIssueWithAiResponses, RevokeSessionData, RevokeSessionResponses, SetupSuperadminData, SetupSuperadminResponses, StreamIssueEventsData, StreamIssueEventsResponse, StreamIssueEventsResponses, SyncIssuesData, SyncIssuesErrors, SyncIssuesResponses, TestAdConfigData, TestAdConfigErrors, TestAdConfigResponses, TestAiConnectionData, TestAiConnectionErrors, TestAiConnectionResponses, TestAiDnsData, TestAiDnsResponses, TestNotificationConfigData, TestNotificationConfigErrors, TestNotificationConfigResponses, TranslateTextData, TranslateTextErrors, TranslateTextResponses, UpdateAdConfigData, UpdateAdConfigResponses, UpdateAdminAssetData, UpdateAdminAssetErrors, UpdateAdminAssetResponses, UpdateAdminTeamData, UpdateAdminTeamErrors, UpdateAdminTeamResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses, UpdateAiConfigData, UpdateAiConfigResponses, UpdateIssueData, UpdateIssueErrors, UpdateIssueResponses, UpdateLocationData, UpdateLocationResponses, UpdateLocationStatusData, UpdateLocationStatusResponses, UpdateNotificationConfigData, UpdateNotificationConfigErrors, UpdateNotificationConfigResponses, UpdateRolePermissionsData, UpdateRolePermissionsResponses, UpdateScoringRulesData, UpdateScoringRulesResponses, UpdateTagStatusData, UpdateTagStatusResponses, UpsertLocationMemberData, UpsertLocationMemberResponses, UpsertTagData, UpsertTagResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -109,6 +109,33 @@ export const upsertTag = <ThrowOnError extends boolean = false>(options: Options
 });
 
 /**
+ * Danh mục thiết bị/tài sản theo vị trí (yêu cầu đăng nhập)
+ */
+export const listAssets = <ThrowOnError extends boolean = false>(options?: Options<ListAssetsData, ThrowOnError>): RequestResult<ListAssetsResponses, ListAssetsErrors, ThrowOnError> => (options?.client ?? client).get<ListAssetsResponses, ListAssetsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/assets',
+    ...options
+});
+
+/**
+ * Danh mục team của site (yêu cầu đăng nhập)
+ */
+export const listTeams = <ThrowOnError extends boolean = false>(options?: Options<ListTeamsData, ThrowOnError>): RequestResult<ListTeamsResponses, ListTeamsErrors, ThrowOnError> => (options?.client ?? client).get<ListTeamsResponses, ListTeamsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/teams',
+    ...options
+});
+
+/**
+ * Thành viên team phục vụ chọn người xử lý (Requires `issue:assign`)
+ */
+export const listAssignableTeamMembers = <ThrowOnError extends boolean = false>(options: Options<ListAssignableTeamMembersData, ThrowOnError>): RequestResult<ListAssignableTeamMembersResponses, ListAssignableTeamMembersErrors, ThrowOnError> => (options.client ?? client).get<ListAssignableTeamMembersResponses, ListAssignableTeamMembersErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/teams/{id}/members',
+    ...options
+});
+
+/**
  * Lấy danh sách issues có phân trang và bộ lọc
  */
 export const listIssues = <ThrowOnError extends boolean = false>(options?: Options<ListIssuesData, ThrowOnError>): RequestResult<ListIssuesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListIssuesResponses, unknown, ThrowOnError>({
@@ -127,7 +154,7 @@ export const getIssue = <ThrowOnError extends boolean = false>(options: Options<
 });
 
 /**
- * Sửa nhanh phân loại S hoặc tags khi phát hiện sai
+ * Sửa nhanh phân loại S, tags hoặc trách nhiệm; multipart chỉ nhận các trường phân loại/ảnh, trường trách nhiệm và expected_version chỉ qua JSON
  */
 export const updateIssue = <ThrowOnError extends boolean = false>(options: Options<UpdateIssueData, ThrowOnError>): RequestResult<UpdateIssueResponses, UpdateIssueErrors, ThrowOnError> => (options.client ?? client).patch<UpdateIssueResponses, UpdateIssueErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -296,6 +323,89 @@ export const listAdminUsers = <ThrowOnError extends boolean = false>(options?: O
 export const updateAdminUser = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminUserData, ThrowOnError>): RequestResult<UpdateAdminUserResponses, UpdateAdminUserErrors, ThrowOnError> => (options.client ?? client).patch<UpdateAdminUserResponses, UpdateAdminUserErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/admin/users/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Tạo tài sản/thiết bị (Requires `masterdata:manage`)
+ */
+export const createAdminAsset = <ThrowOnError extends boolean = false>(options: Options<CreateAdminAssetData, ThrowOnError>): RequestResult<CreateAdminAssetResponses, CreateAdminAssetErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminAssetResponses, CreateAdminAssetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/assets',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Cập nhật tài sản/thiết bị (Requires `masterdata:manage`)
+ */
+export const updateAdminAsset = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminAssetData, ThrowOnError>): RequestResult<UpdateAdminAssetResponses, UpdateAdminAssetErrors, ThrowOnError> => (options.client ?? client).put<UpdateAdminAssetResponses, UpdateAdminAssetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/assets/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Tạo team (Requires `user:manage`)
+ */
+export const createAdminTeam = <ThrowOnError extends boolean = false>(options: Options<CreateAdminTeamData, ThrowOnError>): RequestResult<CreateAdminTeamResponses, unknown, ThrowOnError> => (options.client ?? client).post<CreateAdminTeamResponses, unknown, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/teams',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Cập nhật team (Requires `user:manage`)
+ */
+export const updateAdminTeam = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminTeamData, ThrowOnError>): RequestResult<UpdateAdminTeamResponses, UpdateAdminTeamErrors, ThrowOnError> => (options.client ?? client).put<UpdateAdminTeamResponses, UpdateAdminTeamErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/teams/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Danh sách thành viên team (Requires `user:manage`)
+ */
+export const listTeamMembers = <ThrowOnError extends boolean = false>(options: Options<ListTeamMembersData, ThrowOnError>): RequestResult<ListTeamMembersResponses, ListTeamMembersErrors, ThrowOnError> => (options.client ?? client).get<ListTeamMembersResponses, ListTeamMembersErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/teams/{id}/members',
+    ...options
+});
+
+/**
+ * Xóa người dùng khỏi team (Requires `user:manage`)
+ */
+export const deleteTeamMember = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamMemberData, ThrowOnError>): RequestResult<DeleteTeamMemberResponses, DeleteTeamMemberErrors, ThrowOnError> => (options.client ?? client).delete<DeleteTeamMemberResponses, DeleteTeamMemberErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/teams/{id}/members/{userID}',
+    ...options
+});
+
+/**
+ * Thêm người dùng vào team (Requires `user:manage`)
+ */
+export const addTeamMember = <ThrowOnError extends boolean = false>(options: Options<AddTeamMemberData, ThrowOnError>): RequestResult<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError> => (options.client ?? client).put<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/admin/teams/{id}/members/{userID}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -531,6 +641,15 @@ export const createAuthTicket = <ThrowOnError extends boolean = false>(options?:
 export const getReportSummary = <ThrowOnError extends boolean = false>(options?: Options<GetReportSummaryData, ThrowOnError>): RequestResult<GetReportSummaryResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetReportSummaryResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/reports/summary',
+    ...options
+});
+
+/**
+ * KPI xử lý theo team (Requires `reports:view`)
+ */
+export const getTeamReport = <ThrowOnError extends boolean = false>(options?: Options<GetTeamReportData, ThrowOnError>): RequestResult<GetTeamReportResponses, GetTeamReportErrors, ThrowOnError> => (options?.client ?? client).get<GetTeamReportResponses, GetTeamReportErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/reports/teams',
     ...options
 });
 

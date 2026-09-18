@@ -25,6 +25,7 @@ import { ScoreLedgerPage } from "./pages/ScoreLedgerPage.tsx";
 import { SetupSuperadminModal } from "./pages/SetupSuperadminModal.tsx";
 import { hasCapability, useAuthStore } from "./store/authStore.ts";
 import { modalDialog } from "./store/dialogStore.ts";
+import { useMasterdataStore } from "./store/masterdataStore.ts";
 import { useRouteHistoryStore } from "./store/routeHistoryStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
 import { resolveLocationNameByCode, UserRole } from "./types/index.ts";
@@ -46,6 +47,12 @@ const FactoryLocationsPage = lazy(() =>
 );
 const IssueTagsPage = lazy(() =>
   import("./pages/IssueTagsPage.tsx").then((m) => ({ default: m.IssueTagsPage })),
+);
+const TeamManagementPage = lazy(() =>
+  import("./pages/TeamManagementPage.tsx").then((m) => ({ default: m.TeamManagementPage })),
+);
+const AssetManagementPage = lazy(() =>
+  import("./pages/AssetManagementPage.tsx").then((m) => ({ default: m.AssetManagementPage })),
 );
 
 function ScrollToTop() {
@@ -111,6 +118,23 @@ export function App() {
     totalOpen,
     totalOverdue,
   } = dashboard;
+  const hasActiveFilters =
+    advancedFilters.statuses.length > 0 ||
+    advancedFilters.categories.length > 0 ||
+    advancedFilters.locationCodes.length > 0 ||
+    advancedFilters.assignedTeamId != null ||
+    advancedFilters.mineTeam;
+  const masterTeams = useMasterdataStore((state) => state.teams);
+  const loadMasterdataReference = useMasterdataStore((state) => state.loadReference);
+  const selectedTeamLabel = advancedFilters.assignedTeamId
+    ? (() => {
+        const team = masterTeams.find((item) => item.id === advancedFilters.assignedTeamId);
+        return team ? `${team.name} (${team.code})` : `#${advancedFilters.assignedTeamId}`;
+      })()
+    : "";
+  useEffect(() => {
+    if (user) loadMasterdataReference();
+  }, [user, loadMasterdataReference]);
   const canViewHealth = hasCapability(user ?? useAuthStore.getState().user, "reports:view");
   const dashboardErrors =
     dashboardErrorsState &&
@@ -229,6 +253,32 @@ export function App() {
                 }
               >
                 <IssueTagsPage />
+              </Suspense>
+            </ProtectedRoute>
+          </Route>
+          <Route path="/admin/teams">
+            <ProtectedRoute allowedCapability="user:manage">
+              <Suspense
+                fallback={
+                  <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                }
+              >
+                <TeamManagementPage />
+              </Suspense>
+            </ProtectedRoute>
+          </Route>
+          <Route path="/admin/assets">
+            <ProtectedRoute allowedCapability="masterdata:manage">
+              <Suspense
+                fallback={
+                  <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-black">
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                }
+              >
+                <AssetManagementPage />
               </Suspense>
             </ProtectedRoute>
           </Route>
@@ -508,7 +558,6 @@ export function App() {
                         </div>
                       </>
                     )}
-
                     {/* Quick Facets Bar */}
                     <QuickFacets
                       activeFacet={activeFacet}
@@ -523,25 +572,19 @@ export function App() {
                         onClick={() => setIsFilterDrawerOpen(true)}
                         aria-label={t("filters.title")}
                         className={`p-2.5 rounded-xl border flex items-center justify-center gap-1.5 min-h-[40px] px-3 text-xs font-bold transition-all shadow-xs ${
-                          advancedFilters.statuses.length > 0 ||
-                          advancedFilters.categories.length > 0 ||
-                          advancedFilters.locationCodes.length > 0
+                          hasActiveFilters
                             ? "bg-rose-600 border-rose-600 text-white shadow-rose-200 dark:shadow-none"
                             : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                         }`}
                       >
                         <SlidersHorizontal className="w-4 h-4" />
-                        {(advancedFilters.statuses.length > 0 ||
-                          advancedFilters.categories.length > 0 ||
-                          advancedFilters.locationCodes.length > 0) && (
+                        {hasActiveFilters && (
                           <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                         )}
                       </button>
                     </div>
                     {/* Active Filter Chips */}
-                    {(advancedFilters.statuses.length > 0 ||
-                      advancedFilters.categories.length > 0 ||
-                      advancedFilters.locationCodes.length > 0) && (
+                    {hasActiveFilters && (
                       <div className="flex items-center gap-1.5 flex-wrap px-1 text-xs">
                         <span className="text-zinc-400 text-[11px] font-medium">
                           {t("filters.filter_active")}:
@@ -608,6 +651,35 @@ export function App() {
                             </button>
                           </span>
                         ))}
+                        {advancedFilters.assignedTeamId != null && (
+                          <span className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                            {selectedTeamLabel}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                applyAdvancedFilters({ ...advancedFilters, assignedTeamId: null })
+                              }
+                              className="hover:text-rose-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                        {advancedFilters.mineTeam && (
+                          <span className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                            {t("facets.my_team")}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveFacet("ALL");
+                                applyAdvancedFilters({ ...advancedFilters, mineTeam: false });
+                              }}
+                              className="hover:text-rose-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={resetAdvancedFilters}
@@ -684,6 +756,7 @@ export function App() {
                               key={iss.id}
                               issue={iss}
                               locations={locations}
+                              teams={masterTeams}
                               tags={tags}
                               onClick={() => setSelectedIssue(iss)}
                             />
@@ -745,9 +818,13 @@ export function App() {
                   isOpen={isFilterDrawerOpen}
                   onClose={() => setIsFilterDrawerOpen(false)}
                   locations={locations}
+                  teams={masterTeams}
                   filters={advancedFilters}
                   onApply={applyAdvancedFilters}
-                  onReset={resetAdvancedFilters}
+                  onReset={() => {
+                    setActiveFacet("ALL");
+                    resetAdvancedFilters();
+                  }}
                 />
 
                 {selectedIssue && (

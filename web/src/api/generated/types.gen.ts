@@ -69,6 +69,34 @@ export type Issue = {
     version: number;
     creator_id: number;
     resolver_id?: number;
+    /**
+     * Luôn có mặt; null khi issue không gắn tài sản
+     */
+    asset_id: number | null;
+    /**
+     * Team xử lý; luôn có mặt, null khi chưa phân công
+     */
+    assigned_team_id: number | null;
+    /**
+     * Người xử lý trực tiếp; luôn có mặt, null khi chưa phân công
+     */
+    assignee_id: number | null;
+    /**
+     * Team chịu trách nhiệm nguyên nhân; luôn có mặt, không tự suy ra từ team xử lý
+     */
+    cause_team_id: number | null;
+    /**
+     * Trạng thái xác minh nguyên nhân; luôn có mặt, độc lập với cause_type
+     */
+    cause_status: 'UNVERIFIED' | 'CONFIRMED' | 'NOT_APPLICABLE';
+    /**
+     * Chỉ có ở GET /api/issues/{id}
+     */
+    responsibility_history?: Array<ResponsibilityHistoryEntry>;
+    /**
+     * Chỉ có ở GET /api/issues/{id}
+     */
+    allowed_actions?: IssueAllowedActions;
     category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
     location_code: string;
     tags: Array<string>;
@@ -115,6 +143,67 @@ export type TeamLocation = {
     team_id: number;
     location_code: string;
     created_at?: string;
+};
+
+export type Asset = {
+    id: number;
+    site_id: number;
+    location_code: string;
+    asset_code: string;
+    name: string;
+    asset_type?: string | null;
+    default_team_id: number | null;
+    is_active: boolean;
+};
+
+export type Team = {
+    id: number;
+    site_id: number;
+    code: string;
+    name: string;
+    is_active: boolean;
+};
+
+export type TeamMember = {
+    id: number;
+    username: string;
+    full_name: string;
+    role: 'USER' | 'LINE_LEADER' | 'SAFETY_OFFICER' | 'ADMIN' | 'SUPERADMIN';
+    is_active: boolean;
+};
+
+export type ResponsibilityHistoryEntry = {
+    id: number;
+    /**
+     * ASSIGN khi có người/đơn vị nhận xử lý; TRANSFER khi đổi người/đơn vị; CAUSE_VERIFY khi xác minh nguyên nhân; OTHER cho thay đổi trách nhiệm khác (ví dụ chỉ đổi tài sản)
+     */
+    action: 'ASSIGN' | 'TRANSFER' | 'CAUSE_VERIFY' | 'OTHER';
+    changed_by: number | null;
+    changed_by_name: string | null;
+    old_value: {
+        [key: string]: unknown;
+    } | null;
+    new_value: {
+        [key: string]: unknown;
+    } | null;
+    created_at: string;
+};
+
+export type IssueAllowedActions = {
+    assign: boolean;
+    verify_cause: boolean;
+    resolve: boolean;
+    close: boolean;
+};
+
+export type TeamKpi = {
+    team_id: number;
+    team_name: string;
+    assigned_count: number;
+    open_count: number;
+    overdue_count: number;
+    closed_count: number;
+    confirmed_cause_count: number;
 };
 
 export type AiConfig = {
@@ -372,13 +461,146 @@ export type UpsertTagResponses = {
 
 export type UpsertTagResponse = UpsertTagResponses[keyof UpsertTagResponses];
 
+export type ListAssetsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Chỉ được khác site hiện tại với SUPERADMIN; nếu không sẽ trả 403
+         */
+        site_id?: number;
+        location_code?: string;
+        is_active?: boolean;
+    };
+    url: '/assets';
+};
+
+export type ListAssetsErrors = {
+    /**
+     * Chưa xác thực
+     */
+    401: ErrorEnvelope;
+    /**
+     * site_id không thuộc phạm vi người dùng
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListAssetsError = ListAssetsErrors[keyof ListAssetsErrors];
+
+export type ListAssetsResponses = {
+    /**
+     * Danh sách thiết bị
+     */
+    200: {
+        data: Array<Asset>;
+    };
+};
+
+export type ListAssetsResponse = ListAssetsResponses[keyof ListAssetsResponses];
+
+export type ListTeamsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Chỉ được khác site hiện tại với SUPERADMIN; nếu không sẽ trả 403
+         */
+        site_id?: number;
+        /**
+         * Lọc team có gán khu vực này
+         */
+        location_code?: string;
+        is_active?: boolean;
+    };
+    url: '/teams';
+};
+
+export type ListTeamsErrors = {
+    /**
+     * Chưa xác thực
+     */
+    401: ErrorEnvelope;
+    /**
+     * site_id không thuộc phạm vi người dùng
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListTeamsError = ListTeamsErrors[keyof ListTeamsErrors];
+
+export type ListTeamsResponses = {
+    /**
+     * Danh sách team
+     */
+    200: {
+        data: Array<Team>;
+    };
+};
+
+export type ListTeamsResponse = ListTeamsResponses[keyof ListTeamsResponses];
+
+export type ListAssignableTeamMembersData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/teams/{id}/members';
+};
+
+export type ListAssignableTeamMembersErrors = {
+    /**
+     * Thiếu permission `issue:assign`
+     */
+    403: ErrorEnvelope;
+    /**
+     * Team không thuộc site của người dùng
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListAssignableTeamMembersError = ListAssignableTeamMembersErrors[keyof ListAssignableTeamMembersErrors];
+
+export type ListAssignableTeamMembersResponses = {
+    /**
+     * Danh sách thành viên team
+     */
+    200: {
+        data: Array<TeamMember>;
+    };
+};
+
+export type ListAssignableTeamMembersResponse = ListAssignableTeamMembersResponses[keyof ListAssignableTeamMembersResponses];
+
 export type ListIssuesData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Chấp nhận cả alias số nhiều `statuses` (giá trị lặp lại hoặc phân tách bằng dấu phẩy)
+         */
         status?: 'OPEN' | 'PENDING_REVIEW' | 'CLOSED' | 'INVALID';
+        /**
+         * Chấp nhận cả alias số nhiều `categories`
+         */
         category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+        /**
+         * Chấp nhận cả alias số nhiều `location_codes`
+         */
         location_code?: string;
+        /**
+         * Chỉ issue OPEN quá 48 giờ
+         */
+        overdue?: boolean;
+        /**
+         * Lọc theo team xử lý
+         */
+        assigned_team_id?: number;
+        /**
+         * Chỉ issues được giao cho một team hiện tại của người dùng
+         */
+        mine_team?: boolean;
         page?: number;
         limit?: number;
     };
@@ -428,9 +650,33 @@ export type GetIssueResponse = GetIssueResponses[keyof GetIssueResponses];
 
 export type UpdateIssueData = {
     body: {
+        /**
+         * Bắt buộc khi payload có bất kỳ trường trách nhiệm nào; thiếu thì 400, lệch phiên bản thì 409 ISSUE_CONFLICT
+         */
+        expected_version?: number;
         category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
         location_code?: string;
         tags?: Array<string>;
+        /**
+         * null để xóa; bỏ qua để giữ nguyên
+         */
+        asset_id?: number | null;
+        /**
+         * null để xóa; bỏ qua để giữ nguyên
+         */
+        assigned_team_id?: number | null;
+        /**
+         * null để xóa; bỏ qua để giữ nguyên
+         */
+        assignee_id?: number | null;
+        /**
+         * Bắt buộc có issue:verify_cause khi gửi (kể cả null), nếu không trả 403. Bỏ qua để giữ nguyên. Nếu cause_status hiệu lực là UNVERIFIED/NOT_APPLICABLE, cột này bị xóa cùng lúc; gửi kèm giá trị khác null với hai trạng thái đó trả 400. CONFIRMED đòi hỏi team đang hoạt động thuộc site của issue, nếu không 400.
+         */
+        cause_team_id?: number | null;
+        /**
+         * Bắt buộc có issue:verify_cause khi gửi (kể cả null hoặc UNVERIFIED), nếu không trả 403. Bỏ qua để giữ nguyên. null đặt lại UNVERIFIED; UNVERIFIED/NOT_APPLICABLE luôn xóa cause_team_id trong cùng giao dịch; CONFIRMED giữ nguyên team hiện có nếu hợp lệ. Giá trị ngoài enum trả 400.
+         */
+        cause_status?: 'UNVERIFIED' | 'CONFIRMED' | 'NOT_APPLICABLE' | null;
     };
     path: {
         id: number;
@@ -441,9 +687,17 @@ export type UpdateIssueData = {
 
 export type UpdateIssueErrors = {
     /**
-     * Không có quyền sửa issue này
+     * Thiếu expected_version cho thay đổi trách nhiệm; cause_status ngoài enum; tổ hợp nguyên nhân không nhất quán (UNVERIFIED/NOT_APPLICABLE kèm cause_team_id khác null, hoặc CONFIRMED thiếu team hợp lệ); tài sản/team không khớp site hoặc vị trí của issue
+     */
+    400: ErrorEnvelope;
+    /**
+     * Không có quyền sửa issue này, hoặc thiếu `issue:verify_cause` khi gửi trường nguyên nhân, hoặc thiếu `issue:assign` khi đổi phân công
      */
     403: ErrorEnvelope;
+    /**
+     * Phiên bản issue đã thay đổi (expected_version lệch)
+     */
+    409: ErrorEnvelope;
 };
 
 export type UpdateIssueError = UpdateIssueErrors[keyof UpdateIssueErrors];
@@ -477,6 +731,19 @@ export type SyncIssuesData = {
          * Ảnh cận cảnh / chú thích (<= 2MB, JPEG/PNG)
          */
         photo_detail?: Blob | File;
+        cause_type?: 'CONDITION' | 'BEHAVIOR';
+        /**
+         * Tùy chọn; không cần issue:assign, nhưng 400 nếu tài sản không tồn tại/không hoạt động/khác site. Tài sản hợp lệ sẽ gợi ý default_team_id đang hoạt động khi không gửi assigned_team_id.
+         */
+        asset_id?: number;
+        /**
+         * Tùy chọn; gửi trường này cần issue:assign, nếu không trả 403. Team không hoạt động hoặc khác site trả 400.
+         */
+        assigned_team_id?: number;
+        /**
+         * Tùy chọn; gửi trường này cần issue:assign, nếu không trả 403. Người dùng phải thuộc team hiệu lực, nếu không trả 400.
+         */
+        assignee_id?: number;
     };
     path?: never;
     query?: never;
@@ -484,6 +751,14 @@ export type SyncIssuesData = {
 };
 
 export type SyncIssuesErrors = {
+    /**
+     * Tài sản/team/người xử lý không hợp lệ, không hoạt động, khác site, hoặc người xử lý không thuộc team hiệu lực
+     */
+    400: ErrorEnvelope;
+    /**
+     * Gửi assigned_team_id hoặc assignee_id nhưng thiếu permission `issue:assign`
+     */
+    403: ErrorEnvelope;
     /**
      * File vượt quá dung lượng quy định (Ảnh > 2MB)
      */
@@ -884,6 +1159,266 @@ export type UpdateAdminUserResponses = {
 
 export type UpdateAdminUserResponse = UpdateAdminUserResponses[keyof UpdateAdminUserResponses];
 
+export type CreateAdminAssetData = {
+    body: {
+        location_code: string;
+        asset_code: string;
+        name: string;
+        asset_type?: string | null;
+        default_team_id?: number | null;
+        is_active?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/assets';
+};
+
+export type CreateAdminAssetErrors = {
+    /**
+     * Vị trí hoặc team mặc định không thuộc site hiện tại
+     */
+    400: ErrorEnvelope;
+    /**
+     * Không có quyền quản lý master data
+     */
+    403: ErrorEnvelope;
+};
+
+export type CreateAdminAssetError = CreateAdminAssetErrors[keyof CreateAdminAssetErrors];
+
+export type CreateAdminAssetResponses = {
+    /**
+     * Tài sản đã được tạo
+     */
+    201: {
+        data: Asset;
+    };
+};
+
+export type CreateAdminAssetResponse = CreateAdminAssetResponses[keyof CreateAdminAssetResponses];
+
+export type UpdateAdminAssetData = {
+    body: {
+        /**
+         * Chuỗi rỗng giữ nguyên giá trị hiện tại
+         */
+        location_code?: string;
+        /**
+         * Chuỗi rỗng giữ nguyên giá trị hiện tại
+         */
+        asset_code?: string;
+        /**
+         * Chuỗi rỗng giữ nguyên giá trị hiện tại
+         */
+        name?: string;
+        /**
+         * null để xóa; bỏ qua để giữ nguyên
+         */
+        asset_type?: string | null;
+        /**
+         * null để xóa; bỏ qua để giữ nguyên
+         */
+        default_team_id?: number | null;
+        is_active?: boolean;
+    };
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/admin/assets/{id}';
+};
+
+export type UpdateAdminAssetErrors = {
+    /**
+     * Vị trí hoặc team mặc định không thuộc site hiện tại
+     */
+    400: ErrorEnvelope;
+    /**
+     * Không tìm thấy tài sản trong site hiện tại
+     */
+    404: ErrorEnvelope;
+};
+
+export type UpdateAdminAssetError = UpdateAdminAssetErrors[keyof UpdateAdminAssetErrors];
+
+export type UpdateAdminAssetResponses = {
+    /**
+     * Tài sản đã được cập nhật
+     */
+    200: {
+        data: Asset;
+    };
+};
+
+export type UpdateAdminAssetResponse = UpdateAdminAssetResponses[keyof UpdateAdminAssetResponses];
+
+export type CreateAdminTeamData = {
+    body: {
+        code: string;
+        name: string;
+        is_active?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/teams';
+};
+
+export type CreateAdminTeamResponses = {
+    /**
+     * Team đã được tạo
+     */
+    201: {
+        data: Team;
+    };
+};
+
+export type CreateAdminTeamResponse = CreateAdminTeamResponses[keyof CreateAdminTeamResponses];
+
+export type UpdateAdminTeamData = {
+    body: {
+        /**
+         * null hoặc bỏ qua để giữ nguyên; đổi mã được phép
+         */
+        code?: string;
+        /**
+         * null hoặc bỏ qua để giữ nguyên
+         */
+        name?: string;
+        /**
+         * null hoặc bỏ qua để giữ nguyên
+         */
+        is_active?: boolean | null;
+    };
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/admin/teams/{id}';
+};
+
+export type UpdateAdminTeamErrors = {
+    /**
+     * Không tìm thấy team trong site hiện tại
+     */
+    404: ErrorEnvelope;
+};
+
+export type UpdateAdminTeamError = UpdateAdminTeamErrors[keyof UpdateAdminTeamErrors];
+
+export type UpdateAdminTeamResponses = {
+    /**
+     * Team đã được cập nhật
+     */
+    200: {
+        data: Team;
+    };
+};
+
+export type UpdateAdminTeamResponse = UpdateAdminTeamResponses[keyof UpdateAdminTeamResponses];
+
+export type ListTeamMembersData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/admin/teams/{id}/members';
+};
+
+export type ListTeamMembersErrors = {
+    /**
+     * Thiếu permission `user:manage`
+     */
+    403: ErrorEnvelope;
+    /**
+     * Team không thuộc site hiện tại
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListTeamMembersError = ListTeamMembersErrors[keyof ListTeamMembersErrors];
+
+export type ListTeamMembersResponses = {
+    /**
+     * Danh sách thành viên
+     */
+    200: {
+        data: Array<TeamMember>;
+    };
+};
+
+export type ListTeamMembersResponse = ListTeamMembersResponses[keyof ListTeamMembersResponses];
+
+export type DeleteTeamMemberData = {
+    body?: never;
+    path: {
+        id: number;
+        userID: number;
+    };
+    query?: never;
+    url: '/admin/teams/{id}/members/{userID}';
+};
+
+export type DeleteTeamMemberErrors = {
+    /**
+     * Team hoặc người dùng không thuộc site hiện tại
+     */
+    404: ErrorEnvelope;
+};
+
+export type DeleteTeamMemberError = DeleteTeamMemberErrors[keyof DeleteTeamMemberErrors];
+
+export type DeleteTeamMemberResponses = {
+    /**
+     * Đã xóa thành viên
+     */
+    204: void;
+};
+
+export type DeleteTeamMemberResponse = DeleteTeamMemberResponses[keyof DeleteTeamMemberResponses];
+
+export type AddTeamMemberData = {
+    /**
+     * Không yêu cầu trường nào; có thể gửi JSON rỗng
+     */
+    body?: {
+        [key: string]: unknown;
+    };
+    path: {
+        id: number;
+        userID: number;
+    };
+    query?: never;
+    url: '/admin/teams/{id}/members/{userID}';
+};
+
+export type AddTeamMemberErrors = {
+    /**
+     * Người dùng không hoạt động trong site hiện tại
+     */
+    400: ErrorEnvelope;
+    /**
+     * Team hoặc người dùng không thuộc site hiện tại
+     */
+    404: ErrorEnvelope;
+};
+
+export type AddTeamMemberError = AddTeamMemberErrors[keyof AddTeamMemberErrors];
+
+export type AddTeamMemberResponses = {
+    /**
+     * Đã thêm thành viên
+     */
+    200: {
+        data: {
+            team_id: number;
+            user_id: number;
+        };
+    };
+};
+
+export type AddTeamMemberResponse = AddTeamMemberResponses[keyof AddTeamMemberResponses];
+
 export type ListLocationMembersData = {
     body?: never;
     path: {
@@ -1259,6 +1794,14 @@ export type ExportIssuesXlsxData = {
         status?: string;
         category?: string;
         location_code?: string;
+        /**
+         * Lọc theo team xử lý
+         */
+        assigned_team_id?: number;
+        /**
+         * Chỉ issues thuộc team hiện tại của người dùng
+         */
+        mine_team?: boolean;
     };
     url: '/issues/export';
 };
@@ -1402,6 +1945,38 @@ export type GetReportSummaryResponses = {
 };
 
 export type GetReportSummaryResponse = GetReportSummaryResponses[keyof GetReportSummaryResponses];
+
+export type GetTeamReportData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Số ngày thống kê; mặc định 14, giới hạn 1 đến 90
+         */
+        days?: number;
+    };
+    url: '/reports/teams';
+};
+
+export type GetTeamReportErrors = {
+    /**
+     * Thiếu permission `reports:view`
+     */
+    403: ErrorEnvelope;
+};
+
+export type GetTeamReportError = GetTeamReportErrors[keyof GetTeamReportErrors];
+
+export type GetTeamReportResponses = {
+    /**
+     * KPI theo team
+     */
+    200: {
+        data: Array<TeamKpi>;
+    };
+};
+
+export type GetTeamReportResponse = GetTeamReportResponses[keyof GetTeamReportResponses];
 
 export type ListPermissionsData = {
     body?: never;

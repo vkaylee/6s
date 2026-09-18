@@ -16,7 +16,28 @@ import {
   type TagItem,
 } from "../types/index.ts";
 
-const EMPTY_FILTERS: FilterState = { statuses: [], categories: [], locationCodes: [] };
+/** Shared list/count/export filter set; pagination parity depends on both callers using it. */
+function buildIssueQuery(page: number, filters: FilterState): URLSearchParams {
+  const queryParams = new URLSearchParams({ page: String(page), limit: "20" });
+  if (filters.statuses.length > 0) queryParams.set("statuses", filters.statuses.join(","));
+  if (filters.categories.length > 0) queryParams.set("categories", filters.categories.join(","));
+  if (filters.locationCodes.length > 0) {
+    queryParams.set("location_codes", filters.locationCodes.join(","));
+  }
+  if (filters.assignedTeamId != null) {
+    queryParams.set("assigned_team_id", String(filters.assignedTeamId));
+  }
+  if (filters.mineTeam) queryParams.set("mine_team", "true");
+  return queryParams;
+}
+
+const EMPTY_FILTERS: FilterState = {
+  statuses: [],
+  categories: [],
+  locationCodes: [],
+  assignedTeamId: null,
+  mineTeam: false,
+};
 
 export function normalizeTags(tags: Tag[]): TagItem[] {
   return tags.map((tag) => ({
@@ -59,9 +80,15 @@ export function useDashboardData({
       const saved = localStorage.getItem("6s_active_facet");
       if (
         saved &&
-        ["ALL", "MY_ISSUES", "MY_LINE", "SAFETY_6S", "OVERDUE_48H", "WAITING_MY_REVIEW"].includes(
-          saved,
-        )
+        [
+          "ALL",
+          "MY_ISSUES",
+          "MY_LINE",
+          "MY_TEAM",
+          "SAFETY_6S",
+          "OVERDUE_48H",
+          "WAITING_MY_REVIEW",
+        ].includes(saved)
       ) {
         return saved as FacetKey;
       }
@@ -72,6 +99,13 @@ export function useDashboardData({
     setActiveFacetState(facet);
     if (typeof window !== "undefined") {
       localStorage.setItem("6s_active_facet", facet);
+    }
+    // "My team's work" is a server-side filter (mine_team=true) so paging totals stay exact.
+    const nextMineTeam = facet === "MY_TEAM";
+    if (nextMineTeam !== advancedFilters.mineTeam) {
+      const nextFilters = { ...advancedFilters, mineTeam: nextMineTeam };
+      setAdvancedFilters(nextFilters);
+      loadIssues(true, nextFilters);
     }
   };
   const [searchQuery, setSearchQuery] = useState("");
@@ -158,12 +192,7 @@ export function useDashboardData({
     setDashboardErrors((prev) => ({ ...prev, issues: false }));
 
     const filters = customFilters || advancedFilters;
-    const queryParams = new URLSearchParams({ page: String(targetPage), limit: "20" });
-    if (filters.statuses.length > 0) queryParams.set("statuses", filters.statuses.join(","));
-    if (filters.categories.length > 0) queryParams.set("categories", filters.categories.join(","));
-    if (filters.locationCodes.length > 0) {
-      queryParams.set("location_codes", filters.locationCodes.join(","));
-    }
+    const queryParams = buildIssueQuery(targetPage, filters);
     try {
       const res = await apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
         includeMeta: true,
@@ -204,16 +233,7 @@ export function useDashboardData({
     const requestId = ++issuesRequest.current;
     const nextPage = issuePage + 1;
     setIssuePage(nextPage);
-    const queryParams = new URLSearchParams({ page: String(nextPage), limit: "20" });
-    if (advancedFilters.statuses.length > 0) {
-      queryParams.set("statuses", advancedFilters.statuses.join(","));
-    }
-    if (advancedFilters.categories.length > 0) {
-      queryParams.set("categories", advancedFilters.categories.join(","));
-    }
-    if (advancedFilters.locationCodes.length > 0) {
-      queryParams.set("location_codes", advancedFilters.locationCodes.join(","));
-    }
+    const queryParams = buildIssueQuery(nextPage, advancedFilters);
     setIsLoadingMore(true);
     apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
       includeMeta: true,
@@ -400,6 +420,9 @@ export function useDashboardData({
     MY_LINE: user?.assigned_location_code
       ? issues.filter((issue) => issue.location_code === user.assigned_location_code).length
       : issues.length,
+    // MY_TEAM is filtered server-side, so the loaded page understates it; the pagination total
+    // for that filter is the exact number.
+    MY_TEAM: advancedFilters.mineTeam ? (paginationMeta?.total ?? issues.length) : 0,
     SAFETY_6S: issues.filter(
       (issue) => issue.category === IssueCategory.S6 && issue.status === IssueStatus.OPEN,
     ).length,

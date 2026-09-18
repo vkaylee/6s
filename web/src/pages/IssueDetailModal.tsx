@@ -5,6 +5,7 @@ import { issueOperations } from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
+import { ResponsibilityPicker } from "../components/ResponsibilityPicker.tsx";
 import { SplitSlider } from "../components/SplitSlider.tsx";
 import { TagLabel } from "../components/TagLabel.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
@@ -12,8 +13,10 @@ import { useAiStatus } from "../hooks/useAiStatus.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
+import { useMasterdataStore } from "../store/masterdataStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
+  type CauseStatus,
   detectCauseType,
   IssueCategory,
   type IssueItem,
@@ -75,6 +78,38 @@ export function IssueDetailModal({
   const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
   const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
+  const [isResponsibilityEditing, setIsResponsibilityEditing] = useState(false);
+  const [assignmentAssetId, setAssignmentAssetId] = useState<number | null>(issue.asset_id ?? null);
+  const [assignmentTeamId, setAssignmentTeamId] = useState<number | null>(
+    issue.assigned_team_id ?? null,
+  );
+  const [assignmentAssigneeId, setAssignmentAssigneeId] = useState<number | null>(
+    issue.assignee_id ?? null,
+  );
+  const mayAssign = hasCapability(user, "issue:assign");
+  const [causeTeamId, setCauseTeamId] = useState<number | null>(issue.cause_team_id ?? null);
+  const assets = useMasterdataStore((state) => state.assets);
+  const teams = useMasterdataStore((state) => state.teams);
+  const teamMembers = useMasterdataStore((state) =>
+    currentIssue.assigned_team_id == null
+      ? undefined
+      : state.membersByTeam[currentIssue.assigned_team_id],
+  );
+  const loadMembers = useMasterdataStore((state) => state.loadMembers);
+  const asset = assets.find((item) => item.id === currentIssue.asset_id);
+  const team = teams.find((item) => item.id === currentIssue.assigned_team_id);
+  const assignee = teamMembers?.find((member) => member.id === currentIssue.assignee_id);
+  const causeTeam = teams.find((item) => item.id === currentIssue.cause_team_id);
+
+  // Viewers without issue:assign cannot read the team member list, so show the raw id instead of
+  // claiming the issue is unassigned.
+  const assigneeLabel = assignee
+    ? assignee.full_name
+    : currentIssue.assignee_id == null
+      ? t("issue.unassigned")
+      : `#${currentIssue.assignee_id}`;
+
+  const [causeStatus, setCauseStatus] = useState(issue.cause_status ?? "UNVERIFIED");
 
   const [translatedDesc, setTranslatedDesc] = useState<string | null>(
     issue.translated_description || null,
@@ -90,7 +125,18 @@ export function IssueDetailModal({
     setPendingFollowUpQuestion(null);
     setStreamingFollowUpAnswer("");
     setShowOriginal(false);
+    setAssignmentAssetId(issue.asset_id ?? null);
+    setAssignmentTeamId(issue.assigned_team_id ?? null);
+    setAssignmentAssigneeId(issue.assignee_id ?? null);
+    setCauseTeamId(issue.cause_team_id ?? null);
+    setCauseStatus(issue.cause_status ?? "UNVERIFIED");
   }, [issue, locale]);
+
+  // The assignee name comes from the team member lookup, which the server gates behind issue:assign.
+  useEffect(() => {
+    if (!mayAssign || currentIssue.assigned_team_id == null) return;
+    void loadMembers(currentIssue.assigned_team_id);
+  }, [mayAssign, currentIssue.assigned_team_id, loadMembers]);
 
   const handleAIReview = async () => {
     if (!aiEnabled || isReviewing) {
@@ -425,6 +471,19 @@ export function IssueDetailModal({
         : !canClose
           ? t("issue_detail.need_line_leader")
           : null;
+  // allowed_actions from the API is authoritative for this row; capabilities only cover legacy
+  // responses that omit the field, so a capability can never re-grant a server-denied action.
+  const serverActions = currentIssue.allowed_actions;
+  const canAssignResponsibility = serverActions
+    ? serverActions.assign === true
+    : hasCapability(user, "issue:assign");
+  const canVerifyCause = serverActions
+    ? serverActions.verify_cause === true
+    : hasCapability(user, "issue:verify_cause");
+  const canResolveIssue = serverActions
+    ? serverActions.resolve === true
+    : hasCapability(user, "issue:resolve");
+  const canCloseIssue = serverActions ? serverActions.close === true : canClose;
   const handleQuickChangeCategory = async (newCat: IssueCategory) => {
     try {
       const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
@@ -464,6 +523,62 @@ export function IssueDetailModal({
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("issue_detail.update_location_error"));
+    }
+  };
+  const reloadCurrentIssue = async () => {
+    try {
+      const fresh = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`);
+      if (fresh) setCurrentIssue(fresh);
+    } catch {
+      // Keep the local copy when the refresh fails (offline or transient error).
+    }
+  };
+
+  const handleSaveResponsibility = async () => {
+    if (!canAssignResponsibility) return;
+    try {
+      const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expected_version: currentIssue.version,
+          asset_id: assignmentAssetId,
+          assigned_team_id: assignmentTeamId,
+          assignee_id: assignmentAssigneeId,
+        }),
+      });
+      if (updated) setCurrentIssue(updated);
+      setIsResponsibilityEditing(false);
+      haptics.success();
+      onRefresh();
+    } catch {
+      haptics.errorOrConflict();
+      await reloadCurrentIssue();
+      await modalDialog.alert(t("issue_detail.assignment_update_error"));
+    }
+  };
+
+  const handleVerifyCause = async () => {
+    if (!canVerifyCause) return;
+    if (causeStatus === "CONFIRMED" && causeTeamId == null) return;
+    try {
+      const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expected_version: currentIssue.version,
+          // A reset to UNVERIFIED/NOT_APPLICABLE must explicitly clear the responsible team.
+          cause_team_id: causeStatus === "CONFIRMED" ? causeTeamId : null,
+          cause_status: causeStatus,
+        }),
+      });
+      if (updated) setCurrentIssue(updated);
+      haptics.success();
+      onRefresh();
+    } catch {
+      haptics.errorOrConflict();
+      await reloadCurrentIssue();
+      await modalDialog.alert(t("issue_detail.cause_verification_error"));
     }
   };
 
@@ -867,6 +982,179 @@ export function IssueDetailModal({
                   </div>
                 )}
               </div>
+              <section
+                className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
+                aria-labelledby="responsibility-title"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3
+                    id="responsibility-title"
+                    className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
+                  >
+                    {t("issue.responsibility_title")}
+                  </h3>
+                  {canAssignResponsibility && !isResponsibilityEditing && (
+                    <button
+                      type="button"
+                      onClick={() => setIsResponsibilityEditing(true)}
+                      className="min-h-[40px] rounded-xl px-3 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                    >
+                      {t("issue.edit_responsibility")}
+                    </button>
+                  )}
+                </div>
+                {isResponsibilityEditing ? (
+                  <div className="space-y-2">
+                    <ResponsibilityPicker
+                      locationCode={currentIssue.location_code}
+                      assetId={assignmentAssetId}
+                      assignedTeamId={assignmentTeamId}
+                      assigneeId={assignmentAssigneeId}
+                      onAssetChange={setAssignmentAssetId}
+                      onTeamChange={setAssignmentTeamId}
+                      onAssigneeChange={setAssignmentAssigneeId}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveResponsibility}
+                        className="min-h-[44px] flex-1 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white"
+                      >
+                        {t("common.save")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsResponsibilityEditing(false)}
+                        className="min-h-[44px] rounded-xl bg-zinc-100 px-3 text-xs font-bold dark:bg-zinc-700"
+                      >
+                        {t("common.cancel")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 text-xs sm:grid-cols-3">
+                    <p>
+                      <span className="font-bold text-zinc-500">{t("issue.asset_optional")}:</span>{" "}
+                      {asset ? `${asset.asset_code} — ${asset.name}` : t("issue.no_asset")}
+                    </p>
+                    <p>
+                      <span className="font-bold text-zinc-500">{t("issue.assigned_team")}:</span>{" "}
+                      {team ? `${team.name} (${team.code})` : t("issue.no_assigned_team")}
+                    </p>
+                    <p>
+                      <span className="font-bold text-zinc-500">
+                        {t("issue.assignee_optional")}:
+                      </span>{" "}
+                      {assigneeLabel}
+                    </p>
+                  </div>
+                )}
+                {(currentIssue.cause_status != null || canVerifyCause) && (
+                  <div className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                        {t("issue.cause_verification")}
+                      </h4>
+                      <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-700">
+                        {t(`issue.cause_status_${currentIssue.cause_status || "UNVERIFIED"}`)}
+                      </span>
+                    </div>
+                    {canVerifyCause ? (
+                      <div className="space-y-2">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <label className="space-y-1 text-[11px] font-bold text-zinc-500">
+                            <span>{t("common.status")}</span>
+                            <select
+                              value={causeStatus}
+                              onChange={(event) =>
+                                setCauseStatus(event.target.value as CauseStatus)
+                              }
+                              aria-label={t("common.status")}
+                              className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                            >
+                              <option value="UNVERIFIED">
+                                {t("issue.cause_status_UNVERIFIED")}
+                              </option>
+                              <option value="CONFIRMED">{t("issue.cause_status_CONFIRMED")}</option>
+                              <option value="NOT_APPLICABLE">
+                                {t("issue.cause_status_NOT_APPLICABLE")}
+                              </option>
+                            </select>
+                          </label>
+                          {causeStatus === "CONFIRMED" && (
+                            <label className="space-y-1 text-[11px] font-bold text-zinc-500">
+                              <span>{t("issue.cause_team")}</span>
+                              <select
+                                value={causeTeamId ?? ""}
+                                onChange={(event) =>
+                                  setCauseTeamId(
+                                    event.target.value ? Number(event.target.value) : null,
+                                  )
+                                }
+                                aria-label={t("issue.cause_team")}
+                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                              >
+                                <option value="">{t("issue.no_cause_team")}</option>
+                                {teams
+                                  .filter((item) => item.is_active)
+                                  .map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.name} ({item.code})
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleVerifyCause}
+                          className="min-h-[44px] w-full rounded-xl bg-amber-600 px-4 text-xs font-bold text-white"
+                        >
+                          {t("issue.verify_cause")}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                        <span className="font-bold text-zinc-500">{t("issue.cause_team")}:</span>{" "}
+                        {causeTeam
+                          ? `${causeTeam.name} (${causeTeam.code})`
+                          : t("issue.no_cause_team")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+              {currentIssue.responsibility_history &&
+                currentIssue.responsibility_history.length > 0 && (
+                  <section
+                    className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
+                    aria-labelledby="responsibility-history-title"
+                  >
+                    <h3
+                      id="responsibility-history-title"
+                      className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
+                    >
+                      {t("issue_detail.responsibility_history_title")}
+                    </h3>
+                    <ol className="space-y-2">
+                      {currentIssue.responsibility_history.map((entry, index) => (
+                        <li
+                          key={entry.id ?? `${entry.created_at}-${index}`}
+                          className="border-l-2 border-zinc-200 pl-3 text-xs dark:border-zinc-700"
+                        >
+                          <p className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {t(`issue_detail.history_action_${entry.action}`)}
+                          </p>
+                          <p className="text-zinc-500 dark:text-zinc-400">
+                            {entry.changed_by_name || t("issue_detail.changed_by")} ·{" "}
+                            {new Date(entry.created_at).toLocaleString(locale)}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                )}
               {aiReview && (
                 <AIReviewPanel
                   review={aiReview}
@@ -941,7 +1229,7 @@ export function IssueDetailModal({
             {/* Bottom Actions Bar (Integrated in sidebar for desktop, sticky/accessible) */}
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-2 shrink-0">
               {/* Action: Resolve (Upload after photo) */}
-              {currentIssue.status === IssueStatus.OPEN && hasCapability(user, "issue:resolve") && (
+              {currentIssue.status === IssueStatus.OPEN && canResolveIssue && (
                 <div className="space-y-1.5">
                   <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
                     <input
@@ -973,16 +1261,16 @@ export function IssueDetailModal({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      disabled={!canClose || isSubmitting}
+                      disabled={!canCloseIssue || isSubmitting}
                       onClick={() => setShowConfirmAction("CLOSE")}
                       className={`flex-1 font-black text-sm py-4 px-4 rounded-2xl min-h-[56px] flex items-center justify-center space-x-1 shadow-md transition ${
-                        canClose
+                        canCloseIssue
                           ? "bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white"
                           : "opacity-50 bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
                       }`}
                     >
                       <span>
-                        {canClose
+                        {canCloseIssue
                           ? `✓ ${t("issue.approve").toUpperCase()}`
                           : `🔒 ${t("issue_detail.locked")}`}
                       </span>
@@ -990,14 +1278,14 @@ export function IssueDetailModal({
 
                     <button
                       type="button"
-                      disabled={!canClose || isSubmitting}
+                      disabled={!canCloseIssue || isSubmitting}
                       onClick={() => setShowConfirmAction("REOPEN")}
                       className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs disabled:opacity-40"
                     >
                       {t("issue.reopen")}
                     </button>
                   </div>
-                  {!canClose && closeDisabledReason && (
+                  {!canCloseIssue && closeDisabledReason && (
                     <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium px-1 flex items-center gap-1">
                       <span>⚠️</span>
                       <span>{closeDisabledReason}</span>

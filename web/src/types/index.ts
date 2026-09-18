@@ -79,18 +79,37 @@ import type {
   PaginationMeta as OpenApiPaginationMeta,
 } from "../api/generated/index.ts";
 
-export type IssueItem = OpenApiIssue & {
-  /** Enterprise assignment and visibility fields are optional during legacy API rollout. */
-  site_id?: number;
-  assignee_id?: number | null;
-  assignee_name?: string | null;
+export type {
+  Asset as AssetItem,
+  Team as TeamItem,
+  TeamKpi as TeamKpiReport,
+  TeamMember as TeamMemberItem,
+} from "../api/generated/index.ts";
+
+/** Verification outcome of an issue's root cause; independent of `cause_type`. */
+export type CauseStatus = NonNullable<OpenApiIssue["cause_status"]>;
+
+/**
+ * Responsibility columns are nullable in the API but optional here so cached/legacy
+ * payloads and older fixtures stay assignable; consumers must treat a missing value as null.
+ */
+export type IssueItem = Omit<
+  OpenApiIssue,
+  "asset_id" | "assigned_team_id" | "assignee_id" | "cause_team_id" | "cause_status"
+> & {
+  asset_id?: number | null;
   assigned_team_id?: number | null;
-  assigned_team_name?: string | null;
+  assignee_id?: number | null;
+  cause_team_id?: number | null;
+  cause_status?: CauseStatus | null;
+  /** Enterprise visibility/label fields supplied by the list and detail projections. */
+  site_id?: number;
   visibility_class?: IssueVisibilityClass | null;
   cause_type?: CauseType;
   location_name: string;
   creator_name: string;
   resolver_name?: string | null;
+  assigned_team_name?: string | null;
   translated_description?: string | null;
   score_deducted?: number;
 };

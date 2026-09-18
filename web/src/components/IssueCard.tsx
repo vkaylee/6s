@@ -7,6 +7,7 @@ import {
   type LocationItem,
   resolveLocationNameByCode,
   type TagItem,
+  type TeamItem,
 } from "../types/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
 import { AuthenticatedImage } from "./AuthenticatedImage.tsx";
@@ -17,9 +18,17 @@ interface IssueCardProps {
   onClick: () => void;
   locations?: LocationItem[];
   tags?: TagItem[];
+  teams?: TeamItem[];
 }
-export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCardProps) {
+export function IssueCard({
+  issue,
+  onClick,
+  locations = [],
+  tags = [],
+  teams = [],
+}: IssueCardProps) {
   const { t, locale } = useI18nStore();
+  const assignedTeam = teams.find((team) => team.id === issue.assigned_team_id);
   const isSafety = issue.category === IssueCategory.S6;
   const isOpen = issue.status === IssueStatus.OPEN;
   const isPendingReview = issue.status === IssueStatus.PENDING_REVIEW;
@@ -129,6 +138,14 @@ export function IssueCard({ issue, onClick, locations = [], tags = [] }: IssueCa
           </div>
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
+          {(assignedTeam || issue.assigned_team_name) && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+              <Wrench className="h-3 w-3 shrink-0" />
+              {assignedTeam
+                ? `${assignedTeam.name} (${assignedTeam.code})`
+                : issue.assigned_team_name}
+            </span>
+          )}
           {statusBadge}
           {scoreBadge}
         </div>

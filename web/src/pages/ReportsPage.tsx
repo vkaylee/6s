@@ -44,6 +44,7 @@ import {
   type ReporterLeaderboard,
   type ReportSummaryResponse,
   type TagItem,
+  type TeamKpiReport,
 } from "../types/index.ts";
 import type { LocationReportItem } from "../utils/analytics.ts";
 import { goBack } from "../utils/navigation.ts";
@@ -63,8 +64,7 @@ export async function downloadReportsXlsx(locationCode?: string): Promise<void> 
   a.remove();
   window.URL.revokeObjectURL(url);
 }
-
-export type ReportMeetingTab = "LOCATIONS" | "PEOPLE" | "TRENDS";
+export type ReportMeetingTab = "LOCATIONS" | "PEOPLE" | "TRENDS" | "TEAMS";
 
 const CATEGORY_COLORS: Record<string, string> = {
   [IssueCategory.S1]: "#3b82f6", // Blue
@@ -96,6 +96,17 @@ export function ReportsPage() {
   const [locationLimit, setLocationLimit] = useState<5 | 10 | 0>(5); // 0 = all
   const [locationSort, setLocationSort] = useState<"HEALTH_ASC" | "OPEN_DESC">("HEALTH_ASC");
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("");
+  const [teamReport, setTeamReport] = useState<TeamKpiReport[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  const [teamReportError, setTeamReportError] = useState(false);
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState("");
+  const visibleTeamReport = useMemo(
+    () =>
+      selectedTeamFilter
+        ? teamReport.filter((row) => String(row.team_id) === selectedTeamFilter)
+        : teamReport,
+    [teamReport, selectedTeamFilter],
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Drill-down inspection drawer
@@ -149,6 +160,24 @@ export function ReportsPage() {
       if (requestId === reportRequest.current) setIsLoading(false);
     }
   };
+
+  const loadTeamReport = async () => {
+    setIsLoadingTeams(true);
+    setTeamReportError(false);
+    try {
+      const rows = await apiClient<TeamKpiReport[]>(`/api/reports/teams?days=${daysRange}`);
+      setTeamReport(rows || []);
+    } catch {
+      setTeamReportError(true);
+    } finally {
+      setIsLoadingTeams(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "TEAMS") return;
+    loadTeamReport();
+  }, [activeTab, daysRange]);
 
   useEffect(() => {
     loadData();
@@ -586,6 +615,7 @@ export function ReportsPage() {
             </button>
             <button
               type="button"
+              data-testid="reports-tab-trends"
               onClick={() => setActiveTab("TRENDS")}
               className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
                 activeTab === "TRENDS"
@@ -595,6 +625,19 @@ export function ReportsPage() {
             >
               <span>📈</span>
               <span>{t("reports.tab_trends")}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="reports-tab-teams"
+              onClick={() => setActiveTab("TEAMS")}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                activeTab === "TEAMS"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <span>🛠️</span>
+              <span>{t("reports.tab_teams")}</span>
             </button>
           </div>
 
@@ -1119,6 +1162,107 @@ export function ReportsPage() {
                         </button>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {/* Tab 4: Team handling performance & confirmed causes */}
+          {activeTab === "TEAMS" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm sm:text-base font-black text-zinc-900 dark:text-zinc-100">
+                      {t("reports.team_performance_title")}
+                    </h2>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {t("reports.team_performance_desc")}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                    <span>{t("reports.select_team_filter")}</span>
+                    <select
+                      value={selectedTeamFilter}
+                      onChange={(event) => setSelectedTeamFilter(event.target.value)}
+                      className="min-h-[40px] rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs font-bold text-zinc-800 dark:text-zinc-200"
+                    >
+                      <option value="">{t("reports.all_teams_option")}</option>
+                      {teamReport.map((row) => (
+                        <option key={row.team_id} value={String(row.team_id)}>
+                          {row.team_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {teamReportError ? (
+                  <p role="alert" className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                    {t("reports.teams_load_error")}
+                  </p>
+                ) : isLoadingTeams ? (
+                  <div className="py-8 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                  </div>
+                ) : visibleTeamReport.length === 0 ? (
+                  <p className="text-xs text-zinc-400 py-4">{t("reports.teams_empty")}</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-[11px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                          <th scope="col" className="py-2 pr-3 font-black">
+                            {t("reports.team_name")}
+                          </th>
+                          <th scope="col" className="py-2 px-3 font-black text-right">
+                            {t("reports.assigned_count")}
+                          </th>
+                          <th scope="col" className="py-2 px-3 font-black text-right">
+                            {t("reports.open_count")}
+                          </th>
+                          <th scope="col" className="py-2 px-3 font-black text-right">
+                            {t("reports.overdue_count")}
+                          </th>
+                          <th scope="col" className="py-2 px-3 font-black text-right">
+                            {t("reports.closed_count")}
+                          </th>
+                          <th scope="col" className="py-2 pl-3 font-black text-right">
+                            {t("reports.confirmed_cause_count")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleTeamReport.map((row) => (
+                          <tr
+                            key={row.team_id}
+                            className="border-t border-zinc-100 dark:border-zinc-800"
+                          >
+                            <td className="py-2 pr-3 font-bold text-zinc-800 dark:text-zinc-200">
+                              {row.team_name}
+                            </td>
+                            <td className="py-2 px-3 text-right tabular-nums">
+                              {row.assigned_count}
+                            </td>
+                            <td className="py-2 px-3 text-right tabular-nums">{row.open_count}</td>
+                            <td
+                              className={`py-2 px-3 text-right tabular-nums ${
+                                row.overdue_count > 0
+                                  ? "font-black text-rose-600 dark:text-rose-400"
+                                  : ""
+                              }`}
+                            >
+                              {row.overdue_count}
+                            </td>
+                            <td className="py-2 px-3 text-right tabular-nums">
+                              {row.closed_count}
+                            </td>
+                            <td className="py-2 pl-3 text-right tabular-nums">
+                              {row.confirmed_cause_count}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

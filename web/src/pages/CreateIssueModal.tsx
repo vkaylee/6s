@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
+import { ResponsibilityPicker } from "../components/ResponsibilityPicker.tsx";
 import { type DraftIssue, saveDraftIssue } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
@@ -58,6 +59,11 @@ export function CreateIssueModal({
   const [previewDetail, setPreviewDetail] = useState<string | null>(
     initialIssue?.photo_detail ? resolvePhotoUrl(initialIssue.photo_detail, "detail") : null,
   );
+  const [assetId, setAssetId] = useState<number | null>(initialIssue?.asset_id ?? null);
+  const [assignedTeamId, setAssignedTeamId] = useState<number | null>(
+    initialIssue?.assigned_team_id ?? null,
+  );
+  const [assigneeId, setAssigneeId] = useState<number | null>(initialIssue?.assignee_id ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -69,6 +75,9 @@ export function CreateIssueModal({
       setDescription(initialIssue.description || "");
       setPhotoBefore(null);
       setPhotoDetail(null);
+      setAssetId(initialIssue.asset_id ?? null);
+      setAssignedTeamId(initialIssue.assigned_team_id ?? null);
+      setAssigneeId(initialIssue.assignee_id ?? null);
       setPreviewBefore(resolvePhotoUrl(initialIssue.photo_before, "before"));
       setPreviewDetail(
         initialIssue.photo_detail ? resolvePhotoUrl(initialIssue.photo_detail, "detail") : null,
@@ -178,22 +187,41 @@ export function CreateIssueModal({
         if (photoDetail) {
           formData.append("photo_detail", photoDetail, "detail.jpg");
         }
-        const updated = await apiClient<IssueItem>(`/api/issues/${initialIssue.id}`, {
+        const classificationUpdated = await apiClient<IssueItem>(`/api/issues/${initialIssue.id}`, {
           method: "PATCH",
           body: formData,
         });
+
+        const responsibilityChanged =
+          assetId !== (initialIssue.asset_id ?? null) ||
+          assignedTeamId !== (initialIssue.assigned_team_id ?? null) ||
+          assigneeId !== (initialIssue.assignee_id ?? null);
+        const updated = responsibilityChanged
+          ? await apiClient<IssueItem>(`/api/issues/${initialIssue.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                expected_version: classificationUpdated?.version ?? initialIssue.version,
+                asset_id: assetId,
+                assigned_team_id: assignedTeamId,
+                assignee_id: assigneeId,
+              }),
+            })
+          : classificationUpdated;
 
         haptics.success();
         onSuccess(updated);
         onClose();
       } else {
         // Create flow
-        const clientUuid = crypto.randomUUID();
         const newDraft: DraftIssue = {
-          client_uuid: clientUuid,
+          client_uuid: crypto.randomUUID(),
           category,
           cause_type: causeType,
           location_code: locationCode,
+          asset_id: assetId,
+          assigned_team_id: assignedTeamId,
+          assignee_id: assigneeId,
           tags: selectedTags,
           description: description.trim(),
           photo_before_blob: photoBefore as Blob,
@@ -202,11 +230,9 @@ export function CreateIssueModal({
           sync_status: "PENDING",
         };
 
-        // Save immediately to local IndexedDB (Zero loading screen block, SPEC.md Section 9.3)
         await saveDraftIssue(newDraft);
         haptics.success();
 
-        // Trigger background sync
         syncEngine.triggerSync();
 
         onSuccess();
@@ -348,6 +374,16 @@ export function CreateIssueModal({
               onChange={(val) => setLocationCode(val)}
             />
           </div>
+          <ResponsibilityPicker
+            locationCode={locationCode}
+            assetId={assetId}
+            assignedTeamId={assignedTeamId}
+            assigneeId={assigneeId}
+            onAssetChange={setAssetId}
+            onTeamChange={setAssignedTeamId}
+            onAssigneeChange={setAssigneeId}
+            disabled={isSubmitting}
+          />
 
           {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}
           <div>

@@ -1,799 +1,633 @@
-import { beforeEach, describe, expect, it } from "bun:test";
-import * as React from "react";
-import { renderToString } from "react-dom/server";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type * as React from "react";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { invalidateAiStatus } from "../src/hooks/useAiStatus.ts";
 import { useI18nStore } from "../src/i18n/index.ts";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
-import {
-  IssueCategory,
-  type IssueItem,
-  IssueStatus,
-  type ScoreLogItem,
-  UserRole,
-} from "../src/types/index.ts";
+import { useMasterdataStore } from "../src/store/masterdataStore.ts";
+import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
 
-function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: {
-          current: { useState: (init: unknown) => [unknown, () => void] };
-        };
-      };
+beforeAll(() => {
+  GlobalRegistrator.register({ url: "https://6s.test/" });
+  (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+});
+afterAll(async () => {
+  await GlobalRegistrator.unregister();
+});
+
+type Call = { method: string; url: string; body: string };
+let calls: Call[] = [];
+const originalFetch = globalThis.fetch;
+const mounted: { root: Root; container: HTMLElement }[] = [];
+
+const baseIssue = (over: Partial<IssueItem> = {}): IssueItem => ({
+  id: 101,
+  client_uuid: "c0a80101-0000-4000-8000-000000000101",
+  version: 1,
+  category: IssueCategory.S3,
+  location_code: "LINE_A1",
+  location_name: "Chuyen May A1",
+  description: "Dau loang duoi san may",
+  status: IssueStatus.OPEN,
+  creator_id: 10,
+  creator_name: "Nguyen Van A",
+  tags: [],
+  created_at: "2026-03-01T00:00:00Z",
+  photo_before: "/api/issues/101/media/before/before.jpg",
+  photo_detail: "/api/issues/101/media/detail/detail.jpg",
+  ...over,
+});
+
+const locations = [
+  { code: "LINE_A1", name_vi: "Chuyen May A1", name_en: "Line A1", name_zh: "A1", is_active: true },
+];
+
+/** Serves every endpoint the detail modal touches and echoes mutations onto the issue. */
+function installFetch({ ai = false, issue }: { ai?: boolean; issue: IssueItem }) {
+  calls = [];
+  invalidateAiStatus();
+  let serverIssue: IssueItem = { ...issue };
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const body = typeof init?.body === "string" ? init.body : "";
+    calls.push({ method: init?.method ?? "GET", url, body });
+    const send = (data: unknown) => new Response(JSON.stringify({ data }), { status: 200 });
+    if (url.includes("/api/ai/status")) return send({ enabled: ai });
+    if (url.includes("/api/ai/cached")) return send({ cached: false });
+    if (url.includes("score-logs")) return send([]);
+    if (url.includes("/api/ai/review-follow-up")) return send({ answer: "Theo hinh anh" });
+    if (url.includes("/api/ai/review")) {
+      return send({
+        verdict: "MISMATCH",
+        feedback: "Anh khong khop phan loai",
+        suggestion: { category: "5S" },
+        used_vision: false,
+      });
     }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-  let idx = 0;
-  internals.current.useState = (init: unknown) => {
-    const val =
-      idx < values.length
-        ? values[idx++]
-        : typeof init === "function"
-          ? (init as () => unknown)()
-          : init;
-    return [val, () => {}];
-  };
-  return <>{children}</>;
+    if (url.includes("/api/ai/translate"))
+      return send({ translated_text: "Oil spilled on the floor" });
+    if (url.endsWith("/api/assets") || url.endsWith("/api/teams")) return send([]);
+    if (init?.method === "PATCH") {
+      serverIssue = { ...serverIssue, ...(JSON.parse(body || "{}") as Partial<IssueItem>) };
+      return send(serverIssue);
+    }
+    if (url.includes("/close")) return send({ ...serverIssue, status: IssueStatus.CLOSED });
+    if (url.includes("/reopen")) return send({ ...serverIssue, status: IssueStatus.OPEN });
+    if (url.includes("/invalid")) return send({ ...serverIssue, status: IssueStatus.INVALID });
+    return send(serverIssue);
+  }) as typeof fetch;
 }
 
+async function mount(element: React.ReactElement) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  mounted.push({ root, container });
+  await act(async () => {
+    root.render(element);
+  });
+  await act(async () => {});
+  return container;
+}
+
+function button(container: HTMLElement, text: string) {
+  return (Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]).find((item) =>
+    (item.textContent ?? "").includes(text),
+  );
+}
+
+function selectByLabel(container: HTMLElement, label: string) {
+  return (Array.from(container.querySelectorAll("select")) as HTMLSelectElement[]).find(
+    (item) => item.getAttribute("aria-label") === label,
+  );
+}
+
+async function choose(select: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => {});
+}
+
+const mutations = () => calls.filter((call) => call.method !== "GET");
+
+beforeEach(() => {
+  useI18nStore.getState().setLocale("vi");
+  useAuthStore.setState({ user: null });
+  useMasterdataStore.setState({
+    assets: [],
+    teams: [{ id: 7, code: "TM", name: "To May", is_active: true } as never],
+    membersByTeam: {},
+    membersStatusByTeam: {},
+    status: "ready",
+  });
+});
+
+afterEach(async () => {
+  while (mounted.length > 0) {
+    const entry = mounted.pop();
+    await act(async () => {
+      entry?.root.unmount();
+    });
+    entry?.container.remove();
+  }
+  globalThis.fetch = originalFetch;
+  invalidateAiStatus();
+  useI18nStore.getState().setLocale("vi");
+});
+
 describe("IssueDetailModal Component", () => {
-  beforeEach(() => invalidateAiStatus());
-  const mockIssue: IssueItem = {
-    id: 101,
-    client_uuid: "c0a80101-0000-4000-8000-000000000101",
-    version: 1,
-    category: IssueCategory.S3,
-    location_code: "LINE_A1",
-    location_name: "Chuyền May A1",
-    description: "Dầu loang dưới sàn máy may",
-    photo_before: "/api/issues/101/media/before/before.jpg",
-    status: IssueStatus.OPEN,
-    creator_id: 10,
-    creator_name: "Nguyễn Văn A",
-    tags: ["5S"],
-    created_at: new Date().toISOString(),
-  };
-
-  it("returns null when isOpen is false", () => {
-    const html = renderToString(
-      <IssueDetailModal issue={mockIssue} isOpen={false} onClose={() => {}} onRefresh={() => {}} />,
-    );
-    expect(html).toBe("");
-  });
-
-  it("renders issue details, category and description when isOpen is true", () => {
-    useAuthStore.setState({
-      user: {
-        id: 10,
-        username: "van_a",
-        full_name: "Nguyễn Văn A",
-        role: UserRole.USER,
-        capabilities: ["issue:resolve", "issue:close_own"],
-      },
-    });
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          null,
-          null,
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          true,
-          null, // followUpAnswer
-          "", // followUpQuestion
-          [], // followUpHistory
-          false, // isAskingFollowUp
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
-    );
-    expect(html).toContain("Chuyền May A1");
-    expect(html).toContain("Dầu loang dưới sàn máy may");
-    expect(html).toContain("Nguyễn Văn A");
-    expect(html).toContain("Chỉnh sửa");
-    expect(html).toContain("Biến động điểm 6S của sự cố");
-    expect(html).toContain("Dịch AI");
-  });
-
-  it("shows the localized location name instead of its code in the header metadata", () => {
-    const html = renderToString(
+  it("returns an empty surface when closed and renders authoritative issue metadata when open", async () => {
+    installFetch({ issue: baseIssue({ reject_reason: "Anh mo khong dung" }) });
+    const closed = await mount(
       <IssueDetailModal
-        issue={mockIssue}
+        issue={baseIssue()}
+        isOpen={false}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(closed.innerHTML).toBe("");
+
+    const open = await mount(
+      <IssueDetailModal
+        issue={baseIssue({ reject_reason: "Anh mo khong dung" })}
         isOpen={true}
         onClose={() => {}}
         onRefresh={() => {}}
-        locations={[
-          {
-            code: "LINE_A1",
-            name_vi: "Chuyền May A1",
-            name_zh: "一号线",
-            name_en: "Sewing Line A1",
-            is_active: true,
-          },
-        ]}
+        locations={locations as never}
       />,
     );
-
-    expect(html).toContain("Chuyền May A1");
-    expect(html).not.toContain('class="truncate">LINE_A1</span>');
+    const text = open.textContent ?? "";
+    expect(text).toContain("#101");
+    expect(text).toContain("Chuyen May A1");
+    expect(text).toContain("Dau loang duoi san may");
+    expect(text).toContain("Mới ghi nhận");
+    expect(text).toContain("Anh mo khong dung");
+    expect(text).toContain("Biến động điểm 6S của sự cố");
   });
 
-  it("renders one full issue edit action instead of inline edit pencils", () => {
-    useAuthStore.setState({
-      user: {
-        id: 10,
-        username: "van_a",
-        full_name: "Nguyễn Văn A",
-        role: UserRole.USER,
-        capabilities: ["issue:close_own"],
-      },
-    });
-    const html = renderToString(
+  it("shows the localized score rule label and signed points returned for the issue", async () => {
+    installFetch({ issue: baseIssue() });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("score-logs")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 1,
+                issue_id: 101,
+                target_type: "LOCATION",
+                target_id: "LINE_A1",
+                rule_key: "penalty_normal",
+                rule_description: "x",
+                points: -2,
+                created_at: "2026-03-02T00:00:00Z",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return baseFetch(input as never, init);
+    }) as typeof fetch;
+
+    const container = await mount(
       <IssueDetailModal
-        issue={mockIssue}
+        issue={baseIssue()}
         isOpen={true}
         onClose={() => {}}
         onRefresh={() => {}}
-        locations={[
-          {
-            code: "LINE_A1",
-            name_vi: "Chuyền May A1",
-            name_zh: "一号线",
-            name_en: "Sewing Line A1",
-            is_active: true,
-          },
-        ]}
       />,
     );
-    expect(html).toContain('aria-label="Chỉnh sửa"');
-    expect(html).not.toContain("Chạm để sửa nhanh vị trí (In-place Quick Edit)");
-  });
-  it("renders localized location name in score breakdown logs", () => {
-    useAuthStore.setState({
-      user: {
-        id: 10,
-        username: "van_a",
-        full_name: "Nguyễn Văn A",
-        role: UserRole.USER,
-        capabilities: [],
-      },
+    expect(container.textContent).toContain("Trừ điểm sự cố thường");
+    expect(container.textContent).toContain("-2");
+
+    await act(async () => {
+      useI18nStore.getState().setLocale("en");
     });
-    const scoreLog: ScoreLogItem = {
-      id: 1,
-      issue_id: 101,
-      target_type: "LOCATION",
-      target_id: "LINE_A1",
-      rule_key: "OVERDUE_ISSUE",
-      rule_description: "Quá hạn xử lý",
-      points: -3,
-      created_at: new Date().toISOString(),
-    };
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          null,
-          null,
-          1,
-          { x: 0, y: 0 },
-          [scoreLog],
-          false,
-          true,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal
-          issue={mockIssue}
-          isOpen={true}
-          onClose={() => {}}
-          onRefresh={() => {}}
-          locations={[
+    expect(container.textContent).toContain("Normal issue penalty");
+  });
+
+  it("hides AI controls while the server reports AI disabled", async () => {
+    installFetch({ ai: false, issue: baseIssue() });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(container.textContent).toContain("AI đang tắt");
+    expect(button(container, "Hỏi AI")).toBeUndefined();
+    expect(mutations()).toEqual([]);
+  });
+
+  it("requests an AI review, applies the suggested category and restores the original text after translating", async () => {
+    installFetch({ ai: true, issue: baseIssue() });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      button(container, "Hỏi AI")?.click();
+    });
+    await act(async () => {});
+    const review = calls.find((call) => call.url.includes("/api/ai/review"));
+    expect(review?.method).toBe("POST");
+    expect(review?.body).toContain('"issue_id":101');
+    expect(container.textContent).toContain("Phân loại không khớp");
+    expect(container.textContent).toContain("AI đề xuất phân loại");
+
+    await act(async () => {
+      button(container, "Áp dụng")?.click();
+    });
+    await act(async () => {});
+    const applied = mutations().find((call) => call.method === "PATCH");
+    expect(applied?.url).toContain("/api/issues/101");
+    expect(applied?.body).toContain('"category":"5S"');
+    expect(container.textContent).toContain("AI đề xuất phân loại: 5S");
+
+    await act(async () => {
+      button(container, "Dịch AI")?.click();
+    });
+    await act(async () => {});
+    expect(calls.some((call) => call.url.includes("/api/ai/translate"))).toBe(true);
+    expect(container.textContent).toContain("Oil spilled on the floor");
+
+    await act(async () => {
+      button(container, "Xem bản gốc")?.click();
+    });
+    expect(container.textContent).toContain("Dau loang duoi san may");
+  });
+
+  it("opens the photo gallery and navigates it with zoom, arrows and Escape", async () => {
+    installFetch({ issue: baseIssue() });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    const photoButton = (
+      Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]
+    ).find((item) => item.querySelector('img[alt="Trước khắc phục"]'));
+    await act(async () => {
+      photoButton?.click();
+    });
+    await act(async () => {});
+    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+    expect(container.textContent).toContain("1 / 2");
+    expect(container.textContent).toContain("TRƯỚC");
+
+    await act(async () => {
+      button(container, "Phóng to")?.click();
+    });
+    expect(container.textContent).toContain("125%");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    });
+    expect(container.textContent).toContain("2 / 2");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+  });
+
+  it("renders the responsibility history and saves assignment plus cause verification with the current version", async () => {
+    installFetch({
+      issue: baseIssue({
+        version: 3,
+        allowed_actions: { assign: true, verify_cause: true, resolve: false, close: false },
+        cause_status: "UNVERIFIED",
+        responsibility_history: [
+          {
+            id: 1,
+            action: "ASSIGN",
+            changed_by: 1,
+            changed_by_name: "Admin",
+            old_value: null,
+            new_value: null,
+            created_at: "2026-03-02T10:00:00Z",
+          },
+        ],
+      }),
+    });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue({
+          version: 3,
+          allowed_actions: { assign: true, verify_cause: true, resolve: false, close: false },
+          cause_status: "UNVERIFIED",
+          responsibility_history: [
             {
-              code: "LINE_A1",
-              name_vi: "Chuyền May A1",
-              name_zh: "一号线",
-              name_en: "Sewing Line A1",
-              is_active: true,
+              id: 1,
+              action: "ASSIGN",
+              changed_by: 1,
+              changed_by_name: "Admin",
+              old_value: null,
+              new_value: null,
+              created_at: "2026-03-02T10:00:00Z",
             },
-          ]}
-        />
-      </WithMockState>,
-    );
-    expect(html).toContain("Chuyền May A1");
-  });
-  it("renders score rule labels in selected locale", () => {
-    const scoreLog: ScoreLogItem = {
-      id: 2,
-      issue_id: 101,
-      target_type: "LOCATION",
-      target_id: "LINE_A1",
-      rule_key: "penalty_normal",
-      rule_description: "Normal issue penalty",
-      points: -2,
-      created_at: new Date().toISOString(),
-    };
-    const expected = {
-      vi: "Trừ điểm sự cố thường",
-      en: "Normal issue penalty",
-      zh: "普通问题扣分",
-    } as const;
-
-    for (const [locale, label] of Object.entries(expected)) {
-      useI18nStore.getState().setLocale(locale as keyof typeof expected);
-      const html = renderToString(
-        <WithMockState
-          values={[
-            mockIssue,
-            null,
-            false,
-            false,
-            false,
-            false,
-            false,
-            3,
-            "",
-            false,
-            null,
-            null,
-            1,
-            { x: 0, y: 0 },
-            [scoreLog],
-            false,
-            true,
-            null,
-            false,
-          ]}
-        >
-          <IssueDetailModal
-            issue={mockIssue}
-            isOpen={true}
-            onClose={() => {}}
-            onRefresh={() => {}}
-          />
-        </WithMockState>,
-      );
-      expect(html).toContain(label);
-    }
-    useI18nStore.getState().setLocale("vi");
-  });
-  it("renders detail photo when photo_detail exists", () => {
-    const issueWithDetail: IssueItem = {
-      ...mockIssue,
-      photo_detail: "/api/issues/101/media/detail/c0a80101-0000-4000-8000-000000000101_detail.jpg",
-    };
-    const html = renderToString(
-      <IssueDetailModal
-        issue={issueWithDetail}
+          ],
+        })}
         isOpen={true}
         onClose={() => {}}
         onRefresh={() => {}}
+        locations={locations as never}
       />,
     );
-    expect(html).toContain(
-      "/api/issues/101/media/detail/c0a80101-0000-4000-8000-000000000101_detail.jpg",
-    );
-    expect(html).toContain("Chạm ảnh để xem toàn màn hình");
-  });
+    expect(container.textContent).toContain("Lịch sử phân công");
+    expect(container.textContent).toContain("Admin");
 
-  it("renders zoom preview buttons when issue has photo_after", () => {
-    const resolvedIssue: IssueItem = {
-      ...mockIssue,
-      photo_after: "/api/issues/101/media/after/c0a80101-0000-4000-8000-000000000101_after.jpg",
-      status: IssueStatus.PENDING_REVIEW,
-    };
-    const html = renderToString(
-      <IssueDetailModal
-        issue={resolvedIssue}
-        isOpen={true}
-        onClose={() => {}}
-        onRefresh={() => {}}
-      />,
-    );
-    expect(html).toContain("/api/issues/101/media/before/before.jpg");
-    expect(html).toContain(
-      "/api/issues/101/media/after/c0a80101-0000-4000-8000-000000000101_after.jpg",
-    );
-  });
-  it("renders status badge and tags in modal", () => {
-    useAuthStore.setState({
-      user: {
-        id: 10,
-        username: "van_a",
-        full_name: "Nguyễn Văn A",
-        role: UserRole.USER,
-        capabilities: ["issue:resolve"],
-      },
+    await act(async () => {
+      button(container, "Điều chỉnh phân công")?.click();
     });
-    const html = renderToString(
-      <IssueDetailModal
-        issue={mockIssue}
-        isOpen={true}
-        onClose={() => {}}
-        onRefresh={() => {}}
-        tags={[
-          {
-            tag_code: "5S",
-            category: IssueCategory.S5,
-            label_vi: "Chuẩn 5S",
-            label_zh: "5S标准",
-            label_en: "5S Standard",
-          },
-        ]}
-      />,
-    );
-    expect(html).toContain("Mới ghi nhận");
-    expect(html).toContain("#Chuẩn 5S");
-  });
-
-  it("does not render quick edit category button when user cannot edit", () => {
-    useAuthStore.setState({
-      user: {
-        id: 99,
-        username: "other_user",
-        full_name: "Người khác",
-        role: UserRole.USER,
-      },
+    await act(async () => {});
+    const teamSelect = selectByLabel(container, "Đơn vị xử lý");
+    expect(teamSelect).toBeDefined();
+    await choose(teamSelect as HTMLSelectElement, "7");
+    await act(async () => {
+      button(container, "Lưu")?.click();
     });
-    const html = renderToString(
-      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    await act(async () => {});
+    const assignment = mutations().find((call) => call.method === "PATCH");
+    expect(assignment?.url).toContain("/api/issues/101");
+    expect(assignment?.body).toContain('"expected_version":3');
+    expect(assignment?.body).toContain('"assigned_team_id":7');
+    expect(container.textContent).toContain("To May (TM)");
+    const status = selectByLabel(container, "Trạng thái");
+    expect(status).toBeDefined();
+    await choose(status as HTMLSelectElement, "CONFIRMED");
+    await choose(
+      selectByLabel(container, "Đơn vị chịu trách nhiệm nguyên nhân") as HTMLSelectElement,
+      "7",
     );
-    expect(html).not.toContain("Chạm để sửa nhanh phân loại S (In-place Quick Edit)");
-  });
-
-  it("attaches wheel listener with passive: false to prevent scroll cancellation warning", () => {
-    const listeners: { type: string; options: unknown }[] = [];
-    const fakeElement = {
-      addEventListener: (type: string, _fn: unknown, options: unknown) => {
-        listeners.push({ type, options });
-      },
-      removeEventListener: () => {},
-    };
-
-    // Verify passive: false option pattern used for wheel
-    fakeElement.addEventListener("wheel", () => {}, { passive: false });
-    const wheelListener = listeners.find((l) => l.type === "wheel");
-    expect(wheelListener).toBeDefined();
-    expect(wheelListener?.options).toEqual({ passive: false });
-  });
-
-  it("renders with 2-column desktop responsive classes up to 2xl breakpoint", () => {
-    const html = renderToString(
-      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
-    );
-    expect(html).toContain("2xl:max-w-7xl");
-    expect(html).toContain("lg:grid-cols-12");
-    expect(html).toContain("2xl:col-span-8");
-    expect(html).toContain("2xl:col-span-4");
-  });
-  it("renders review and approve action buttons for line leaders when status is PENDING_REVIEW", () => {
-    useAuthStore.setState({
-      user: {
-        id: 1,
-        username: "leader",
-        full_name: "Chuyền Trưởng",
-        role: UserRole.LINE_LEADER,
-        capabilities: ["issue:close_line"],
-        assigned_location_code: "LINE_A1",
-      },
+    await act(async () => {
+      button(container, "Lưu kết quả xác minh")?.click();
     });
-    const pendingIssue: IssueItem = {
-      ...mockIssue,
-      status: IssueStatus.PENDING_REVIEW,
-      photo_after: "/uploads/after/after.jpg",
-    };
-    const html = renderToString(
-      <IssueDetailModal
-        issue={pendingIssue}
-        isOpen={true}
-        onClose={() => {}}
-        onRefresh={() => {}}
-      />,
-    );
-    expect(html).toContain("DUYỆT ĐẠT");
-    expect(html).toContain("Mở lại");
+    await act(async () => {});
+    const patches = mutations().filter((call) => call.method === "PATCH");
+    const verification = patches[patches.length - 1];
+    expect(verification?.body).toContain('"expected_version":3');
+    expect(verification?.body).toContain('"cause_status":"CONFIRMED"');
+    expect(verification?.body).toContain('"cause_team_id":7');
   });
-  it("renders invalidate action button for admins when status is OPEN", () => {
-    useAuthStore.setState({
-      user: {
-        id: 1,
-        username: "admin",
-        full_name: "Quản trị viên",
-        role: UserRole.ADMIN,
-        capabilities: ["issue:invalidate"],
-      },
+
+  it("blocks cause verification until a responsible team is chosen and keeps the modal open on failure", async () => {
+    installFetch({
+      issue: baseIssue({
+        allowed_actions: { assign: false, verify_cause: true, resolve: false, close: false },
+        cause_status: "UNVERIFIED",
+      }),
     });
-    const html = renderToString(
-      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
-    );
-    expect(html).toContain("Bác bỏ báo cáo (Admin / An toàn)");
-  });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return new Response(JSON.stringify({ error: { message: "bad" } }), { status: 409 });
+      }
+      return baseFetch(input as never, init);
+    }) as typeof fetch;
 
-  it("renders closed status badge when status is CLOSED", () => {
-    const closedIssue: IssueItem = {
-      ...mockIssue,
-      status: IssueStatus.CLOSED,
-      photo_after: "/uploads/after/after.jpg",
-      score_rating: 5,
-    };
-    const html = renderToString(
+    const container = await mount(
       <IssueDetailModal
-        issue={closedIssue}
+        issue={baseIssue({
+          allowed_actions: { assign: false, verify_cause: true, resolve: false, close: false },
+          cause_status: "UNVERIFIED",
+        })}
         isOpen={true}
         onClose={() => {}}
         onRefresh={() => {}}
       />,
     );
-    expect(html).toContain("Đã hoàn thành");
+    const status = selectByLabel(container, "Trạng thái");
+    await choose(status as HTMLSelectElement, "CONFIRMED");
+    expect(selectByLabel(container, "Đơn vị chịu trách nhiệm nguyên nhân")).toBeDefined();
+
+    await act(async () => {
+      button(container, "Lưu kết quả xác minh")?.click();
+    });
+    await act(async () => {});
+    expect(mutations().some((call) => call.method === "PATCH")).toBe(false);
   });
 
-  it("renders 6S root cause badge correctly for condition and behavior issues", () => {
-    const conditionHtml = renderToString(
-      <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
-    );
-    expect(conditionHtml).toContain("📦");
-    expect(conditionHtml).toContain("Vật chất / Thiết bị");
-
-    const behaviorIssue: IssueItem = {
-      ...mockIssue,
-      category: IssueCategory.S5,
-      tags: ["ppe_violation"],
-    };
-    const behaviorHtml = renderToString(
+  it("confirms an approval with the chosen kaizen rating for a permitted resolver", async () => {
+    let refreshed = 0;
+    let closed = 0;
+    installFetch({
+      issue: baseIssue({
+        status: IssueStatus.PENDING_REVIEW,
+        photo_after: "/api/issues/101/media/after/after.jpg",
+        allowed_actions: { assign: false, verify_cause: false, resolve: false, close: true },
+      }),
+    });
+    const container = await mount(
       <IssueDetailModal
-        issue={behaviorIssue}
+        issue={baseIssue({
+          status: IssueStatus.PENDING_REVIEW,
+          photo_after: "/api/issues/101/media/after/after.jpg",
+          allowed_actions: { assign: false, verify_cause: false, resolve: false, close: true },
+        })}
+        isOpen={true}
+        onClose={() => {
+          closed += 1;
+        }}
+        onRefresh={() => {
+          refreshed += 1;
+        }}
+      />,
+    );
+    const approve = button(container, "DUYỆT ĐẠT");
+    expect(approve?.disabled).toBe(false);
+    await act(async () => {
+      approve?.click();
+    });
+    await act(async () => {});
+    expect(container.textContent).toContain("Xác nhận duyệt đạt sự cố?");
+
+    const stars = (Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]).filter(
+      (item) => (item.textContent ?? "").trim() === "★",
+    );
+    await act(async () => {
+      stars[4]?.click();
+    });
+    await act(async () => {
+      button(container, "Xác nhận")?.click();
+    });
+    await act(async () => {});
+    const closeCall = mutations().find((call) => call.url.includes("/close"));
+    expect(closeCall?.method).toBe("POST");
+    expect(closeCall?.body).toContain('"score_rating":5');
+    expect(refreshed).toBe(1);
+    expect(closed).toBe(1);
+  });
+
+  it("reopens a pending issue after confirmation, falling back to the documented default reason", async () => {
+    installFetch({
+      issue: baseIssue({
+        status: IssueStatus.PENDING_REVIEW,
+        allowed_actions: { assign: false, verify_cause: false, resolve: false, close: true },
+      }),
+    });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue({
+          status: IssueStatus.PENDING_REVIEW,
+          allowed_actions: { assign: false, verify_cause: false, resolve: false, close: true },
+        })}
         isOpen={true}
         onClose={() => {}}
         onRefresh={() => {}}
       />,
     );
-    expect(behaviorHtml).toContain("👤");
-    expect(behaviorHtml).toContain("Hành vi con người");
+    // Cancel first: dismissing the drawer must not send anything.
+    await act(async () => {
+      button(container, "Mở lại")?.click();
+    });
+    await act(async () => {});
+    expect(container.textContent).toContain("Xác nhận mở lại sự cố?");
+    await act(async () => {
+      button(container, "Hủy")?.click();
+    });
+    await act(async () => {});
+    expect(container.textContent).not.toContain("Xác nhận mở lại sự cố?");
+    expect(mutations()).toEqual([]);
+
+    await act(async () => {
+      button(container, "Mở lại")?.click();
+    });
+    await act(async () => {});
+    await act(async () => {
+      button(container, "Xác nhận")?.click();
+    });
+    await act(async () => {});
+    const reopen = mutations().find((call) => call.url.includes("/reopen"));
+    expect(reopen?.method).toBe("POST");
+    expect(reopen?.body).toContain("Chưa đạt yêu cầu 6S");
   });
 
-  it("renders close confirmation dialog with kaizen rating when showConfirmAction is CLOSE", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue, // currentIssue
-          null, // translatedDesc
-          false, // isTranslating
-          false, // showOriginal
-          false, // isEditingFull
-          false, // isEditingCategory
-          false, // isEditingLocation
-          5, // scoreRating (5 stars)
-          "", // rejectReason
-          false, // isSubmitting
-          "CLOSE", // showConfirmAction
-          null, // previewIndex
-          1, // zoomScale
-          { x: 0, y: 0 }, // panOffset
-          [], // issueScoreLogs
-          false, // loadingScores
-          false, // aiEnabled
-          null, // aiReview
-          false, // isReviewing
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
+  it("locks approval and explains the missing permission for a plain user", async () => {
+    installFetch({
+      issue: baseIssue({
+        status: IssueStatus.PENDING_REVIEW,
+        allowed_actions: { assign: false, verify_cause: false, resolve: false, close: false },
+      }),
+    });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue({
+          status: IssueStatus.PENDING_REVIEW,
+          allowed_actions: { assign: false, verify_cause: false, resolve: false, close: false },
+        })}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
     );
-
-    expect(html).toContain("Xác nhận duyệt đạt sự cố?");
-    expect(html).toContain("Kaizen");
-    expect(html).toContain("🏆 Kaizen Xuất sắc (+5 điểm)");
+    expect(button(container, "Khóa")?.disabled).toBe(true);
+    expect(container.textContent).toContain("Cần quyền Line Leader trở lên");
+    expect(mutations()).toEqual([]);
   });
 
-  it("renders invalid confirmation dialog with warning when showConfirmAction is INVALID", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          "INVALID",
-          null,
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
+  it("lets an authorized safety viewer invalidate with the default reason and hides it from others", async () => {
+    installFetch({ issue: baseIssue() });
+    await act(async () => {
+      useAuthStore.setState({
+        user: {
+          id: 1,
+          username: "admin",
+          full_name: "Admin",
+          role: "ADMIN" as never,
+          capabilities: ["issue:invalidate"],
+        },
+      });
+    });
+    const authorized = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
     );
+    await act(async () => {
+      button(authorized, "Bác bỏ báo cáo")?.click();
+    });
+    await act(async () => {});
+    expect(authorized.textContent).toContain("Chỉ bác bỏ khi");
+    await act(async () => {
+      button(authorized, "Xác nhận")?.click();
+    });
+    await act(async () => {});
+    const invalid = mutations().find((call) => call.url.includes("/invalid"));
+    expect(invalid?.method).toBe("POST");
+    expect(invalid?.body).toContain("Báo cáo không đúng thực tế");
 
-    expect(html).toContain("Xác nhận bác bỏ sự cố?");
-    expect(html).toContain("Nhập lý do bắt buộc...");
+    await act(async () => {
+      useAuthStore.setState({
+        user: { id: 99, username: "u", full_name: "U", role: "USER" as never },
+      });
+    });
+    const plain = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(button(plain, "Bác bỏ báo cáo")).toBeUndefined();
+    expect(plain.textContent).not.toContain("CHỤP ẢNH KHẮC PHỤC");
   });
 
-  it("renders photo preview overlay when previewIndex is set", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          null,
-          0, // previewIndex on photo_before
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
+  it("opens the full edit form prefilled with the current description for the reporter", async () => {
+    installFetch({ issue: baseIssue() });
+    await act(async () => {
+      useAuthStore.setState({
+        user: {
+          id: 10,
+          username: "owner",
+          full_name: "Owner",
+          role: "USER" as never,
+          capabilities: ["issue:close_own"],
+        },
+      });
+    });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+        locations={locations as never}
+      />,
     );
-
-    expect(html).toContain("/api/issues/101/media/before/before.jpg");
-  });
-
-  it("renders reopen confirmation dialog when showConfirmAction is REOPEN", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          "REOPEN",
-          null,
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
+    const editButton = container.querySelector('button[aria-label="Chỉnh sửa"]');
+    expect(editButton).not.toBeNull();
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    expect(container.textContent).toContain("Chỉnh sửa báo cáo sự cố 6S / An toàn");
+    expect((container.querySelector("textarea") as HTMLTextAreaElement | null)?.value).toBe(
+      "Dau loang duoi san may",
     );
-
-    expect(html).toContain("Xác nhận mở lại sự cố?");
-  });
-
-  it("renders in-place category and location editor when enabled", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          true, // isEditingCategory
-          true, // isEditingLocation
-          3,
-          "",
-          false,
-          null,
-          null,
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal
-          issue={mockIssue}
-          isOpen={true}
-          onClose={() => {}}
-          onRefresh={() => {}}
-          locations={[
-            {
-              code: "LINE_A1",
-              name_vi: "Chuyền A1",
-              name_zh: "A1",
-              name_en: "A1",
-              is_active: true,
-            },
-          ]}
-        />
-      </WithMockState>,
-    );
-
-    expect(html).toContain("1S");
-    expect(html).toContain("6S");
-    expect(html).toContain("Chuyền A1");
-  });
-
-  it("renders multi-photo preview controls when previewIndex is second photo", () => {
-    const resolvedIssue: IssueItem = {
-      ...mockIssue,
-      photo_after: "/uploads/after/after.jpg",
-    };
-
-    const html = renderToString(
-      <WithMockState
-        values={[
-          resolvedIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          null,
-          1, // previewIndex = 1 (after photo)
-          1.25, // zoomScale
-          { x: 10, y: 20 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal
-          issue={resolvedIssue}
-          isOpen={true}
-          onClose={() => {}}
-          onRefresh={() => {}}
-        />
-      </WithMockState>,
-    );
-
-    expect(html).toContain("Sau khi khắc phục");
-    expect(html).toContain("scale(1.25)");
-    expect(html).toContain('aria-label="Ảnh trước"');
-  });
-
-  it("renders CreateIssueModal when isEditingFull is true", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          true, // isEditingFull
-          false,
-          false,
-          3,
-          "",
-          false,
-          null,
-          null,
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
-    );
-
-    expect(html).toContain("Dầu loang dưới sàn máy may");
-  });
-
-  it("hides AI controls and explains why when AI is disabled", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null,
-          false,
-          false,
-          false,
-          false,
-          false,
-          3,
-          "",
-          false,
-          null,
-          null,
-          1,
-          { x: 0, y: 0 },
-          [],
-          false,
-          false,
-          null,
-          false,
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
-    );
-
-    expect(html).not.toContain("Hỏi AI");
-    expect(html).not.toContain("Dịch AI");
-    expect(html).toContain("AI đang tắt");
-  });
-
-  it("shows the AI review button when AI is enabled", () => {
-    const html = renderToString(
-      <WithMockState
-        values={[
-          mockIssue,
-          null, // translatedDesc
-          false, // isTranslating
-          false, // showOriginal
-          false, // isEditingFull
-          false, // isEditingCategory
-          false, // isEditingLocation
-          3, // scoreRating
-          "", // rejectReason
-          false, // isSubmitting
-          null, // showConfirmAction
-          null, // previewIndex
-          1, // zoomScale
-          { x: 0, y: 0 }, // panOffset
-          [], // issueScoreLogs
-          false, // loadingScores
-          null, // aiReview
-          false, // isReviewing
-          null, // followUpAnswer
-          "", // followUpQuestion
-          [], // followUpHistory
-          false, // isAskingFollowUp
-        ]}
-      >
-        <IssueDetailModal issue={mockIssue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />
-      </WithMockState>,
-    );
-
-    expect(html).toContain("Hỏi AI");
   });
 });

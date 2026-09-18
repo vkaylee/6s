@@ -6,18 +6,22 @@ import {
   IssueStatus,
   type LocationItem,
   resolveLocationName,
+  type TeamItem,
 } from "../types/index.ts";
 
 export interface FilterState {
   statuses: string[];
   categories: string[];
   locationCodes: string[];
+  assignedTeamId?: number | null;
+  mineTeam?: boolean;
 }
 
 interface FilterDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   locations: LocationItem[];
+  teams?: TeamItem[];
   filters: FilterState;
   onApply: (filters: FilterState) => void;
   onReset: () => void;
@@ -27,6 +31,7 @@ export function FilterDrawer({
   isOpen,
   onClose,
   locations,
+  teams = [],
   filters,
   onApply,
   onReset,
@@ -117,7 +122,11 @@ export function FilterDrawer({
   };
 
   const activeCount =
-    filters.statuses.length + filters.categories.length + filters.locationCodes.length;
+    filters.statuses.length +
+    filters.categories.length +
+    filters.locationCodes.length +
+    (filters.assignedTeamId != null ? 1 : 0) +
+    (filters.mineTeam ? 1 : 0);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -279,6 +288,40 @@ export function FilterDrawer({
                 );
               })}
             </div>
+          </div>
+
+          {/* Team Selector (single select) + opt-in "my team's work" */}
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+              {t("filters.team")}
+            </span>
+            <select
+              value={filters.assignedTeamId ?? ""}
+              onChange={(e) =>
+                onApply({
+                  ...filters,
+                  assignedTeamId: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
+              <option value="">{t("filters.all_teams")}</option>
+              {teams
+                .filter((team) => team.is_active)
+                .map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name} ({team.code})
+                  </option>
+                ))}
+            </select>
+            <label className="flex items-center gap-2 min-h-[44px] text-xs font-bold text-zinc-700 dark:text-zinc-300">
+              <input
+                type="checkbox"
+                checked={filters.mineTeam}
+                onChange={(e) => onApply({ ...filters, mineTeam: e.target.checked })}
+                className="w-4 h-4 accent-rose-600"
+              />
+              <span>{t("filters.mine_team_only")}</span>
+            </label>
           </div>
         </div>
 

@@ -5,6 +5,9 @@ export interface DraftIssue {
   category: string;
   cause_type?: string;
   location_code: string;
+  asset_id?: number | null;
+  assigned_team_id?: number | null;
+  assignee_id?: number | null;
   tags: string[];
   description: string;
   photo_before_blob: Blob;
@@ -54,7 +57,7 @@ export interface SixSDatabase extends DBSchema {
 }
 
 const DB_NAME = "6s_local_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<SixSDatabase>> | null = null;
 
