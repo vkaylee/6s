@@ -190,17 +190,19 @@ SELECT COUNT(*) FROM issues i
 WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar[]))
   AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR i.category = ANY($2::varchar[]))
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
-  AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
-  AND ($5::bigint IS NULL OR i.assigned_team_id = $5::bigint)
-  AND ($6::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $7::bigint AND tm.team_id = i.assigned_team_id))
-  AND ($8::bigint = 0 OR i.site_id = $8)
-  AND ($8::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $7::bigint OR i.assignee_id = $7::bigint OR $9::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $7::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $7::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $7::bigint AND tm2.team_id = i.assigned_team_id))
+  AND ($4::varchar IS NULL OR EXISTS (SELECT 1 FROM issue_tags it WHERE it.issue_id = i.id AND it.tag_code = $4::varchar))
+  AND ($5::boolean IS NULL OR $5::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
+  AND ($6::bigint IS NULL OR i.assigned_team_id = $6::bigint)
+  AND ($7::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $8::bigint AND tm.team_id = i.assigned_team_id))
+  AND ($9::bigint = 0 OR i.site_id = $9)
+  AND ($9::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $8::bigint OR i.assignee_id = $8::bigint OR $10::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($10::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $8::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($10::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $8::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $8::bigint AND tm2.team_id = i.assigned_team_id))
 `
 
 type CountIssuesFilteredParams struct {
 	Statuses       []string
 	Categories     []string
 	LocationCodes  []string
+	TagCode        sql.NullString
 	Overdue        sql.NullBool
 	AssignedTeamID sql.NullInt64
 	MineTeam       sql.NullBool
@@ -214,6 +216,7 @@ func (q *Queries) CountIssuesFiltered(ctx context.Context, arg CountIssuesFilter
 		pq.Array(arg.Statuses),
 		pq.Array(arg.Categories),
 		pq.Array(arg.LocationCodes),
+		arg.TagCode,
 		arg.Overdue,
 		arg.AssignedTeamID,
 		arg.MineTeam,
@@ -2128,21 +2131,23 @@ LEFT JOIN users res ON i.resolver_id = res.id
 WHERE (coalesce(cardinality($1::varchar[]), 0) = 0 OR i.status = ANY($1::varchar[]))
   AND (coalesce(cardinality($2::varchar[]), 0) = 0 OR i.category = ANY($2::varchar[]))
   AND (coalesce(cardinality($3::varchar[]), 0) = 0 OR i.location_code = ANY($3::varchar[]))
-  AND ($4::boolean IS NULL OR $4::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
-  AND ($5::bigint IS NULL OR i.assigned_team_id = $5::bigint)
-  AND ($6::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $7::bigint AND tm.team_id = i.assigned_team_id))
-  AND ($8::bigint = 0 OR i.site_id = $8)
-  AND ($8::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $7::bigint OR i.assignee_id = $7::bigint OR $9::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $7::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($9::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $7::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $7::bigint AND tm2.team_id = i.assigned_team_id))
+  AND ($4::varchar IS NULL OR EXISTS (SELECT 1 FROM issue_tags it WHERE it.issue_id = i.id AND it.tag_code = $4::varchar))
+  AND ($5::boolean IS NULL OR $5::boolean = FALSE OR (i.status = 'OPEN' AND i.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'))
+  AND ($6::bigint IS NULL OR i.assigned_team_id = $6::bigint)
+  AND ($7::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $8::bigint AND tm.team_id = i.assigned_team_id))
+  AND ($9::bigint = 0 OR i.site_id = $9)
+  AND ($9::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $8::bigint OR i.assignee_id = $8::bigint OR $10::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($10::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $8::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($10::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $8::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $8::bigint AND tm2.team_id = i.assigned_team_id))
 ORDER BY
     CASE WHEN i.category = '6S' THEN 0 ELSE 1 END,
     i.created_at DESC
-LIMIT $11 OFFSET $10
+LIMIT $12 OFFSET $11
 `
 
 type ListIssuesFilteredParams struct {
 	Statuses       []string
 	Categories     []string
 	LocationCodes  []string
+	TagCode        sql.NullString
 	Overdue        sql.NullBool
 	AssignedTeamID sql.NullInt64
 	MineTeam       sql.NullBool
@@ -2192,6 +2197,7 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 		pq.Array(arg.Statuses),
 		pq.Array(arg.Categories),
 		pq.Array(arg.LocationCodes),
+		arg.TagCode,
 		arg.Overdue,
 		arg.AssignedTeamID,
 		arg.MineTeam,

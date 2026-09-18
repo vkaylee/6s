@@ -1049,6 +1049,12 @@ paths:
           description: Chấp nhận cả alias số nhiều `location_codes`
           schema:
             type: string
+        - name: tag_code
+          in: query
+          required: false
+          description: Lọc issue có gắn tag theo mã code
+          schema:
+            type: string
         - name: overdue
           in: query
           required: false

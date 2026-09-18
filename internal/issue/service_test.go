@@ -57,6 +57,8 @@ type mockIssueStore struct {
 	tagDeleteErr error
 	tagInsertErr error
 	auditErr     error
+	lastList     db.ListIssuesFilteredParams
+	lastCount    db.CountIssuesFilteredParams
 }
 
 func newMockIssueStore() *mockIssueStore {
@@ -299,7 +301,8 @@ func TestIssueService_PatchIssue_TagFailureRollsBackIssueAndTags(t *testing.T) {
 	}
 }
 
-func (m *mockIssueStore) ListIssuesFiltered(_ context.Context, _ db.ListIssuesFilteredParams) ([]db.ListIssuesFilteredRow, error) {
+func (m *mockIssueStore) ListIssuesFiltered(_ context.Context, arg db.ListIssuesFilteredParams) ([]db.ListIssuesFilteredRow, error) {
+	m.lastList = arg
 	rows := make([]db.ListIssuesFilteredRow, 0, len(m.issues))
 	for _, iss := range m.issues {
 		u := m.users[iss.CreatorID]
@@ -323,7 +326,8 @@ func (m *mockIssueStore) ListIssuesFiltered(_ context.Context, _ db.ListIssuesFi
 	return rows, nil
 }
 
-func (m *mockIssueStore) CountIssuesFiltered(_ context.Context, _ db.CountIssuesFilteredParams) (int64, error) {
+func (m *mockIssueStore) CountIssuesFiltered(_ context.Context, arg db.CountIssuesFilteredParams) (int64, error) {
+	m.lastCount = arg
 	return int64(len(m.issues)), nil
 }
 
@@ -864,6 +868,24 @@ func TestIssueService_ListIssuesFiltered(t *testing.T) {
 	}
 	if total != 1 || len(items) != 1 {
 		t.Errorf("expected 1 item, got total=%d, len=%d", total, len(items))
+	}
+}
+
+func TestIssueService_ListIssuesFiltered_PassesTagCodeToQueries(t *testing.T) {
+	store := newMockIssueStore()
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền May A1"}
+	worker := db.User{ID: 10, Username: "worker", Role: "USER", IsActive: true}
+	store.users[worker.ID] = worker
+	store.issues[1] = db.Issue{ID: 1, CreatorID: worker.ID, Category: Category1S.String(), LocationCode: "LINE_A1", Status: StatusOpen.String(), CreatedAt: time.Now()}
+	store.tags[1] = []string{"oil_leak"}
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	svc := NewService(store, storageMgr, make(chan struct{}, 1))
+	var tagCode = "oil_leak"
+	if _, _, err := svc.ListIssuesFiltered(ctxFor(worker), ListFilter{TagCode: &tagCode, Page: 1, Limit: 10}); err != nil {
+		t.Fatalf("ListIssuesFiltered with tag code failed: %v", err)
+	}
+	if !store.lastList.TagCode.Valid || store.lastList.TagCode.String != tagCode || !store.lastCount.TagCode.Valid || store.lastCount.TagCode.String != tagCode {
+		t.Fatalf("expected tag_code forwarded to list and count queries, got list=%+v count=%+v", store.lastList.TagCode, store.lastCount.TagCode)
 	}
 }
 

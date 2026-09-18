@@ -19,10 +19,11 @@ import (
 )
 
 type mockIssueService struct {
-	issueResp *Response
-	err       error
-	events    chan Event
-	eventErrs map[int64]error
+	issueResp  *Response
+	err        error
+	events     chan Event
+	eventErrs  map[int64]error
+	lastFilter ListFilter
 }
 
 func (m *mockIssueService) SyncIssue(_ context.Context, _ SyncIssueRequest, _ db.User) (*Response, bool, error) {
@@ -83,7 +84,8 @@ func (m *mockIssueService) OpenMedia(_ context.Context, _ int64, _, _ string) (*
 	return nil, ErrIssueNotFound
 }
 
-func (m *mockIssueService) ListIssuesFiltered(_ context.Context, _ ListFilter) ([]Response, int64, error) {
+func (m *mockIssueService) ListIssuesFiltered(_ context.Context, filter ListFilter) ([]Response, int64, error) {
+	m.lastFilter = filter
 	if m.err != nil {
 		return nil, 0, m.err
 	}
@@ -124,6 +126,15 @@ func TestIssueHandler(t *testing.T) {
 	handler.List(rrList, reqList)
 	if rrList.Code != http.StatusOK {
 		t.Fatalf("expected 200 for list, got %d", rrList.Code)
+	}
+	reqTag := httptest.NewRequest("GET", "/api/issues?tag_code=oil_leak", nil)
+	rrTag := httptest.NewRecorder()
+	handler.List(rrTag, reqTag)
+	if rrTag.Code != http.StatusOK {
+		t.Fatalf("expected 200 for tag-filtered list, got %d", rrTag.Code)
+	}
+	if mockSvc.lastFilter.TagCode == nil || *mockSvc.lastFilter.TagCode != "oil_leak" {
+		t.Fatalf("expected tag_code filter oil_leak, got %v", mockSvc.lastFilter.TagCode)
 	}
 
 	// 2. GetByID

@@ -67,9 +67,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	statuses := parseQueryValues(q, "status", "statuses")
 	categories := parseQueryValues(q, "category", "categories")
 	locationCodes := parseQueryValues(q, "location_code", "location_codes")
+	var tagCode *string
+	if raw := strings.TrimSpace(q.Get("tag_code")); raw != "" {
+		tagCode = &raw
+	}
 	overdue := q.Get("overdue") == "true" || q.Get("overdue") == "1"
 	page, limit := response.ParsePageLimit(q, 20, 100)
-	filter := ListFilter{Statuses: statuses, Categories: categories, LocationCodes: locationCodes, Overdue: overdue, Page: page, Limit: limit}
+	filter := ListFilter{Statuses: statuses, Categories: categories, LocationCodes: locationCodes, TagCode: tagCode, Overdue: overdue, Page: page, Limit: limit}
 	if raw := q.Get("assigned_team_id"); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 {

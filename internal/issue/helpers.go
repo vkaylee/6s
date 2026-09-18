@@ -21,6 +21,13 @@ func nullInt64(v *int64) sql.NullInt64 {
 	return sql.NullInt64{Int64: *v, Valid: true}
 }
 
+func nullString(v *string) sql.NullString {
+	if v == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: *v, Valid: true}
+}
+
 func nullInt32(v *int32) sql.NullInt32 {
 	if v == nil {
 		return sql.NullInt32{}

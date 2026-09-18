@@ -108,6 +108,7 @@ type ListFilter struct {
 	Statuses       []string
 	Categories     []string
 	LocationCodes  []string
+	TagCode        *string
 	Overdue        bool
 	AssignedTeamID *int64
 	MineTeam       bool
@@ -118,7 +119,7 @@ type ListFilter struct {
 // toListParams maps the filter onto the shared list query parameters.
 func (f ListFilter) toListParams(user db.User) db.ListIssuesFilteredParams {
 	return db.ListIssuesFilteredParams{
-		Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes,
+		Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode),
 		Overdue:        sql.NullBool{Bool: f.Overdue, Valid: f.Overdue},
 		AssignedTeamID: nullInt64(f.AssignedTeamID),
 		MineTeam:       sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam},
@@ -130,7 +131,7 @@ func (f ListFilter) toListParams(user db.User) db.ListIssuesFilteredParams {
 // toCountParams maps the filter onto the shared count query parameters.
 func (f ListFilter) toCountParams(user db.User) db.CountIssuesFilteredParams {
 	return db.CountIssuesFilteredParams{
-		Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes,
+		Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode),
 		Overdue:        sql.NullBool{Bool: f.Overdue, Valid: f.Overdue},
 		AssignedTeamID: nullInt64(f.AssignedTeamID),
 		MineTeam:       sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam},
