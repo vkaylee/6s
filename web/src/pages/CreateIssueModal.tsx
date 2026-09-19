@@ -374,16 +374,18 @@ export function CreateIssueModal({
               onChange={(val) => setLocationCode(val)}
             />
           </div>
-          <ResponsibilityPicker
-            locationCode={locationCode}
-            assetId={assetId}
-            assignedTeamId={assignedTeamId}
-            assigneeId={assigneeId}
-            onAssetChange={setAssetId}
-            onTeamChange={setAssignedTeamId}
-            onAssigneeChange={setAssigneeId}
-            disabled={isSubmitting}
-          />
+          {initialIssue && (
+            <ResponsibilityPicker
+              locationCode={locationCode}
+              assetId={assetId}
+              assignedTeamId={assignedTeamId}
+              assigneeId={assigneeId}
+              onAssetChange={setAssetId}
+              onTeamChange={setAssignedTeamId}
+              onAssigneeChange={setAssigneeId}
+              disabled={isSubmitting}
+            />
+          )}
 
           {/* Dual-Shot Context: Wide + Detail Photo (SPEC.md Section 9.7) */}
           <div>

@@ -365,7 +365,9 @@ describe("IssueDetailModal Component", () => {
       button(container, "Điều chỉnh phân công")?.click();
     });
     await act(async () => {});
-    const teamSelect = selectByLabel(container, "Đơn vị xử lý");
+    const teamSelect = selectByLabel(container, "Team xử lý");
+    expect(container.textContent).toContain("Trách nhiệm xử lý");
+    expect(container.textContent).toContain("Xác nhận nguyên nhân gốc");
     expect(teamSelect).toBeDefined();
     await choose(teamSelect as HTMLSelectElement, "7");
     await act(async () => {
@@ -380,12 +382,9 @@ describe("IssueDetailModal Component", () => {
     const status = selectByLabel(container, "Trạng thái");
     expect(status).toBeDefined();
     await choose(status as HTMLSelectElement, "CONFIRMED");
-    await choose(
-      selectByLabel(container, "Đơn vị chịu trách nhiệm nguyên nhân") as HTMLSelectElement,
-      "7",
-    );
+    await choose(selectByLabel(container, "Team xác nhận nguyên nhân") as HTMLSelectElement, "7");
     await act(async () => {
-      button(container, "Lưu kết quả xác minh")?.click();
+      button(container, "Lưu kết quả xác nhận")?.click();
     });
     await act(async () => {});
     const patches = mutations().filter((call) => call.method === "PATCH");
@@ -423,10 +422,10 @@ describe("IssueDetailModal Component", () => {
     );
     const status = selectByLabel(container, "Trạng thái");
     await choose(status as HTMLSelectElement, "CONFIRMED");
-    expect(selectByLabel(container, "Đơn vị chịu trách nhiệm nguyên nhân")).toBeDefined();
+    expect(selectByLabel(container, "Team xác nhận nguyên nhân")).toBeDefined();
 
     await act(async () => {
-      button(container, "Lưu kết quả xác minh")?.click();
+      button(container, "Lưu kết quả xác nhận")?.click();
     });
     await act(async () => {});
     expect(mutations().some((call) => call.method === "PATCH")).toBe(false);
@@ -457,7 +456,7 @@ describe("IssueDetailModal Component", () => {
     const container = await mount(
       <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
     );
-    const verifyButton = button(container, "Lưu kết quả xác minh");
+    const verifyButton = button(container, "Lưu kết quả xác nhận");
     expect(verifyButton).toBeDefined();
 
     await act(async () => {
@@ -472,7 +471,7 @@ describe("IssueDetailModal Component", () => {
 
     resolvePatch(new Response(JSON.stringify({ data: issue }), { status: 200 }));
     await act(async () => {});
-    expect((button(container, "Lưu kết quả xác minh") as HTMLButtonElement).disabled).toBe(false);
+    expect((button(container, "Lưu kết quả xác nhận") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("confirms an approval with the chosen kaizen rating for a permitted resolver", async () => {

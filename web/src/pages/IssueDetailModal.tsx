@@ -1094,20 +1094,25 @@ export function IssueDetailModal({
               </div>
               <section
                 className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
-                aria-labelledby="responsibility-title"
+                aria-labelledby="handling-responsibility-title"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <h3
-                    id="responsibility-title"
-                    className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
-                  >
-                    {t("issue.responsibility_title")}
-                  </h3>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3
+                      id="handling-responsibility-title"
+                      className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
+                    >
+                      {t("issue.handling_responsibility_title")}
+                    </h3>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      {t("issue.handling_responsibility_hint")}
+                    </p>
+                  </div>
                   {canAssignResponsibility && !isResponsibilityEditing && (
                     <button
                       type="button"
                       onClick={() => setIsResponsibilityEditing(true)}
-                      className="min-h-[40px] rounded-xl px-3 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                      className="min-h-[40px] rounded-xl px-3 text-xs font-bold text-blue-600 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-blue-950/30"
                     >
                       {t("issue.edit_responsibility")}
                     </button>
@@ -1170,7 +1175,7 @@ export function IssueDetailModal({
                               void loadMembers(currentIssue.assigned_team_id, true);
                             }
                           }}
-                          className="ms-2 font-bold text-blue-600 underline"
+                          className="ms-2 font-bold text-blue-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                           {t("common.retry")}
                         </button>
@@ -1178,86 +1183,93 @@ export function IssueDetailModal({
                     </p>
                   </div>
                 )}
-                {(currentIssue.cause_status != null || canVerifyCause) && (
-                  <div className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-                    <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                        {t("issue.cause_verification")}
-                      </h4>
-                      <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-700">
-                        {t(`issue.cause_status_${currentIssue.cause_status || "UNVERIFIED"}`)}
-                      </span>
+              </section>
+              {(currentIssue.cause_status != null || canVerifyCause) && (
+                <section
+                  className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
+                  aria-labelledby="cause-verification-title"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3
+                        id="cause-verification-title"
+                        className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
+                      >
+                        {t("issue.cause_verification_title")}
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        {t("issue.cause_verification_hint")}
+                      </p>
                     </div>
-                    {canVerifyCause ? (
-                      <div className="space-y-2">
-                        <div className="grid gap-2 sm:grid-cols-2">
+                    <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-700">
+                      {t(`issue.cause_status_${currentIssue.cause_status || "UNVERIFIED"}`)}
+                    </span>
+                  </div>
+                  {canVerifyCause ? (
+                    <div className="space-y-2">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="space-y-1 text-[11px] font-bold text-zinc-500">
+                          <span>{t("common.status")}</span>
+                          <select
+                            value={causeStatus}
+                            onChange={(event) => setCauseStatus(event.target.value as CauseStatus)}
+                            aria-label={t("common.status")}
+                            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                          >
+                            <option value="UNVERIFIED">{t("issue.cause_status_UNVERIFIED")}</option>
+                            <option value="CONFIRMED">{t("issue.cause_status_CONFIRMED")}</option>
+                            <option value="NOT_APPLICABLE">
+                              {t("issue.cause_status_NOT_APPLICABLE")}
+                            </option>
+                          </select>
+                        </label>
+                        {causeStatus === "CONFIRMED" && (
                           <label className="space-y-1 text-[11px] font-bold text-zinc-500">
-                            <span>{t("common.status")}</span>
+                            <span>{t("issue.cause_team")}</span>
                             <select
-                              value={causeStatus}
+                              value={causeTeamId ?? ""}
                               onChange={(event) =>
-                                setCauseStatus(event.target.value as CauseStatus)
+                                setCauseTeamId(
+                                  event.target.value ? Number(event.target.value) : null,
+                                )
                               }
-                              aria-label={t("common.status")}
+                              aria-label={t("issue.cause_team")}
                               className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                             >
-                              <option value="UNVERIFIED">
-                                {t("issue.cause_status_UNVERIFIED")}
-                              </option>
-                              <option value="CONFIRMED">{t("issue.cause_status_CONFIRMED")}</option>
-                              <option value="NOT_APPLICABLE">
-                                {t("issue.cause_status_NOT_APPLICABLE")}
-                              </option>
+                              <option value="">{t("issue.no_cause_team")}</option>
+                              {teams
+                                .filter((item) => item.is_active)
+                                .map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.name} ({item.code})
+                                  </option>
+                                ))}
                             </select>
                           </label>
-                          {causeStatus === "CONFIRMED" && (
-                            <label className="space-y-1 text-[11px] font-bold text-zinc-500">
-                              <span>{t("issue.cause_team")}</span>
-                              <select
-                                value={causeTeamId ?? ""}
-                                onChange={(event) =>
-                                  setCauseTeamId(
-                                    event.target.value ? Number(event.target.value) : null,
-                                  )
-                                }
-                                aria-label={t("issue.cause_team")}
-                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                              >
-                                <option value="">{t("issue.no_cause_team")}</option>
-                                {teams
-                                  .filter((item) => item.is_active)
-                                  .map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.name} ({item.code})
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleVerifyCause}
-                          disabled={isSavingCause}
-                          aria-busy={isSavingCause}
-                          className="min-h-[44px] w-full rounded-xl bg-amber-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isSavingCause
-                            ? t("issue.cause_verification_saving")
-                            : t("issue.verify_cause")}
-                        </button>
+                        )}
                       </div>
-                    ) : (
-                      <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                        <span className="font-bold text-zinc-500">{t("issue.cause_team")}:</span>{" "}
-                        {causeTeam
-                          ? `${causeTeam.name} (${causeTeam.code})`
-                          : t("issue.no_cause_team")}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </section>
+                      <button
+                        type="button"
+                        onClick={handleVerifyCause}
+                        disabled={isSavingCause}
+                        aria-busy={isSavingCause}
+                        className="min-h-[44px] w-full rounded-xl bg-amber-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSavingCause
+                          ? t("issue.cause_verification_saving")
+                          : t("issue.verify_cause")}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                      <span className="font-bold text-zinc-500">{t("issue.cause_team")}:</span>{" "}
+                      {causeTeam
+                        ? `${causeTeam.name} (${causeTeam.code})`
+                        : t("issue.no_cause_team")}
+                    </p>
+                  )}
+                </section>
+              )}
               {currentIssue.responsibility_history &&
                 currentIssue.responsibility_history.length > 0 && (
                   <section

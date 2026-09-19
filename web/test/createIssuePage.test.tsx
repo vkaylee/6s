@@ -198,6 +198,17 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(pageHtml).toContain("Phím tắt: 1-6 chọn loại S");
   });
 
+  it("keeps assignment out of the report creation flow", () => {
+    const pageHtml = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+      </Router>,
+    );
+
+    expect(pageHtml).not.toContain("Trách nhiệm xử lý");
+    expect(pageHtml).not.toContain("Đơn vị xử lý");
+  });
+
   it("renders drag and drop photo dropzones with enterprise hints", () => {
     const pageHtml = renderToString(
       <Router ssrPath="/issues/new">

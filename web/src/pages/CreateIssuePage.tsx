@@ -18,7 +18,6 @@ import { useLocation } from "wouter";
 import { ImageAnnotatorModal } from "../components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
-import { ResponsibilityPicker } from "../components/ResponsibilityPicker.tsx";
 import { TaxonomySelectorModal } from "../components/TaxonomySelectorModal.tsx";
 import type { DraftIssue } from "../db/indexeddb.ts";
 import { saveDraftIssue } from "../db/indexeddb.ts";
@@ -97,10 +96,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [photoError, setPhotoError] = useState(false);
   // Annotation Modal state
   const [annotatorTarget, setAnnotatorTarget] = useState<"wide" | "detail" | null>(null);
-  // Optional responsibility assignment (asset + handling team + assignee)
-  const [assetId, setAssetId] = useState<number | null>(null);
-  const [assignedTeamId, setAssignedTeamId] = useState<number | null>(null);
-  const [assigneeId, setAssigneeId] = useState<number | null>(null);
 
   // Hidden file input refs for Retake / Re-upload
   const wideInputRef = useRef<HTMLInputElement | null>(null);
@@ -325,9 +320,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         category,
         cause_type: causeType,
         location_code: locationCode,
-        asset_id: assetId,
-        assigned_team_id: assignedTeamId,
-        assignee_id: assigneeId,
+        asset_id: null,
+        assigned_team_id: null,
+        assignee_id: null,
         tags: selectedTags,
         description: description.trim(),
         photo_before_blob: photoBefore,
@@ -763,15 +758,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   {t("issue.shortcuts_hint")}
                 </p>
               </div>
-              <ResponsibilityPicker
-                locationCode={locationCode}
-                assetId={assetId}
-                assignedTeamId={assignedTeamId}
-                assigneeId={assigneeId}
-                onAssetChange={setAssetId}
-                onTeamChange={setAssignedTeamId}
-                onAssigneeChange={setAssigneeId}
-              />
             </div>
 
             {/* Right Column (7/12 on LG/XL): Unified 6S Categorization & Taxonomy Tags */}

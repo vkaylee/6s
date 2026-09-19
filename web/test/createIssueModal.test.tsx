@@ -179,15 +179,6 @@ function findSelect(container: HTMLElement, ariaLabel: string) {
   );
 }
 
-async function pickOption(select: HTMLSelectElement | undefined, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-  await act(async () => {
-    setter?.call(select, value);
-    select?.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await act(async () => {});
-}
-
 function multipartPart(body: string, name: string): string | undefined {
   const match = body.match(new RegExp(`name="${name}"\\s*\\r?\\n\\r?\\n([^\\r\\n]*)`));
   return match?.[1];
@@ -393,7 +384,7 @@ describe("CreateIssueModal Component", () => {
     });
   });
 
-  it("suggests the asset default team for assign-capable staff and hides assignment from others", async () => {
+  it("hides assignment controls while creating a report", async () => {
     useAuthStore.setState({
       user: {
         id: 9,
@@ -403,7 +394,7 @@ describe("CreateIssueModal Component", () => {
         capabilities: ["issue:assign"],
       },
     });
-    const first = await mount(
+    const { container, root } = await mount(
       <CreateIssueModal
         isOpen={true}
         onClose={() => {}}
@@ -413,35 +404,32 @@ describe("CreateIssueModal Component", () => {
       />,
     );
 
-    const assetSelect = findSelect(first.container, "Thiết bị / tài sản (tùy chọn)");
-    expect(assetSelect).toBeDefined();
-    await pickOption(assetSelect, "5");
-
-    expect(findSelect(first.container, "Đơn vị xử lý")).toBeDefined();
-
-    useAuthStore.setState({
-      user: {
-        id: 9,
-        username: "staff",
-        full_name: "Staff",
-        role: "USER" as never,
-        capabilities: [],
-      },
-    });
-    const second = await mount(
-      <CreateIssueModal
-        isOpen={true}
-        onClose={() => {}}
-        onSuccess={() => {}}
-        locations={mockLocations}
-        tags={mockTags}
-      />,
-    );
-    expect(findSelect(second.container, "Đơn vị xử lý")?.disabled).toBe(true);
-    expect(second.container.textContent).toContain("Cần quyền điều phối");
+    expect(findSelect(container, "Thiết bị / tài sản (tùy chọn)")).toBeUndefined();
+    expect(findSelect(container, "Đơn vị xử lý")).toBeUndefined();
+    expect(container.textContent).not.toContain("Trách nhiệm xử lý");
 
     await act(async () => {
-      second.root.unmount();
+      root.unmount();
+    });
+  });
+
+  it("keeps assignment controls available while editing an existing issue", async () => {
+    const { container, root } = await mount(
+      <CreateIssueModal
+        isOpen={true}
+        onClose={() => {}}
+        onSuccess={() => {}}
+        locations={mockLocations}
+        tags={mockTags}
+        initialIssue={mockIssue}
+      />,
+    );
+
+    expect(findSelect(container, "Thiết bị / tài sản (tùy chọn)")).toBeDefined();
+    expect(findSelect(container, "Team xử lý")).toBeDefined();
+
+    await act(async () => {
+      root.unmount();
     });
   });
 
