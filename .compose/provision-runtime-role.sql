@@ -1,4 +1,6 @@
 \getenv migrator_password MIGRATOR_PASSWORD
+-- Extensions are installed by the bootstrap superuser before the migrator is restricted.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 \getenv runtime_password RUNTIME_PASSWORD
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'migrator_user', :'migrator_password') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migrator_user')\gexec
 SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'migrator_user', :'migrator_password')\gexec
