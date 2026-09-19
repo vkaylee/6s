@@ -34,6 +34,6 @@
   }
 
   handle {
-    reverse_proxy web:5173
+    reverse_proxy server:8080
   }
 }

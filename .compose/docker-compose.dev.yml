@@ -3,8 +3,6 @@ services:
     depends_on:
       server:
         condition: service_healthy
-      web:
-        condition: service_started
 
   role-provisioner:
     image: docker.io/library/postgres:18-alpine

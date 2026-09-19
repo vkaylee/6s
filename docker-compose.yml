@@ -9,6 +9,7 @@ services:
       - .:/workspace
       - go-module-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
+      - web-node-modules:/workspace/web/node_modules
     environment:
       CGO_ENABLED: "0"
       SERVER_PORT: "8080"
@@ -16,27 +17,15 @@ services:
       DB_DSN: "${DB_DSN:-postgres://runtime:runtime@db:5432/6s_db?sslmode=disable}"
       JWT_SECRET: "${JWT_SECRET:-development-jwt-secret-01234567890123456789}"
       DEV_INSECURE: "${DEV_INSECURE:-1}"
-    command: ["air", "-c", ".air.toml"]
+    command: ["sh", "/workspace/scripts/dev-app.sh"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/api/ready"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
     networks:
       - 6s-network
 
-  web:
-    build:
-      context: .
-      dockerfile: .compose/Dockerfile.bun
-    image: 6s-bun-dev:1.1
-    working_dir: /workspace/web
-    volumes:
-      - .:/workspace
-      - web-node-modules:/workspace/web/node_modules
-    command: ["sh", "/workspace/scripts/dev-web.sh"]
-    networks:
-      - 6s-network
 
   caddy:
     image: docker.io/library/caddy:2.8.4
