@@ -2,6 +2,7 @@ import type { I18nObject } from "./i18n.ts";
 
 export {
   resolveI18n,
+  resolveIssueLocationName,
   resolveLocationName,
   resolveLocationNameByCode,
   resolveTagLabel,
@@ -102,11 +103,15 @@ export type IssueItem = Omit<
   assignee_id?: number | null;
   cause_team_id?: number | null;
   cause_status?: CauseStatus | null;
-  /** Enterprise visibility/label fields supplied by the list and detail projections. */
   site_id?: number;
   visibility_class?: IssueVisibilityClass | null;
   cause_type?: CauseType;
   location_name: string;
+  location_name_vi_snapshot?: string | null;
+  location_name_zh_snapshot?: string | null;
+  location_name_en_snapshot?: string | null;
+  location_snapshot_source?: "CLIENT_CAPTURE" | "SERVER_CAPTURE" | null;
+  location_snapshot_recorded_at?: string | null;
   creator_name: string;
   resolver_name?: string | null;
   assigned_team_name?: string | null;

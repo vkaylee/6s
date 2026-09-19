@@ -12,21 +12,27 @@ import (
 	"log"
 	"mime/multipart"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // SyncIssueRequest parameters for POST /api/issues/sync.
 type SyncIssueRequest struct {
-	ClientUUID     string
-	Category       string
-	CauseType      string
-	LocationCode   string
-	Tags           []string
-	Description    string
-	AssetID        *int64
-	AssignedTeamID *int64
-	AssigneeID     *int64
-	PhotoBefore    *multipart.FileHeader
-	PhotoDetail    *multipart.FileHeader
+	ClientUUID             string
+	Category               string
+	CauseType              string
+	LocationCode           string
+	LocationNameViSnapshot string
+	LocationNameZhSnapshot string
+	LocationNameEnSnapshot string
+	LocationSnapshotSource string
+	Tags                   []string
+	Description            string
+	AssetID                *int64
+	AssignedTeamID         *int64
+	AssigneeID             *int64
+	PhotoBefore            *multipart.FileHeader
+	PhotoDetail            *multipart.FileHeader
 }
 
 // resolveCreateResponsibility validates optional asset/team/assignee references and applies the
@@ -116,6 +122,31 @@ func (s *ServiceImpl) loadSiteUser(ctx context.Context, currentUser db.User, id 
 	return user, nil
 }
 
+func normalizeLocationSnapshot(req SyncIssueRequest) (sql.NullString, sql.NullString, sql.NullString, sql.NullString, sql.NullTime) {
+	trim := func(value string) sql.NullString {
+		value = strings.TrimSpace(value)
+		if value == "" || len(value) > 255 {
+			return sql.NullString{}
+		}
+		return sql.NullString{String: value, Valid: true}
+	}
+	vi := trim(req.LocationNameViSnapshot)
+	zh := trim(req.LocationNameZhSnapshot)
+	en := trim(req.LocationNameEnSnapshot)
+	source := strings.TrimSpace(req.LocationSnapshotSource)
+	if source != "CLIENT_CAPTURE" && source != "SERVER_CAPTURE" {
+		source = ""
+	}
+	var recordedAt sql.NullTime
+	if vi.Valid || zh.Valid || en.Valid {
+		recordedAt = sql.NullTime{Time: time.Now().UTC(), Valid: true}
+	}
+	if !recordedAt.Valid || source == "" {
+		source = ""
+	}
+	return vi, zh, en, sql.NullString{String: source, Valid: source != ""}, recordedAt
+}
+
 // SyncIssue handles creating or idempotently returning an issue.
 func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, currentUser db.User) (*Response, bool, error) {
 	existing, err := s.store.GetIssueByUUID(ctx, req.ClientUUID)
@@ -149,6 +180,7 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 		}
 	}
 	var descVal sql.NullString
+	locationNameViSnapshot, locationNameZhSnapshot, locationNameEnSnapshot, snapshotSourceVal, snapshotRecordedAt := normalizeLocationSnapshot(req)
 	if req.Description != "" {
 		descVal = sql.NullString{String: req.Description, Valid: true}
 	}
@@ -174,6 +206,8 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 		ClientUuid: req.ClientUUID, SiteID: currentUser.SiteID, CreatorID: currentUser.ID,
 		Category: req.Category, CauseType: NormalizeCauseType(req.CauseType, req.Category), VisibilityClass: visibilityForCategory(req.Category),
 		LocationCode: req.LocationCode, Description: descVal, PhotoBefore: beforeBasename, PhotoDetail: detailBasename,
+		LocationNameViSnapshot: locationNameViSnapshot, LocationNameZhSnapshot: locationNameZhSnapshot, LocationNameEnSnapshot: locationNameEnSnapshot,
+		LocationSnapshotSource: snapshotSourceVal, LocationSnapshotRecordedAt: snapshotRecordedAt,
 		AssetID: assetID, AssignedTeamID: teamID, AssigneeID: assigneeID,
 	}, req.Tags, buildOutbox, func(issueID int64) []db.InsertScoreLogParams {
 		score.IssueID = issueID

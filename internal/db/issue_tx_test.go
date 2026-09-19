@@ -198,8 +198,8 @@ func issueValues(issue Issue) []driver.Value {
 	return []driver.Value{
 		issue.ID, issue.ClientUuid, issue.Version, issue.SiteID, issue.CreatorID,
 		nil, nil, nil, issue.Category, issue.CauseType, issue.VisibilityClass,
-		issue.LocationCode, nil, nil, "UNVERIFIED", nil, nil, issue.PhotoBefore, nil, nil, nil,
-		issue.Status, issue.CreatedAt, nil, nil,
+		issue.LocationCode, nil, nil, "UNVERIFIED", nil, nil, issue.PhotoBefore, nil, nil,
+		nil, nil, nil, nil, nil, int16(3), issue.Status, issue.CreatedAt, nil, nil,
 	}
 }
 

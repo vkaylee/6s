@@ -157,6 +157,10 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	category := strings.TrimSpace(r.FormValue("category"))
 	causeType := strings.TrimSpace(r.FormValue("cause_type"))
 	locationCode := strings.TrimSpace(r.FormValue("location_code"))
+	locationNameViSnapshot := strings.TrimSpace(r.FormValue("location_name_vi_snapshot"))
+	locationNameZhSnapshot := strings.TrimSpace(r.FormValue("location_name_zh_snapshot"))
+	locationNameEnSnapshot := strings.TrimSpace(r.FormValue("location_name_en_snapshot"))
+	locationSnapshotSource := strings.TrimSpace(r.FormValue("location_snapshot_source"))
 	description := strings.TrimSpace(r.FormValue("description"))
 	tagsStr := strings.TrimSpace(r.FormValue("tags"))
 
@@ -216,6 +220,8 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 	syncReq := SyncIssueRequest{
 		ClientUUID: clientUUID, Category: category, CauseType: causeType, LocationCode: locationCode,
+		LocationNameViSnapshot: locationNameViSnapshot, LocationNameZhSnapshot: locationNameZhSnapshot,
+		LocationNameEnSnapshot: locationNameEnSnapshot, LocationSnapshotSource: locationSnapshotSource,
 		Tags: tags, Description: description, AssetID: assetID, AssignedTeamID: assignedTeamID,
 		AssigneeID: assigneeID, PhotoBefore: photoBeforeHeader, PhotoDetail: photoDetailHeader,
 	}

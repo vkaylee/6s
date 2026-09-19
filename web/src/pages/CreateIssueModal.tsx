@@ -214,11 +214,16 @@ export function CreateIssueModal({
         onClose();
       } else {
         // Create flow
+        const capturedLocation = locations.find((location) => location.code === locationCode);
         const newDraft: DraftIssue = {
           client_uuid: crypto.randomUUID(),
           category,
           cause_type: causeType,
           location_code: locationCode,
+          location_name_vi_snapshot: capturedLocation?.name_vi,
+          location_name_zh_snapshot: capturedLocation?.name_zh,
+          location_name_en_snapshot: capturedLocation?.name_en,
+          location_snapshot_source: capturedLocation ? "CLIENT_CAPTURE" : undefined,
           asset_id: assetId,
           assigned_team_id: assignedTeamId,
           assignee_id: assigneeId,

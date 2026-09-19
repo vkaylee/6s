@@ -31,9 +31,20 @@ func (q *Queries) AddRolePermission(ctx context.Context, arg AddRolePermissionPa
 }
 
 const addTeamLocation = `-- name: AddTeamLocation :exec
-INSERT INTO team_locations (team_id, location_code, created_by)
-VALUES ($1, $2, $3::bigint)
-ON CONFLICT (team_id, location_code) DO NOTHING
+WITH locked AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+), current_period AS MATERIALIZED (
+    SELECT tl.period_id
+    FROM team_locations tl, locked
+    WHERE tl.team_id = $1 AND tl.location_code = $2
+      AND tl.valid_from <= CURRENT_TIMESTAMP
+      AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+    LIMIT 1
+)
+INSERT INTO team_locations (team_id, location_code, valid_from, created_by)
+SELECT $1, $2, CURRENT_TIMESTAMP, $3::bigint
+FROM locked
+WHERE NOT EXISTS (SELECT 1 FROM current_period)
 `
 
 type AddTeamLocationParams struct {
@@ -42,6 +53,8 @@ type AddTeamLocationParams struct {
 	CreatedBy    sql.NullInt64
 }
 
+// PUT is a current-state convenience: keep an existing current period idempotently;
+// otherwise open a new period at one server instant. Historical periods remain closed.
 func (q *Queries) AddTeamLocation(ctx context.Context, arg AddTeamLocationParams) error {
 	_, err := q.db.ExecContext(ctx, addTeamLocation, arg.TeamID, arg.LocationCode, arg.CreatedBy)
 	return err
@@ -131,7 +144,7 @@ SET status = 'CLOSED',
 WHERE id = $1 
   AND status = 'PENDING_REVIEW' 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type CloseIssueParams struct {
@@ -164,6 +177,11 @@ func (q *Queries) CloseIssue(ctx context.Context, arg CloseIssueParams) (Issue, 
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -313,29 +331,40 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 
 const createIssue = `-- name: CreateIssue :one
 INSERT INTO issues (
-    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code, asset_id, assigned_team_id, assignee_id, cause_team_id, cause_status, description, photo_before, photo_detail, status
+    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code,
+    location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot,
+    location_snapshot_source, location_snapshot_recorded_at,
+    asset_id, assigned_team_id, assignee_id, cause_team_id, cause_status, description, photo_before, photo_detail, status
 ) VALUES (
-    $1, 1, $2, $3, $4, $5, $6, $7, $11, $12, $13, $14, COALESCE($15::varchar, 'UNVERIFIED'), $8, $9, $10, 'OPEN'
+    $1, 1, $2, $3, $4, $5, $6, $7,
+    $11, $12, $13,
+    $14, $15,
+    $16, $17, $18, $19, COALESCE($20::varchar, 'UNVERIFIED'), $8, $9, $10, 'OPEN'
 )
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type CreateIssueParams struct {
-	ClientUuid      string
-	SiteID          int64
-	CreatorID       int64
-	Category        string
-	CauseType       string
-	VisibilityClass string
-	LocationCode    string
-	Description     sql.NullString
-	PhotoBefore     string
-	PhotoDetail     sql.NullString
-	AssetID         sql.NullInt64
-	AssignedTeamID  sql.NullInt64
-	AssigneeID      sql.NullInt64
-	CauseTeamID     sql.NullInt64
-	CauseStatus     sql.NullString
+	ClientUuid                 string
+	SiteID                     int64
+	CreatorID                  int64
+	Category                   string
+	CauseType                  string
+	VisibilityClass            string
+	LocationCode               string
+	Description                sql.NullString
+	PhotoBefore                string
+	PhotoDetail                sql.NullString
+	LocationNameViSnapshot     sql.NullString
+	LocationNameZhSnapshot     sql.NullString
+	LocationNameEnSnapshot     sql.NullString
+	LocationSnapshotSource     sql.NullString
+	LocationSnapshotRecordedAt sql.NullTime
+	AssetID                    sql.NullInt64
+	AssignedTeamID             sql.NullInt64
+	AssigneeID                 sql.NullInt64
+	CauseTeamID                sql.NullInt64
+	CauseStatus                sql.NullString
 }
 
 func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue, error) {
@@ -350,6 +379,11 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		arg.Description,
 		arg.PhotoBefore,
 		arg.PhotoDetail,
+		arg.LocationNameViSnapshot,
+		arg.LocationNameZhSnapshot,
+		arg.LocationNameEnSnapshot,
+		arg.LocationSnapshotSource,
+		arg.LocationSnapshotRecordedAt,
 		arg.AssetID,
 		arg.AssignedTeamID,
 		arg.AssigneeID,
@@ -378,6 +412,11 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -668,8 +707,15 @@ func (q *Queries) DeleteRolePermissions(ctx context.Context, role string) error 
 }
 
 const deleteTeamLocation = `-- name: DeleteTeamLocation :exec
-DELETE FROM team_locations
-WHERE team_id = $1 AND location_code = $2
+WITH locked AS (
+    SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+)
+UPDATE team_locations tl
+SET valid_to = CURRENT_TIMESTAMP
+FROM locked
+WHERE tl.team_id = $1 AND tl.location_code = $2
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
 `
 
 type DeleteTeamLocationParams struct {
@@ -704,7 +750,7 @@ SET status = 'PENDING_REVIEW',
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
 WHERE id = $1
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ForceResolveIssueParams struct {
@@ -737,6 +783,11 @@ func (q *Queries) ForceResolveIssue(ctx context.Context, arg ForceResolveIssuePa
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -854,7 +905,7 @@ func (q *Queries) GetCategoryBreakdown(ctx context.Context, locationCode sql.Nul
 }
 
 const getIssueByID = `-- name: GetIssueByID :one
-SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE id = $1 LIMIT 1
 `
 
@@ -882,6 +933,11 @@ func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -892,7 +948,7 @@ func (q *Queries) GetIssueByID(ctx context.Context, id int64) (Issue, error) {
 }
 
 const getIssueByUUID = `-- name: GetIssueByUUID :one
-SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at FROM issues
+SELECT id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at FROM issues
 WHERE client_uuid = $1 LIMIT 1
 `
 
@@ -920,6 +976,11 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -1357,8 +1418,13 @@ func (q *Queries) GetTeamByID(ctx context.Context, id int64) (Team, error) {
 }
 
 const getTeamLocation = `-- name: GetTeamLocation :one
-SELECT team_id, location_code, created_at, created_by FROM team_locations
-WHERE team_id = $1 AND location_code = $2 LIMIT 1
+SELECT period_id, team_id, location_code, valid_from, valid_to, created_at, created_by
+FROM team_locations
+WHERE team_id = $1 AND location_code = $2
+  AND valid_from <= CURRENT_TIMESTAMP
+  AND (valid_to IS NULL OR valid_to > CURRENT_TIMESTAMP)
+ORDER BY valid_from DESC
+LIMIT 1
 `
 
 type GetTeamLocationParams struct {
@@ -1370,8 +1436,11 @@ func (q *Queries) GetTeamLocation(ctx context.Context, arg GetTeamLocationParams
 	row := q.db.QueryRowContext(ctx, getTeamLocation, arg.TeamID, arg.LocationCode)
 	var i TeamLocation
 	err := row.Scan(
+		&i.PeriodID,
 		&i.TeamID,
 		&i.LocationCode,
+		&i.ValidFrom,
+		&i.ValidTo,
 		&i.CreatedAt,
 		&i.CreatedBy,
 	)
@@ -1815,7 +1884,7 @@ SET status = 'INVALID',
 WHERE id = $1 
   AND status IN ('OPEN', 'PENDING_REVIEW') 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type InvalidateIssueParams struct {
@@ -1848,6 +1917,11 @@ func (q *Queries) InvalidateIssue(ctx context.Context, arg InvalidateIssueParams
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -1872,6 +1946,8 @@ FROM team_locations tl
 JOIN team_memberships tm ON tm.team_id = tl.team_id
 JOIN locations l ON l.code = tl.location_code
 WHERE tm.user_id = $1
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
   AND ($2::bigint IS NULL OR l.site_id = $2::bigint)
 `
 
@@ -2113,7 +2189,7 @@ func (q *Queries) ListIssueResponsibilityHistory(ctx context.Context, targetID s
 }
 
 const listIssuesFiltered = `-- name: ListIssuesFiltered :many
-SELECT i.id, i.client_uuid, i.version, i.site_id, i.creator_id, i.resolver_id, i.assignee_id, i.assigned_team_id, i.category, i.cause_type, i.visibility_class, i.location_code, i.asset_id, i.cause_team_id, i.cause_status, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at, 
+SELECT i.id, i.client_uuid, i.version, i.site_id, i.creator_id, i.resolver_id, i.assignee_id, i.assigned_team_id, i.category, i.cause_type, i.visibility_class, i.location_code, i.asset_id, i.cause_team_id, i.cause_status, i.description, i.reject_reason, i.photo_before, i.photo_detail, i.photo_after, i.location_name_vi_snapshot, i.location_name_zh_snapshot, i.location_name_en_snapshot, i.location_snapshot_source, i.location_snapshot_recorded_at, i.score_rating, i.status, i.created_at, i.resolved_at, i.closed_at,
        COALESCE((
            SELECT SUM(CASE WHEN sl.points < 0 THEN -sl.points ELSE 0 END)
            FROM score_logs sl
@@ -2159,37 +2235,42 @@ type ListIssuesFilteredParams struct {
 }
 
 type ListIssuesFilteredRow struct {
-	ID               int64
-	ClientUuid       string
-	Version          int32
-	SiteID           int64
-	CreatorID        int64
-	ResolverID       sql.NullInt64
-	AssigneeID       sql.NullInt64
-	AssignedTeamID   sql.NullInt64
-	Category         string
-	CauseType        string
-	VisibilityClass  string
-	LocationCode     string
-	AssetID          sql.NullInt64
-	CauseTeamID      sql.NullInt64
-	CauseStatus      string
-	Description      sql.NullString
-	RejectReason     sql.NullString
-	PhotoBefore      string
-	PhotoDetail      sql.NullString
-	PhotoAfter       sql.NullString
-	ScoreRating      sql.NullInt16
-	Status           string
-	CreatedAt        time.Time
-	ResolvedAt       sql.NullTime
-	ClosedAt         sql.NullTime
-	ScoreDeducted    int64
-	LocationNameVi   string
-	CreatorUsername  string
-	CreatorFullName  string
-	ResolverUsername sql.NullString
-	ResolverFullName sql.NullString
+	ID                         int64
+	ClientUuid                 string
+	Version                    int32
+	SiteID                     int64
+	CreatorID                  int64
+	ResolverID                 sql.NullInt64
+	AssigneeID                 sql.NullInt64
+	AssignedTeamID             sql.NullInt64
+	Category                   string
+	CauseType                  string
+	VisibilityClass            string
+	LocationCode               string
+	AssetID                    sql.NullInt64
+	CauseTeamID                sql.NullInt64
+	CauseStatus                string
+	Description                sql.NullString
+	RejectReason               sql.NullString
+	PhotoBefore                string
+	PhotoDetail                sql.NullString
+	PhotoAfter                 sql.NullString
+	LocationNameViSnapshot     sql.NullString
+	LocationNameZhSnapshot     sql.NullString
+	LocationNameEnSnapshot     sql.NullString
+	LocationSnapshotSource     sql.NullString
+	LocationSnapshotRecordedAt sql.NullTime
+	ScoreRating                sql.NullInt16
+	Status                     string
+	CreatedAt                  time.Time
+	ResolvedAt                 sql.NullTime
+	ClosedAt                   sql.NullTime
+	ScoreDeducted              int64
+	LocationNameVi             string
+	CreatorUsername            string
+	CreatorFullName            string
+	ResolverUsername           sql.NullString
+	ResolverFullName           sql.NullString
 }
 
 func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFilteredParams) ([]ListIssuesFilteredRow, error) {
@@ -2235,6 +2316,11 @@ func (q *Queries) ListIssuesFiltered(ctx context.Context, arg ListIssuesFiltered
 			&i.PhotoBefore,
 			&i.PhotoDetail,
 			&i.PhotoAfter,
+			&i.LocationNameViSnapshot,
+			&i.LocationNameZhSnapshot,
+			&i.LocationNameEnSnapshot,
+			&i.LocationSnapshotSource,
+			&i.LocationSnapshotRecordedAt,
 			&i.ScoreRating,
 			&i.Status,
 			&i.CreatedAt,
@@ -2425,6 +2511,8 @@ SELECT tl.team_id, t.code AS team_code, t.name AS team_name, tl.created_at
 FROM team_locations tl
 JOIN teams t ON t.id = tl.team_id
 WHERE tl.location_code = $1
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
 ORDER BY t.name ASC
 `
 
@@ -2953,17 +3041,22 @@ func (q *Queries) ListTeamKPIs(ctx context.Context, arg ListTeamKPIsParams) ([]L
 }
 
 const listTeamLocations = `-- name: ListTeamLocations :many
-SELECT tl.team_id, tl.location_code, tl.created_at,
+SELECT tl.period_id, tl.team_id, tl.location_code, tl.valid_from, tl.valid_to, tl.created_at,
        l.name_vi, l.name_zh, l.name_en
 FROM team_locations tl
 JOIN locations l ON l.code = tl.location_code
 WHERE tl.team_id = $1
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
 ORDER BY tl.location_code ASC
 `
 
 type ListTeamLocationsRow struct {
+	PeriodID     int64
 	TeamID       int64
 	LocationCode string
+	ValidFrom    time.Time
+	ValidTo      sql.NullTime
 	CreatedAt    time.Time
 	NameVi       string
 	NameZh       string
@@ -2980,8 +3073,11 @@ func (q *Queries) ListTeamLocations(ctx context.Context, teamID int64) ([]ListTe
 	for rows.Next() {
 		var i ListTeamLocationsRow
 		if err := rows.Scan(
+			&i.PeriodID,
 			&i.TeamID,
 			&i.LocationCode,
+			&i.ValidFrom,
+			&i.ValidTo,
 			&i.CreatedAt,
 			&i.NameVi,
 			&i.NameZh,
@@ -3301,7 +3397,7 @@ SET category = COALESCE($1, category),
     cause_status = CASE WHEN $15::boolean THEN COALESCE($16, 'UNVERIFIED') ELSE cause_status END,
     version = version + 1
 WHERE id = $17 AND ($18::int IS NULL OR version = $18::int)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type PatchIssueParams struct {
@@ -3368,6 +3464,11 @@ func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, 
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -3385,7 +3486,7 @@ SET status = 'OPEN',
 WHERE id = $1 
   AND status = 'PENDING_REVIEW' 
   AND ($3::int IS NULL OR version = $3)
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ReopenIssueParams struct {
@@ -3418,6 +3519,11 @@ func (q *Queries) ReopenIssue(ctx context.Context, arg ReopenIssueParams) (Issue
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,
@@ -3455,7 +3561,7 @@ SET status = 'PENDING_REVIEW',
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
 WHERE id = $1 AND status = 'OPEN' AND version = $4
-RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, score_rating, status, created_at, resolved_at, closed_at
+RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at
 `
 
 type ResolveIssueParams struct {
@@ -3494,6 +3600,11 @@ func (q *Queries) ResolveIssue(ctx context.Context, arg ResolveIssueParams) (Iss
 		&i.PhotoBefore,
 		&i.PhotoDetail,
 		&i.PhotoAfter,
+		&i.LocationNameViSnapshot,
+		&i.LocationNameZhSnapshot,
+		&i.LocationNameEnSnapshot,
+		&i.LocationSnapshotSource,
+		&i.LocationSnapshotRecordedAt,
 		&i.ScoreRating,
 		&i.Status,
 		&i.CreatedAt,

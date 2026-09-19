@@ -242,11 +242,14 @@ func newTeamLocationRouter(h *TeamLocationHandler) http.Handler {
 }
 
 func TestTeamLocationHandler_List_HappyPath(t *testing.T) {
+	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	store := &stubTeamLocationStore{
 		rows: []db.ListTeamLocationsRow{{
 			TeamID:       1,
 			LocationCode: "LINE_A1",
-			CreatedAt:    time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			PeriodID:     7,
+			ValidFrom:    validFrom,
+			CreatedAt:    validFrom,
 			NameVi:       "Chuyền A1",
 		}},
 	}
@@ -266,6 +269,33 @@ func TestTeamLocationHandler_List_HappyPath(t *testing.T) {
 	if len(env.Data) != 1 || env.Data[0].LocationCode != "LINE_A1" {
 		t.Fatalf("unexpected body: %+v", env.Data)
 	}
+	if env.Data[0].PeriodID != 7 || env.Data[0].ValidFrom != validFrom.Format(time.RFC3339Nano) {
+		t.Fatalf("expected temporal fields, got %+v", env.Data[0])
+	}
+}
+
+func TestTeamLocationHandler_List_SerializesClosedPeriodAndOmitsCurrentValidTo(t *testing.T) {
+	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	validTo := time.Date(2026, 2, 1, 12, 30, 45, 123000000, time.UTC)
+	store := &stubTeamLocationStore{rows: []db.ListTeamLocationsRow{
+		{TeamID: 1, LocationCode: "LINE_A1", PeriodID: 7, ValidFrom: validFrom, ValidTo: sql.NullTime{Time: validTo, Valid: true}, CreatedAt: validFrom},
+		{TeamID: 1, LocationCode: "LINE_A1", PeriodID: 8, ValidFrom: validTo, CreatedAt: validTo},
+	}}
+	router := newTeamLocationRouter(NewTeamLocationHandler(store))
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/teams/1/locations", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var env struct { Data []TeamLocationResponse `json:"data"` }
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil { t.Fatal(err) }
+	if len(env.Data) != 2 { t.Fatalf("expected closed and current periods, got %+v", env.Data) }
+	if env.Data[0].ValidTo != validTo.Format(time.RFC3339Nano) { t.Fatalf("expected closed valid_to %q, got %q", validTo.Format(time.RFC3339Nano), env.Data[0].ValidTo) }
+	if env.Data[1].ValidFrom != validTo.Format(time.RFC3339Nano) || env.Data[1].ValidTo != "" { t.Fatalf("expected current period boundary and no valid_to, got %+v", env.Data[1]) }
+	var raw struct { Data []map[string]any `json:"data"` }
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil { t.Fatal(err) }
+	if _, ok := raw.Data[1]["valid_to"]; ok { t.Fatalf("expected current valid_to omitted, got %s", rec.Body.String()) }
 }
 
 func TestTeamLocationHandler_List_InvalidID(t *testing.T) {
@@ -296,6 +326,27 @@ func TestTeamLocationHandler_Add_HappyPath(t *testing.T) {
 	}
 }
 
+
+func TestTeamLocationHandler_Add_RepeatedRequestsPreserveParams(t *testing.T) {
+	store := &stubTeamLocationStore{}
+	router := newTeamLocationRouter(NewTeamLocationHandler(store))
+	for range 2 {
+		req := httptest.NewRequest(http.MethodPut, "/api/admin/teams/1/locations/LINE_A1", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected repeated PUT to return 200, got %d body=%s", rec.Code, rec.Body.String())
+		}
+	}
+	if len(store.adds) != 2 {
+		t.Fatalf("expected both PUTs to reach store, got %d calls", len(store.adds))
+	}
+	for i, arg := range store.adds {
+		if arg.TeamID != 1 || arg.LocationCode != "LINE_A1" {
+			t.Fatalf("unexpected add params at call %d: %+v", i, arg)
+		}
+	}
+}
 func TestTeamLocationHandler_Add_CrossSiteBlocked(t *testing.T) {
 	store := &stubTeamLocationStore{
 		getLoc: func(_ context.Context, _ string) (db.Location, error) {

@@ -38,6 +38,8 @@ func NewTeamLocationHandler(store TeamLocationStore) *TeamLocationHandler {
 }
 
 // TeamLocationResponse formats the response for a team-location relationship.
+// TeamLocationResponse formats the response for a current team-location relationship.
+// The existing fields remain stable; temporal fields are additive.
 type TeamLocationResponse struct {
 	TeamID       int64  `json:"team_id"`
 	LocationCode string `json:"location_code"`
@@ -45,6 +47,9 @@ type TeamLocationResponse struct {
 	NameVi       string `json:"name_vi"`
 	NameZh       string `json:"name_zh"`
 	NameEn       string `json:"name_en"`
+	PeriodID     int64  `json:"period_id"`
+	ValidFrom    string `json:"valid_from"`
+	ValidTo      string `json:"valid_to,omitempty"`
 }
 
 // ListTeamLocations handles GET /api/admin/teams/{id}/locations.
@@ -60,15 +65,21 @@ func (h *TeamLocationHandler) ListTeamLocations(w http.ResponseWriter, r *http.R
 		return
 	}
 	items := make([]TeamLocationResponse, 0, len(rows))
-	for _, r := range rows {
-		items = append(items, TeamLocationResponse{
-			TeamID:       r.TeamID,
-			LocationCode: r.LocationCode,
-			CreatedAt:    r.CreatedAt.UTC().Format(time.RFC3339Nano),
-			NameVi:       r.NameVi,
-			NameZh:       r.NameZh,
-			NameEn:       r.NameEn,
-		})
+	for _, row := range rows {
+		item := TeamLocationResponse{
+			TeamID:       row.TeamID,
+			LocationCode: row.LocationCode,
+			CreatedAt:    row.CreatedAt.UTC().Format(time.RFC3339Nano),
+			NameVi:       row.NameVi,
+			NameZh:       row.NameZh,
+			NameEn:       row.NameEn,
+			PeriodID:     row.PeriodID,
+			ValidFrom:    row.ValidFrom.UTC().Format(time.RFC3339Nano),
+		}
+		if row.ValidTo.Valid {
+			item.ValidTo = row.ValidTo.Time.UTC().Format(time.RFC3339Nano)
+		}
+		items = append(items, item)
 	}
 	_ = response.JSON(w, http.StatusOK, items)
 }

@@ -5,6 +5,10 @@ export interface DraftIssue {
   category: string;
   cause_type?: string;
   location_code: string;
+  location_name_vi_snapshot?: string;
+  location_name_zh_snapshot?: string;
+  location_name_en_snapshot?: string;
+  location_snapshot_source?: "CLIENT_CAPTURE";
   asset_id?: number | null;
   assigned_team_id?: number | null;
   assignee_id?: number | null;

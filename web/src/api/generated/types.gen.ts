@@ -99,6 +99,26 @@ export type Issue = {
     allowed_actions?: IssueAllowedActions;
     category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
     location_code: string;
+    /**
+     * Location name in Vietnamese captured with the issue, when available.
+     */
+    location_name_vi_snapshot?: string;
+    /**
+     * Location name in Chinese captured with the issue, when available.
+     */
+    location_name_zh_snapshot?: string;
+    /**
+     * Location name in English captured with the issue, when available.
+     */
+    location_name_en_snapshot?: string;
+    /**
+     * Provenance of the display snapshot; never used for authorization.
+     */
+    location_snapshot_source?: 'CLIENT_CAPTURE' | 'SERVER_CAPTURE';
+    /**
+     * Server receipt time at which the snapshot was persisted.
+     */
+    location_snapshot_recorded_at?: string;
     tags: Array<string>;
     description?: string;
     reject_reason?: string;
@@ -590,6 +610,10 @@ export type ListIssuesData = {
          */
         location_code?: string;
         /**
+         * Lọc issue có gắn tag theo mã code
+         */
+        tag_code?: string;
+        /**
          * Chỉ issue OPEN quá 48 giờ
          */
         overdue?: boolean;
@@ -718,6 +742,19 @@ export type SyncIssuesData = {
         client_uuid: string;
         category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
         location_code: string;
+        /**
+         * Optional captured Vietnamese location name; display provenance only.
+         */
+        location_name_vi_snapshot?: string;
+        /**
+         * Optional captured Chinese location name; display provenance only.
+         */
+        location_name_zh_snapshot?: string;
+        /**
+         * Optional captured English location name; display provenance only.
+         */
+        location_name_en_snapshot?: string;
+        location_snapshot_source?: 'CLIENT_CAPTURE' | 'SERVER_CAPTURE';
         /**
          * JSON array string, vd '["oil_leak", "safety_gear"]'
          */

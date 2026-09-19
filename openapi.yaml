@@ -243,6 +243,28 @@ components:
         location_code:
           type: string
           example: LINE_A1
+        location_name_vi_snapshot:
+          type: string
+          nullable: true
+          description: Location name in Vietnamese captured with the issue, when available.
+        location_name_zh_snapshot:
+          type: string
+          nullable: true
+          description: Location name in Chinese captured with the issue, when available.
+        location_name_en_snapshot:
+          type: string
+          nullable: true
+          description: Location name in English captured with the issue, when available.
+        location_snapshot_source:
+          type: string
+          nullable: true
+          enum: [CLIENT_CAPTURE, SERVER_CAPTURE]
+          description: Provenance of the display snapshot; never used for authorization.
+        location_snapshot_recorded_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Server receipt time at which the snapshot was persisted.
         tags:
           type: array
           items:
@@ -1242,6 +1264,18 @@ paths:
                 location_code:
                   type: string
                   example: LINE_A1
+                location_name_vi_snapshot:
+                  type: string
+                  description: Optional captured Vietnamese location name; display provenance only.
+                location_name_zh_snapshot:
+                  type: string
+                  description: Optional captured Chinese location name; display provenance only.
+                location_name_en_snapshot:
+                  type: string
+                  description: Optional captured English location name; display provenance only.
+                location_snapshot_source:
+                  type: string
+                  enum: [CLIENT_CAPTURE, SERVER_CAPTURE]
                 tags:
                   type: string
                   description: JSON array string, vd '["oil_leak", "safety_gear"]'

@@ -76,12 +76,22 @@ CREATE TABLE IF NOT EXISTS location_memberships (
 );
 
 CREATE TABLE IF NOT EXISTS team_locations (
+    period_id BIGSERIAL PRIMARY KEY,
     team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code) ON DELETE CASCADE,
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    valid_to TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
-    PRIMARY KEY (team_id, location_code)
+    CHECK (valid_to IS NULL OR valid_to > valid_from)
 );
+
+CREATE INDEX IF NOT EXISTS idx_team_locations_team ON team_locations(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_locations_location ON team_locations(location_code);
+CREATE INDEX IF NOT EXISTS idx_team_locations_period ON team_locations(team_id, location_code, valid_from, valid_to);
+
+-- Temporal overlap prevention is installed by migration 000022 using btree_gist.
+-- The canonical schema stays sqlc-compatible and mirrors the temporal columns.
 CREATE TABLE IF NOT EXISTS assets (
     id BIGSERIAL PRIMARY KEY,
     site_id BIGINT NOT NULL REFERENCES sites(id),
@@ -141,6 +151,11 @@ CREATE TABLE IF NOT EXISTS issues (
     photo_before VARCHAR(500) NOT NULL,
     photo_detail VARCHAR(500),
     photo_after VARCHAR(500),
+    location_name_vi_snapshot VARCHAR(255),
+    location_name_zh_snapshot VARCHAR(255),
+    location_name_en_snapshot VARCHAR(255),
+    location_snapshot_source VARCHAR(32),
+    location_snapshot_recorded_at TIMESTAMPTZ,
     score_rating SMALLINT DEFAULT 3,
     status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

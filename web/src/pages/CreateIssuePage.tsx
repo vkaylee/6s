@@ -315,11 +315,16 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     setIsSubmitting(true);
     try {
       const clientUuid = crypto.randomUUID();
+      const capturedLocation = locations.find((location) => location.code === locationCode);
       const newDraft: DraftIssue = {
         client_uuid: clientUuid,
         category,
         cause_type: causeType,
         location_code: locationCode,
+        location_name_vi_snapshot: capturedLocation?.name_vi,
+        location_name_zh_snapshot: capturedLocation?.name_zh,
+        location_name_en_snapshot: capturedLocation?.name_en,
+        location_snapshot_source: capturedLocation ? "CLIENT_CAPTURE" : undefined,
         asset_id: null,
         assigned_team_id: null,
         assignee_id: null,

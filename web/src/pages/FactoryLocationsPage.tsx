@@ -3,12 +3,12 @@ import { apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
-import type { LocationItem } from "../types/index.ts";
+import { type LocationItem, resolveLocationName } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
 
 export function FactoryLocationsPage() {
-  const { t } = useI18nStore();
+  const { t, locale } = useI18nStore();
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [newCode, setNewCode] = useState("");
@@ -153,6 +153,9 @@ export function FactoryLocationsPage() {
           </button>
           <h1 className="text-base font-black">{t("admin.locations_page_title")}</h1>
         </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          {t("admin.location_display_hint")}
+        </p>
       </PageContainer>
 
       <PageContainer className="py-4 space-y-6">
@@ -268,9 +271,10 @@ export function FactoryLocationsPage() {
                 <div key={loc.code} className="py-3 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2">
-                      <span className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                        {loc.code}
+                      <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                        {resolveLocationName(loc, locale) || t("admin.location_name_missing")}
                       </span>
+                      <span className="font-mono text-[11px] text-zinc-500">{loc.code}</span>
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           loc.is_active
@@ -281,9 +285,8 @@ export function FactoryLocationsPage() {
                         {loc.is_active ? t("admin.active_status") : t("admin.inactive_status")}
                       </span>
                     </div>
-                    <div className="text-xs text-zinc-600 dark:text-zinc-300 font-medium truncate mt-0.5">
-                      {loc.name_vi} {loc.name_zh && `• ${loc.name_zh}`}{" "}
-                      {loc.name_en && `• ${loc.name_en}`}
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium truncate mt-0.5">
+                      {t("admin.location_code_label_short")}: {loc.code}
                     </div>
                   </div>
 

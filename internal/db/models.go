@@ -62,31 +62,36 @@ type CronTaskLog struct {
 }
 
 type Issue struct {
-	ID              int64
-	ClientUuid      string
-	Version         int32
-	SiteID          int64
-	CreatorID       int64
-	ResolverID      sql.NullInt64
-	AssigneeID      sql.NullInt64
-	AssignedTeamID  sql.NullInt64
-	Category        string
-	CauseType       string
-	VisibilityClass string
-	LocationCode    string
-	AssetID         sql.NullInt64
-	CauseTeamID     sql.NullInt64
-	CauseStatus     string
-	Description     sql.NullString
-	RejectReason    sql.NullString
-	PhotoBefore     string
-	PhotoDetail     sql.NullString
-	PhotoAfter      sql.NullString
-	ScoreRating     sql.NullInt16
-	Status          string
-	CreatedAt       time.Time
-	ResolvedAt      sql.NullTime
-	ClosedAt        sql.NullTime
+	ID                         int64
+	ClientUuid                 string
+	Version                    int32
+	SiteID                     int64
+	CreatorID                  int64
+	ResolverID                 sql.NullInt64
+	AssigneeID                 sql.NullInt64
+	AssignedTeamID             sql.NullInt64
+	Category                   string
+	CauseType                  string
+	VisibilityClass            string
+	LocationCode               string
+	AssetID                    sql.NullInt64
+	CauseTeamID                sql.NullInt64
+	CauseStatus                string
+	Description                sql.NullString
+	RejectReason               sql.NullString
+	PhotoBefore                string
+	PhotoDetail                sql.NullString
+	PhotoAfter                 sql.NullString
+	LocationNameViSnapshot     sql.NullString
+	LocationNameZhSnapshot     sql.NullString
+	LocationNameEnSnapshot     sql.NullString
+	LocationSnapshotSource     sql.NullString
+	LocationSnapshotRecordedAt sql.NullTime
+	ScoreRating                sql.NullInt16
+	Status                     string
+	CreatedAt                  time.Time
+	ResolvedAt                 sql.NullTime
+	ClosedAt                   sql.NullTime
 }
 
 type IssueTag struct {
@@ -232,8 +237,11 @@ type Team struct {
 }
 
 type TeamLocation struct {
+	PeriodID     int64
 	TeamID       int64
 	LocationCode string
+	ValidFrom    time.Time
+	ValidTo      sql.NullTime
 	CreatedAt    time.Time
 	CreatedBy    sql.NullInt64
 }

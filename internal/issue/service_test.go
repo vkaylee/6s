@@ -9,12 +9,14 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -95,25 +97,30 @@ func (m *mockIssueStore) GetIssueByUUID(_ context.Context, clientUUID string) (d
 
 func (m *mockIssueStore) CreateIssue(_ context.Context, arg db.CreateIssueParams) (db.Issue, error) {
 	iss := db.Issue{
-		ID:              int64(len(m.issues) + 1),
-		ClientUuid:      arg.ClientUuid,
-		Version:         1,
-		SiteID:          arg.SiteID,
-		CreatorID:       arg.CreatorID,
-		Category:        arg.Category,
-		CauseType:       arg.CauseType,
-		VisibilityClass: arg.VisibilityClass,
-		LocationCode:    arg.LocationCode,
-		Description:     arg.Description,
-		PhotoBefore:     arg.PhotoBefore,
-		PhotoDetail:     arg.PhotoDetail,
-		AssetID:         arg.AssetID,
-		AssignedTeamID:  arg.AssignedTeamID,
-		AssigneeID:      arg.AssigneeID,
-		CauseTeamID:     arg.CauseTeamID,
-		CauseStatus:     arg.CauseStatus.String,
-		Status:          StatusOpen.String(),
-		CreatedAt:       time.Now(),
+		ID:                         int64(len(m.issues) + 1),
+		ClientUuid:                 arg.ClientUuid,
+		Version:                    1,
+		SiteID:                     arg.SiteID,
+		CreatorID:                  arg.CreatorID,
+		Category:                   arg.Category,
+		CauseType:                  arg.CauseType,
+		VisibilityClass:            arg.VisibilityClass,
+		LocationCode:               arg.LocationCode,
+		Description:                arg.Description,
+		PhotoBefore:                arg.PhotoBefore,
+		PhotoDetail:                arg.PhotoDetail,
+		LocationNameViSnapshot:     arg.LocationNameViSnapshot,
+		LocationNameZhSnapshot:     arg.LocationNameZhSnapshot,
+		LocationNameEnSnapshot:     arg.LocationNameEnSnapshot,
+		LocationSnapshotSource:     arg.LocationSnapshotSource,
+		LocationSnapshotRecordedAt: arg.LocationSnapshotRecordedAt,
+		AssetID:                    arg.AssetID,
+		AssignedTeamID:             arg.AssignedTeamID,
+		AssigneeID:                 arg.AssigneeID,
+		CauseTeamID:                arg.CauseTeamID,
+		CauseStatus:                arg.CauseStatus.String,
+		Status:                     StatusOpen.String(),
+		CreatedAt:                  time.Now(),
 	}
 	m.issues[iss.ID] = iss
 	return iss, nil
@@ -591,6 +598,17 @@ func createTestFileHeader(t *testing.T, fieldName, filename string, content []by
 	return req.MultipartForm.File[fieldName][0]
 }
 
+var testJPEGBytes = []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9}
+
+func mustTestStorageManager(t *testing.T) *storage.Manager {
+	t.Helper()
+	manager, err := storage.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+	return manager
+}
+
 func TestIssueService_FullWorkflow(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "6s_test_issue_svc_*")
 	defer func() { _ = os.RemoveAll(tempDir) }()
@@ -677,6 +695,142 @@ func TestIssueService_FullWorkflow(t *testing.T) {
 	}
 	if closedResp.Status != StatusClosed.String() {
 		t.Errorf("expected status CLOSED, got %s", closedResp.Status)
+	}
+}
+
+func TestIssueService_SyncIssue_PersistsLocalizedLocationSnapshot(t *testing.T) {
+	store := newMockIssueStore()
+	worker := db.User{ID: 10, Username: "worker", FullName: "Worker", Role: "USER", SiteID: 1, IsActive: true}
+	store.users[worker.ID] = worker
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Tên hiện tại", SiteID: worker.SiteID}
+	svc := NewService(store, mustTestStorageManager(t), make(chan struct{}, 1))
+
+	resp, created, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
+		ClientUUID:             "c0a80101-0000-4000-8000-000000000101",
+		Category:               Category3S.String(),
+		LocationCode:           "LINE_A1",
+		LocationNameViSnapshot: "Tên cũ",
+		LocationNameZhSnapshot: "旧名称",
+		LocationNameEnSnapshot: "Previous name",
+		LocationSnapshotSource: "CLIENT_CAPTURE",
+		PhotoBefore:            createTestFileHeader(t, "photo_before", "before.jpg", testJPEGBytes),
+	}, worker)
+	if err != nil {
+		t.Fatalf("SyncIssue error: %v", err)
+	}
+	if !created {
+		t.Fatal("expected first sync to create an issue")
+	}
+
+	stored := store.issues[resp.ID]
+	for name, got := range map[string]sql.NullString{
+		"vi snapshot":     stored.LocationNameViSnapshot,
+		"zh snapshot":     stored.LocationNameZhSnapshot,
+		"en snapshot":     stored.LocationNameEnSnapshot,
+		"snapshot source": stored.LocationSnapshotSource,
+	} {
+		if !got.Valid {
+			t.Errorf("%s was not persisted", name)
+		}
+	}
+	if stored.LocationNameViSnapshot.String != "Tên cũ" || stored.LocationNameZhSnapshot.String != "旧名称" || stored.LocationNameEnSnapshot.String != "Previous name" {
+		t.Fatalf("localized snapshots not persisted: %+v", stored)
+	}
+	if stored.LocationSnapshotSource.String != "CLIENT_CAPTURE" || !stored.LocationSnapshotRecordedAt.Valid {
+		t.Fatalf("snapshot metadata not persisted: source=%+v recorded_at=%+v", stored.LocationSnapshotSource, stored.LocationSnapshotRecordedAt)
+	}
+	if resp.LocationNameViSnapshot == nil || *resp.LocationNameViSnapshot != "Tên cũ" || resp.LocationNameZhSnapshot == nil || *resp.LocationNameZhSnapshot != "旧名称" || resp.LocationNameEnSnapshot == nil || *resp.LocationNameEnSnapshot != "Previous name" {
+		t.Fatalf("localized snapshots missing from response: %+v", resp)
+	}
+	if resp.LocationSnapshotSource == nil || *resp.LocationSnapshotSource != "CLIENT_CAPTURE" || resp.LocationSnapshotRecordedAt == nil {
+		t.Fatalf("snapshot metadata missing from response: source=%v recorded_at=%v", resp.LocationSnapshotSource, resp.LocationSnapshotRecordedAt)
+	}
+}
+
+func TestIssueService_SyncIssue_IgnoresMalformedSnapshotsAndValidatesLocation(t *testing.T) {
+	store := newMockIssueStore()
+	worker := db.User{ID: 10, Username: "worker", FullName: "Worker", Role: "USER", SiteID: 1, IsActive: true}
+	store.users[worker.ID] = worker
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Line A1", SiteID: worker.SiteID}
+	svc := NewService(store, mustTestStorageManager(t), make(chan struct{}, 1))
+
+	resp, created, err := svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
+		ClientUUID:             "c0a80101-0000-4000-8000-000000000102",
+		Category:               Category3S.String(),
+		LocationCode:           "LINE_A1",
+		LocationNameViSnapshot: strings.Repeat("x", 256),
+		LocationNameZhSnapshot: "   ",
+		LocationNameEnSnapshot: "  English line  ",
+		LocationSnapshotSource: "UNTRUSTED_SOURCE",
+		PhotoBefore:            createTestFileHeader(t, "photo_before", "before.jpg", testJPEGBytes),
+	}, worker)
+	if err != nil || !created {
+		t.Fatalf("valid location sync failed: created=%v err=%v", created, err)
+	}
+	stored := store.issues[resp.ID]
+	if stored.LocationNameViSnapshot.Valid || stored.LocationNameZhSnapshot.Valid {
+		t.Fatalf("malformed/oversized snapshots should be ignored: vi=%+v zh=%+v", stored.LocationNameViSnapshot, stored.LocationNameZhSnapshot)
+	}
+	if !stored.LocationNameEnSnapshot.Valid || stored.LocationNameEnSnapshot.String != "English line" {
+		t.Fatalf("valid localized snapshot was not normalized: %+v", stored.LocationNameEnSnapshot)
+	}
+	if stored.LocationSnapshotSource.Valid || resp.LocationSnapshotSource != nil {
+		t.Fatalf("malformed snapshot source should be ignored: stored=%+v response=%v", stored.LocationSnapshotSource, resp.LocationSnapshotSource)
+	}
+	if resp.LocationNameViSnapshot != nil || resp.LocationNameZhSnapshot != nil || resp.LocationNameEnSnapshot == nil || *resp.LocationNameEnSnapshot != "English line" {
+		t.Fatalf("response exposed malformed snapshots: %+v", resp)
+	}
+
+	_, _, err = svc.SyncIssue(ctxFor(worker), SyncIssueRequest{
+		ClientUUID:             "c0a80101-0000-4000-8000-000000000103",
+		Category:               Category3S.String(),
+		LocationCode:           "UNKNOWN_LOCATION",
+		LocationNameEnSnapshot: "Should not bypass location validation",
+		PhotoBefore:            createTestFileHeader(t, "photo_before", "before.jpg", testJPEGBytes),
+	}, worker)
+	if err == nil || !errors.Is(err, ErrInvalidResponsibility) {
+		t.Fatalf("expected invalid responsibility for unknown location, got %v", err)
+	}
+	if len(store.issues) != 1 {
+		t.Fatalf("unknown location created an issue: %d stored issues", len(store.issues))
+	}
+}
+
+func TestIssueService_SyncIssue_IdempotentRetryReturnsExistingSnapshot(t *testing.T) {
+	store := newMockIssueStore()
+	worker := db.User{ID: 10, Username: "worker", FullName: "Worker", Role: "USER", SiteID: 1, IsActive: true}
+	store.users[worker.ID] = worker
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Line A1", SiteID: worker.SiteID}
+	svc := NewService(store, mustTestStorageManager(t), make(chan struct{}, 1))
+	clientUUID := "c0a80101-0000-4000-8000-000000000104"
+	firstReq := SyncIssueRequest{
+		ClientUUID:             clientUUID,
+		Category:               Category3S.String(),
+		LocationCode:           "LINE_A1",
+		LocationNameViSnapshot: "Tên lần đầu",
+		LocationSnapshotSource: "CLIENT_CAPTURE",
+		PhotoBefore:            createTestFileHeader(t, "photo_before", "before.jpg", testJPEGBytes),
+	}
+	first, created, err := svc.SyncIssue(ctxFor(worker), firstReq, worker)
+	if err != nil || !created {
+		t.Fatalf("first sync failed: created=%v err=%v", created, err)
+	}
+	secondReq := firstReq
+	secondReq.LocationNameViSnapshot = "Tên retry khác"
+	secondReq.LocationSnapshotSource = "SERVER_CAPTURE"
+	secondReq.PhotoBefore = createTestFileHeader(t, "photo_before", "retry.jpg", testJPEGBytes)
+	second, created, err := svc.SyncIssue(ctxFor(worker), secondReq, worker)
+	if err != nil {
+		t.Fatalf("retry sync failed: %v", err)
+	}
+	if created {
+		t.Fatal("idempotent retry reported a new issue")
+	}
+	if len(store.issues) != 1 || second.ID != first.ID {
+		t.Fatalf("retry created a second issue or changed identity: first=%d second=%d stored=%d", first.ID, second.ID, len(store.issues))
+	}
+	if second.LocationNameViSnapshot == nil || *second.LocationNameViSnapshot != "Tên lần đầu" || second.LocationSnapshotSource == nil || *second.LocationSnapshotSource != "CLIENT_CAPTURE" {
+		t.Fatalf("retry did not return the persisted snapshot: %+v", second)
 	}
 }
 func TestIssueService_ConfiguredScoringRules(t *testing.T) {

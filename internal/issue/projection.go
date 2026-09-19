@@ -384,6 +384,26 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.U
 		Creator:  UserItem{ID: creator.ID, Username: creator.Username, FullName: creator.FullName},
 		Resolver: resolver, CreatedAt: issue.CreatedAt.Format(time.RFC3339),
 	}
+	if issue.LocationNameViSnapshot.Valid {
+		value := issue.LocationNameViSnapshot.String
+		resp.LocationNameViSnapshot = &value
+	}
+	if issue.LocationNameZhSnapshot.Valid {
+		value := issue.LocationNameZhSnapshot.String
+		resp.LocationNameZhSnapshot = &value
+	}
+	if issue.LocationNameEnSnapshot.Valid {
+		value := issue.LocationNameEnSnapshot.String
+		resp.LocationNameEnSnapshot = &value
+	}
+	if issue.LocationSnapshotSource.Valid {
+		value := issue.LocationSnapshotSource.String
+		resp.LocationSnapshotSource = &value
+	}
+	if issue.LocationSnapshotRecordedAt.Valid {
+		value := issue.LocationSnapshotRecordedAt.Time.Format(time.RFC3339)
+		resp.LocationSnapshotRecordedAt = &value
+	}
 	if issue.AssigneeID.Valid {
 		v := issue.AssigneeID.Int64
 		resp.AssigneeID = &v

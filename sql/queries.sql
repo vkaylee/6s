@@ -279,35 +279,67 @@ FROM team_locations tl
 JOIN team_memberships tm ON tm.team_id = tl.team_id
 JOIN locations l ON l.code = tl.location_code
 WHERE tm.user_id = $1
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
   AND (sqlc.narg('site_id')::bigint IS NULL OR l.site_id = sqlc.narg('site_id')::bigint);
 
 -- name: ListTeamLocations :many
-SELECT tl.team_id, tl.location_code, tl.created_at,
+SELECT tl.period_id, tl.team_id, tl.location_code, tl.valid_from, tl.valid_to, tl.created_at,
        l.name_vi, l.name_zh, l.name_en
 FROM team_locations tl
 JOIN locations l ON l.code = tl.location_code
 WHERE tl.team_id = $1
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
 ORDER BY tl.location_code ASC;
 
 -- name: GetTeamLocation :one
-SELECT * FROM team_locations
-WHERE team_id = $1 AND location_code = $2 LIMIT 1;
+SELECT period_id, team_id, location_code, valid_from, valid_to, created_at, created_by
+FROM team_locations
+WHERE team_id = $1 AND location_code = $2
+  AND valid_from <= CURRENT_TIMESTAMP
+  AND (valid_to IS NULL OR valid_to > CURRENT_TIMESTAMP)
+ORDER BY valid_from DESC
+LIMIT 1;
 
 -- name: AddTeamLocation :exec
-INSERT INTO team_locations (team_id, location_code, created_by)
-VALUES ($1, $2, sqlc.narg('created_by')::bigint)
-ON CONFLICT (team_id, location_code) DO NOTHING;
+-- PUT is a current-state convenience: keep an existing current period idempotently;
+-- otherwise open a new period at one server instant. Historical periods remain closed.
+WITH locked AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+), current_period AS MATERIALIZED (
+    SELECT tl.period_id
+    FROM team_locations tl, locked
+    WHERE tl.team_id = $1 AND tl.location_code = $2
+      AND tl.valid_from <= CURRENT_TIMESTAMP
+      AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+    LIMIT 1
+)
+INSERT INTO team_locations (team_id, location_code, valid_from, created_by)
+SELECT $1, $2, CURRENT_TIMESTAMP, sqlc.narg('created_by')::bigint
+FROM locked
+WHERE NOT EXISTS (SELECT 1 FROM current_period);
 
 -- name: DeleteTeamLocation :exec
-DELETE FROM team_locations
-WHERE team_id = $1 AND location_code = $2;
+WITH locked AS (
+    SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+)
+UPDATE team_locations tl
+SET valid_to = CURRENT_TIMESTAMP
+FROM locked
+WHERE tl.team_id = $1 AND tl.location_code = $2
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP);
 
 -- name: ListLocationTeams :many
 SELECT tl.team_id, t.code AS team_code, t.name AS team_name, tl.created_at
 FROM team_locations tl
 JOIN teams t ON t.id = tl.team_id
 WHERE tl.location_code = $1
+  AND tl.valid_from <= CURRENT_TIMESTAMP
+  AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
 ORDER BY t.name ASC;
+
 
 -- name: ListTeams :many
 SELECT * FROM teams
@@ -437,9 +469,15 @@ WHERE id = $1 LIMIT 1;
 
 -- name: CreateIssue :one
 INSERT INTO issues (
-    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code, asset_id, assigned_team_id, assignee_id, cause_team_id, cause_status, description, photo_before, photo_detail, status
+    client_uuid, version, site_id, creator_id, category, cause_type, visibility_class, location_code,
+    location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot,
+    location_snapshot_source, location_snapshot_recorded_at,
+    asset_id, assigned_team_id, assignee_id, cause_team_id, cause_status, description, photo_before, photo_detail, status
 ) VALUES (
-    $1, 1, $2, $3, $4, $5, $6, $7, sqlc.narg('asset_id'), sqlc.narg('assigned_team_id'), sqlc.narg('assignee_id'), sqlc.narg('cause_team_id'), COALESCE(sqlc.narg('cause_status')::varchar, 'UNVERIFIED'), $8, $9, $10, 'OPEN'
+    $1, 1, $2, $3, $4, $5, $6, $7,
+    sqlc.narg('location_name_vi_snapshot'), sqlc.narg('location_name_zh_snapshot'), sqlc.narg('location_name_en_snapshot'),
+    sqlc.narg('location_snapshot_source'), sqlc.narg('location_snapshot_recorded_at'),
+    sqlc.narg('asset_id'), sqlc.narg('assigned_team_id'), sqlc.narg('assignee_id'), sqlc.narg('cause_team_id'), COALESCE(sqlc.narg('cause_status')::varchar, 'UNVERIFIED'), $8, $9, $10, 'OPEN'
 )
 RETURNING *;
 
@@ -469,7 +507,7 @@ DELETE FROM issue_tags
 WHERE issue_id = $1;
 
 -- name: ListIssuesFiltered :many
-SELECT i.*, 
+SELECT i.*,
        COALESCE((
            SELECT SUM(CASE WHEN sl.points < 0 THEN -sl.points ELSE 0 END)
            FROM score_logs sl

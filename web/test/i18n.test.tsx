@@ -90,6 +90,19 @@ describe("i18n Locale Parity & Consistency (vi, en, zh)", () => {
       expect(t("admin.tags_page_title")).toBe(tags);
     }
   });
+  it("translates location display labels in every locale", () => {
+    const { setLocale, t } = useI18nStore.getState();
+    const expected = {
+      vi: ["Mã", "Đang phân công"],
+      en: ["Code", "Current assignment"],
+      zh: ["编号", "当前分配"],
+    } as const;
+    for (const [locale, [code, current]] of Object.entries(expected)) {
+      setLocale(locale as keyof typeof expected);
+      expect(t("admin.location_code_label_short")).toBe(code);
+      expect(t("admin.team_location_period_current")).toBe(current);
+    }
+  });
 
   it("correctly translates and interpolates per locale", () => {
     const { t, setLocale } = useI18nStore.getState();

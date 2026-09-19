@@ -29,6 +29,23 @@ export function resolveLocationNameByCode(
   const location = locations.find((item) => item.code === code);
   return resolveLocationName(location ?? { name_vi: fallbackName }, locale) || code;
 }
+
+export function resolveIssueLocationName(
+  issue: {
+    location_name?: string;
+    location_name_vi_snapshot?: string | null;
+    location_name_zh_snapshot?: string | null;
+    location_name_en_snapshot?: string | null;
+  },
+  locale?: SupportedLocale,
+): string {
+  const snapshot = {
+    name_vi: issue.location_name_vi_snapshot || undefined,
+    name_zh: issue.location_name_zh_snapshot || undefined,
+    name_en: issue.location_name_en_snapshot || undefined,
+  };
+  return resolveLocationName(snapshot, locale) || issue.location_name || "";
+}
 export function resolveTagLabel(
   tag: {
     label_vi?: string;
