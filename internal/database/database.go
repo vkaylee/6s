@@ -5,15 +5,19 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 //go:embed migrations/*.up.sql
@@ -27,7 +31,6 @@ type PoolConfig struct {
 	ConnMaxIdleTime time.Duration
 }
 
-// DefaultPoolConfig returns standard database pool parameters according to SPEC.md.
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
 		MaxOpenConns:    25,
@@ -37,120 +40,402 @@ func DefaultPoolConfig() PoolConfig {
 	}
 }
 
-// Connect establishes a sql.DB connection pool using the pgx driver.
 func Connect(ctx context.Context, dsn string, poolCfg PoolConfig) (*sql.DB, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sql open: %w", err)
 	}
-
 	db.SetMaxOpenConns(poolCfg.MaxOpenConns)
 	db.SetMaxIdleConns(poolCfg.MinIdleConns)
 	db.SetConnMaxLifetime(poolCfg.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(poolCfg.ConnMaxIdleTime)
 
-	// Check connectivity with a short timeout context
 	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-
 	if err := db.PingContext(pingCtx); err != nil {
-		// Do not fail hard immediately if network isn't ready during tests, but report error
-		return db, fmt.Errorf("ping db: %w", err)
+		_ = db.Close()
+		return nil, fmt.Errorf("ping db: %w", err)
 	}
-
 	return db, nil
 }
 
-// RunMigrations applies each embedded up migration once, in version order.
-// Each migration and its tracking row commit atomically in one transaction;
-// a changed applied migration fails rather than being silently re-executed.
-func RunMigrations(ctx context.Context, db *sql.DB) (retErr error) { //nolint:gocognit // ordered migration and checksum validation stay explicit
-	if db == nil {
-		return fmt.Errorf("run migrations: nil database")
+// MigrationInfo is the externally visible state of one embedded migration.
+type MigrationInfo struct {
+	Version  int64
+	Name     string
+	Checksum string
+	Applied  bool
+}
+
+type migrationAsset struct {
+	version  int64
+	name     string
+	checksum string
+	body     []byte
+}
+
+type migrationTimeouts struct {
+	lock      time.Duration
+	statement time.Duration
+	overall   time.Duration
+}
+
+var migrationNameRE = regexp.MustCompile(`^[0-9]{6}_[a-z0-9][a-z0-9_-]*\.up\.sql$`)
+
+func migrationTimeoutConfig() (migrationTimeouts, error) {
+	parse := func(key string, fallback time.Duration) (time.Duration, error) {
+		value := os.Getenv(key)
+		if value == "" {
+			return fallback, nil
+		}
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed <= 0 {
+			return 0, fmt.Errorf("invalid %s", key)
+		}
+		return parsed, nil
 	}
-	entries, err := migrationsFS.ReadDir("migrations")
+
+	lock, err := parse("MIGRATION_LOCK_TIMEOUT", 30*time.Second)
 	if err != nil {
-		return fmt.Errorf("read migrations dir: %w", err)
+		return migrationTimeouts{}, err
 	}
-	type migration struct {
-		version int64
-		name    string
-		body    []byte
+	statement, err := parse("MIGRATION_STATEMENT_TIMEOUT", 5*time.Minute)
+	if err != nil {
+		return migrationTimeouts{}, err
 	}
-	migrations := make([]migration, 0, len(entries))
+	overall, err := parse("MIGRATION_TIMEOUT", 10*time.Minute)
+	if err != nil {
+		return migrationTimeouts{}, err
+	}
+	return migrationTimeouts{lock: lock, statement: statement, overall: overall}, nil
+}
+
+func loadManifest() ([]migrationAsset, error) {
+	return loadManifestFromFS(migrationsFS)
+}
+
+func loadManifestFromFS(source fs.FS) ([]migrationAsset, error) {
+	entries, err := fs.ReadDir(source, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("read migrations dir: %w", err)
+	}
+
+	manifest := make([]migrationAsset, 0, len(entries))
+	versions := make(map[int64]string, len(entries))
+	names := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
 			continue
 		}
+		if !migrationNameRE.MatchString(entry.Name()) {
+			return nil, fmt.Errorf("invalid migration filename %q", entry.Name())
+		}
 		parts := strings.SplitN(entry.Name(), "_", 2)
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid migration filename %q", entry.Name())
-		}
 		version, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid migration version %q: %w", entry.Name(), err)
+		if err != nil || version <= 0 {
+			return nil, fmt.Errorf("invalid migration version %q", entry.Name())
 		}
-		body, err := migrationsFS.ReadFile(filepath.Join("migrations", entry.Name()))
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
+		if previous, exists := versions[version]; exists {
+			return nil, fmt.Errorf("duplicate migration version %d (%s and %s)", version, previous, entry.Name())
 		}
-		migrations = append(migrations, migration{version, entry.Name(), body})
+		if _, exists := names[entry.Name()]; exists {
+			return nil, fmt.Errorf("duplicate migration name %q", entry.Name())
+		}
+		body, err := fs.ReadFile(source, filepath.Join("migrations", entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read migration %s: %w", entry.Name(), err)
+		}
+		versions[version] = entry.Name()
+		names[entry.Name()] = struct{}{}
+		manifest = append(manifest, migrationAsset{
+			version:  version,
+			name:     entry.Name(),
+			checksum: fmt.Sprintf("%x", sha256.Sum256(body)),
+			body:     body,
+		})
 	}
-	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
-	conn, err := db.Conn(ctx)
+	sort.Slice(manifest, func(i, j int) bool { return manifest[i].version < manifest[j].version })
+	return manifest, nil
+}
+
+func migrationLedgerDDL() string {
+	return `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version BIGINT PRIMARY KEY,
+		name TEXT NOT NULL,
+		checksum TEXT NOT NULL,
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`
+}
+
+func ledgerExists(ctx context.Context, conn *sql.Conn) (bool, error) {
+	var relation *string
+	if err := conn.QueryRowContext(ctx, `SELECT to_regclass('public.schema_migrations')`).Scan(&relation); err != nil {
+		return false, err
+	}
+	return relation != nil, nil
+}
+
+func readLedger(ctx context.Context, conn *sql.Conn) (map[int64]MigrationInfo, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT version, name, checksum FROM public.schema_migrations`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ledger := make(map[int64]MigrationInfo)
+	for rows.Next() {
+		var item MigrationInfo
+		if err := rows.Scan(&item.Version, &item.Name, &item.Checksum); err != nil {
+			return nil, err
+		}
+		if _, exists := ledger[item.Version]; exists {
+			return nil, fmt.Errorf("schema_migrations contains duplicate version %d", item.Version)
+		}
+		ledger[item.Version] = item
+	}
+	return ledger, rows.Err()
+}
+
+func validateLedger(manifest []migrationAsset, ledger map[int64]MigrationInfo) error {
+	byVersion := make(map[int64]migrationAsset, len(manifest))
+	for _, asset := range manifest {
+		byVersion[asset.version] = asset
+	}
+
+	var highest int64
+	for version, applied := range ledger {
+		asset, exists := byVersion[version]
+		if !exists {
+			return fmt.Errorf("ledger contains unknown migration version %d", version)
+		}
+		if applied.Name != asset.name {
+			return fmt.Errorf("migration %d name mismatch", version)
+		}
+		if applied.Checksum != asset.checksum {
+			return fmt.Errorf("migration %d checksum mismatch", version)
+		}
+		if version > highest {
+			highest = version
+		}
+	}
+	for _, asset := range manifest {
+		if asset.version <= highest {
+			if _, exists := ledger[asset.version]; !exists {
+				return fmt.Errorf("migration %d missing below applied version %d", asset.version, highest)
+			}
+		}
+	}
+	return nil
+}
+
+func validateAllApplied(manifest []migrationAsset, ledger map[int64]MigrationInfo) error {
+	if err := validateLedger(manifest, ledger); err != nil {
+		return err
+	}
+	for _, asset := range manifest {
+		if _, applied := ledger[asset.version]; !applied {
+			return fmt.Errorf("migration %d is not applied", asset.version)
+		}
+	}
+	return nil
+}
+
+func setStatementTimeout(ctx context.Context, conn *sql.Conn, timeout time.Duration) error {
+	_, err := conn.ExecContext(ctx, `SELECT set_config('statement_timeout', $1, false)`, fmt.Sprintf("%d", timeout.Milliseconds()))
+	return err
+}
+
+func resetStatementTimeout(ctx context.Context, conn *sql.Conn) error {
+	_, err := conn.ExecContext(ctx, `SELECT set_config('statement_timeout', '0', false)`)
+	return err
+}
+
+func discardMigrationConn(conn *sql.Conn) {
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+}
+
+// MigrationStatus reads migration state without creating the ledger or applying SQL.
+func MigrationStatus(ctx context.Context, db *sql.DB) ([]MigrationInfo, error) {
+	if db == nil {
+		return nil, fmt.Errorf("migration status: nil database")
+	}
+	manifest, err := loadManifest()
+	if err != nil {
+		return nil, err
+	}
+	timeouts, err := migrationTimeoutConfig()
+	if err != nil {
+		return nil, err
+	}
+	operation, cancel := context.WithTimeout(ctx, timeouts.overall)
+	defer cancel()
+	conn, err := db.Conn(operation)
+	if err != nil {
+		return nil, fmt.Errorf("acquire migration connection: %w", err)
+	}
+	defer conn.Close()
+
+	exists, err := ledgerExists(operation, conn)
+	if err != nil {
+		return nil, fmt.Errorf("inspect migration ledger: %w", err)
+	}
+	ledger := map[int64]MigrationInfo{}
+	if exists {
+		ledger, err = readLedger(operation, conn)
+		if err != nil {
+			return nil, fmt.Errorf("read migration ledger: %w", err)
+		}
+		if err := validateLedger(manifest, ledger); err != nil {
+			return nil, err
+		}
+	}
+
+	status := make([]MigrationInfo, 0, len(manifest))
+	for _, asset := range manifest {
+		_, applied := ledger[asset.version]
+		status = append(status, MigrationInfo{Version: asset.version, Name: asset.name, Checksum: asset.checksum, Applied: applied})
+	}
+	return status, nil
+}
+
+// ValidateMigrations verifies that the database has exactly the applied prefix of the manifest.
+// Server startup uses this read-only check and never applies DDL.
+func ValidateMigrations(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return fmt.Errorf("validate migrations: nil database")
+	}
+	manifest, err := loadManifest()
+	if err != nil {
+		return err
+	}
+	timeouts, err := migrationTimeoutConfig()
+	if err != nil {
+		return err
+	}
+	operation, cancel := context.WithTimeout(ctx, timeouts.overall)
+	defer cancel()
+	conn, err := db.Conn(operation)
 	if err != nil {
 		return fmt.Errorf("acquire migration connection: %w", err)
 	}
+	defer conn.Close()
+
+	exists, err := ledgerExists(operation, conn)
+	if err != nil {
+		return fmt.Errorf("inspect migration ledger: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("migration ledger is missing")
+	}
+	ledger, err := readLedger(operation, conn)
+	if err != nil {
+		return fmt.Errorf("read migration ledger: %w", err)
+	}
+	return validateAllApplied(manifest, ledger)
+}
+
+// RunMigrations applies pending embedded migrations in order.
+func RunMigrations(ctx context.Context, db *sql.DB) (retErr error) {
+	if db == nil {
+		return fmt.Errorf("run migrations: nil database")
+	}
+	manifest, err := loadManifest()
+	if err != nil {
+		return err
+	}
+	timeouts, err := migrationTimeoutConfig()
+	if err != nil {
+		return err
+	}
+	operation, cancel := context.WithTimeout(ctx, timeouts.overall)
+	defer cancel()
+	conn, err := db.Conn(operation)
+	if err != nil {
+		return fmt.Errorf("acquire migration connection: %w", err)
+	}
+	discard := false
 	defer func() {
+		if discard {
+			discardMigrationConn(conn)
+		}
 		if closeErr := conn.Close(); closeErr != nil && retErr == nil {
-			retErr = fmt.Errorf("close migration connection: %w", closeErr)
+			retErr = closeErr
 		}
 	}()
-	if _, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version BIGINT PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
-		applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-	)`); err != nil {
-		return fmt.Errorf("create schema_migrations: %w", err)
-	}
-	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtextextended('6s schema migrations', 0))`); err != nil {
+
+	lockContext, cancelLock := context.WithTimeout(operation, timeouts.lock)
+	defer cancelLock()
+	if _, err := conn.ExecContext(lockContext, `SELECT pg_advisory_lock(hashtextextended('6s schema migrations', 0))`); err != nil {
+		discard = true
 		return fmt.Errorf("acquire migration lock: %w", err)
 	}
 	defer func() {
-		if _, unlockErr := conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`); unlockErr != nil && retErr == nil {
-			retErr = fmt.Errorf("release migration lock: %w", unlockErr)
+		unlockContext, cancelUnlock := context.WithTimeout(context.Background(), timeouts.lock)
+		defer cancelUnlock()
+		if _, unlockErr := conn.ExecContext(unlockContext, `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`); unlockErr != nil {
+			discard = true
+			if retErr == nil {
+				retErr = fmt.Errorf("release migration lock: %w", unlockErr)
+			}
 		}
 	}()
-	for _, migration := range migrations {
-		var checksum string
-		err := conn.QueryRowContext(ctx, `SELECT checksum FROM schema_migrations WHERE version = $1`, migration.version).Scan(&checksum)
-		if err == nil {
-			if checksum != fmt.Sprintf("%x", sha256.Sum256(migration.body)) {
-				return fmt.Errorf("migration %s checksum mismatch: applied content differs from embedded asset", migration.name)
+
+	if err := setStatementTimeout(operation, conn, timeouts.statement); err != nil {
+		return fmt.Errorf("set migration statement timeout: %w", err)
+	}
+	defer func() {
+		resetContext, cancelReset := context.WithTimeout(context.Background(), timeouts.lock)
+		defer cancelReset()
+		if resetErr := resetStatementTimeout(resetContext, conn); resetErr != nil {
+			discard = true
+			if retErr == nil {
+				retErr = fmt.Errorf("reset migration statement timeout: %w", resetErr)
 			}
+		}
+	}()
+
+	exists, err := ledgerExists(operation, conn)
+	if err != nil {
+		return fmt.Errorf("inspect migration ledger: %w", err)
+	}
+	ledger := map[int64]MigrationInfo{}
+	if exists {
+		ledger, err = readLedger(operation, conn)
+		if err != nil {
+			return fmt.Errorf("read migration ledger: %w", err)
+		}
+		if err := validateLedger(manifest, ledger); err != nil {
+			return err
+		}
+	} else {
+		if _, err := conn.ExecContext(operation, migrationLedgerDDL()); err != nil {
+			return fmt.Errorf("create migration ledger: %w", err)
+		}
+	}
+
+	for _, asset := range manifest {
+		if _, applied := ledger[asset.version]; applied {
 			continue
 		}
-		if err != sql.ErrNoRows {
-			return fmt.Errorf("check migration %s: %w", migration.name, err)
+		statementContext, cancelStatement := context.WithTimeout(operation, timeouts.statement)
+		tx, err := conn.BeginTx(statementContext, nil)
+		if err == nil {
+			_, err = tx.ExecContext(statementContext, string(asset.body))
 		}
-		tx, err := conn.BeginTx(ctx, nil)
+		if err == nil {
+			_, err = tx.ExecContext(statementContext,
+				`INSERT INTO public.schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`,
+				asset.version, asset.name, asset.checksum,
+			)
+		}
+		if err == nil {
+			err = tx.Commit()
+		} else {
+			_ = tx.Rollback()
+		}
+		cancelStatement()
 		if err != nil {
-			return fmt.Errorf("begin migration %s: %w", migration.name, err)
-		}
-		rollback := func(cause error) error {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				return fmt.Errorf("%w; rollback migration %s: %v", cause, migration.name, rollbackErr)
-			}
-			return cause
-		}
-		if _, err = tx.ExecContext(ctx, string(migration.body)); err != nil {
-			return rollback(fmt.Errorf("exec migration %s: %w", migration.name, err))
-		}
-		checksum = fmt.Sprintf("%x", sha256.Sum256(migration.body))
-		if _, err = tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`, migration.version, migration.name, checksum); err != nil {
-			return rollback(fmt.Errorf("record migration %s: %w", migration.name, err))
-		}
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %s: %w", migration.name, err)
+			return fmt.Errorf("apply migration %s: %w", asset.name, err)
 		}
 	}
 	return nil

@@ -1,9 +1,13 @@
 // @ts-check
 import { request } from "@playwright/test";
 
-const E2E_TIMEOUT_MS = 60_000;
-const POLL_INTERVAL_MS = 1_000;
-const REQUEST_TIMEOUT_MS = 5_000;
+const positiveEnvMs = (name, fallback) => {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+const E2E_TIMEOUT_MS = positiveEnvMs("E2E_STARTUP_TIMEOUT_MS", 60_000);
+const POLL_INTERVAL_MS = positiveEnvMs("E2E_POLL_INTERVAL_MS", 1_000);
+const REQUEST_TIMEOUT_MS = positiveEnvMs("E2E_REQUEST_TIMEOUT_MS", 5_000);
 
 /**
  * Waits for the isolated application and its post-migration seed account.

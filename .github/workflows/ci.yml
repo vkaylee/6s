@@ -43,6 +43,32 @@ jobs:
       - name: Go vulnerability scan
         run: ./scripts/security-scan.sh go
 
+
+  postgres-migrations:
+    name: PostgreSQL migration regressions
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U test -d test"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run PostgreSQL migration regressions
+        env:
+          TEST_DB_DSN: postgres://test:test_password@127.0.0.1:5432/test?sslmode=disable
+          GO_NETWORK: host
+        run: ./scripts/_go.sh test ./internal/database -run '^TestPostgres' -count=1
   web:
     runs-on: ubuntu-24.04
     steps:

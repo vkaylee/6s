@@ -13,8 +13,8 @@ services:
       CGO_ENABLED: "0"
       SERVER_PORT: "8080"
       DATA_DIR: "/workspace/data"
-      DB_DSN: "${DB_DSN:?DB_DSN is required (e.g. postgres://postgres:postgres@db:5432/6s_db?sslmode=disable)}"
-      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required (min 32 bytes)}"
+      DB_DSN: "${DB_DSN:-postgres://runtime:runtime@db:5432/6s_db?sslmode=disable}"
+      JWT_SECRET: "${JWT_SECRET:-development-jwt-secret-01234567890123456789}"
       DEV_INSECURE: "${DEV_INSECURE:-1}"
     command: ["air", "-c", ".air.toml"]
     healthcheck:

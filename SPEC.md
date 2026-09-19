@@ -47,8 +47,11 @@ Hệ thống webapp mobile-first hỗ trợ nhân viên nhà xưởng ghi nhận
 //   db.SetConnMaxIdleTime(5 * time.Minute)
 ```
 ### 3.2. Quản lý Migration & Rollback (Tuân thủ .agent/rules/migration-and-rollback.md)
-- Sử dụng migration embedded trong `internal/database/migrations/`; runtime chạy các file `.up.sql` theo thứ tự và ghi nhận `schema_migrations(version, name, checksum, applied_at)`.
-- Migration đã áp dụng không được sửa nội dung; checksum khác biệt làm startup thất bại. Mọi thay đổi tiếp theo phải dùng migration với số phiên bản mới.
+- Sử dụng migration embedded trong `internal/database/migrations/`; **migrator chủ động** chạy các file `.up.sql` theo thứ tự và ghi nhận `schema_migrations(version, name, checksum, applied_at)`.
+- Server không tự apply DDL khi startup/reload. Runtime chỉ dùng credential `RUNTIME_*`, không có quyền tạo/sửa/xóa schema; migrator dùng `MIGRATOR_*` và chạy một lần từ đúng release image trước server.
+- Migration đã áp dụng không được sửa nội dung; checksum khác biệt làm `validate`/startup thất bại. Mọi thay đổi tiếp theo phải dùng migration với số phiên bản mới.
+- `status` và `validate` là lệnh chỉ đọc; `up` là hành động chủ động duy nhất được thay đổi schema. Không cung cấp auto-down/force/repair.
+- Với migration `000022` đã áp dụng: bảo vệ dữ liệu, dừng writer cũ, đối chiếu ledger/checksum và artifact, rồi chạy binary mới; không sửa migration đã áp dụng, không reset volume, không rollback mù bằng binary cũ/down script.
 - Mọi migration mới phải có `.down.sql` tương ứng để rollback vận hành thủ công; runtime chưa tự động rollback.
 - **Nguyên tắc bắt buộc**: Mỗi migration file `.up.sql` luôn đi kèm file `.down.sql` có khả năng rollback hoàn toàn.
 - **Mã hóa dữ liệu nhạy cảm at-rest**: Các cột credential (`ad_configs.bind_password`, `notification_configs.wxpusher_app_token`, `notification_configs.lan_webhook_url`) phải được mã hóa bằng thuật toán `AES-256-GCM` trước khi lưu vào PostgreSQL, sử dụng master key đọc từ biến môi trường `APP_ENCRYPTION_KEY` (32 bytes base64). Tuyệt đối không lưu plaintext credential trong database.

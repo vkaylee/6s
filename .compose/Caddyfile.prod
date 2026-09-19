@@ -13,11 +13,9 @@
 	servers :443 {
 		protocols h1 h2
 	}
-	# Authorize on-demand cert issuance via the app liveness endpoint (same
-	# protection the dev stack uses; avoids the deprecated rate_limit form).
-	on_demand_tls {
-		ask http://server:8080/api/health
-	}
+    # Certificate issuance still needs a dependency-free liveness probe.
+    # Traffic admission below is separately gated by /api/ready.
+    ask http://server:8080/api/health
 }
 
 # Plain HTTP -> HTTPS (preserve the mapped HTTPS port)
@@ -42,5 +40,9 @@
 		-Server
 	}
 
-	reverse_proxy server:8080
+    reverse_proxy server:8080 {
+        health_uri /api/ready
+        health_interval 5s
+        health_timeout 3s
+    }
 }

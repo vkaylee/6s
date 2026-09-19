@@ -28,7 +28,8 @@ RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
 # Static, reproducible binary: no cgo, trimmed paths, stripped symbols.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /server ./cmd/server
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /server ./cmd/server \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /migrate ./cmd/migrate
 
 # --- Stage 3: runtime ------------------------------------------------------
 FROM docker.io/library/debian:bookworm-slim AS runtime
@@ -58,6 +59,7 @@ LABEL org.opencontainers.image.title="6s" \
 
 WORKDIR /
 COPY --from=server --chown=root:root /server /usr/local/bin/server
+COPY --from=server --chown=root:root /migrate /usr/local/bin/migrate
 
 USER appuser
 

@@ -11,9 +11,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -o /server ./cmd/server
+RUN CGO_ENABLED=0 go build -o /server ./cmd/server \
+    && CGO_ENABLED=0 go build -o /migrate ./cmd/migrate
 
 FROM docker.io/library/debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && rm -rf /var/lib/apt/lists/*
 COPY --from=server /server /usr/local/bin/server
+COPY --from=server /migrate /usr/local/bin/migrate
 CMD ["server"]

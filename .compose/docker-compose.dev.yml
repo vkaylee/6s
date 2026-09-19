@@ -6,10 +6,68 @@ services:
       web:
         condition: service_started
 
-  server:
+  role-provisioner:
+    image: docker.io/library/postgres:18-alpine
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
-    # Development-only key; production must provide APP_ENCRYPTION_KEY externally.
     environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: "${DB_USER:-postgres}"
+      PGPASSWORD: "${DB_PASSWORD:-postgres}"
+      PGDATABASE: "${DB_NAME:-6s_db}"
+      MIGRATOR_USER: "${MIGRATOR_USER:-migrator}"
+      MIGRATOR_PASSWORD: "${MIGRATOR_PASSWORD:-migrator}"
+      RUNTIME_USER: "${RUNTIME_USER:-runtime}"
+      RUNTIME_PASSWORD: "${RUNTIME_PASSWORD:-runtime}"
+    volumes:
+      - ./.compose/provision-runtime-role.sql:/provision.sql:ro
+    command: ["sh", "-ec", "psql -v ON_ERROR_STOP=1 -v migrator_user=\"$${MIGRATOR_USER}\" -v runtime_user=\"$${RUNTIME_USER}\" -v dbname=\"$${PGDATABASE}\" -f /provision.sql"]
+    networks: [6s-network]
+
+  migrator:
+    image: 6s-go-dev:1.23
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - go-module-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      CGO_ENABLED: "0"
+      MIGRATION_DB_DSN: "postgres://${MIGRATOR_USER:-migrator}:${MIGRATOR_PASSWORD:-migrator}@db:5432/${DB_NAME:-6s_db}?sslmode=disable"
+      MIGRATION_LOCK_TIMEOUT: "30s"
+      MIGRATION_STATEMENT_TIMEOUT: "5m"
+      MIGRATION_TIMEOUT: "10m"
+    command: ["go", "run", "./cmd/migrate", "up"]
+    depends_on:
+      role-provisioner:
+        condition: service_completed_successfully
+    networks: [6s-network]
+  ledger-protector:
+    image: docker.io/library/postgres:18-alpine
+    restart: "no"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: "${DB_USER:-postgres}"
+      PGPASSWORD: "${DB_PASSWORD:-postgres}"
+      PGDATABASE: "${DB_NAME:-6s_db}"
+      RUNTIME_USER: "${RUNTIME_USER:-runtime}"
+    volumes:
+      - ./.compose/protect-runtime-role.sql:/protect.sql:ro
+    command: ["sh", "-ec", "psql -v ON_ERROR_STOP=1 -f /protect.sql"]
+    networks: [6s-network]
+
+
+  server:
+    depends_on:
+      ledger-protector:
+        condition: service_completed_successfully
+    environment:
+      DB_DSN: "${RUNTIME_DB_DSN:-postgres://runtime:runtime@db:5432/6s_db?sslmode=disable}"
       APP_ENCRYPTION_KEY: "01234567890123456789012345678901"

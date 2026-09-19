@@ -1,11 +1,34 @@
 services:
+  migrator:
+    profiles: ["go"]
+    build:
+      context: ..
+      dockerfile: .compose/Dockerfile.golang
+    image: 6s-go-dev:1.23
+    volumes:
+      - ..:/workspace
+      - go-module-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    working_dir: /workspace
+    environment:
+      CGO_ENABLED: "0"
+      MIGRATION_DB_DSN: "postgres://test:test_password@test-db:5432/test?sslmode=disable"
+      MIGRATION_LOCK_TIMEOUT: "30s"
+      MIGRATION_STATEMENT_TIMEOUT: "5m"
+      MIGRATION_TIMEOUT: "10m"
+    command: ["go", "run", "./cmd/migrate", "up"]
+    depends_on:
+      test-db:
+        condition: service_healthy
+    networks: [test]
+
   server:
     profiles: ["server", "lint-server", "unit-server", "int-server", "go", "lint-go", "unit-go", "int-go"]
     container_name: ${COMPOSE_PROJECT_NAME}_go_1
     build:
       context: ..
       dockerfile: .compose/Dockerfile.golang
-    image: 6s-go:1.23
+    image: 6s-go-dev:1.23
     volumes:
       - ..:/workspace
       - go-module-cache:/go/pkg/mod
@@ -14,11 +37,14 @@ services:
     environment:
       CGO_ENABLED: "0"
       TEST_DB_DSN: "postgres://test:test_password@test-db:5432/test?sslmode=disable"
+      DB_DSN: "postgres://test:test_password@test-db:5432/test?sslmode=disable"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
     networks: [test]
     command: ["sleep", "infinity"]
     healthcheck:
       test: ["CMD", "go", "version"]
-
   test-db:
     profiles: ["go"]
     image: docker.io/library/postgres:18-alpine
@@ -51,8 +77,8 @@ services:
       DEV_INSECURE: "1"
     command: ["/usr/local/bin/server"]
     depends_on:
-      db:
-        condition: service_healthy
+      e2e-migrator:
+        condition: service_completed_successfully
     networks:
       e2e:
         aliases: [server]
@@ -62,6 +88,20 @@ services:
       timeout: 3s
       retries: 30
       start_period: 10s
+
+  e2e-migrator:
+    profiles: ["e2e-web"]
+    image: 6s-e2e-server:local
+    build:
+      context: ..
+      dockerfile: .compose/Dockerfile.e2e-server
+    environment:
+      MIGRATION_DB_DSN: "postgres://e2e:e2e_password@db:5432/6s_e2e?sslmode=disable"
+    command: ["/usr/local/bin/migrate", "up"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [e2e]
 
   db:
     profiles: ["e2e-web"]

@@ -288,14 +288,30 @@ func TestTeamLocationHandler_List_SerializesClosedPeriodAndOmitsCurrentValidTo(t
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	var env struct { Data []TeamLocationResponse `json:"data"` }
-	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil { t.Fatal(err) }
-	if len(env.Data) != 2 { t.Fatalf("expected closed and current periods, got %+v", env.Data) }
-	if env.Data[0].ValidTo != validTo.Format(time.RFC3339Nano) { t.Fatalf("expected closed valid_to %q, got %q", validTo.Format(time.RFC3339Nano), env.Data[0].ValidTo) }
-	if env.Data[1].ValidFrom != validTo.Format(time.RFC3339Nano) || env.Data[1].ValidTo != "" { t.Fatalf("expected current period boundary and no valid_to, got %+v", env.Data[1]) }
-	var raw struct { Data []map[string]any `json:"data"` }
-	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil { t.Fatal(err) }
-	if _, ok := raw.Data[1]["valid_to"]; ok { t.Fatalf("expected current valid_to omitted, got %s", rec.Body.String()) }
+	var env struct {
+		Data []TeamLocationResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Data) != 2 {
+		t.Fatalf("expected closed and current periods, got %+v", env.Data)
+	}
+	if env.Data[0].ValidTo != validTo.Format(time.RFC3339Nano) {
+		t.Fatalf("expected closed valid_to %q, got %q", validTo.Format(time.RFC3339Nano), env.Data[0].ValidTo)
+	}
+	if env.Data[1].ValidFrom != validTo.Format(time.RFC3339Nano) || env.Data[1].ValidTo != "" {
+		t.Fatalf("expected current period boundary and no valid_to, got %+v", env.Data[1])
+	}
+	var raw struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw.Data[1]["valid_to"]; ok {
+		t.Fatalf("expected current valid_to omitted, got %s", rec.Body.String())
+	}
 }
 
 func TestTeamLocationHandler_List_InvalidID(t *testing.T) {
@@ -325,7 +341,6 @@ func TestTeamLocationHandler_Add_HappyPath(t *testing.T) {
 		t.Fatalf("expected audit, got %+v", store.audits)
 	}
 }
-
 
 func TestTeamLocationHandler_Add_RepeatedRequestsPreserveParams(t *testing.T) {
 	store := &stubTeamLocationStore{}

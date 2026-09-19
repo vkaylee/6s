@@ -49,26 +49,38 @@ record the full revision and build time. It builds the current working tree,
 so a revision label alone does not certify that local changes are committed.
 It never pushes images or starts services. CI continues using Buildx directly.
 
-`.compose/docker-compose.prod.yml` runs a production-shaped stack: the immutable
-app image, Postgres over TLS (self-signed cert generated at container startup),
-and Caddy terminating TLS at the edge. Unlike dev, it runs the compiled binary
-(no hot reload), assembles `DB_DSN` with `sslmode=require`, and fails closed if
-`DB_PASSWORD`, `JWT_SECRET`, or `APP_ENCRYPTION_KEY` are missing.
+`.compose/docker-compose.prod.yml` runs a production-shaped stack: Postgres,
+the immutable app image, and Caddy terminating TLS at the edge. Deployment has
+an explicit one-shot `role-provisioner` and `migrator` step before `server`;
+the migrator uses `MIGRATOR_*` credentials and the runtime server uses only
+`RUNTIME_*` credentials. Runtime credentials cannot create or alter schema.
 
 ```sh
-cp .env.prod.example .env.prod          # then fill in REAL secrets
-# generate values, e.g.:
-#   JWT_SECRET=$(openssl rand -base64 48)
-#   APP_ENCRYPTION_KEY=$(openssl rand -base64 32)   # exactly 32 raw bytes
-#   DB_PASSWORD=$(openssl rand -base64 24)
-podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml up -d --build
+cp .env.prod.example .env.prod          # fill every placeholder with real secrets
+podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml build
+podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml run --rm migrator migrate validate
+podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml up -d
 ```
 
-Then open `https://localhost:${PROD_HTTPS_PORT:-8444}` and trust Caddy's
-internal CA certificate as described above. `.env.prod` is git-ignored; never
-commit real secrets. Stop and remove the stack (including volumes) with
-`podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml down -v`.
+The migrator runs from the same image tag as the server. `status` and `validate`
+are read-only; `up` is the only schema-changing action. Do not run down scripts,
+reset volumes, or roll back with an older binary. For the already-applied
+000022 incident, stop old writers, preserve the ledger and data, compare the
+artifact/checksum, then deploy a new binary and follow the separate recovery
+runbook; never edit migration 000022.
 
+For a disposable smoke environment, use a unique `COMPOSE_PROJECT_NAME` and
+unique volume names (or omit the production named volumes); never point this
+procedure at an existing production volume. The runtime role must not be used
+for DDL or ledger writes.
+
+The image healthcheck is liveness-only (`/api/health`); Caddy admits traffic
+only after its upstream readiness check (`/api/ready`) succeeds. A database
+outage therefore does not create a liveness restart loop.
+
+```sh
+podman compose --env-file .env.prod -f .compose/docker-compose.prod.yml down
+```
 On first launch, create the initial superadmin through the setup dialog; no
 existing login is required. Setup is rejected once an active admin exists.
 Restrict network access to trusted operators until initialization is complete,

@@ -5,17 +5,23 @@ export function buildIssueSyncFormData(issue: DraftIssue): FormData {
   if (issue.cause_type) formData.append("cause_type", issue.cause_type);
   formData.append("location_code", issue.location_code);
   if (issue.asset_id != null) formData.append("asset_id", String(issue.asset_id));
-  if (issue.assigned_team_id != null) formData.append("assigned_team_id", String(issue.assigned_team_id));
+  if (issue.assigned_team_id != null)
+    formData.append("assigned_team_id", String(issue.assigned_team_id));
   if (issue.assignee_id != null) formData.append("assignee_id", String(issue.assignee_id));
   formData.append("description", issue.description);
   formData.append("tags", JSON.stringify(issue.tags));
-  if (issue.location_name_vi_snapshot) formData.append("location_name_vi_snapshot", issue.location_name_vi_snapshot);
-  if (issue.location_name_zh_snapshot) formData.append("location_name_zh_snapshot", issue.location_name_zh_snapshot);
-  if (issue.location_name_en_snapshot) formData.append("location_name_en_snapshot", issue.location_name_en_snapshot);
-  if (issue.location_snapshot_source) formData.append("location_snapshot_source", issue.location_snapshot_source);
+  if (issue.location_name_vi_snapshot)
+    formData.append("location_name_vi_snapshot", issue.location_name_vi_snapshot);
+  if (issue.location_name_zh_snapshot)
+    formData.append("location_name_zh_snapshot", issue.location_name_zh_snapshot);
+  if (issue.location_name_en_snapshot)
+    formData.append("location_name_en_snapshot", issue.location_name_en_snapshot);
+  if (issue.location_snapshot_source)
+    formData.append("location_snapshot_source", issue.location_snapshot_source);
   formData.append("created_at", new Date(issue.created_at).toISOString());
   formData.append("photo_before", issue.photo_before_blob, "before.jpg");
-  if (issue.photo_detail_blob) formData.append("photo_detail", issue.photo_detail_blob, "detail.jpg");
+  if (issue.photo_detail_blob)
+    formData.append("photo_detail", issue.photo_detail_blob, "detail.jpg");
   return formData;
 }
 

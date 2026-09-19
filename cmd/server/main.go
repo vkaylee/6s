@@ -39,24 +39,22 @@ func main() {
 		log.Fatalf("invalid config: %v", err)
 	}
 
-	ctx := context.Background()
-	var dbConn *sql.DB
-	dbConn, err = database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dbConn, err := database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
 	if err != nil {
 		if dbConn != nil {
 			_ = dbConn.Close()
 		}
-		dbConn = nil
-		log.Printf("warning: db connection failed: %v", err)
-	} else {
-		defer func() {
-			if err := dbConn.Close(); err != nil {
-				log.Printf("error closing db: %v", err)
-			}
-		}()
-		if err := database.RunMigrations(ctx, dbConn); err != nil {
-			log.Fatalf("database migrations failed: %v", err)
+		log.Fatalf("database connection failed")
+	}
+	defer func() {
+		if err := dbConn.Close(); err != nil {
+			log.Printf("error closing db: %v", err)
 		}
+	}()
+	if err := database.ValidateMigrations(ctx, dbConn); err != nil {
+		log.Fatalf("database schema validation failed: %v", err)
 	}
 
 	var cipher *crypto.Cipher
