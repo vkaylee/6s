@@ -477,9 +477,9 @@ func (q *Queries) CreateLocalAdmin(ctx context.Context, arg CreateLocalAdminPara
 
 const createLocation = `-- name: CreateLocation :one
 INSERT INTO locations (
-    code, name_vi, name_zh, name_en, qr_code, is_active
+    code, name_vi, name_zh, name_en, qr_code, site_id, is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, TRUE
+    $1, $2, $3, $4, $5, (SELECT id FROM sites WHERE code = 'DEFAULT'), TRUE
 )
 RETURNING id, code, name_vi, name_zh, name_en, qr_code, site_id, is_active, created_at
 `
