@@ -172,8 +172,11 @@ volumes:
     name: 6s-test-go-module-cache
   go-build-cache:
     name: 6s-test-go-build-cache
+  # Keep browser dependency caches stable across isolated per-run Compose projects.
   e2e-node-modules:
+    name: 6s-e2e-node-modules
   e2e-bun-install-cache:
+    name: 6s-e2e-bun-install-cache
 
 networks:
   test:
