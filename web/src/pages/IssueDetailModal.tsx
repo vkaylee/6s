@@ -1,4 +1,4 @@
-import { AlertTriangle, Languages, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Languages, Loader2, ShieldCheck, Sparkles, UserCog } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
 import { issueOperations } from "../api/operations.ts";
@@ -79,6 +79,7 @@ export function IssueDetailModal({
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
   const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
   const [isResponsibilityEditing, setIsResponsibilityEditing] = useState(false);
+  const [isCauseVerificationOpen, setIsCauseVerificationOpen] = useState(false);
   const [isSavingResponsibility, setIsSavingResponsibility] = useState(false);
   const [assignmentAssetId, setAssignmentAssetId] = useState<number | null>(issue.asset_id ?? null);
   const [assignmentTeamId, setAssignmentTeamId] = useState<number | null>(
@@ -87,8 +88,14 @@ export function IssueDetailModal({
   const [assignmentAssigneeId, setAssignmentAssigneeId] = useState<number | null>(
     issue.assignee_id ?? null,
   );
+  const [syncCauseWithAssignment, setSyncCauseWithAssignment] = useState(false);
   const mayAssign = hasCapability(user, "issue:assign");
   const [causeTeamId, setCauseTeamId] = useState<number | null>(issue.cause_team_id ?? null);
+  const [closeCauseTeamId, setCloseCauseTeamId] = useState<number | null>(
+    issue.cause_status === "UNVERIFIED"
+      ? (issue.cause_team_id ?? issue.assigned_team_id ?? null)
+      : (issue.cause_team_id ?? null),
+  );
   const assets = useMasterdataStore((state) => state.assets);
   const teams = useMasterdataStore((state) => state.teams);
   const teamMembers = useMasterdataStore((state) =>
@@ -141,6 +148,13 @@ export function IssueDetailModal({
     setAssignmentAssigneeId(issue.assignee_id ?? null);
     setCauseTeamId(issue.cause_team_id ?? null);
     setCauseStatus(issue.cause_status ?? "UNVERIFIED");
+    setCloseCauseTeamId(
+      issue.cause_status === "UNVERIFIED"
+        ? (issue.cause_team_id ?? issue.assigned_team_id ?? null)
+        : (issue.cause_team_id ?? null),
+    );
+    setSyncCauseWithAssignment(false);
+    setIsCauseVerificationOpen(false);
   }, [issue, locale]);
 
   // The assignee name comes from the team member lookup, which the server gates behind issue:assign.
@@ -633,6 +647,9 @@ export function IssueDetailModal({
           asset_id: assignmentAssetId,
           assigned_team_id: assignmentTeamId,
           assignee_id: assignmentAssigneeId,
+          ...(syncCauseWithAssignment && assignmentTeamId != null
+            ? { cause_status: "CONFIRMED", cause_team_id: assignmentTeamId }
+            : {}),
         }),
       });
       if (updated) setCurrentIssue(updated);
@@ -667,7 +684,10 @@ export function IssueDetailModal({
           cause_status: causeStatus,
         }),
       });
-      if (updated) setCurrentIssue(updated);
+      if (updated) {
+        setCurrentIssue(updated);
+        setCloseCauseTeamId(updated.cause_team_id ?? null);
+      }
       haptics.success();
       onRefresh();
     } catch (error) {
@@ -720,6 +740,17 @@ export function IssueDetailModal({
   const handleConfirmClose = async () => {
     setIsSubmitting(true);
     try {
+      if (canVerifyCause && closeCauseTeamId != null && currentIssue.cause_status !== "CONFIRMED") {
+        await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expected_version: currentIssue.version,
+            cause_team_id: closeCauseTeamId,
+            cause_status: "CONFIRMED",
+          }),
+        });
+      }
       await issueOperations.close(currentIssue.id, { score_rating: scoreRating });
       haptics.success();
       setShowConfirmAction(null);
@@ -1093,33 +1124,52 @@ export function IssueDetailModal({
                 )}
               </div>
               <section
-                className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
-                aria-labelledby="handling-responsibility-title"
+                className="space-y-3.5 rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-2xs dark:border-zinc-700 dark:bg-zinc-800/80"
+                aria-labelledby="assignment-title"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-0.5">
                     <h3
-                      id="handling-responsibility-title"
-                      className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
+                      id="assignment-title"
+                      className="text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200"
                     >
                       {t("issue.handling_responsibility_title")}
                     </h3>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                       {t("issue.handling_responsibility_hint")}
                     </p>
                   </div>
-                  {canAssignResponsibility && !isResponsibilityEditing && (
-                    <button
-                      type="button"
-                      onClick={() => setIsResponsibilityEditing(true)}
-                      className="min-h-[40px] rounded-xl px-3 text-xs font-bold text-blue-600 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-blue-950/30"
-                    >
-                      {t("issue.edit_responsibility")}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 sm:shrink-0">
+                    {canAssignResponsibility && !isResponsibilityEditing && (
+                      <button
+                        type="button"
+                        onClick={() => setIsResponsibilityEditing(true)}
+                        aria-label={t("issue.edit_responsibility")}
+                        title={t("issue.edit_responsibility")}
+                        className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-200/90 bg-white px-4 text-xs font-bold text-zinc-700 shadow-2xs transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-98 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:flex-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
+                      >
+                        <UserCog className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{t("issue.edit_responsibility_short")}</span>
+                      </button>
+                    )}
+                    {canVerifyCause && (
+                      <button
+                        type="button"
+                        onClick={() => setIsCauseVerificationOpen((prev) => !prev)}
+                        aria-expanded={isCauseVerificationOpen}
+                        aria-controls="cause-verification-panel"
+                        aria-label={t("issue.cause_verification_title")}
+                        title={t("issue.cause_verification_title")}
+                        className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200/90 bg-amber-50/80 px-4 text-xs font-bold text-amber-800 shadow-2xs transition hover:border-amber-300 hover:bg-amber-100 active:scale-98 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:flex-none dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/70"
+                      >
+                        <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{t("issue.cause_verification_short")}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {isResponsibilityEditing ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <ResponsibilityPicker
                       locationCode={currentIssue.location_code}
                       assetId={assignmentAssetId}
@@ -1129,92 +1179,144 @@ export function IssueDetailModal({
                       onTeamChange={setAssignmentTeamId}
                       onAssigneeChange={setAssignmentAssigneeId}
                     />
-                    <div className="flex gap-2">
+                    {canVerifyCause &&
+                      currentIssue.cause_status === "UNVERIFIED" &&
+                      assignmentTeamId != null && (
+                        <label className="flex min-h-[44px] items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                          <input
+                            type="checkbox"
+                            checked={syncCauseWithAssignment}
+                            onChange={(event) => setSyncCauseWithAssignment(event.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                          />
+                          <span>{t("issue.sync_cause_team_label")}</span>
+                        </label>
+                      )}
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsResponsibilityEditing(false)}
+                        disabled={isSavingResponsibility}
+                        className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50 active:scale-98 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                      >
+                        {t("common.cancel")}
+                      </button>
                       <button
                         type="button"
                         onClick={handleSaveResponsibility}
                         disabled={isSavingResponsibility}
                         aria-busy={isSavingResponsibility}
-                        className="min-h-[44px] flex-1 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-5 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 active:scale-98 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isSavingResponsibility ? t("common.saving") : t("common.save")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsResponsibilityEditing(false)}
-                        disabled={isSavingResponsibility}
-                        className="min-h-[44px] rounded-xl bg-zinc-100 px-3 text-xs font-bold dark:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {t("common.cancel")}
+                        {isSavingResponsibility ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            <span>{t("common.saving")}</span>
+                          </>
+                        ) : (
+                          t("common.save")
+                        )}
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid gap-2 text-xs sm:grid-cols-3">
-                    <p>
-                      <span className="font-bold text-zinc-500">{t("issue.asset_optional")}:</span>{" "}
-                      {asset ? `${asset.asset_code} — ${asset.name}` : t("issue.no_asset")}
-                    </p>
-                    <p>
-                      <span className="font-bold text-zinc-500">{t("issue.assigned_team")}:</span>{" "}
-                      {team ? `${team.name} (${team.code})` : t("issue.no_assigned_team")}
-                    </p>
-                    <p>
-                      <span className="font-bold text-zinc-500">
-                        {t("issue.assignee_optional")}:
-                      </span>{" "}
-                      <span aria-live="polite">{assigneeLabel}</span>
-                      {mayAssign && membersStatus === "loading" && (
-                        <span className="ms-2 text-zinc-400">{t("issue.assignee_loading")}</span>
-                      )}
-                      {assigneeLookupError && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (currentIssue.assigned_team_id != null) {
-                              void loadMembers(currentIssue.assigned_team_id, true);
-                            }
-                          }}
-                          className="ms-2 font-bold text-blue-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                          {t("common.retry")}
-                        </button>
-                      )}
-                    </p>
+                  <div className="grid gap-2.5 sm:grid-cols-3">
+                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                        {t("issue.asset_optional")}
+                      </span>
+                      <span
+                        className="mt-1 block truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200"
+                        title={asset ? `${asset.asset_code} — ${asset.name}` : undefined}
+                      >
+                        {asset ? `${asset.asset_code} — ${asset.name}` : t("issue.no_asset")}
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                        {t("issue.assigned_team")}
+                      </span>
+                      <span
+                        className="mt-1 block truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200"
+                        title={team ? `${team.name} (${team.code})` : undefined}
+                      >
+                        {team ? `${team.name} (${team.code})` : t("issue.no_assigned_team")}
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                        {t("issue.assignee_optional")}
+                      </span>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                        <span aria-live="polite" className="truncate">
+                          {assigneeLabel}
+                        </span>
+                        {mayAssign && membersStatus === "loading" && (
+                          <span className="text-[10px] font-normal text-zinc-400">
+                            ({t("issue.assignee_loading")})
+                          </span>
+                        )}
+                        {assigneeLookupError && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (currentIssue.assigned_team_id != null) {
+                                void loadMembers(currentIssue.assigned_team_id, true);
+                              }
+                            }}
+                            className="shrink-0 font-bold text-blue-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          >
+                            {t("common.retry")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {currentIssue.cause_status === "CONFIRMED" && causeTeam && (
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200/90 bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-900 sm:col-span-3 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle
+                            className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                            aria-hidden="true"
+                          />
+                          <span>
+                            <strong className="font-bold">{t("issue.cause_team")}:</strong>{" "}
+                            {causeTeam.name} ({causeTeam.code})
+                          </span>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-amber-200/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/70 dark:text-amber-200">
+                          {t("issue.cause_status_CONFIRMED")}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
-              </section>
-              {(currentIssue.cause_status != null || canVerifyCause) && (
-                <section
-                  className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
-                  aria-labelledby="cause-verification-title"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3
-                        id="cause-verification-title"
-                        className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300"
-                      >
-                        {t("issue.cause_verification_title")}
-                      </h3>
-                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        {t("issue.cause_verification_hint")}
-                      </p>
+                {isCauseVerificationOpen && canVerifyCause && (
+                  <div
+                    id="cause-verification-panel"
+                    className="space-y-3 rounded-xl border border-amber-200/70 bg-amber-50/40 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/20"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                          {t("issue.cause_verification_title")}
+                        </h4>
+                        <p className="mt-0.5 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                          {t("issue.cause_verification_hint")}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-300">
+                        {t(`issue.cause_status_${currentIssue.cause_status || "UNVERIFIED"}`)}
+                      </span>
                     </div>
-                    <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-700">
-                      {t(`issue.cause_status_${currentIssue.cause_status || "UNVERIFIED"}`)}
-                    </span>
-                  </div>
-                  {canVerifyCause ? (
-                    <div className="space-y-2">
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <label className="space-y-1 text-[11px] font-bold text-zinc-500">
+                    <div className="space-y-3">
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        <label className="space-y-1 text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
                           <span>{t("common.status")}</span>
                           <select
                             value={causeStatus}
                             onChange={(event) => setCauseStatus(event.target.value as CauseStatus)}
                             aria-label={t("common.status")}
-                            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                            className="min-h-[42px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-800 shadow-2xs dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                           >
                             <option value="UNVERIFIED">{t("issue.cause_status_UNVERIFIED")}</option>
                             <option value="CONFIRMED">{t("issue.cause_status_CONFIRMED")}</option>
@@ -1224,7 +1326,7 @@ export function IssueDetailModal({
                           </select>
                         </label>
                         {causeStatus === "CONFIRMED" && (
-                          <label className="space-y-1 text-[11px] font-bold text-zinc-500">
+                          <label className="space-y-1 text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
                             <span>{t("issue.cause_team")}</span>
                             <select
                               value={causeTeamId ?? ""}
@@ -1234,7 +1336,7 @@ export function IssueDetailModal({
                                 )
                               }
                               aria-label={t("issue.cause_team")}
-                              className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                              className="min-h-[42px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-800 shadow-2xs dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                             >
                               <option value="">{t("issue.no_cause_team")}</option>
                               {teams
@@ -1248,28 +1350,36 @@ export function IssueDetailModal({
                           </label>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleVerifyCause}
-                        disabled={isSavingCause}
-                        aria-busy={isSavingCause}
-                        className="min-h-[44px] w-full rounded-xl bg-amber-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isSavingCause
-                          ? t("issue.cause_verification_saving")
-                          : t("issue.verify_cause")}
-                      </button>
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsCauseVerificationOpen(false)}
+                          disabled={isSavingCause}
+                          className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50 active:scale-98 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                        >
+                          {t("common.cancel")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleVerifyCause}
+                          disabled={isSavingCause}
+                          aria-busy={isSavingCause}
+                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-5 text-xs font-bold text-white shadow-xs transition hover:bg-amber-700 active:scale-98 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSavingCause ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                              <span>{t("issue.cause_verification_saving")}</span>
+                            </>
+                          ) : (
+                            t("issue.verify_cause")
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                      <span className="font-bold text-zinc-500">{t("issue.cause_team")}:</span>{" "}
-                      {causeTeam
-                        ? `${causeTeam.name} (${causeTeam.code})`
-                        : t("issue.no_cause_team")}
-                    </p>
-                  )}
-                </section>
-              )}
+                  </div>
+                )}
+              </section>
               {currentIssue.responsibility_history &&
                 currentIssue.responsibility_history.length > 0 && (
                   <section
@@ -1529,6 +1639,36 @@ export function IssueDetailModal({
                     )}
                   </div>
                 </div>
+
+                {canVerifyCause && currentIssue.cause_status === "UNVERIFIED" && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                        {t("issue.close_cause_verification_title")}
+                      </span>
+                      <span className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                        {t("issue.optional_for_scoring")}
+                      </span>
+                    </div>
+                    <select
+                      value={closeCauseTeamId ?? ""}
+                      onChange={(event) =>
+                        setCloseCauseTeamId(event.target.value ? Number(event.target.value) : null)
+                      }
+                      aria-label={t("issue.close_cause_verification_title")}
+                      className="min-h-[44px] w-full rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-zinc-800 shadow-2xs dark:border-amber-800 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="">{t("issue.no_cause_team")}</option>
+                      {teams
+                        .filter((item) => item.is_active)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} ({item.code})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 
