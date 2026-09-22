@@ -200,6 +200,31 @@ func TestUploadsRouteRemoved(t *testing.T) {
 		t.Fatalf("expected removed uploads route to return 404, got %d", rec.Code)
 	}
 }
+func TestTimeoutByRouteLeavesSSEUnbounded(t *testing.T) {
+	done := make(chan struct{})
+	handler := timeoutByRoute(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-done:
+		case <-r.Context().Done():
+			t.Error("SSE request context timed out")
+		}
+	}))
+	defer close(done)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/issues/events?ticket=test", nil)
+	rec := httptest.NewRecorder()
+	finished := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(finished)
+	}()
+
+	select {
+	case <-finished:
+		t.Fatal("SSE handler returned before request was released")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
 
 // scriptedDriver returns canned rows keyed by SQL text so route-level RBAC can be
 // exercised with real auth middleware and sqlc-generated queries.

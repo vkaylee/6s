@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import type { Tag } from "../api/generated/index.ts";
+import { subscribeIssueEvents } from "../api/issueEvents.ts";
 import type { FilterState } from "../components/FilterDrawer.tsx";
 import type { FacetKey } from "../components/QuickFacets.tsx";
 import { hasCapability, type UserProfile } from "../store/authStore.ts";
@@ -301,34 +302,16 @@ export function useDashboardData({
       }
       wasSyncing = progress.isSyncing;
     });
-    let eventSource: EventSource | null = null;
-    let active = true;
+    let unsubscribeEvents: (() => void) | undefined;
     if (typeof window !== "undefined" && typeof EventSource !== "undefined" && accessToken) {
-      apiClient<{ ticket: string }>("/api/auth/ticket", { method: "POST" })
-        .then(({ ticket }) => {
-          if (!active) return;
-          eventSource = new EventSource(`/api/issues/events?ticket=${encodeURIComponent(ticket)}`);
-          eventSource.addEventListener("issue", () => {
-            loadIssues(true);
-            loadLeaderboards();
-          });
-        })
-        .catch(() => {
-          // ponytail: fallback if ticket endpoint unavailable
-          if (!active) return;
-          eventSource = new EventSource(
-            `/api/issues/events?token=${encodeURIComponent(accessToken)}`,
-          );
-          eventSource.addEventListener("issue", () => {
-            loadIssues(true);
-            loadLeaderboards();
-          });
-        });
+      unsubscribeEvents = subscribeIssueEvents(() => {
+        loadIssues(true);
+        loadLeaderboards();
+      });
     }
     return () => {
-      active = false;
+      unsubscribeEvents?.();
       unsub();
-      eventSource?.close();
       syncEngine.stop();
     };
   }, [user, accessToken]);

@@ -385,12 +385,9 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 func timeoutByRoute(next http.Handler) http.Handler {
 	timeout := middleware.Timeout(60 * time.Second)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		patterns := chi.RouteContext(r.Context()).RoutePatterns
-		for _, pattern := range patterns {
-			if pattern == "/api/issues/events" {
-				next.ServeHTTP(w, r)
-				return
-			}
+		if r.URL.Path == "/api/issues/events" {
+			next.ServeHTTP(w, r)
+			return
 		}
 		timeout(next).ServeHTTP(w, r)
 	})
