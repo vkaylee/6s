@@ -3,6 +3,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 rm -f "$ROOT/.air-web-trigger"
+rm -rf "${DEV_BUILD_LOCK:-$ROOT/tmp/dev-build.lock}"
 "$ROOT/scripts/dev-web.sh" &
 watcher_pid=$!
 

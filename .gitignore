@@ -10,6 +10,7 @@ uploads/
 certs/
 tmp/
 build-errors.log
+.air-web-trigger
 .cache/
 .config/
 web/test-results/
