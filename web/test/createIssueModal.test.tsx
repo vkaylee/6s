@@ -49,11 +49,13 @@ function installFetch() {
     const requestBody =
       typeof init?.body === "string"
         ? init.body
-        : init?.body instanceof FormData
-          ? Array.from(init.body.entries())
-              .map(([key, value]) => `${key}=${typeof value === "string" ? value : "[file]"}`)
-              .join("&")
-          : "";
+        : init?.body instanceof ArrayBuffer
+          ? new TextDecoder().decode(init.body)
+          : init?.body instanceof FormData
+            ? Array.from(init.body.entries())
+                .map(([key, value]) => `${key}=${typeof value === "string" ? value : "[file]"}`)
+                .join("&")
+            : "";
     calls.push({ method: init?.method ?? "GET", url, body: requestBody });
     const send = (data: unknown) => new Response(JSON.stringify({ data }), { status: 200 });
     if (url.includes("score-logs")) return send([]);

@@ -1,4 +1,49 @@
-export function buildIssueSyncFormData(issue: DraftIssue): FormData {
+import { apiClient } from "../api/client.ts";
+import {
+  type DraftIssue,
+  type DraftResolve,
+  deleteDraftIssue,
+  deleteDraftResolve,
+  getAllDraftIssues,
+  getAllDraftResolves,
+  saveDraftIssue,
+  saveDraftResolve,
+} from "../db/indexeddb.ts";
+import { useAuthStore } from "../store/authStore.ts";
+import { compressImage } from "../utils/compress.ts";
+
+async function hasSupportedImageSignature(blob: Blob): Promise<boolean> {
+  const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+  const isJpeg =
+    header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  const isPng =
+    header.length >= 8 &&
+    header[0] === 0x89 &&
+    header[1] === 0x50 &&
+    header[2] === 0x4e &&
+    header[3] === 0x47 &&
+    header[4] === 0x0d &&
+    header[5] === 0x0a &&
+    header[6] === 0x1a &&
+    header[7] === 0x0a;
+  return isJpeg || isPng;
+}
+
+async function prepareUploadImage(blob: Blob): Promise<Blob> {
+  if (await hasSupportedImageSignature(blob)) return blob;
+
+  const converted = await compressImage(blob, { maxDimension: 1280, quality: 0.7 });
+  if (!(await hasSupportedImageSignature(converted))) {
+    throw new Error("Image must be converted to JPEG or PNG before upload");
+  }
+  return converted;
+}
+
+export async function buildIssueSyncFormData(issue: DraftIssue): Promise<FormData> {
+  const photoBefore = await prepareUploadImage(issue.photo_before_blob);
+  const photoDetail = issue.photo_detail_blob
+    ? await prepareUploadImage(issue.photo_detail_blob)
+    : undefined;
   const formData = new FormData();
   formData.append("client_uuid", issue.client_uuid);
   formData.append("category", issue.category);
@@ -19,24 +64,10 @@ export function buildIssueSyncFormData(issue: DraftIssue): FormData {
   if (issue.location_snapshot_source)
     formData.append("location_snapshot_source", issue.location_snapshot_source);
   formData.append("created_at", new Date(issue.created_at).toISOString());
-  formData.append("photo_before", issue.photo_before_blob, "before.jpg");
-  if (issue.photo_detail_blob)
-    formData.append("photo_detail", issue.photo_detail_blob, "detail.jpg");
+  formData.append("photo_before", photoBefore, "before.jpg");
+  if (photoDetail) formData.append("photo_detail", photoDetail, "detail.jpg");
   return formData;
 }
-
-import { apiClient } from "../api/client.ts";
-import {
-  type DraftIssue,
-  type DraftResolve,
-  deleteDraftIssue,
-  deleteDraftResolve,
-  getAllDraftIssues,
-  getAllDraftResolves,
-  saveDraftIssue,
-  saveDraftResolve,
-} from "../db/indexeddb.ts";
-import { useAuthStore } from "../store/authStore.ts";
 
 export interface SyncProgress {
   total: number;
@@ -226,7 +257,7 @@ class SyncEngine {
     try {
       await apiClient("/api/issues/sync", {
         method: "POST",
-        body: buildIssueSyncFormData(issue),
+        body: await buildIssueSyncFormData(issue),
       });
       return true;
     } catch {
@@ -241,7 +272,11 @@ class SyncEngine {
       const formData = new FormData();
       formData.append("resolved_client_uuid", resolveItem.resolved_client_uuid);
       formData.append("expected_version", String(resolveItem.expected_version));
-      formData.append("photo_after", resolveItem.photo_after_blob, "after.jpg");
+      formData.append(
+        "photo_after",
+        await prepareUploadImage(resolveItem.photo_after_blob),
+        "after.jpg",
+      );
       await apiClient(`/api/issues/${resolveItem.issue_id}/resolve`, {
         method: "POST",
         body: formData,

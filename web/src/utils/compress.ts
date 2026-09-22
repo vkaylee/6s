@@ -62,11 +62,8 @@ export async function compressImage(
             ctx.drawImage(bitmap, 0, 0, width, height);
             canvas.toBlob(
               (blob) => {
-                if (blob) {
-                  resolve(blob);
-                } else {
-                  resolve(file);
-                }
+                if (blob) resolve(blob);
+                else resolve(file);
               },
               "image/jpeg",
               quality,
@@ -108,11 +105,8 @@ export async function compressImage(
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
           (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              resolve(file);
-            }
+            if (blob) resolve(blob);
+            else resolve(file);
           },
           "image/jpeg",
           quality,

@@ -116,10 +116,17 @@ const authenticatedFetch = Object.assign(
     const send = async (token?: string) => {
       const retryHeaders = new Headers(headers);
       if (token) retryHeaders.set("Authorization", `Bearer ${token}`);
+      // Multipart payloads carry binary image bytes: .text() re-encodes them as
+      // UTF-8 and destroys JPEG/PNG magic bytes. Read those byte-exact.
+      const isMultipart = (request.headers.get("content-type") ?? "").startsWith(
+        "multipart/form-data",
+      );
       const body =
         request.method === "GET" || request.method === "HEAD"
           ? undefined
-          : await request.clone().text();
+          : isMultipart
+            ? await request.clone().arrayBuffer()
+            : await request.clone().text();
       const fetchInput =
         typeof window === "undefined" ? request.url.replace("http://localhost", "") : request.url;
       return globalThis.fetch(fetchInput, { method: request.method, headers: retryHeaders, body });

@@ -49,6 +49,41 @@ describe("apiClient request contract", () => {
       globalThis.fetch = originalFetch;
     }
   });
+  it("preserves binary multipart bytes through authenticated fetch", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedBody: ArrayBuffer | null = null;
+    let capturedHeaders = new Headers();
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body instanceof ArrayBuffer ? init.body : null;
+      capturedHeaders = new Headers(init?.headers);
+      return new Response(JSON.stringify({ data: { ok: true } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const form = new FormData();
+      form.append("client_uuid", "d9a16f42-bc15-4afe-b732-2549500613cf");
+      form.append("photo_before", new Blob([new Uint8Array([0xff, 0xd8, 0xff])]), "before.jpg");
+
+      await apiClient<{ ok: boolean }>("/api/issues/sync", {
+        method: "POST",
+        body: form,
+        skipAuth: true,
+      });
+
+      expect(capturedBody).toBeInstanceOf(ArrayBuffer);
+      const parsed = await new Response(capturedBody, { headers: capturedHeaders }).formData();
+      const photo = parsed.get("photo_before");
+      expect(photo).toBeInstanceOf(File);
+      expect(Array.from(new Uint8Array(await (photo as File).arrayBuffer()).slice(0, 3))).toEqual([
+        0xff, 0xd8, 0xff,
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 
   it("preserves explicit POST methods for mutation requests", async () => {
     const originalFetch = globalThis.fetch;
