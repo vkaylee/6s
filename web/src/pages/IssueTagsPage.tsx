@@ -7,6 +7,7 @@ import { modalDialog } from "../store/dialogStore.ts";
 import { IssueCategory, resolveI18n, S_CATEGORIES } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
+import { searchTags } from "../utils/tagSearch.ts";
 
 type TagLocale = SupportedLocale;
 type TagItemData = {
@@ -519,16 +520,7 @@ export function IssueTagsPage() {
         setSuggestedCode("");
         return;
       }
-      const normalized = text.toLocaleLowerCase();
-      setSimilarTags(
-        tags.filter((tag) =>
-          [tag.name_vi, tag.name_en, tag.name_zh].some((name) => {
-            if (!name) return false;
-            const n = name.toLocaleLowerCase();
-            return n.includes(normalized) || normalized.includes(n);
-          }),
-        ),
-      );
+      setSimilarTags(searchTags(tags, text));
       setSuggestedCode(normalizeCode(text));
     }, 250);
     return () => window.clearTimeout(timer);

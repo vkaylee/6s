@@ -99,8 +99,47 @@ describe("Enterprise CreateIssuePage UIUX", () => {
         />
       </WithMockState>,
     );
-    expect(html).toContain("Rò rỉ dầu mỡ");
-    expect(html).not.toContain("Nguy cơ cháy nổ");
+    const text = html.replace(/<[^>]+>/g, "");
+    expect(text).toContain("Rò rỉ dầu mỡ");
+    expect(text).not.toContain("Nguy cơ cháy nổ");
+    expect(html).toContain("<mark");
+  });
+
+  it("renders TaxonomySelectorModal with relevance ordering overriding source order", () => {
+    const invertedTags: TagItem[] = [
+      {
+        tag_code: "oil_general",
+        category: IssueCategory.S3,
+        label_vi: "Dầu mỡ linh tinh",
+        label_zh: "油污",
+        use_count: 999,
+      },
+      {
+        tag_code: "oil_spill",
+        category: IssueCategory.S3,
+        label_vi: "Rò rỉ dầu",
+        label_zh: "漏油",
+        use_count: 1,
+      },
+    ];
+    const html = renderToString(
+      <WithMockState values={["ALL", null, "ro ri dau"]}>
+        <TaxonomySelectorModal
+          isOpen={true}
+          onClose={() => {}}
+          tags={invertedTags}
+          selectedTags={[]}
+          currentCategory={null}
+          onToggleTag={() => {}}
+          onSelectCategory={() => {}}
+        />
+      </WithMockState>,
+    );
+    const firstIndex = html.indexOf("Rò");
+    const secondIndex = html.indexOf("linh tinh");
+    expect(firstIndex).toBeGreaterThan(-1);
+    expect(secondIndex).toBeGreaterThan(-1);
+    expect(firstIndex).toBeLessThan(secondIndex);
   });
 
   it("renders TaxonomySelectorModal no match state with custom tag suggestion", () => {

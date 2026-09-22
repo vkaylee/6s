@@ -9,6 +9,7 @@ import {
   type TagItem,
 } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
+import { highlightSegments, normalizeSearchText, searchTags } from "../utils/tagSearch.ts";
 
 interface TaxonomySelectorModalProps {
   isOpen: boolean;
@@ -19,15 +20,6 @@ interface TaxonomySelectorModalProps {
   onToggleTag: (tagCode: string) => void;
   onSelectCategory: (category: IssueCategory) => void;
   onAddCustomTag?: (tag: TagItem) => void;
-}
-function normalizeSearchText(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "d")
-    .trim();
 }
 
 const categoryBadgeColors: Record<string, string> = {
@@ -82,24 +74,10 @@ export function TaxonomySelectorModal({
   const isSearching = queryNorm.length > 0;
 
   const visibleTags = useMemo(() => {
-    return tags.filter((tg) => {
-      const matchTab = isSearching || activeTab === "ALL" || tg.category === activeTab;
-      if (!matchTab) return false;
-      if (!isSearching) return true;
-
-      const labelViNorm = normalizeSearchText(tg.label_vi);
-      const labelZh = tg.label_zh.toLowerCase();
-      const labelEn = tg.label_en ? normalizeSearchText(tg.label_en) : "";
-      const tagCode = tg.tag_code.toLowerCase();
-
-      return (
-        labelViNorm.includes(queryNorm) ||
-        labelZh.includes(tagQuery.toLowerCase().trim()) ||
-        labelEn.includes(queryNorm) ||
-        tagCode.includes(queryNorm)
-      );
-    });
-  }, [tags, isSearching, activeTab, queryNorm, tagQuery]);
+    const scoped =
+      isSearching || activeTab === "ALL" ? tags : tags.filter((tg) => tg.category === activeTab);
+    return searchTags(scoped, tagQuery);
+  }, [tags, isSearching, activeTab, tagQuery]);
 
   // Escape closes; Tab cycles inside the dialog and focus returns to the opener.
   useEffect(() => {
@@ -331,7 +309,26 @@ export function TaxonomySelectorModal({
                     >
                       {isBehavior ? "👤" : "📦"}
                     </span>
-                    <span>{resolveTagLabel(tag, locale)}</span>
+                    <span>
+                      {isSearching
+                        ? highlightSegments(resolveTagLabel(tag, locale), tagQuery).map((seg) =>
+                            seg.match ? (
+                              <mark
+                                key={seg.start}
+                                className={
+                                  isChecked
+                                    ? "bg-white/30 text-white font-black rounded-xs px-0.5"
+                                    : "bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-100 font-black rounded-xs px-0.5"
+                                }
+                              >
+                                {seg.text}
+                              </mark>
+                            ) : (
+                              <span key={seg.start}>{seg.text}</span>
+                            ),
+                          )
+                        : resolveTagLabel(tag, locale)}
+                    </span>
                     {tag.category && (
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded border font-mono font-black ${
