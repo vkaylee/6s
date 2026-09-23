@@ -1725,7 +1725,7 @@ export function IssueDetailModal({
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   placeholder={t("issue_detail.reason_placeholder")}
-                  className="w-full bg-white dark:bg-zinc-900 border border-rose-300 dark:border-rose-700 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  className="w-full bg-white dark:bg-zinc-900 border border-rose-300 dark:border-rose-700 rounded-xl p-3 text-base focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             )}
@@ -1736,7 +1736,7 @@ export function IssueDetailModal({
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder={t("issue_detail.reason_placeholder")}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm focus:outline-none"
+                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-base focus:outline-none"
               />
             )}
 

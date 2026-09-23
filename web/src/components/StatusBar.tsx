@@ -156,7 +156,7 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={t("app.search_placeholder")}
                 aria-label={t("app.search_placeholder")}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-1.5 pl-9 pr-14 text-xs text-zinc-900 placeholder:text-zinc-400 transition-colors focus:border-rose-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-rose-400 dark:focus:bg-zinc-900"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-1.5 pl-9 pr-14 text-base text-zinc-900 placeholder:text-zinc-400 transition-colors focus:border-rose-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-rose-400 dark:focus:bg-zinc-900"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
                 {searchQuery ? (

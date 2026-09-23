@@ -255,7 +255,7 @@ export function TaxonomySelectorModal({
                 value={tagQuery}
                 onChange={(e) => setTagQuery(e.target.value)}
                 placeholder={t("issue.tag_search_placeholder")}
-                className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-8 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[42px]"
+                className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-8 py-2.5 text-base text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[42px]"
               />
               {tagQuery && (
                 <button

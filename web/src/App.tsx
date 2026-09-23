@@ -15,6 +15,7 @@ import { QuickFacets } from "./components/QuickFacets.tsx";
 import type { DraftResolve } from "./db/indexeddb.ts";
 import { useDashboardData } from "./hooks/useDashboardData.ts";
 import { useEdgeSwipeBack } from "./hooks/useEdgeSwipeBack.ts";
+import { useKeyboardViewport } from "./hooks/useKeyboardViewport.ts";
 import { useSetupStatus } from "./hooks/useSetupStatus.ts";
 import { useI18nStore } from "./i18n/index.ts";
 import { CreateIssuePage } from "./pages/CreateIssuePage.tsx";
@@ -147,6 +148,8 @@ export function App() {
     initTheme();
     restoreSession();
   }, [initTheme, restoreSession]);
+
+  useKeyboardViewport();
 
   useEffect(() => {
     const current = currentPath.split("?")[0];
