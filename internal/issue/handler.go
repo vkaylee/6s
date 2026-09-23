@@ -490,17 +490,18 @@ func (h *Handler) Invalid(w http.ResponseWriter, r *http.Request) {
 
 // PatchRequest defines payload for in-place quick editing of an issue.
 type PatchRequest struct {
-	Category        *string  `json:"category"`
-	CauseType       *string  `json:"cause_type"`
-	LocationCode    *string  `json:"location_code"`
-	Description     *string  `json:"description"`
-	Tags            []string `json:"tags"`
-	AssetID         **int64  `json:"asset_id"`
-	AssignedTeamID  **int64  `json:"assigned_team_id"`
-	AssigneeID      **int64  `json:"assignee_id"`
-	CauseTeamID     **int64  `json:"cause_team_id"`
-	CauseStatus     **string `json:"cause_status"`
-	ExpectedVersion *int32   `json:"expected_version"`
+	Category        *string       `json:"category"`
+	CauseType       *string       `json:"cause_type"`
+	LocationCode    *string       `json:"location_code"`
+	Description     *string       `json:"description"`
+	Tags            []string      `json:"tags"`
+	ProposedTags    []ProposedTag `json:"proposed_tags"`
+	AssetID         **int64       `json:"asset_id"`
+	AssignedTeamID  **int64       `json:"assigned_team_id"`
+	AssigneeID      **int64       `json:"assignee_id"`
+	CauseTeamID     **int64       `json:"cause_team_id"`
+	CauseStatus     **string      `json:"cause_status"`
+	ExpectedVersion *int32        `json:"expected_version"`
 }
 
 func (h *Handler) parseMultipartPatch(r *http.Request) (PatchIssueRequest, error) {
@@ -526,6 +527,11 @@ func (h *Handler) parseMultipartPatch(r *http.Request) (PatchIssueRequest, error
 			patchReq.Tags = tags
 		}
 	}
+	if proposedTagsStr := strings.TrimSpace(r.FormValue("proposed_tags")); proposedTagsStr != "" {
+		if unmarshalErr := json.Unmarshal([]byte(proposedTagsStr), &patchReq.ProposedTags); unmarshalErr != nil {
+			return patchReq, unmarshalErr
+		}
+	}
 	if fhs := r.MultipartForm.File["photo_before"]; len(fhs) > 0 {
 		patchReq.PhotoBefore = fhs[0]
 	}
@@ -542,7 +548,7 @@ func (h *Handler) parseJSONPatch(r *http.Request) (PatchIssueRequest, error) {
 	}
 	return PatchIssueRequest{
 		Category: req.Category, CauseType: req.CauseType, LocationCode: req.LocationCode,
-		Description: req.Description, Tags: req.Tags, AssetID: req.AssetID,
+		Description: req.Description, Tags: req.Tags, ProposedTags: req.ProposedTags, AssetID: req.AssetID,
 		AssignedTeamID: req.AssignedTeamID, AssigneeID: req.AssigneeID,
 		CauseTeamID: req.CauseTeamID, CauseStatus: req.CauseStatus, ExpectedVersion: req.ExpectedVersion,
 	}, nil

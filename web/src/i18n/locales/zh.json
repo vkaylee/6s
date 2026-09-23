@@ -714,6 +714,7 @@
     "ai_review_suggested_category": "AI 建议分类",
     "ai_review_suggested_cause": "AI 建议原因类型",
     "ai_review_suggested_tags": "AI 建议标签",
+    "ai_review_proposed_tags": "AI 建议的新标签",
     "ai_review_apply": "应用",
     "ai_follow_up_title": "继续询问 AI",
     "ai_follow_up_placeholder": "输入问题...",

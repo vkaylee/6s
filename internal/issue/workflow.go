@@ -164,13 +164,17 @@ const maxProposedTags = 5
 // buildProposedTagParams validates creator proposals and derives stable, creator-scoped tag codes.
 // Codes are deterministic so a retried sync reuses the same pending tag instead of duplicating it.
 func buildProposedTagParams(req SyncIssueRequest, currentUser db.User) ([]db.UpsertProposedTagParams, error) {
-	if len(req.ProposedTags) > maxProposedTags {
+	return buildProposedTagParamsForCategory(req.Category, req.ProposedTags, currentUser.ID)
+}
+
+func buildProposedTagParamsForCategory(category string, proposals []ProposedTag, userID int64) ([]db.UpsertProposedTagParams, error) {
+	if len(proposals) > maxProposedTags {
 		return nil, fmt.Errorf("at most %d proposed tags are allowed", maxProposedTags)
 	}
-	category := strings.TrimSpace(strings.ToUpper(req.Category))
-	seen := make(map[string]struct{}, len(req.ProposedTags))
-	params := make([]db.UpsertProposedTagParams, 0, len(req.ProposedTags))
-	for _, proposal := range req.ProposedTags {
+	category = strings.TrimSpace(strings.ToUpper(category))
+	seen := make(map[string]struct{}, len(proposals))
+	params := make([]db.UpsertProposedTagParams, 0, len(proposals))
+	for _, proposal := range proposals {
 		nameVi := strings.TrimSpace(proposal.NameVi)
 		nameZh := strings.TrimSpace(proposal.NameZh)
 		nameEn := strings.TrimSpace(proposal.NameEn)
@@ -181,7 +185,7 @@ func buildProposedTagParams(req SyncIssueRequest, currentUser db.User) ([]db.Ups
 		if len([]rune(nameVi)) > 255 || len([]rune(nameZh)) > 255 || len([]rune(nameEn)) > 255 {
 			return nil, fmt.Errorf("proposed tag names are too long")
 		}
-		if !isValidCategory(proposalCategory) || proposalCategory != category {
+		if !isValidCategory(proposalCategory) || (category != "" && proposalCategory != category) {
 			return nil, fmt.Errorf("proposed tag category is invalid")
 		}
 		key := strings.ToLower(nameVi) + "\x00" + strings.ToLower(nameZh) + "\x00" + strings.ToLower(nameEn) + "\x00" + proposalCategory
@@ -189,11 +193,11 @@ func buildProposedTagParams(req SyncIssueRequest, currentUser db.User) ([]db.Ups
 			continue
 		}
 		seen[key] = struct{}{}
-		hash := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", currentUser.ID, key)))
+		hash := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", userID, key)))
 		params = append(params, db.UpsertProposedTagParams{
 			Code: "pending_" + hex.EncodeToString(hash[:])[:40], NameVi: nameVi, NameZh: nameZh,
 			NameEn: nameEn, Category: proposalCategory,
-			CreatedBy: sql.NullInt64{Int64: currentUser.ID, Valid: currentUser.ID > 0},
+			CreatedBy: sql.NullInt64{Int64: userID, Valid: userID > 0},
 		})
 	}
 	return params, nil
@@ -559,6 +563,7 @@ type PatchIssueRequest struct {
 	LocationCode    *string
 	Description     *string
 	Tags            []string
+	ProposedTags    []ProposedTag
 	PhotoBefore     *multipart.FileHeader
 	PhotoDetail     *multipart.FileHeader
 	AssetID         **int64
@@ -704,7 +709,28 @@ func (s *ServiceImpl) applyNonResponsibilityPatch(ctx context.Context, req Patch
 	}
 	var updated db.Issue
 	var err error
-	if len(req.Tags) > 0 {
+	targetCategory := issue.Category
+	if catVal.Valid && catVal.String != "" {
+		targetCategory = catVal.String
+	}
+	var proposedParams []db.UpsertProposedTagParams
+	if len(req.ProposedTags) > 0 {
+		ownerID := issue.CreatorID
+		if ownerID == 0 {
+			ownerID = currentUser.ID
+		}
+		proposedParams, err = buildProposedTagParamsForCategory(targetCategory, req.ProposedTags, ownerID)
+		if err != nil {
+			return err
+		}
+	}
+	if len(proposedParams) > 0 {
+		if propStore, ok := s.store.(ProposedPatchAtomic); ok {
+			updated, err = propStore.PatchIssueWithProposedTagsAtomic(ctx, patch, req.Tags, proposedParams)
+		} else {
+			return errors.New("issue store does not support atomic proposed tag patch")
+		}
+	} else if len(req.Tags) > 0 {
 		updated, err = s.store.PatchIssueWithTagsAtomic(ctx, patch, req.Tags)
 	} else {
 		updated, err = s.store.PatchIssue(ctx, patch)

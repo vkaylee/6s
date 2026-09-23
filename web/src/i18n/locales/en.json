@@ -714,6 +714,7 @@
     "ai_review_suggested_category": "AI suggested category",
     "ai_review_suggested_cause": "AI suggested cause",
     "ai_review_suggested_tags": "AI suggested tags",
+    "ai_review_proposed_tags": "AI proposed new tags",
     "ai_review_apply": "Apply",
     "ai_follow_up_title": "Ask AI a follow-up question",
     "ai_follow_up_placeholder": "Enter a question...",

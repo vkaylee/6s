@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -235,7 +236,7 @@ func TestAIHandler_TranslateRateLimitQueue(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			body, _ := json.Marshal(TranslateRequest{Text: "Test text", TargetLang: "vi"})
+			body, _ := json.Marshal(TranslateRequest{Text: fmt.Sprintf("Unique text %d %d", idx, time.Now().UnixNano()), TargetLang: "vi"})
 			req := httptest.NewRequest(http.MethodPost, "/api/ai/translate", bytes.NewReader(body))
 			handler.Translate(recorders[idx], req)
 		}(i)
@@ -313,5 +314,53 @@ func TestAIHandler_GetCached(t *testing.T) {
 	handler.GetCached(rrBad, reqBad)
 	if rrBad.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rrBad.Code)
+	}
+}
+
+func TestAIHandler_Review_WithProposedTags(t *testing.T) {
+	var capturedPrompt string
+	mockGateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if msgs, ok := body["messages"].([]any); ok && len(msgs) > 0 {
+			if m, ok := msgs[0].(map[string]any); ok {
+				capturedPrompt, _ = m["content"].(string)
+			}
+		}
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]string{
+						"content": `{"verdict":"REVIEW","feedback":"Cần phân loại lại","suggested_tags":[]}`,
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockGateway.Close()
+
+	store := reviewTestFixture(mockGateway.URL, "")
+	svc := NewService(store, nil, mockGateway.Client(), "")
+	svc.SetMinInterval(0)
+	handler := NewHandler(svc)
+
+	reqBody, _ := json.Marshal(ReviewRequest{
+		IssueID: 7,
+		Lang:    "vi",
+		ProposedTags: []SuggestedProposedTag{
+			{NameVi: "Mùi khét máy", Category: "3S"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/ai/review", bytes.NewReader(reqBody))
+	rr := httptest.NewRecorder()
+	handler.Review(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(capturedPrompt, "pending(Mùi khét máy)") {
+		t.Fatalf("expected prompt to contain pending tag, got %q", capturedPrompt)
 	}
 }

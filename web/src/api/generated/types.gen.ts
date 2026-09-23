@@ -698,6 +698,15 @@ export type UpdateIssueData = {
         location_code?: string;
         tags?: Array<string>;
         /**
+         * User-selected new tags; saved as creator-owned PENDING tags atomically with issue tags
+         */
+        proposed_tags?: Array<{
+            name_vi: string;
+            name_zh: string;
+            name_en: string;
+            category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+        }>;
+        /**
          * null để xóa; bỏ qua để giữ nguyên
          */
         asset_id?: number | null;
@@ -1801,7 +1810,21 @@ export type ReviewIssueWithAiResponses = {
      * Kết quả review
      */
     200: {
-        [key: string]: unknown;
+        verdict?: 'OK' | 'REVIEW' | 'MISMATCH';
+        feedback?: string;
+        suggestion?: {
+            category?: string;
+            cause_type?: string;
+            tags?: Array<string>;
+            proposed_tags?: Array<{
+                name_vi: string;
+                name_zh: string;
+                name_en: string;
+                category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+            }>;
+        };
+        model?: string;
+        used_vision?: boolean;
     };
 };
 

@@ -1,12 +1,22 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
-import { type IssueItem, resolveTagLabel, type TagItem } from "../types/index.ts";
+import {
+  type IssueItem,
+  type ProposedTagItem,
+  resolveTagLabel,
+  type TagItem,
+} from "../types/index.ts";
 
 export type AIReviewResult = {
   verdict: "OK" | "REVIEW" | "MISMATCH";
   feedback: string;
-  suggestion: { category?: string; cause_type?: string; tags?: string[] };
+  suggestion: {
+    category?: string;
+    cause_type?: string;
+    tags?: string[];
+    proposed_tags?: ProposedTagItem[];
+  };
   used_vision: boolean;
 };
 type FollowUpTurn = { question: string; answer: string };
@@ -16,6 +26,8 @@ type AIReviewPanelProps = {
   currentIssue: IssueItem;
   tags: TagItem[];
   value: string;
+  selectedProposedTags: ProposedTagItem[];
+  onSelectedProposedTagsChange: (tags: ProposedTagItem[]) => void;
   isAskingFollowUp: boolean;
   pendingFollowUpQuestion: string | null;
   streamingFollowUpAnswer: string;
@@ -136,6 +148,8 @@ export function AIReviewPanel({
   currentIssue,
   tags,
   value,
+  selectedProposedTags,
+  onSelectedProposedTagsChange,
   isAskingFollowUp,
   pendingFollowUpQuestion,
   streamingFollowUpAnswer,
@@ -277,6 +291,37 @@ export function AIReviewPanel({
                   </button>
                 );
               })}
+            </div>
+          )}
+          {review.suggestion.proposed_tags && review.suggestion.proposed_tags.length > 0 && (
+            <div className="space-y-1.5">
+              <span>{t("issue_detail.ai_review_proposed_tags")}:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {review.suggestion.proposed_tags.map((proposal) => {
+                  const selected = selectedProposedTags.some(
+                    (item) =>
+                      item.name_vi === proposal.name_vi && item.category === proposal.category,
+                  );
+                  const tagName =
+                    proposal.name_vi || proposal.name_en || proposal.name_zh || proposal.category;
+                  return (
+                    <button
+                      key={`${proposal.category}-${proposal.name_vi}`}
+                      type="button"
+                      className={actionClass}
+                      disabled={selected}
+                      onClick={() => {
+                        const next = [...selectedProposedTags, proposal];
+                        onSelectedProposedTagsChange(next);
+                        onApplySuggestion({ tags: [...appliedTags], proposed_tags: next });
+                      }}
+                    >
+                      {selected ? `✓ #${tagName}` : `+ #${tagName}`} · {proposal.category}
+                      {!selected && ` · ${t("issue_detail.ai_review_apply")}`}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
           {followUpHistory.length > 0 && (

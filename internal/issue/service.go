@@ -122,6 +122,11 @@ type Writer interface {
 	PatchIssueWithAuditAtomic(ctx context.Context, patch db.PatchIssueParams, tags []string, audit []db.InsertAuditLogParams) (db.Issue, error)
 }
 
+// ProposedPatchAtomic supports atomically patching an issue with newly selected pending tags.
+type ProposedPatchAtomic interface {
+	PatchIssueWithProposedTagsAtomic(ctx context.Context, patch db.PatchIssueParams, tags []string, proposed []db.UpsertProposedTagParams) (db.Issue, error)
+}
+
 // ListFilter narrows an issue listing for list, count, and export parity.
 type ListFilter struct {
 	Statuses       []string

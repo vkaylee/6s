@@ -33,6 +33,8 @@ function renderPanel(isAskingFollowUp: boolean, streamingAnswer?: string) {
       currentIssue={issue}
       tags={[]}
       value=""
+      selectedProposedTags={[]}
+      onSelectedProposedTagsChange={() => {}}
       isAskingFollowUp={isAskingFollowUp}
       pendingFollowUpQuestion={isAskingFollowUp ? "Explain this result" : null}
       streamingFollowUpAnswer={streamingAnswer ?? (isAskingFollowUp ? "Working" : "")}
@@ -82,6 +84,8 @@ it("renders markdown formatting in AI feedback and follow-up answers", () => {
       currentIssue={issue}
       tags={[]}
       value=""
+      selectedProposedTags={[]}
+      onSelectedProposedTagsChange={() => {}}
       isAskingFollowUp={false}
       pendingFollowUpQuestion={null}
       streamingFollowUpAnswer=""
@@ -109,6 +113,8 @@ it("allows only HTTPS markdown links in AI answers", () => {
       currentIssue={issue}
       tags={[]}
       value=""
+      selectedProposedTags={[]}
+      onSelectedProposedTagsChange={() => {}}
       isAskingFollowUp={false}
       pendingFollowUpQuestion={null}
       streamingFollowUpAnswer=""
@@ -135,4 +141,68 @@ it("renders panel header with title and collapse toggle", () => {
   expect(html).toContain("Thu gọn");
   expect(html).toContain('aria-controls="ai-review-content"');
   expect(html).toContain('aria-expanded="true"');
+});
+
+it("renders proposed new tags with apply buttons", () => {
+  const html = renderToString(
+    <AIReviewPanel
+      review={{
+        ...review,
+        suggestion: {
+          proposed_tags: [
+            { name_vi: "Mùi khét máy", name_zh: "焦味", name_en: "Burning smell", category: "3S" },
+          ],
+        },
+      }}
+      currentIssue={issue}
+      tags={[]}
+      value=""
+      selectedProposedTags={[]}
+      onSelectedProposedTagsChange={() => {}}
+      isAskingFollowUp={false}
+      pendingFollowUpQuestion={null}
+      streamingFollowUpAnswer=""
+      followUpCount={0}
+      followUpLimit={5}
+      followUpHistory={[]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+  expect(html).toContain("Mùi khét máy");
+  expect(html).toContain("3S");
+});
+
+it("filters out proposed tags that were already selected by user", () => {
+  const html = renderToString(
+    <AIReviewPanel
+      review={{
+        ...review,
+        suggestion: {
+          proposed_tags: [
+            { name_vi: "Mùi khét máy", name_zh: "焦味", name_en: "Burning smell", category: "3S" },
+          ],
+        },
+      }}
+      currentIssue={issue}
+      tags={[]}
+      value=""
+      selectedProposedTags={[
+        { name_vi: "Mùi khét máy", name_zh: "焦味", name_en: "Burning smell", category: "3S" },
+      ]}
+      onSelectedProposedTagsChange={() => {}}
+      isAskingFollowUp={false}
+      pendingFollowUpQuestion={null}
+      streamingFollowUpAnswer=""
+      followUpCount={0}
+      followUpLimit={5}
+      followUpHistory={[]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+  expect(html).toContain("✓ #Mùi khét máy");
+  expect(html).not.toContain("· Áp dụng");
 });

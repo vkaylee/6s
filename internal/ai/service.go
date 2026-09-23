@@ -906,8 +906,9 @@ const (
 
 // ReviewRequest defines input for POST /api/ai/review.
 type ReviewRequest struct {
-	IssueID int64  `json:"issue_id"`
-	Lang    string `json:"lang"`
+	IssueID      int64                  `json:"issue_id"`
+	Lang         string                 `json:"lang"`
+	ProposedTags []SuggestedProposedTag `json:"proposed_tags,omitempty"`
 }
 
 // FollowUpTurn records one successful follow-up exchange.
@@ -935,9 +936,10 @@ const reviewMaxQuestionRunes = 500
 
 // ReviewSuggestion holds AI-proposed corrections; empty fields mean "keep as is".
 type ReviewSuggestion struct {
-	Category  string   `json:"category,omitempty"`
-	CauseType string   `json:"cause_type,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
+	Category     string                 `json:"category,omitempty"`
+	CauseType    string                 `json:"cause_type,omitempty"`
+	Tags         []string               `json:"tags,omitempty"`
+	ProposedTags []SuggestedProposedTag `json:"proposed_tags,omitempty"`
 }
 
 // SuggestTagsRequest defines input for POST /api/ai/suggest-tags.
@@ -1141,12 +1143,12 @@ func (s *Service) Review(ctx context.Context, req ReviewRequest) (ReviewResponse
 	}
 
 	images := s.collectReviewImages(issue)
-	prompt := buildReviewPrompt(issue, selected, catalog, resolveTargetLang(req.Lang), len(images) > 0)
+	prompt := buildReviewPrompt(issue, selected, catalog, req.ProposedTags, resolveTargetLang(req.Lang), len(images) > 0)
 	raw, err := s.completeReview(ctx, baseURL, cfg.ApiKey, model, prompt, images)
 	if err != nil {
 		return ReviewResponse{}, err
 	}
-	return parseReviewResult(raw, model, issue, selected, catalog, len(images) > 0)
+	return parseReviewResult(raw, model, issue, selected, catalog, req.ProposedTags, len(images) > 0)
 }
 
 // FollowUp answers one bounded question about a completed issue review.
@@ -1191,7 +1193,7 @@ func (s *Service) FollowUp(ctx context.Context, req FollowUpRequest) (FollowUpRe
 		return FollowUpResponse{}, reviewStoreError(err)
 	}
 	images := s.collectReviewImages(issue)
-	system := buildReviewPrompt(issue, selected, catalog, resolveTargetLang(req.Lang), len(images) > 0)
+	system := buildReviewPrompt(issue, selected, catalog, nil, resolveTargetLang(req.Lang), len(images) > 0)
 	system += "\n\nAnswer user's follow-up question about this review. Use previous conversation turns for context. Do not modify issue. Return only concise plain text in requested language; never return JSON, markdown fences, or the original review object.\n"
 	answer, err := s.completeFollowUp(ctx, baseURL, cfg.ApiKey, model, system, question, req.History, images)
 	if err != nil {
@@ -1281,13 +1283,14 @@ func (s *Service) completeReview(ctx context.Context, baseURL, apiKey, model, pr
 }
 
 // parseReviewResult validates the model's JSON verdict and clamps it to known codes.
-func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, usedVision bool) (ReviewResponse, error) {
+func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, alreadyProposed []SuggestedProposedTag, usedVision bool) (ReviewResponse, error) {
 	var out struct {
-		Verdict           string   `json:"verdict"`
-		Feedback          string   `json:"feedback"`
-		SuggestedCategory string   `json:"suggested_category"`
-		SuggestedCause    string   `json:"suggested_cause_type"`
-		SuggestedTags     []string `json:"suggested_tags"`
+		Verdict           string                 `json:"verdict"`
+		Feedback          string                 `json:"feedback"`
+		SuggestedCategory string                 `json:"suggested_category"`
+		SuggestedCause    string                 `json:"suggested_cause_type"`
+		SuggestedTags     []string               `json:"suggested_tags"`
+		ProposedTags      []SuggestedProposedTag `json:"proposed_tags"`
 	}
 	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &out); err != nil {
 		return ReviewResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, "model returned invalid review JSON")
@@ -1310,6 +1313,7 @@ func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTags
 		resp.Suggestion.CauseType = ct
 	}
 	resp.Suggestion.Tags = filterReviewTags(out.SuggestedTags, selected, catalog)
+	resp.Suggestion.ProposedTags = filterReviewProposedTags(out.ProposedTags, issue.Category, catalog, alreadyProposed)
 	return resp, nil
 }
 func filterReviewTags(suggested []string, selected []db.ListTagsForIssueRow, catalog []db.Tag) []string {
@@ -1335,6 +1339,59 @@ func filterReviewTags(suggested []string, selected []db.ListTagsForIssueRow, cat
 		}
 	}
 	return out
+}
+
+func filterReviewProposedTags(suggested []SuggestedProposedTag, category string, catalog []db.Tag, alreadyProposed []SuggestedProposedTag) []SuggestedProposedTag {
+	known := make(map[string]struct{}, len(catalog)*3+len(alreadyProposed)*3)
+	for _, tag := range catalog {
+		known[strings.ToLower(strings.TrimSpace(tag.NameVi))] = struct{}{}
+		known[strings.ToLower(strings.TrimSpace(tag.NameZh))] = struct{}{}
+		known[strings.ToLower(strings.TrimSpace(tag.NameEn))] = struct{}{}
+	}
+	for _, p := range alreadyProposed {
+		if s := strings.ToLower(strings.TrimSpace(p.NameVi)); s != "" {
+			known[s] = struct{}{}
+		}
+		if s := strings.ToLower(strings.TrimSpace(p.NameZh)); s != "" {
+			known[s] = struct{}{}
+		}
+		if s := strings.ToLower(strings.TrimSpace(p.NameEn)); s != "" {
+			known[s] = struct{}{}
+		}
+	}
+	result := make([]SuggestedProposedTag, 0, reviewMaxSuggestedTags)
+	seen := make(map[string]struct{}, len(suggested))
+	for _, proposal := range suggested {
+		proposal.NameVi = strings.TrimSpace(proposal.NameVi)
+		proposal.NameZh = strings.TrimSpace(proposal.NameZh)
+		proposal.NameEn = strings.TrimSpace(proposal.NameEn)
+		proposal.Category = strings.ToUpper(strings.TrimSpace(proposal.Category))
+		if proposal.Category == "" {
+			proposal.Category = category
+		}
+		if proposal.Category != category || proposal.NameVi == "" || proposal.NameZh == "" || proposal.NameEn == "" || len([]rune(proposal.NameVi)) > 255 || len([]rune(proposal.NameZh)) > 255 || len([]rune(proposal.NameEn)) > 255 {
+			continue
+		}
+		key := strings.ToLower(proposal.NameVi) + "\x00" + strings.ToLower(proposal.NameZh) + "\x00" + strings.ToLower(proposal.NameEn)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		if _, ok := known[strings.ToLower(proposal.NameVi)]; ok {
+			continue
+		}
+		if _, ok := known[strings.ToLower(proposal.NameZh)]; ok {
+			continue
+		}
+		if _, ok := known[strings.ToLower(proposal.NameEn)]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, proposal)
+		if len(result) == reviewMaxSuggestedTags {
+			break
+		}
+	}
+	return result
 }
 
 func reviewStoreError(err error) *apperror.AppError {
@@ -1409,7 +1466,7 @@ const reviewCategoryGuide = `6S category definitions:
 
 // buildReviewPrompt assembles the audit instructions, including the tag vocabulary
 // so the model can only suggest codes that exist in the system.
-func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, langName string, hasPhotos bool) string {
+func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalog []db.Tag, additionalProposed []SuggestedProposedTag, langName string, hasPhotos bool) string {
 	parts := []string{
 		"You are a strict 6S (Sort, Set in Order, Shine, Standardize, Sustain, Safety) workplace audit assistant covering production floors and office areas alike. ",
 		"An employee submitted the issue report below. Judge whether category, cause type, tags and description are accurate and consistent with the evidence, and propose corrections.\n\n",
@@ -1422,17 +1479,23 @@ func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalo
 		desc = desc[:reviewDescriptionMaxRunes]
 	}
 	parts = append(parts, fmt.Sprintf("- Description: %q\n", string(desc)))
-	if len(selected) == 0 {
+	selectedParts := make([]string, 0, len(selected)+len(additionalProposed))
+	for _, t := range selected {
+		selectedParts = append(selectedParts, fmt.Sprintf("%s(%s)", t.Code, reviewTagName(db.Tag{Code: t.Code, NameVi: t.NameVi, NameZh: t.NameZh, NameEn: t.NameEn, Category: t.Category}, langName)))
+	}
+	for _, p := range additionalProposed {
+		name := p.NameVi
+		if langName == "Simplified Chinese" && p.NameZh != "" {
+			name = p.NameZh
+		} else if langName == "English" && p.NameEn != "" {
+			name = p.NameEn
+		}
+		selectedParts = append(selectedParts, fmt.Sprintf("pending(%s)", name))
+	}
+	if len(selectedParts) == 0 {
 		parts = append(parts, "- Selected tags: (none)\n")
 	} else {
-		parts = append(parts, "- Selected tags: ")
-		for i, t := range selected {
-			if i > 0 {
-				parts = append(parts, ", ")
-			}
-			parts = append(parts, fmt.Sprintf("%s(%s)", t.Code, reviewTagName(db.Tag{Code: t.Code, NameVi: t.NameVi, NameZh: t.NameZh, NameEn: t.NameEn, Category: t.Category}, langName)))
-		}
-		parts = append(parts, "\n")
+		parts = append(parts, "- Selected tags: ", strings.Join(selectedParts, ", "), "\n")
 	}
 	parts = append(parts, "\n", reviewCategoryGuide, "\n\n", "TAG CATALOG (use ONLY these codes in suggestions; names shown in requested language):\n")
 	for _, t := range catalog {
@@ -1446,7 +1509,7 @@ func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalo
 	}
 	parts = append(parts,
 		"\n\nReturn ONLY a JSON object:\n",
-		`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...]}`,
+		`{"verdict":"OK"|"REVIEW"|"MISMATCH","feedback":"...","suggested_category":"1S|2S|3S|4S|5S|6S or empty","suggested_cause_type":"CONDITION|BEHAVIOR or empty","suggested_tags":["CODE",...],"proposed_tags":[{"name_vi":"...","name_zh":"...","name_en":"...","category":"..."}]}`,
 		"\nRules:\n",
 		"- OK: everything matches the evidence. REVIEW: plausible but uncertain or incomplete. MISMATCH: classification or report clearly contradicts the evidence.\n",
 		"- Treat the description and selected tags as user claims; distinguish them from facts visible in photos.\n",
@@ -1456,6 +1519,7 @@ func buildReviewPrompt(issue db.Issue, selected []db.ListTagsForIssueRow, catalo
 		"- If evidence is insufficient, leave suggested_category, suggested_cause_type empty and suggested_tags as [].\n",
 		"- suggested_* fields: fill ONLY when the correction clearly improves the report; leave empty or [] otherwise.\n",
 		"- suggested_tags must contain tag codes from the catalog, never translated tag names; at most 5 codes and never already selected.\n",
+		"- proposed_tags: when no tag in the catalog fits an observed 6S issue, actively propose at most 3 new concise tags with name_vi, name_zh, name_en and category matching the issue; NEVER propose tags already listed under Selected tags or pending; leave as [] when catalog tags suffice.\n",
 		"- feedback: at most 3 sentences addressed to the reporter; state what matches or what is wrong and why; write entirely in "+langName+".",
 	)
 	return strings.Join(parts, "")

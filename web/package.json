@@ -11,7 +11,7 @@
     "type-check": "tsc --noEmit",
     "check-i18n": "bun test test/i18n.test.tsx",
     "openapi:check": "node scripts/openapi-operations.mjs",
-    "openapi:generate": "openapi-ts --file openapi-ts.config.ts",
+    "openapi:generate": "openapi-ts --file openapi-ts.config.ts --output src/api/generated",
     "openapi:drift": "node scripts/openapi-generate-check.mjs",
     "test": "bun test",
     "test:coverage": "bun test --coverage"

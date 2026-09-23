@@ -8,13 +8,22 @@ import (
 
 // PatchIssueWithTagsAtomic commits an issue patch and full tag replacement together.
 func (q *Queries) PatchIssueWithTagsAtomic(ctx context.Context, patch PatchIssueParams, tags []string) (Issue, error) {
-	return q.PatchIssueWithAuditAtomic(ctx, patch, tags, nil)
+	return q.patchIssueWithAuditAtomic(ctx, patch, tags, nil, nil)
+}
+
+// PatchIssueWithProposedTagsAtomic also upserts and links creator-owned pending tags atomically.
+func (q *Queries) PatchIssueWithProposedTagsAtomic(ctx context.Context, patch PatchIssueParams, tags []string, proposed []UpsertProposedTagParams) (Issue, error) {
+	return q.patchIssueWithAuditAtomic(ctx, patch, tags, proposed, nil)
 }
 
 // PatchIssueWithAuditAtomic commits an issue patch, full tag replacement, and audit rows together.
 // A nil or empty audit slice skips audit writes; any failure rolls the entire mutation back so a
 // responsibility transfer can never be persisted without its history.
 func (q *Queries) PatchIssueWithAuditAtomic(ctx context.Context, patch PatchIssueParams, tags []string, audit []InsertAuditLogParams) (Issue, error) {
+	return q.patchIssueWithAuditAtomic(ctx, patch, tags, nil, audit)
+}
+
+func (q *Queries) patchIssueWithAuditAtomic(ctx context.Context, patch PatchIssueParams, tags []string, proposed []UpsertProposedTagParams, audit []InsertAuditLogParams) (Issue, error) {
 	beginner, ok := q.db.(interface {
 		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 	})
@@ -31,13 +40,12 @@ func (q *Queries) PatchIssueWithAuditAtomic(ctx context.Context, patch PatchIssu
 		}
 		return Issue{}, cause
 	}
-
 	txQueries := q.WithTx(tx)
 	updated, err := txQueries.PatchIssue(ctx, patch)
 	if err != nil {
 		return rollback(fmt.Errorf("patch issue: %w", err))
 	}
-	if tags != nil {
+	if tags != nil || proposed != nil {
 		if err := txQueries.DeleteIssueTags(ctx, patch.ID); err != nil {
 			return rollback(fmt.Errorf("delete issue tags: %w", err))
 		}
@@ -47,6 +55,15 @@ func (q *Queries) PatchIssueWithAuditAtomic(ctx context.Context, patch PatchIssu
 			}
 			if err := txQueries.InsertIssueTag(ctx, InsertIssueTagParams{IssueID: patch.ID, TagCode: tag}); err != nil {
 				return rollback(fmt.Errorf("insert issue tag: %w", err))
+			}
+		}
+		for _, proposal := range proposed {
+			tag, err := txQueries.UpsertProposedTag(ctx, proposal)
+			if err != nil {
+				return rollback(fmt.Errorf("upsert proposed tag: %w", err))
+			}
+			if err := txQueries.InsertIssueTag(ctx, InsertIssueTagParams{IssueID: patch.ID, TagCode: tag.Code}); err != nil {
+				return rollback(fmt.Errorf("insert proposed issue tag: %w", err))
 			}
 		}
 	}

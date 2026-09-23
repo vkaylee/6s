@@ -50,10 +50,12 @@ function installFetch({
   ai = false,
   issue,
   mediaStatus = 200,
+  reviewResult,
 }: {
   ai?: boolean;
   issue: IssueItem;
   mediaStatus?: number;
+  reviewResult?: Record<string, unknown>;
 }) {
   calls = [];
   invalidateAiStatus();
@@ -71,12 +73,14 @@ function installFetch({
     if (url.includes("score-logs")) return send([]);
     if (url.includes("/api/ai/review-follow-up")) return send({ answer: "Theo hinh anh" });
     if (url.includes("/api/ai/review")) {
-      return send({
-        verdict: "MISMATCH",
-        feedback: "Anh khong khop phan loai",
-        suggestion: { category: "5S" },
-        used_vision: false,
-      });
+      return send(
+        reviewResult ?? {
+          verdict: "MISMATCH",
+          feedback: "Anh khong khop phan loai",
+          suggestion: { category: "5S" },
+          used_vision: false,
+        },
+      );
     }
     if (url.includes("/api/ai/translate"))
       return send({ translated_text: "Oil spilled on the floor" });
@@ -301,6 +305,63 @@ describe("IssueDetailModal Component", () => {
       button(container, "Xem bản gốc")?.click();
     });
     expect(container.textContent).toContain("Dau loang duoi san may");
+  });
+
+  it("includes selected proposed tags when re-requesting AI review", async () => {
+    installFetch({
+      ai: true,
+      issue: baseIssue(),
+      reviewResult: {
+        verdict: "REVIEW",
+        feedback: "Cần xem xét nhãn mới.",
+        suggestion: {
+          proposed_tags: [
+            { name_vi: "Mùi khét máy", name_zh: "焦味", name_en: "Burning smell", category: "3S" },
+          ],
+        },
+        used_vision: false,
+      },
+    });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+
+    // First AI review
+    await act(async () => {
+      button(container, "Phân tích AI")?.click();
+    });
+    await act(async () => {});
+
+    expect(container.textContent).toContain("Mùi khét máy");
+    expect(container.textContent).toContain("AI đề xuất thẻ mới");
+
+    // Click proposed tag button to select it
+    const tagBtn = button(container, "Mùi khét máy");
+    expect(tagBtn).toBeDefined();
+    await act(async () => {
+      tagBtn?.click();
+    });
+    await act(async () => {});
+
+    // Verify patch was triggered with proposed_tags
+    const patchCall = mutations().find((call) => call.method === "PATCH");
+    expect(patchCall?.body).toContain('"proposed_tags":[{"name_vi":"Mùi khét máy"');
+
+    // Re-run AI review
+    calls = [];
+    await act(async () => {
+      button(container, "Phân tích AI")?.click();
+    });
+    await act(async () => {});
+
+    const reReview = calls.find((call) => call.url.includes("/api/ai/review"));
+    expect(reReview).toBeDefined();
+    expect(reReview?.body).toContain('"proposed_tags":[{"name_vi":"Mùi khét máy"');
   });
 
   it("opens the photo gallery and navigates it with zoom, arrows and Escape", async () => {

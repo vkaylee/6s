@@ -23,6 +23,7 @@ import {
   type IssueItem,
   IssueStatus,
   type LocationItem,
+  type ProposedTagItem,
   resolveI18n,
   resolveLocationNameByCode,
   S_CATEGORIES,
@@ -174,7 +175,11 @@ export function IssueDetailModal({
       const res = await apiClient<AIReviewResult>("/api/ai/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issue_id: currentIssue.id, lang: locale }),
+        body: JSON.stringify({
+          issue_id: currentIssue.id,
+          lang: locale,
+          proposed_tags: selectedProposedTags.length > 0 ? selectedProposedTags : undefined,
+        }),
       });
       setAiReview(res);
       haptics.success();
@@ -247,7 +252,6 @@ export function IssueDetailModal({
       if (updated) {
         setCurrentIssue(updated);
       }
-      // Keep AI feedback and follow-up answer visible after applying a suggestion.
       onRefresh();
     } catch {
       haptics.errorOrConflict();
@@ -282,6 +286,7 @@ export function IssueDetailModal({
   const [loadingScores, setLoadingScores] = useState(false);
   const aiEnabled = useAiStatus();
   const [aiReview, setAiReview] = useState<AIReviewResult | null>(null);
+  const [selectedProposedTags, setSelectedProposedTags] = useState<ProposedTagItem[]>([]);
   const [isReviewing, setIsReviewing] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState("");
   const [pendingFollowUpQuestion, setPendingFollowUpQuestion] = useState<string | null>(null);
@@ -1167,6 +1172,8 @@ export function IssueDetailModal({
                   currentIssue={currentIssue}
                   tags={tags}
                   value={followUpQuestion}
+                  selectedProposedTags={selectedProposedTags}
+                  onSelectedProposedTagsChange={setSelectedProposedTags}
                   followUpCount={followUpHistory.length}
                   followUpLimit={followUpLimit}
                   followUpHistory={followUpHistory}

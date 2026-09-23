@@ -1174,6 +1174,66 @@ func TestReview_HappyPath(t *testing.T) {
 	}
 }
 
+func TestReview_WithProposedTags(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{
+					"content": `{"verdict":"REVIEW","feedback":"Cần phân loại thêm.","suggested_tags":[],"proposed_tags":[{"name_vi":"Mùi khét máy","name_zh":"焦味","name_en":"Burning smell","category":"3S"},{"name_vi":"Rò rỉ dầu","name_zh":"漏油","name_en":"Oil leak","category":"3S"},{"name_vi":"Bụi","name_zh":"尘","name_en":"Dust","category":"1S"}]}`,
+				}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := reviewTestFixture(mockServer.URL, "")
+	svc := NewService(store, nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+
+	res, err := svc.Review(context.Background(), ReviewRequest{IssueID: 7, Lang: "vi"})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(res.Suggestion.ProposedTags) != 1 {
+		t.Fatalf("expected 1 valid proposed tag (category matching 3S and not in catalog), got %d: %+v", len(res.Suggestion.ProposedTags), res.Suggestion.ProposedTags)
+	}
+	if res.Suggestion.ProposedTags[0].NameVi != "Mùi khét máy" {
+		t.Errorf("proposed tag name = %q, want 'Mùi khét máy'", res.Suggestion.ProposedTags[0].NameVi)
+	}
+}
+
+func TestReview_DropsAlreadySelectedProposedTags(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{
+				"content": `{"verdict":"REVIEW","feedback":"","proposed_tags":[{"name_vi":"Mùi khét máy","name_zh":"焦味","name_en":"Burning smell","category":"3S"},{"name_vi":"Rung bất thường","name_zh":"异常振动","name_en":"Abnormal vibration","category":"3S"}]}`,
+			}}},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := reviewTestFixture(mockServer.URL, "")
+	svc := NewService(store, nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+	res, err := svc.Review(context.Background(), ReviewRequest{
+		IssueID: 7,
+		Lang:    "vi",
+		ProposedTags: []SuggestedProposedTag{
+			{NameVi: "Mùi khét máy", NameZh: "焦味", NameEn: "Burning smell", Category: "3S"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(res.Suggestion.ProposedTags) != 1 || res.Suggestion.ProposedTags[0].NameVi != "Rung bất thường" {
+		t.Fatalf("expected only new proposal, got %+v", res.Suggestion.ProposedTags)
+	}
+}
+
 func TestReview_DisabledAI(t *testing.T) {
 	store := reviewTestFixture("http://unused", "")
 	store.cfg.IsEnabled = false
@@ -1422,7 +1482,7 @@ func TestBuildReviewPromptUsesRequestedTagLanguageAndFullCatalog(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prompt := buildReviewPrompt(issue, selected, catalog, tt.language, false)
+			prompt := buildReviewPrompt(issue, selected, catalog, nil, tt.language, false)
 			for _, value := range tt.mustHave {
 				if !strings.Contains(prompt, value) {
 					t.Errorf("prompt missing %q", value)
@@ -1442,7 +1502,7 @@ func TestBuildReviewPromptUsesRequestedTagLanguageAndFullCatalog(t *testing.T) {
 
 func TestBuildReviewPromptRequiresEvidenceBackedTagCodes(t *testing.T) {
 	issue := db.Issue{Category: "3S", LocationCode: "LINE_A1", Description: sql.NullString{String: "Wet floor", Valid: true}}
-	prompt := buildReviewPrompt(issue, nil, []db.Tag{{Code: "WET_FLOOR", NameVi: "Sàn ướt", NameEn: "Wet floor", NameZh: "湿地面", Category: "3S"}}, "English", true)
+	prompt := buildReviewPrompt(issue, nil, []db.Tag{{Code: "WET_FLOOR", NameVi: "Sàn ướt", NameEn: "Wet floor", NameZh: "湿地面", Category: "3S"}}, nil, "English", true)
 	for _, rule := range []string{
 		"Treat the description and selected tags as user claims",
 		"Do not invent or assume details",
@@ -1457,5 +1517,14 @@ func TestBuildReviewPromptRequiresEvidenceBackedTagCodes(t *testing.T) {
 	}
 	if !strings.Contains(prompt, `"suggested_tags":["CODE",...]`) {
 		t.Error("prompt missing tag-code JSON contract")
+	}
+}
+
+func TestBuildReviewPromptIncludesSelectedProposedTags(t *testing.T) {
+	issue := db.Issue{Category: "3S", LocationCode: "LINE_A1", Description: sql.NullString{String: "Oil leak", Valid: true}}
+	proposals := []SuggestedProposedTag{{NameVi: "Mùi khét máy", NameZh: "焦味", NameEn: "Burning smell", Category: "3S"}}
+	prompt := buildReviewPrompt(issue, nil, nil, proposals, "Vietnamese", false)
+	if !strings.Contains(prompt, "pending(Mùi khét máy)") {
+		t.Errorf("prompt missing pending proposal: %q", prompt)
 	}
 }

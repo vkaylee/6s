@@ -1224,6 +1224,18 @@ paths:
                   type: array
                   items:
                     type: string
+                proposed_tags:
+                  type: array
+                  description: User-selected new tags; saved as creator-owned PENDING tags atomically with issue tags
+                  maxItems: 5
+                  items:
+                    type: object
+                    required: [name_vi, name_zh, name_en, category]
+                    properties:
+                      name_vi: {type: string, maxLength: 255}
+                      name_zh: {type: string, maxLength: 255}
+                      name_en: {type: string, maxLength: 255}
+                      category: {type: string, enum: [1S, 2S, 3S, 4S, 5S, 6S]}
                 asset_id:
                   type: [integer, 'null']
                   description: null để xóa; bỏ qua để giữ nguyên
@@ -2484,6 +2496,17 @@ paths:
                   type: integer
                 lang:
                   type: string
+                proposed_tags:
+                  type: array
+                  description: Thẻ mới người dùng đã chọn trước đó để AI biết và xem xét cùng bối cảnh
+                  items:
+                    type: object
+                    required: [name_vi, category]
+                    properties:
+                      name_vi: {type: string}
+                      name_zh: {type: string}
+                      name_en: {type: string}
+                      category: {type: string, enum: [1S, 2S, 3S, 4S, 5S, 6S]}
       responses:
         '200':
           description: Kết quả review
@@ -2491,7 +2514,27 @@ paths:
             application/json:
               schema:
                 type: object
-
+                properties:
+                  verdict: {type: string, enum: [OK, REVIEW, MISMATCH]}
+                  feedback: {type: string}
+                  suggestion:
+                    type: object
+                    properties:
+                      category: {type: string}
+                      cause_type: {type: string}
+                      tags: {type: array, items: {type: string}}
+                      proposed_tags:
+                        type: array
+                        items:
+                          type: object
+                          required: [name_vi, name_zh, name_en, category]
+                          properties:
+                            name_vi: {type: string}
+                            name_zh: {type: string}
+                            name_en: {type: string}
+                            category: {type: string, enum: [1S, 2S, 3S, 4S, 5S, 6S]}
+                  model: {type: string}
+                  used_vision: {type: boolean}
   /ai/review-follow-up:
     post:
       operationId: followUpAiReview

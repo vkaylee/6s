@@ -288,6 +288,19 @@ func (m *mockIssueStore) PatchIssueWithTagsAtomic(ctx context.Context, arg db.Pa
 	return updated, nil
 }
 
+func (m *mockIssueStore) PatchIssueWithProposedTagsAtomic(ctx context.Context, arg db.PatchIssueParams, tags []string, proposed []db.UpsertProposedTagParams) (db.Issue, error) {
+	updated, err := m.PatchIssueWithTagsAtomic(ctx, arg, tags)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	for _, proposal := range proposed {
+		m.pendingTags = append(m.pendingTags, proposal)
+		if err := m.InsertIssueTag(ctx, db.InsertIssueTagParams{IssueID: arg.ID, TagCode: proposal.Code}); err != nil {
+			return db.Issue{}, err
+		}
+	}
+	return updated, nil
+}
 func (m *mockIssueStore) IncrementTagUseCount(_ context.Context, _ string) error {
 	return nil
 }
@@ -1568,7 +1581,7 @@ func TestSyncIssue_ProposedTags_Workflow(t *testing.T) {
 	store := newMockIssueStore()
 	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền A1"}
 	svc := NewService(store, storageMgr, nil)
-	creator := db.User{ID: 7, SiteID: 1, Role: "WORKER", Username: "worker7", FullName: "Worker 7", IsActive: true}
+	creator := db.User{ID: 7, SiteID: 1, Role: "USER", Username: "worker7", FullName: "Worker 7", IsActive: true}
 	store.users[creator.ID] = creator
 
 	clientUUID := "c0a80101-0000-4000-8000-000000009999"
@@ -1614,6 +1627,24 @@ func TestSyncIssue_ProposedTags_Workflow(t *testing.T) {
 	}
 	if resp2.ID != resp.ID {
 		t.Fatalf("expected same issue ID on replay: %d vs %d", resp2.ID, resp.ID)
+	}
+
+	// Patch issue with proposed tags
+	patchResp, patchErr := svc.PatchIssue(ctxFor(creator), PatchIssueRequest{
+		IssueID: resp.ID,
+		Tags:    []string{"scrap_material"},
+		ProposedTags: []ProposedTag{
+			{NameVi: "Thùng nứt", NameZh: "破裂箱", NameEn: "Cracked bin", Category: "1S"},
+		},
+	}, creator)
+	if patchErr != nil {
+		t.Fatalf("PatchIssue with proposed tags failed: %v", patchErr)
+	}
+	if len(patchResp.Tags) != 2 {
+		t.Fatalf("expected 2 tags after patch with proposal, got %v", patchResp.Tags)
+	}
+	if len(store.pendingTags) != 2 {
+		t.Fatalf("expected 2 pending tags stored total, got %d", len(store.pendingTags))
 	}
 
 	// Validation: more than 5 proposed tags rejected
