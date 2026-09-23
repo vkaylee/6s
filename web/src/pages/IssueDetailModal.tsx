@@ -177,6 +177,12 @@ export function IssueDetailModal({
       });
       setAiReview(res);
       haptics.success();
+      window.requestAnimationFrame(() => {
+        const panel = document.getElementById("ai-review-panel");
+        if (!panel) return;
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        panel.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+      });
     } catch {
       haptics.errorOrConflict();
       await modalDialog.alert(t("issue_detail.ai_review_failed"));
@@ -1022,81 +1028,36 @@ export function IssueDetailModal({
               <h2 className="font-bold text-base leading-6 text-zinc-900 dark:text-zinc-100 break-words">
                 #{currentIssue.id} - {resolvedLocationName}
               </h2>
-              <div className="p-4 bg-white dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs space-y-2.5">
-                <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <div className="flex items-center gap-2 flex-wrap">
+              <div className="space-y-2.5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-700 dark:bg-zinc-800/80">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span>
                       {t("issue_detail.reporter_label")}{" "}
                       <strong>{currentIssue.creator_name}</strong>
                     </span>
                     <span>{new Date(currentIssue.created_at).toLocaleDateString(dateLocale)}</span>
                   </div>
-                  {aiEnabled === false ? (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400 text-right">
-                      {t("issue_detail.ai_disabled_reason")}
-                    </p>
-                  ) : (
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                      <button
-                        type="button"
-                        onClick={handleAIReview}
-                        disabled={aiEnabled !== true || isReviewing}
-                        aria-disabled={aiEnabled !== true}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/60 border border-violet-200/80 dark:border-violet-800/80 transition-colors shadow-2xs disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>
-                          {isReviewing
-                            ? t("issue_detail.ai_reviewing")
-                            : t("issue_detail.ai_review_btn")}
-                        </span>
-                      </button>
-                      {currentIssue.description && (
-                        <button
-                          type="button"
-                          onClick={handleTranslate}
-                          disabled={aiEnabled !== true || isTranslating}
-                          aria-disabled={aiEnabled !== true}
-                          aria-busy={isTranslating}
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors shadow-2xs disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isTranslating ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                          ) : (
-                            <Languages className="w-3.5 h-3.5" />
-                          )}
-                          <span>
-                            {isTranslating
-                              ? t("issue_detail.translating")
-                              : translatedDesc && translatedLangRef.current === locale
-                                ? showOriginal
-                                  ? t("issue_detail.translate_btn")
-                                  : t("issue_detail.show_original")
-                                : t("issue_detail.translate_btn")}
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
                 {translatedDesc && translatedLangRef.current === locale && !showOriginal ? (
                   <div className="space-y-1.5">
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs">
-                      <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <div className="inline-flex items-center gap-1 rounded-md border border-indigo-200/80 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 shadow-2xs dark:border-indigo-800/80 dark:bg-indigo-950/60 dark:text-indigo-300">
+                      <Sparkles
+                        className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400"
+                        aria-hidden="true"
+                      />
                       <span>
                         {t("issue_detail.translated_badge", { lang: locale.toUpperCase() })}
                       </span>
                     </div>
-                    <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
+                    <p className="whitespace-pre-wrap text-sm font-medium text-zinc-800 dark:text-zinc-200">
                       {translatedDesc}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
+                  <p className="whitespace-pre-wrap text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     {currentIssue.description || t("issue.no_description")}
                   </p>
                 )}
-                {/* Tags display */}
                 {currentIssue.tags && currentIssue.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {currentIssue.tags.map((tagCode) => (
@@ -1104,18 +1065,93 @@ export function IssueDetailModal({
                         key={tagCode}
                         code={tagCode}
                         tags={tags}
-                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300"
+                        className="inline-flex items-center rounded-md bg-zinc-200/80 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 dark:bg-zinc-700/80 dark:text-zinc-300"
                       />
                     ))}
                   </div>
                 )}
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2 dark:border-zinc-700/70">
+                  {aiEnabled === false ? (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                      {t("issue_detail.ai_disabled_reason")}
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleAIReview}
+                      disabled={aiEnabled !== true || isReviewing}
+                      aria-disabled={aiEnabled !== true}
+                      aria-busy={isReviewing}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-transparent px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:border-violet-300 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-violet-700 dark:hover:bg-violet-950/40"
+                    >
+                      {isReviewing ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Sparkles
+                          className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>
+                        {isReviewing
+                          ? t("issue_detail.ai_reviewing")
+                          : t("issue_detail.ai_review_btn")}
+                      </span>
+                    </button>
+                  )}
+                  {currentIssue.description && (
+                    <button
+                      type="button"
+                      onClick={handleTranslate}
+                      disabled={aiEnabled !== true || isTranslating}
+                      aria-disabled={aiEnabled !== true}
+                      aria-busy={isTranslating}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-transparent px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/40"
+                    >
+                      {isTranslating ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Languages
+                          className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>
+                        {isTranslating
+                          ? t("issue_detail.translating")
+                          : translatedDesc && translatedLangRef.current === locale
+                            ? showOriginal
+                              ? t("issue_detail.translate_btn")
+                              : t("issue_detail.show_original")
+                            : t("issue_detail.translate_btn")}
+                      </span>
+                    </button>
+                  )}
+                </div>
                 {currentIssue.reject_reason && (
-                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-300">
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
                     <strong>{t("issue_detail.reject_reason_label")}</strong>{" "}
                     {currentIssue.reject_reason}
                   </div>
                 )}
               </div>
+              {aiReview && (
+                <AIReviewPanel
+                  review={aiReview}
+                  currentIssue={currentIssue}
+                  tags={tags}
+                  value={followUpQuestion}
+                  followUpCount={followUpHistory.length}
+                  followUpLimit={followUpLimit}
+                  followUpHistory={followUpHistory}
+                  pendingFollowUpQuestion={pendingFollowUpQuestion}
+                  streamingFollowUpAnswer={streamingFollowUpAnswer}
+                  onFollowUpQuestionChange={setFollowUpQuestion}
+                  isAskingFollowUp={isAskingFollowUp}
+                  onApplySuggestion={handleApplySuggestion}
+                  onFollowUp={handleFollowUp}
+                />
+              )}
               <section
                 className="space-y-3.5 rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-2xs dark:border-zinc-700 dark:bg-zinc-800/80"
                 aria-labelledby="assignment-title"
@@ -1403,24 +1439,6 @@ export function IssueDetailModal({
                     </ol>
                   </section>
                 )}
-              {aiReview && (
-                <AIReviewPanel
-                  review={aiReview}
-                  currentIssue={currentIssue}
-                  tags={tags}
-                  value={followUpQuestion}
-                  followUpCount={followUpHistory.length}
-                  followUpLimit={followUpLimit}
-                  followUpHistory={followUpHistory}
-                  pendingFollowUpQuestion={pendingFollowUpQuestion}
-                  streamingFollowUpAnswer={streamingFollowUpAnswer}
-                  onFollowUpQuestionChange={setFollowUpQuestion}
-                  isAskingFollowUp={isAskingFollowUp}
-                  onApplySuggestion={handleApplySuggestion}
-                  onFollowUp={handleFollowUp}
-                />
-              )}
-
               {/* Score Impact Breakdown Card */}
               <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 space-y-2.5">
                 <div className="flex items-center justify-between">

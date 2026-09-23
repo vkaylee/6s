@@ -127,3 +127,12 @@ it("allows only HTTPS markdown links in AI answers", () => {
   expect(html).toContain("[Unsafe](javascript:alert(1))");
   expect(html).not.toContain('href="javascript:alert(1)"');
 });
+
+it("renders panel header with title and collapse toggle", () => {
+  const html = renderPanel(false);
+
+  expect(html).toContain("Đánh giá từ AI");
+  expect(html).toContain("Thu gọn");
+  expect(html).toContain('aria-controls="ai-review-content"');
+  expect(html).toContain('aria-expanded="true"');
+});

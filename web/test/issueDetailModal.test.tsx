@@ -227,11 +227,11 @@ describe("IssueDetailModal Component", () => {
       />,
     );
     expect(container.textContent).toContain("AI đang tắt");
-    expect(button(container, "Hỏi AI")).toBeUndefined();
+    expect(button(container, "Phân tích AI")).toBeUndefined();
     expect(mutations()).toEqual([]);
   });
 
-  it("requests an AI review, applies the suggested category and restores the original text after translating", async () => {
+  it("requests an AI review, renders it before assignment card, allows collapsing and applies suggestions", async () => {
     installFetch({ ai: true, issue: baseIssue() });
     const container = await mount(
       <IssueDetailModal
@@ -243,13 +243,31 @@ describe("IssueDetailModal Component", () => {
     );
 
     await act(async () => {
-      button(container, "Hỏi AI")?.click();
+      button(container, "Phân tích AI")?.click();
     });
     await act(async () => {});
     const review = calls.find((call) => call.url.includes("/api/ai/review"));
     expect(review?.method).toBe("POST");
     expect(review?.body).toContain('"issue_id":101');
+    expect(container.textContent).toContain("Đánh giá từ AI");
     expect(container.textContent).toContain("Phân loại không khớp");
+    expect(container.textContent).toContain("AI đề xuất phân loại");
+
+    const aiPanelPos = container.textContent?.indexOf("Đánh giá từ AI") ?? -1;
+    const assignmentPos = container.textContent?.indexOf("Phân công & trách nhiệm") ?? -1;
+    expect(aiPanelPos).toBeGreaterThan(-1);
+    expect(assignmentPos).toBeGreaterThan(-1);
+    expect(aiPanelPos).toBeLessThan(assignmentPos);
+
+    await act(async () => {
+      button(container, "Thu gọn")?.click();
+    });
+    expect(container.textContent).not.toContain("AI đề xuất phân loại");
+    expect(button(container, "Xem chi tiết")).toBeDefined();
+
+    await act(async () => {
+      button(container, "Xem chi tiết")?.click();
+    });
     expect(container.textContent).toContain("AI đề xuất phân loại");
 
     await act(async () => {
