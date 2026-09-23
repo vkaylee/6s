@@ -63,7 +63,7 @@ test("real issue image opens, zooms and closes on React surface", async ({
   // Click the actual image card. IssueDetailModal opens the fullscreen preview dialog.
   await beforeImageButton.click();
 
-  const preview = page.locator('div[role="dialog"][aria-modal="true"]').last();
+  const preview = page.locator('div[role="dialog"][aria-labelledby="issue-photo-preview-title"]');
   await expect(preview).toBeVisible();
   await expect(preview.locator('[role="application"]')).toBeVisible();
 

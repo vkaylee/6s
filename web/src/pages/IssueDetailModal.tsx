@@ -31,6 +31,7 @@ import {
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
+import { generateUuid } from "../utils/uuid.ts";
 import { CreateIssueModal } from "./CreateIssueModal.tsx";
 
 const SCORE_RULE_KEYS = [
@@ -707,7 +708,7 @@ export function IssueDetailModal({
 
       // Save draft resolve in local IndexedDB (SPEC.md Section 7.2)
       const draft: DraftResolve = {
-        resolved_client_uuid: crypto.randomUUID(),
+        resolved_client_uuid: generateUuid(),
         issue_id: currentIssue.id,
         expected_version: currentIssue.version,
         photo_after_blob: compressed,

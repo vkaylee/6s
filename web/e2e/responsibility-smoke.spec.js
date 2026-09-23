@@ -96,8 +96,8 @@ test('responsibility ownership remains independent from physical location', asyn
     .filter({ hasText: `Responsibility smoke ${stamp}` })
     .last();
   await expect(issueModal).toBeVisible();
-  await expect(issueModal.locator("p", { hasText: `Electrical ${stamp}` }).first()).toBeVisible();
-  await expect(issueModal.locator("p", { hasText: member.full_name }).first()).toBeVisible();
+  await expect(issueModal.getByText(`Electrical ${stamp}`, { exact: false }).first()).toBeVisible();
+  await expect(issueModal.getByText(member.full_name, { exact: false }).first()).toBeVisible();
   await page.screenshot({ path: '../artifacts/e2e/responsibility-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: '../artifacts/e2e/responsibility-mobile.png', fullPage: true });

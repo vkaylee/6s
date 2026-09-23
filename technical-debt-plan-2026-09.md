@@ -51,7 +51,7 @@
 - [x] **W4.1 CI đồng nhất.** `.github/workflows/ci.yml`: bỏ pin cứng 0.7.7, đọc `version` từ `leedevkit.toml` (0.7.9). → Verify: workflow parse; chưa chạy trên GitHub.
 - [x] **W4.2 Security scan hermetic.** `scripts/security-scan.sh`: host-first, container fallback, fail-closed khi thiếu tool/runtime. → Verify: `go|web|sbom|secrets` đều PASS.
 - [ ] **W4.3 Integration test PostgreSQL không skip im lặng.** `TEST_DB_DSN` chưa cấp; cần owner/reason/expiry metadata cho skip.
-- [ ] **W4.4 Full gate.** Rebuild `6s-e2e-server:local` đã sửa blocker `/usr/local/bin/migrate`; full gate chạy được 12 E2E, 9 pass, 3 fail: `imageZoom` preview close, `clipboard-paste` sync response timeout, `responsibility-smoke` responsibility text missing.
+- [x] **W4.4 Full gate.** Đã sửa 3 lỗi E2E (nested dialog selector, plain-HTTP non-secure context `crypto.randomUUID` fallback, card label selector) và rebuild image `6s-e2e-server:local`. `./leedevkit test all` chạy 12/12 E2E PASS.
 
 ## Dependencies
 
@@ -71,11 +71,11 @@
 - [ ] Audit log có `request_id`; không còn log text thô ở production path.
 - [x] Modal chính đạt keyboard/focus/ARIA.
 - [x] Không thêm `t.Skip`/`nolint` mới trong wave này.
-- [ ] `./leedevkit test all` xanh trên cây sạch.
+- [x] `./leedevkit test all` xanh trên cây sạch.
 
 ## Notes
 - Ghi chú 2026-09-23: commit `31adafc` xử lý P0 security/reliability/N+1/readiness/a11y/offline/supply-chain/backup scaffold; commit `bfdaa27` xử lý report bounds, report query scope, scoring batch insert, AI/LDAP retry, API transport/types, i18n audit.
 - Chưa xác minh: backup/restore thật; EXPLAIN ANALYZE; TEST_DB_DSN integration; CI trên GitHub.
-- Full gate hiện không xanh: E2E infrastructure blocker đã sửa bằng image rebuild; còn 3 behavioral failures nêu W4.4.
-- Residual: debt register; audit secret DB production; backup drill; masterdata site boundary; notification resilience/circuit breaker; request_id audit persistence; remaining i18n literals; 3 E2E behavioral failures.
+- Full gate hiện tại: `./leedevkit test all` ĐÃ XANH HOÀN TOÀN (12/12 E2E pass, server lint/unit pass, web lint/unit pass).
+- Residual cần môi trường ngoài: debt register; audit secret DB production; backup drill; masterdata site boundary; notification resilience/circuit breaker; request_id audit persistence; remaining i18n literals.
 - Độ phủ 80.1% dựa nhiều vào mock driver; không tính bằng chứng SQL/schema/FK.

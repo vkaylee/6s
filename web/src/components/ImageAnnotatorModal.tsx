@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "../i18n/index.ts";
 import { type I18nObject, resolveI18n } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
+import { generateUuid } from "../utils/uuid.ts";
 
 interface ImageAnnotatorModalProps {
   imageUrl: string;
@@ -330,7 +331,7 @@ export function ImageAnnotatorModal({
     setSelectedShapeId(null);
     setIsDrawing(true);
     const newShape: ShapeItem = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       type: tool,
       color,
       lineWidth: 6,

@@ -64,9 +64,21 @@ test.describe("Clipboard Paste Image Upload", () => {
     }, CLIPBOARD_WEBP_BASE64);
 
     // 6. If ImageAnnotatorModal opens on capture, close or save it
-    const annotatorSave = page.locator("button:has-text('Lưu ảnh'), button:has-text('Save'), button:has-text('Xong')");
-    if (await annotatorSave.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await annotatorSave.click();
+    const annotatorModal = page.locator('div[role="dialog"][aria-labelledby="image-annotator-modal-title"]');
+    try {
+      await annotatorModal.waitFor({ state: "visible", timeout: 5000 });
+      const annotatorSave = annotatorModal
+        .locator("button")
+        .filter({ hasText: /Save Annotation|Lưu chú thích|Save|Lưu/i })
+        .first();
+      if (await annotatorSave.isVisible().catch(() => false)) {
+        await annotatorSave.click();
+      } else {
+        await annotatorModal.locator('button[aria-label="Close"], button:has-text("Cancel")').first().click();
+      }
+      await annotatorModal.waitFor({ state: "hidden", timeout: 5000 });
+    } catch {
+      // Annotator modal did not open or already closed
     }
 
     // 7. Verify the overview photo preview appears (indicates paste was processed)
@@ -75,7 +87,7 @@ test.describe("Clipboard Paste Image Upload", () => {
 
     // 8. Capture the POST /api/issues/sync request and assert HTTP 200/201 response
     const submitBtn = page
-      .locator("button:has-text('GỬI BÁO CÁO'), button:has-text('Lưu báo cáo'), button:has-text('Tạo báo cáo'), button:has-text('Submit')")
+      .locator("button:has-text('GỬI BÁO CÁO'), button:has-text('SUBMIT'), button:has-text('Submit'), button:has-text('Lưu báo cáo')")
       .first();
 
     const [syncResponse] = await Promise.all([

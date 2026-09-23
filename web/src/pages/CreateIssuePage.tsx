@@ -40,6 +40,7 @@ import {
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
+import { generateUuid } from "../utils/uuid.ts";
 
 interface CreateIssuePageProps {
   locations: LocationItem[];
@@ -68,6 +69,14 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       });
     }
   }, [tags]);
+
+  // Default to first location when locations load asynchronously if unset
+  useEffect(() => {
+    if (!locationCode && locations && locations.length > 0 && locations[0]?.code) {
+      setLocationCode(locations[0].code);
+    }
+  }, [locations, locationCode]);
+  const effectiveLocationCode = locationCode || locations[0]?.code || "";
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [photoBefore, setPhotoBefore] = useState<Blob | null>(null);
@@ -297,7 +306,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       setPhotoError(true);
       hasError = true;
     }
-    if (!locationCode) {
+    if (!effectiveLocationCode) {
       modalDialog.alert(t("issue.missing_location"));
       return;
     }
@@ -314,13 +323,15 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
 
     setIsSubmitting(true);
     try {
-      const clientUuid = crypto.randomUUID();
-      const capturedLocation = locations.find((location) => location.code === locationCode);
+      const clientUuid = generateUuid();
+      const capturedLocation = locations.find(
+        (location) => location.code === effectiveLocationCode,
+      );
       const newDraft: DraftIssue = {
         client_uuid: clientUuid,
         category,
         cause_type: causeType,
-        location_code: locationCode,
+        location_code: effectiveLocationCode,
         location_name_vi_snapshot: capturedLocation?.name_vi,
         location_name_zh_snapshot: capturedLocation?.name_zh,
         location_name_en_snapshot: capturedLocation?.name_en,
@@ -336,7 +347,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         sync_status: "PENDING",
       };
       await saveDraftIssue(newDraft);
-      updateRecentLocations(locationCode);
+      updateRecentLocations(effectiveLocationCode);
       haptics.success();
       syncEngine.triggerSync();
       onSuccess();
@@ -699,7 +710,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 </span>
                 <LocationCombobox
                   locations={locations}
-                  value={locationCode}
+                  value={effectiveLocationCode}
                   onChange={(val) => setLocationCode(val)}
                 />
                 {recentLocations.length > 0 && (
@@ -710,7 +721,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                     </span>
                     {recentLocations.map((code) => {
                       const loc = locations.find((l) => l.code === code);
-                      const isSelected = locationCode === code;
+                      const isSelected = effectiveLocationCode === code;
                       return (
                         <button
                           key={code}

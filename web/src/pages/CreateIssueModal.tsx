@@ -23,6 +23,7 @@ import {
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
+import { generateUuid } from "../utils/uuid.ts";
 
 interface CreateIssueModalProps {
   isOpen: boolean;
@@ -263,7 +264,7 @@ export function CreateIssueModal({
         // Create flow
         const capturedLocation = locations.find((location) => location.code === locationCode);
         const newDraft: DraftIssue = {
-          client_uuid: crypto.randomUUID(),
+          client_uuid: generateUuid(),
           category,
           cause_type: causeType,
           location_code: locationCode,
