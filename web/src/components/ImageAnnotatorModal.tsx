@@ -559,10 +559,10 @@ export function ImageAnnotatorModal({
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
               {[
-                { hex: "#e11d48", label: "Red" },
-                { hex: "#eab308", label: "Yellow" },
-                { hex: "#2563eb", label: "Blue" },
-                { hex: "#16a34a", label: "Green" },
+                { hex: "#e11d48", labelKey: "issue.color_red" },
+                { hex: "#eab308", labelKey: "issue.color_yellow" },
+                { hex: "#2563eb", labelKey: "issue.color_blue" },
+                { hex: "#16a34a", labelKey: "issue.color_green" },
               ].map((c) => (
                 <button
                   key={c.hex}
@@ -582,7 +582,7 @@ export function ImageAnnotatorModal({
                       : "border-transparent opacity-70 hover:opacity-100"
                   }`}
                   style={{ backgroundColor: c.hex }}
-                  aria-label={c.label}
+                  aria-label={t(c.labelKey)}
                 />
               ))}
             </div>

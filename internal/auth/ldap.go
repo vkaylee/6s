@@ -1,10 +1,12 @@
 package auth
 
 import (
+	crand "crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -56,15 +58,70 @@ type LDAPUser struct {
 
 // LiveLDAPClient connects to an enterprise Active Directory / LDAP domain controller.
 type LiveLDAPClient struct {
-	cfg LDAPConfig
+	cfg      LDAPConfig
+	dialFunc func() (*ldap.Conn, error)
 }
+
+const (
+	ldapDialAttempts    = 3
+	ldapDialBackoffBase = 25 * time.Millisecond
+	ldapDialBackoffMax  = 100 * time.Millisecond
+)
 
 // NewLiveLDAPClient instantiates LiveLDAPClient with given configuration.
 func NewLiveLDAPClient(cfg LDAPConfig) *LiveLDAPClient {
-	return &LiveLDAPClient{cfg: cfg}
+	client := &LiveLDAPClient{cfg: cfg}
+	client.dialFunc = client.dialOnce
+	return client
 }
 
 func (c *LiveLDAPClient) dial() (*ldap.Conn, error) {
+	var err error
+	for attempt := 0; attempt < ldapDialAttempts; attempt++ {
+		conn, dialErr := c.dialFunc()
+		if dialErr == nil {
+			return conn, nil
+		}
+		err = dialErr
+		if !isRetryableLDAPError(err) || attempt == ldapDialAttempts-1 {
+			return nil, err
+		}
+		waitLDAPRetry(attempt)
+	}
+	return nil, err
+}
+
+func waitLDAPRetry(attempt int) {
+	delay := ldapDialBackoffBase << attempt
+	if delay > ldapDialBackoffMax {
+		delay = ldapDialBackoffMax
+	}
+	// Jitter keeps simultaneous failed login workers from reconnecting in lockstep.
+	jitterMax := delay / 2
+	jitter := time.Duration(0)
+	if jitterMax > 0 {
+		if n, err := crand.Int(crand.Reader, big.NewInt(int64(jitterMax))); err == nil {
+			jitter = time.Duration(n.Int64())
+		}
+	}
+	timer := time.NewTimer(jitterMax + jitter)
+	defer timer.Stop()
+	<-timer.C
+}
+
+func isRetryableLDAPError(err error) bool {
+	return errors.Is(err, ErrLDAPUnreachable) || ldap.IsErrorAnyOf(err,
+		ldap.LDAPResultBusy,
+		ldap.LDAPResultUnavailable,
+		ldap.LDAPResultServerDown,
+		ldap.LDAPResultLocalError,
+		ldap.LDAPResultTimeout,
+		ldap.LDAPResultConnectError,
+		ldap.ErrorNetwork,
+	)
+}
+
+func (c *LiveLDAPClient) dialOnce() (*ldap.Conn, error) {
 	addr := net.JoinHostPort(c.cfg.Server, strconv.Itoa(c.cfg.Port))
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: c.cfg.SkipTLSVerify, //nolint:gosec

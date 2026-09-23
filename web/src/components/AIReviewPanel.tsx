@@ -229,7 +229,7 @@ export function AIReviewPanel({
         <div className="flex flex-wrap gap-1.5">
           <span>{t("issue_detail.ai_review_suggested_tags")}:</span>
           {review.suggestion.tags.map((tagCode) => {
-            const matchedTag = tags.find((tg) => (tg.tag_code || tg.code) === tagCode);
+            const matchedTag = tags.find((tg) => tg.code === tagCode);
             const tagName = matchedTag ? resolveTagLabel(matchedTag, locale) : tagCode;
             return (
               <button

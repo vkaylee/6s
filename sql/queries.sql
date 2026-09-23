@@ -882,6 +882,29 @@ SELECT photo_detail AS photo_name FROM issues WHERE photo_detail IS NOT NULL AND
 UNION
 SELECT photo_after AS photo_name FROM issues WHERE photo_after IS NOT NULL AND photo_after != '';
 
+-- name: InsertScoreLogsForIssue :exec
+INSERT INTO score_logs (
+    issue_id, target_type, target_id, rule_key, points, created_at, penalty_date
+)
+SELECT
+    sqlc.arg('issue_id')::bigint,
+    t.target_type,
+    t.target_id,
+    t.rule_key,
+    t.points,
+    CURRENT_TIMESTAMP,
+    NULLIF(t.penalty_date, '')::date
+FROM (
+    SELECT
+        unnest(sqlc.arg('target_types')::varchar[]) AS target_type,
+        unnest(sqlc.arg('target_ids')::varchar[]) AS target_id,
+        unnest(sqlc.arg('rule_keys')::varchar[]) AS rule_key,
+        unnest(sqlc.arg('points')::int[]) AS points,
+        unnest(sqlc.arg('penalty_dates')::varchar[]) AS penalty_date
+) AS t
+ON CONFLICT (issue_id, rule_key, penalty_date) WHERE penalty_date IS NOT NULL
+DO NOTHING;
+
 -- name: CleanupOldAuditLogs :exec
 DELETE FROM system_audit_logs
 WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 years';
@@ -895,30 +918,150 @@ SELECT
     COUNT(CASE WHEN status = 'INVALID' THEN 1 END)::bigint AS invalid_issues,
     COUNT(CASE WHEN category = '6S' AND status != 'CLOSED' THEN 1 END)::bigint AS safety_issues,
     COUNT(CASE WHEN status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours' THEN 1 END)::bigint AS overdue_issues
-FROM issues
-WHERE (sqlc.narg('location_code')::varchar IS NULL OR location_code = sqlc.narg('location_code'));
+FROM issues i
+WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
+  AND i.created_at < sqlc.arg('date_to')::timestamptz
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = sqlc.arg('user_id')::bigint
+      OR i.assignee_id = sqlc.arg('user_id')::bigint
+      OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = sqlc.arg('user_id')::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = sqlc.arg('user_id')::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  );
 
 -- name: GetCategoryBreakdown :many
-SELECT category, COUNT(*)::bigint AS count
-FROM issues
-WHERE (sqlc.narg('location_code')::varchar IS NULL OR location_code = sqlc.narg('location_code'))
-GROUP BY category ORDER BY category ASC;
+SELECT i.category, COUNT(*)::bigint AS count
+FROM issues i
+WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
+  AND i.created_at < sqlc.arg('date_to')::timestamptz
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = sqlc.arg('user_id')::bigint
+      OR i.assignee_id = sqlc.arg('user_id')::bigint
+      OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = sqlc.arg('user_id')::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = sqlc.arg('user_id')::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
+GROUP BY i.category ORDER BY i.category ASC;
 
 -- name: GetIssueTrends :many
 SELECT d.day::date AS date_key,
-       COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
+       COUNT(CASE WHEN i.created_at >= sqlc.arg('date_from')::timestamptz
+                       AND i.created_at < sqlc.arg('date_to')::timestamptz
+                       AND i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
        COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
-FROM generate_series(CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day', CURRENT_DATE, INTERVAL '1 day') AS d(day)
+FROM generate_series(
+    date_trunc('day', sqlc.arg('date_from')::timestamptz),
+    date_trunc('day', sqlc.arg('date_to')::timestamptz) - INTERVAL '1 day',
+    INTERVAL '1 day'
+) AS d(day)
 LEFT JOIN issues i ON (i.created_at::date = d.day::date OR i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date))
+  AND i.site_id = sqlc.arg('site_id')::bigint
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = sqlc.arg('user_id')::bigint
+      OR i.assignee_id = sqlc.arg('user_id')::bigint
+      OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = sqlc.arg('user_id')::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = sqlc.arg('user_id')::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
 GROUP BY d.day ORDER BY d.day ASC;
 
 -- name: GetTopViolatedTags :many
 SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
 FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
-WHERE (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
+  AND i.created_at < sqlc.arg('date_to')::timestamptz
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = sqlc.arg('user_id')::bigint
+      OR i.assignee_id = sqlc.arg('user_id')::bigint
+      OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = sqlc.arg('user_id')::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = sqlc.arg('user_id')::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
 GROUP BY t.code, t.category, t.name_vi, t.name_zh, t.name_en
-ORDER BY violation_count DESC, t.code ASC LIMIT $1;
+ORDER BY violation_count DESC, t.code ASC LIMIT sqlc.arg('limit')::int;
 
 -- name: ListIssuesForExport :many
 SELECT i.id, i.client_uuid, i.category, i.location_code, loc.name_vi AS location_name_vi, loc.name_zh AS location_name_zh, loc.name_en AS location_name_en, i.status, i.description, i.reject_reason, u.username AS creator_username, u.full_name AS creator_full_name, res.username AS resolver_username, res.full_name AS resolver_full_name, i.score_rating, i.created_at, i.resolved_at, i.closed_at, COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
@@ -928,10 +1071,11 @@ WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
   AND (sqlc.narg('assigned_team_id')::bigint IS NULL OR i.assigned_team_id = sqlc.narg('assigned_team_id')::bigint)
   AND (sqlc.narg('mine_team')::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tm.team_id = i.assigned_team_id))
+  AND (sqlc.narg('date_from')::timestamptz IS NULL OR i.created_at >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::timestamptz IS NULL OR i.created_at < sqlc.narg('date_to'))
   AND (sqlc.arg('site_id')::bigint = 0 OR i.site_id = sqlc.arg('site_id'))
   AND (sqlc.arg('site_id')::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = sqlc.arg('user_id')::bigint AND tm2.team_id = i.assigned_team_id))
-GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000;
-
+GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 10000;
 
 
 -- name: GetTranslationCache :one

@@ -61,7 +61,7 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
       })
       .catch((err) => {
         if (isMounted) {
-          setError(err.message || "Failed to load score history");
+          setError(err.message || t("leaderboard.score_history_load_error"));
         }
       })
       .finally(() => {
@@ -73,7 +73,7 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
     return () => {
       isMounted = false;
     };
-  }, [targetType, id]);
+  }, [targetType, id, t]);
 
   const totalPoints = logs.reduce((sum, item) => sum + item.points, 0);
   const isLocation = targetType === "LOCATION";

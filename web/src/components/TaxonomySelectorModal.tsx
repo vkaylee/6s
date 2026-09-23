@@ -122,7 +122,9 @@ export function TaxonomySelectorModal({
   if (!isOpen) return null;
 
   const handleTagClick = (tag: TagItem) => {
-    onToggleTag(tag.tag_code);
+    const code = tag.code || tag.tag_code || "";
+    if (!code) return;
+    onToggleTag(code);
     if (tag.category) {
       const cat = tag.category as IssueCategory;
       if (Object.values(IssueCategory).includes(cat)) {
@@ -142,11 +144,12 @@ export function TaxonomySelectorModal({
       (activeTab !== "ALL" ? (activeTab as IssueCategory) : currentCategory) || IssueCategory.S3;
 
     const newTag: TagItem = {
-      tag_code: codeSlug,
+      code: codeSlug,
       category: assignedCat,
-      label_vi: trimmed,
-      label_zh: trimmed,
-      label_en: trimmed,
+      name_vi: trimmed,
+      name_zh: trimmed,
+      name_en: trimmed,
+      use_count: 0,
     };
 
     if (onAddCustomTag) {
@@ -287,14 +290,16 @@ export function TaxonomySelectorModal({
           ) : (
             <div className="flex flex-wrap gap-2">
               {visibleTags.map((tag) => {
-                const isChecked = selectedTags.includes(tag.tag_code);
-                const isBehavior = isBehaviorTag(tag.tag_code, tag.category);
+                const code = tag.code || tag.tag_code || "";
+                const isChecked = selectedTags.includes(code);
+                const isBehavior = isBehaviorTag(code, tag.category);
                 const badgeColor =
-                  categoryBadgeColors[tag.category] || "bg-zinc-100 text-zinc-700 border-zinc-200";
+                  (tag.category && categoryBadgeColors[tag.category]) ||
+                  "bg-zinc-100 text-zinc-700 border-zinc-200";
 
                 return (
                   <button
-                    key={tag.tag_code}
+                    key={code || tag.label_vi || tag.label_en || "tag"}
                     type="button"
                     onClick={() => handleTagClick(tag)}
                     className={`px-3 py-2 rounded-xl text-xs font-bold transition-all min-h-[40px] border flex items-center gap-1.5 ${

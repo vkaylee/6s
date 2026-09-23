@@ -62,8 +62,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   useEffect(() => {
     if (tags && tags.length > 0) {
       setLocalTags((prev) => {
-        const existingCodes = new Set(prev.map((t) => t.tag_code));
-        const newItems = tags.filter((t) => !existingCodes.has(t.tag_code));
+        const existingCodes = new Set(prev.map((t) => t.code || t.tag_code));
+        const newItems = tags.filter((t) => !existingCodes.has(t.code || t.tag_code));
         return newItems.length > 0 ? [...prev, ...newItems] : prev.length === 0 ? tags : prev;
       });
     }
@@ -137,7 +137,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
 
   const handleToggleTag = (tagCode: string) => {
     haptics.success();
-    const tagObj = localTags.find((t) => t.tag_code === tagCode);
+    const tagObj = localTags.find((t) => (t.code || t.tag_code) === tagCode);
     if (tagObj && isBehaviorTag(tagCode, tagObj.category)) {
       setCauseType("BEHAVIOR");
     }
@@ -952,13 +952,14 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                               {t("issue.category_quick_tags_label")}:
                             </span>
                             {categoryTags.map((tg) => {
-                              const isChecked = selectedTags.includes(tg.tag_code);
+                              const code = tg.code || tg.tag_code || "";
+                              const isChecked = selectedTags.includes(code);
                               const label = resolveTagLabel(tg, locale);
                               return (
                                 <button
-                                  key={tg.tag_code}
+                                  key={code}
                                   type="button"
-                                  onClick={() => handleToggleTag(tg.tag_code)}
+                                  onClick={() => handleToggleTag(code)}
                                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border flex items-center gap-1 ${
                                     isChecked
                                       ? "bg-blue-600 text-white border-blue-600 shadow-sm"
@@ -1040,7 +1041,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   ) : (
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {selectedTags.map((tagCode) => {
-                        const tagObj = localTags.find((t) => t.tag_code === tagCode);
+                        const tagObj = localTags.find((t) => (t.code || t.tag_code) === tagCode);
                         const badgeColor = tagObj?.category
                           ? categoryBadgeColors[tagObj.category] ||
                             "bg-zinc-100 text-zinc-700 border-zinc-200"

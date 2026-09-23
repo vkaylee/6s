@@ -155,7 +155,7 @@ export function CreateIssueModal({
 
   const handleToggleTag = (tagCode: string) => {
     haptics.success();
-    const tagObj = tags.find((t) => t.tag_code === tagCode);
+    const tagObj = tags.find((t) => (t.code || t.tag_code) === tagCode);
     if (tagObj && isBehaviorTag(tagCode, tagObj.category)) {
       setCauseType("BEHAVIOR");
     }
@@ -528,12 +528,13 @@ export function CreateIssueModal({
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {filteredTags.map((tag) => {
-                  const isChecked = selectedTags.includes(tag.tag_code);
+                  const code = tag.code || tag.tag_code || "";
+                  const isChecked = selectedTags.includes(code);
                   return (
                     <button
-                      key={tag.tag_code}
+                      key={code}
                       type="button"
-                      onClick={() => handleToggleTag(tag.tag_code)}
+                      onClick={() => handleToggleTag(code)}
                       className={`px-3 py-2 rounded-xl text-xs font-bold transition-all min-h-[44px] border ${
                         isChecked
                           ? "bg-blue-600 border-blue-600 text-white"

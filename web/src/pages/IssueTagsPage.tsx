@@ -1,25 +1,18 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client.ts";
+import { createTag, fetchTags } from "../api/operations.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useAiStatus } from "../hooks/useAiStatus.ts";
 import { type SupportedLocale, useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
+import type { TagItem } from "../types/index.ts";
 import { IssueCategory, resolveI18n, S_CATEGORIES } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
 import { searchTags } from "../utils/tagSearch.ts";
 
 type TagLocale = SupportedLocale;
-type TagItemData = {
-  code: string;
-  name_vi: string;
-  name_zh?: string;
-  name_en?: string;
-  category: string;
-  use_count: number;
-  is_preset?: boolean;
-  is_active?: boolean;
-};
+type TagItemData = TagItem;
 type PackKey = "ALL" | "GARMENT" | "MACHINERY" | "ELECTRONICS";
 
 const PACKS: Record<Exclude<PackKey, "ALL">, Record<string, true>> = {
@@ -168,7 +161,7 @@ function TagCard({
         {showToggle && onToggle && (
           <button
             type="button"
-            onClick={() => onToggle(tag.code, active)}
+            onClick={() => tag.code && onToggle(tag.code, active)}
             className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border"
           >
             {active ? t("admin.tag_btn_disable") : t("admin.tag_btn_enable")}
@@ -214,7 +207,11 @@ function CreateTagModal({
   const [category, setCategory] = useState<string>(editingTag?.category ?? IssueCategory.S1);
   const [names, setNames] = useState<Record<TagLocale, string> | null>(
     editingTag
-      ? { vi: editingTag.name_vi, zh: editingTag.name_zh ?? "", en: editingTag.name_en ?? "" }
+      ? {
+          vi: editingTag.name_vi || editingTag.label_vi || "",
+          zh: editingTag.name_zh || editingTag.label_zh || "",
+          en: editingTag.name_en || editingTag.label_en || "",
+        }
       : null,
   );
   const [editable, setEditable] = useState<Partial<Record<TagLocale, boolean>>>(
@@ -289,16 +286,12 @@ function CreateTagModal({
     if (!code.trim() || !names?.vi.trim() || !names.en.trim() || !names.zh.trim()) return;
     setSaving(true);
     try {
-      const saved = await apiClient<TagItemData>("/api/tags", {
-        method: "POST",
-        body: JSON.stringify({
-          code: code.trim().toLowerCase(),
-          category,
-          name_vi: names.vi.trim(),
-          name_zh: names.zh.trim(),
-          name_en: names.en.trim(),
-          is_preset: editingTag?.is_preset ?? false,
-        }),
+      const saved = await createTag({
+        code: code.trim().toLowerCase(),
+        category: category as "1S" | "2S" | "3S" | "4S" | "5S" | "6S",
+        name_vi: names.vi.trim(),
+        name_zh: names.zh.trim(),
+        name_en: names.en.trim(),
       });
       haptics.success();
       onCreated(saved);
@@ -499,7 +492,7 @@ export function IssueTagsPage() {
       setTags((await apiClient<TagItemData[]>("/api/tags/all")) || []);
     } catch {
       try {
-        setTags((await apiClient<TagItemData[]>("/api/tags")) || []);
+        setTags((await fetchTags()) || []);
       } catch {
         /* keep current */
       }
@@ -552,10 +545,12 @@ export function IssueTagsPage() {
           body: JSON.stringify({ all: true, is_active: true }),
         });
       } else {
-        const active = tags.filter((item) => PACKS[pack][item.code]).map((item) => item.code);
+        const active = tags
+          .filter((item) => item.code && PACKS[pack][item.code])
+          .map((item) => item.code as string);
         const inactive = tags
-          .filter((item) => !active.includes(item.code))
-          .map((item) => item.code);
+          .filter((item) => item.code && !active.includes(item.code))
+          .map((item) => item.code as string);
         await Promise.all([
           apiClient("/api/tags/batch-status", {
             method: "POST",

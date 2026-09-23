@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiClient } from "../api/client.ts";
+import { getSetupStatus } from "../api/generated/index.ts";
 
 export interface SetupStatusState {
   isSetupOpen: boolean;
@@ -10,9 +10,15 @@ export function useSetupStatus(): SetupStatusState {
   const [isSetupOpen, setIsSetupOpen] = useState(false);
 
   useEffect(() => {
-    apiClient<{ needs_setup: boolean }>("/api/auth/setup-status", { skipAuth: true })
-      .then((response) => {
-        if (response?.needs_setup) setIsSetupOpen(true);
+    getSetupStatus({
+      headers: { "X-Skip-Auth": "true" },
+      throwOnError: true,
+    })
+      .then((res) => {
+        const payload = res.data as { data?: { needs_setup?: boolean }; needs_setup?: boolean };
+        if ((payload.data?.needs_setup ?? payload.needs_setup) === true) {
+          setIsSetupOpen(true);
+        }
       })
       .catch(() => {
         // ignore offline or failed status checks

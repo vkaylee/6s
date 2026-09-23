@@ -76,8 +76,13 @@ export const IssueWorkspace = {
 export type IssueWorkspace = (typeof IssueWorkspace)[keyof typeof IssueWorkspace];
 
 import type {
+  AiConfig as OpenApiAiConfig,
   Issue as OpenApiIssue,
+  Location as OpenApiLocation,
+  LocationHealthScore as OpenApiLocationHealthScore,
   PaginationMeta as OpenApiPaginationMeta,
+  ReporterScore as OpenApiReporterScore,
+  Tag as OpenApiTag,
 } from "../api/generated/index.ts";
 
 export type {
@@ -86,7 +91,6 @@ export type {
   TeamKpi as TeamKpiReport,
   TeamMember as TeamMemberItem,
 } from "../api/generated/index.ts";
-
 /** Verification outcome of an issue's root cause; independent of `cause_type`. */
 export type CauseStatus = NonNullable<OpenApiIssue["cause_status"]>;
 
@@ -138,50 +142,30 @@ export function hasRestrictedIssueScope(role?: UserRole): boolean {
 
 export type PaginationMeta = OpenApiPaginationMeta;
 
-export interface PaginatedResult<T> {
-  data: T;
-  pagination?: PaginationMeta;
-}
-
-export type LocationItem = {
-  code: string;
-  name_vi: string;
-  name_zh: string;
-  name_en: string;
+export type LocationItem = Omit<OpenApiLocation, "qr_code"> & {
   qr_code?: string;
   is_active: boolean;
 };
 
-export type TagItem = {
-  tag_code: string;
-  category: string;
-  label_vi: string;
-  label_zh: string;
-  label_en?: string;
-  target_kind?: "OBJECT" | "BEHAVIOR";
+export type TagItem = Omit<Partial<OpenApiTag>, "category"> & {
   code?: string;
   name_vi?: string;
   name_zh?: string;
   name_en?: string;
+  category?: string;
   use_count?: number;
+  tag_code?: string;
+  label_vi?: string;
+  label_zh?: string;
+  label_en?: string;
+  target_kind?: "OBJECT" | "BEHAVIOR";
   is_preset?: boolean;
+  is_active?: boolean;
 };
 
-export interface LocationHealthScore {
-  location_code: string;
-  location_name: string;
-  health_score: number;
-  open_count: number;
-  overdue_count: number;
-}
+export type LocationHealthScore = OpenApiLocationHealthScore;
 
-export interface ReporterLeaderboard {
-  user_id: number;
-  full_name: string;
-  points: number;
-  valid_count: number;
-  safety_count: number;
-}
+export type ReporterLeaderboard = OpenApiReporterScore;
 
 export interface ScoreLogItem {
   id: number;
@@ -390,16 +374,7 @@ export interface ReportSummaryResponse {
   topTags: ReportTagItem[];
 }
 
-export interface AIConfigData {
-  is_enabled: boolean;
-  base_url: string;
-  has_api_key: boolean;
-  default_model: string;
-  model_translate: string;
-  model_vision: string;
-  model_summary: string;
-  updated_at?: string;
-}
+export type AIConfigData = OpenApiAiConfig;
 
 export interface AITranslateResponse {
   translated_text: string;

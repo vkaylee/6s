@@ -306,7 +306,7 @@ export function AdminConfigPage() {
           user_filter: adUserFilter,
         }),
       });
-      setAdTestResult(res.message || "OK");
+      setAdTestResult(res.message || t("common.ok"));
       haptics.success();
     } catch (error) {
       setAdTestResult(error instanceof ApiError ? error.message : t("admin.connection_failed"));
@@ -978,7 +978,7 @@ export function AdminConfigPage() {
                             r.success ? "text-emerald-600" : "text-rose-600"
                           }`}
                         >
-                          {r.success ? "✓ OK" : `✗ ${r.error || "Failed"}`}
+                          {r.success ? `✓ ${t("common.ok")}` : `✗ ${r.error || t("common.failed")}`}
                         </span>
                       </div>
                     ))}

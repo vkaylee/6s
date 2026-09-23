@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS locations (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_locations_site ON locations(site_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_locations_code_lower ON locations (LOWER(code));
 
 CREATE TABLE IF NOT EXISTS teams (
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS teams (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (site_id, code)
 );
+CREATE INDEX IF NOT EXISTS idx_teams_site ON teams(site_id);
 
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
@@ -54,6 +56,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMPTZ
 );
+CREATE INDEX IF NOT EXISTS idx_users_site ON users(site_id);
 
 CREATE TABLE IF NOT EXISTS team_memberships (
     team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
@@ -61,6 +64,7 @@ CREATE TABLE IF NOT EXISTS team_memberships (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (team_id, user_id)
 );
+CREATE INDEX IF NOT EXISTS idx_team_memberships_user ON team_memberships(user_id);
 
 CREATE TABLE IF NOT EXISTS location_memberships (
     location_code VARCHAR(50) NOT NULL REFERENCES locations(code) ON DELETE CASCADE,
@@ -74,6 +78,8 @@ CREATE TABLE IF NOT EXISTS location_memberships (
     PRIMARY KEY (location_code, user_id),
     CHECK (valid_to IS NULL OR valid_to > valid_from)
 );
+CREATE INDEX IF NOT EXISTS idx_location_memberships_location ON location_memberships(location_code);
+CREATE INDEX IF NOT EXISTS idx_location_memberships_user ON location_memberships(user_id);
 
 CREATE TABLE IF NOT EXISTS team_locations (
     period_id BIGSERIAL PRIMARY KEY,
@@ -116,6 +122,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 
 CREATE TABLE IF NOT EXISTS tags (
     id BIGSERIAL PRIMARY KEY,
@@ -129,6 +136,7 @@ CREATE TABLE IF NOT EXISTS tags (
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_code_lower ON tags (LOWER(code));
+CREATE INDEX IF NOT EXISTS idx_tags_active ON tags(is_active) WHERE is_active = TRUE;
 
 CREATE TABLE IF NOT EXISTS issues (
     id BIGSERIAL PRIMARY KEY,
@@ -294,6 +302,13 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE INDEX IF NOT EXISTS idx_role_permissions_permission ON role_permissions(permission_code);
 
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+CREATE INDEX IF NOT EXISTS idx_issues_asset ON issues(asset_id);
+CREATE INDEX IF NOT EXISTS idx_issues_assigned_team ON issues(assigned_team_id);
+CREATE INDEX IF NOT EXISTS idx_issues_assignee ON issues(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_issues_cause_team ON issues(cause_team_id);
+CREATE INDEX IF NOT EXISTS idx_issues_location_snapshot_recorded_at
+    ON issues(location_snapshot_recorded_at);
+CREATE INDEX IF NOT EXISTS idx_issues_site_visibility ON issues(site_id, visibility_class, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_issues_client_uuid ON issues(client_uuid);
 CREATE INDEX IF NOT EXISTS idx_issues_location_code ON issues(location_code);
 CREATE INDEX IF NOT EXISTS idx_issues_category ON issues(category);

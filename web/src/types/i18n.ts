@@ -60,10 +60,10 @@ export function resolveTagLabel(
   locale?: SupportedLocale,
 ): string {
   const targetLocale = locale ?? useI18nStore.getState().locale;
-  const vi = tag.label_vi || tag.name_vi || "";
-  const zh = tag.label_zh || tag.name_zh || "";
-  const en = tag.label_en || tag.name_en || "";
-  const fallback = tag.tag_code || tag.code || "";
+  const vi = tag.name_vi || tag.label_vi || "";
+  const zh = tag.name_zh || tag.label_zh || "";
+  const en = tag.name_en || tag.label_en || "";
+  const fallback = tag.code || tag.tag_code || "";
 
   if (targetLocale === "en") return en || vi || zh || fallback;
   if (targetLocale === "zh") return zh || vi || en || fallback;

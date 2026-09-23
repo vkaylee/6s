@@ -21,6 +21,7 @@ type mockScoringStore struct {
 	reporterLeaderboardArg db.GetReporterLeaderboardInMonthParams
 	rules                  map[string]int32
 	logs                   []db.ScoreLog
+	batchCalls             []db.InsertScoreLogsForIssueParams
 	auditLogs              []db.InsertAuditLogParams
 	issueLogs              []db.ListScoreLogsByIssueRow
 	targetLogs             []db.ListScoreLogsByTargetSinceRow
@@ -79,14 +80,17 @@ func (m *mockScoringStore) ListScoreLogsByTargetSince(_ context.Context, _ db.Li
 	return m.targetLogs, nil
 }
 
-func (m *mockScoringStore) InsertScoreLog(_ context.Context, arg db.InsertScoreLogParams) error {
-	m.logs = append(m.logs, db.ScoreLog{
-		IssueID:    arg.IssueID,
-		TargetType: arg.TargetType,
-		TargetID:   arg.TargetID,
-		RuleKey:    arg.RuleKey,
-		Points:     arg.Points,
-	})
+func (m *mockScoringStore) InsertScoreLogsForIssue(_ context.Context, arg db.InsertScoreLogsForIssueParams) error {
+	m.batchCalls = append(m.batchCalls, arg)
+	for i := range arg.RuleKeys {
+		m.logs = append(m.logs, db.ScoreLog{
+			IssueID:    arg.IssueID,
+			TargetType: arg.TargetTypes[i],
+			TargetID:   arg.TargetIds[i],
+			RuleKey:    arg.RuleKeys[i],
+			Points:     arg.Points[i],
+		})
+	}
 	return nil
 }
 
@@ -226,6 +230,67 @@ func TestScoringService_RetroactiveRecalculate(t *testing.T) {
 
 	if len(store.auditLogs) != 1 {
 		t.Errorf("expected 1 audit log entry, got %d", len(store.auditLogs))
+	}
+}
+
+func TestScoringService_RetroactiveRecalculateBatchesPerIssue(t *testing.T) {
+	store := &mockScoringStore{
+		rules: map[string]int32{
+			"penalty_normal": -2,
+			"penalty_safety": -10,
+		},
+		logs: []db.ScoreLog{
+			{ID: 1, IssueID: 42, TargetType: "LOCATION", TargetID: "LINE_A1", RuleKey: "penalty_normal", Points: -2},
+			{ID: 2, IssueID: 42, TargetType: "LOCATION", TargetID: "LINE_A1", RuleKey: "penalty_safety", Points: -10},
+			{ID: 3, IssueID: 99, TargetType: "LOCATION", TargetID: "LINE_B2", RuleKey: "penalty_normal", Points: -2},
+		},
+	}
+
+	svc := NewService(store, time.UTC)
+	applyFrom := time.Now().Add(-24 * time.Hour)
+
+	err := svc.UpdateRules(context.Background(), UpdateRulesRequest{
+		Rules: map[string]int32{
+			"penalty_normal": -5,
+			"penalty_safety": -15,
+		},
+		ApplyFrom: &applyFrom,
+		Reason:    "Board approval",
+	}, 1)
+	if err != nil {
+		t.Fatalf("UpdateRules error: %v", err)
+	}
+
+	// Must issue exactly one batched call per issue (2 issues -> 2 calls, not 3 calls)
+	if len(store.batchCalls) != 2 {
+		t.Fatalf("expected 2 batch calls (1 per issue), got %d", len(store.batchCalls))
+	}
+
+	callsByIssue := make(map[int64]db.InsertScoreLogsForIssueParams)
+	for _, call := range store.batchCalls {
+		callsByIssue[call.IssueID] = call
+	}
+
+	call42, ok := callsByIssue[42]
+	if !ok {
+		t.Fatalf("missing batch call for issue 42")
+	}
+	if len(call42.RuleKeys) != 2 {
+		t.Fatalf("expected 2 rules batched in single statement for issue 42, got %d", len(call42.RuleKeys))
+	}
+	if call42.Points[0] != -3 || call42.Points[1] != -5 {
+		t.Errorf("expected deltas [-3, -5] for issue 42, got %+v", call42.Points)
+	}
+
+	call99, ok := callsByIssue[99]
+	if !ok {
+		t.Fatalf("missing batch call for issue 99")
+	}
+	if len(call99.RuleKeys) != 1 {
+		t.Fatalf("expected 1 rule batched for issue 99, got %d", len(call99.RuleKeys))
+	}
+	if call99.Points[0] != -3 {
+		t.Errorf("expected delta -3 for issue 99, got %d", call99.Points[0])
 	}
 }
 

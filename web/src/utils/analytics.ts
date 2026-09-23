@@ -170,7 +170,7 @@ export function calculateTopTags(
 ): TagReportItem[] {
   const tagMap = new Map<string, TagItem>();
   for (const t of tags) {
-    const code = t.tag_code || t.code || "";
+    const code = t.code;
     if (code) {
       tagMap.set(code, t);
     }
@@ -194,9 +194,9 @@ export function calculateTopTags(
         tag_code: code,
         count,
         category: meta?.category || "6S",
-        name_vi: meta?.name_vi || meta?.label_vi || code,
-        name_zh: meta?.name_zh || meta?.label_zh || code,
-        name_en: meta?.name_en || meta?.label_en || code,
+        name_vi: meta?.name_vi || code,
+        name_zh: meta?.name_zh || code,
+        name_en: meta?.name_en || code,
       };
     })
     .sort((a, b) => b.count - a.count)

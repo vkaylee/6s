@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -66,7 +67,12 @@ func (h *Handler) ExportXLSX(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
 		return
 	}
-	var filters ExportTeamFilter
+	dateRange, err := parseExportDateRange(r.URL.Query())
+	if err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput).WithCause(err))
+		return
+	}
+	filters := ExportTeamFilter{DateRange: dateRange}
 	if value := r.URL.Query().Get("assigned_team_id"); value != "" {
 		parsed, err := strconv.ParseInt(value, 10, 64)
 		if err != nil || parsed <= 0 {
@@ -91,6 +97,31 @@ func (h *Handler) ExportXLSX(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="6S_Issues_Export_%s.xlsx"`, time.Now().Format("20060102_150405")))
 	_ = writeXLSX(w, rows)
+}
+
+// parseExportDateRange validates optional date_from/date_to filters as inclusive YYYY-MM-DD days.
+// Missing values produce a zero range, which the service defaults to the most recent 30 days.
+func parseExportDateRange(query url.Values) (ExportDateRange, error) {
+	fromValue, toValue := query.Get("date_from"), query.Get("date_to")
+	if fromValue == "" && toValue == "" {
+		return ExportDateRange{}, nil
+	}
+	if fromValue == "" || toValue == "" {
+		return ExportDateRange{}, fmt.Errorf("date_from and date_to must be provided together")
+	}
+	from, err := time.Parse("2006-01-02", fromValue)
+	if err != nil {
+		return ExportDateRange{}, fmt.Errorf("date_from must use YYYY-MM-DD")
+	}
+	to, err := time.Parse("2006-01-02", toValue)
+	if err != nil {
+		return ExportDateRange{}, fmt.Errorf("date_to must use YYYY-MM-DD")
+	}
+	to = to.AddDate(0, 0, 1)
+	if !to.After(from) || to.Sub(from) > maxExportRangeDays*24*time.Hour {
+		return ExportDateRange{}, fmt.Errorf("export date range must be between 1 and %d days", maxExportRangeDays)
+	}
+	return ExportDateRange{From: from, To: to}, nil
 }
 
 func writeXLSX(w http.ResponseWriter, rows []db.ListIssuesForExportRow) error {

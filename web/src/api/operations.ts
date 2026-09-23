@@ -1,18 +1,40 @@
+import type {
+  IssueItem,
+  LocationHealthScore,
+  LocationItem,
+  PaginationMeta,
+  ReporterLeaderboard,
+  TagItem,
+} from "../types/index.ts";
 import { sdkClient } from "./client.ts";
-import type { Issue } from "./generated/index.ts";
-import { closeIssue, invalidateIssue, reopenIssue } from "./generated/index.ts";
-
+import type {
+  CloseIssueData,
+  GetReporterLeaderboardData,
+  InvalidateIssueData,
+  Issue,
+  ListIssuesData,
+  ReopenIssueData,
+  UpdateIssueData,
+  UpsertTagData,
+} from "./generated/index.ts";
+import {
+  closeIssue,
+  getIssue,
+  getLocationLeaderboard,
+  getReporterLeaderboard,
+  invalidateIssue,
+  listIssues,
+  listLocations,
+  listTags,
+  reopenIssue,
+  updateIssue,
+  upsertTag,
+} from "./generated/index.ts";
 export type IssueMutation = "close" | "reopen" | "invalid";
 
-export type CloseIssueBody = {
-  score_rating?: number;
-};
-export type ReopenIssueBody = {
-  reject_reason: string;
-};
-export type InvalidIssueBody = {
-  reason: string;
-};
+export type CloseIssueBody = NonNullable<CloseIssueData["body"]>;
+export type ReopenIssueBody = ReopenIssueData["body"];
+export type InvalidIssueBody = InvalidateIssueData["body"];
 export type IssueMutationBody = {
   close: CloseIssueBody;
   reopen: ReopenIssueBody;
@@ -59,8 +81,70 @@ export async function mutateIssue<K extends IssueMutation>(
   });
   return result.data.data;
 }
+
 export const issueOperations = {
   close: (id: number, body: CloseIssueBody) => mutateIssue("close", id, body),
   reopen: (id: number, body: ReopenIssueBody) => mutateIssue("reopen", id, body),
   invalid: (id: number, body: InvalidIssueBody) => mutateIssue("invalid", id, body),
 } as const;
+
+export async function fetchIssue(id: number): Promise<IssueItem> {
+  const result = await getIssue({ client: sdkClient, path: { id }, throwOnError: true });
+  return result.data.data as IssueItem;
+}
+
+export async function fetchIssuePage(
+  query: NonNullable<ListIssuesData["query"]> | Record<string, unknown>,
+): Promise<{ data: IssueItem[]; pagination: PaginationMeta }> {
+  const result = await listIssues({
+    client: sdkClient,
+    query: query as NonNullable<ListIssuesData["query"]>,
+    throwOnError: true,
+  });
+  return result.data as { data: IssueItem[]; pagination: PaginationMeta };
+}
+
+export type UpdateIssueBody = NonNullable<UpdateIssueData["body"]>;
+
+export async function patchIssue(id: number, body: UpdateIssueBody): Promise<IssueItem> {
+  const result = await updateIssue({
+    client: sdkClient,
+    path: { id },
+    body,
+    throwOnError: true,
+  });
+  return result.data.data as IssueItem;
+}
+
+export async function fetchLocations(): Promise<LocationItem[]> {
+  const result = await listLocations({ client: sdkClient, throwOnError: true });
+  return result.data.data as LocationItem[];
+}
+
+export async function fetchTags(): Promise<TagItem[]> {
+  const result = await listTags({ client: sdkClient, throwOnError: true });
+  return result.data.data.map((tag) => ({
+    ...tag,
+    tag_code: tag.code,
+    label_vi: tag.name_vi,
+    label_zh: tag.name_zh,
+    label_en: tag.name_en,
+  }));
+}
+
+export async function createTag(body: UpsertTagData["body"]): Promise<TagItem> {
+  const result = await upsertTag({ client: sdkClient, body, throwOnError: true });
+  return result.data.data;
+}
+
+export async function fetchLocationLeaderboard(): Promise<LocationHealthScore[]> {
+  const result = await getLocationLeaderboard({ client: sdkClient, throwOnError: true });
+  return result.data.data;
+}
+
+export async function fetchReporterLeaderboard(
+  query?: GetReporterLeaderboardData["query"],
+): Promise<ReporterLeaderboard[]> {
+  const result = await getReporterLeaderboard({ client: sdkClient, query, throwOnError: true });
+  return result.data.data as ReporterLeaderboard[];
+}

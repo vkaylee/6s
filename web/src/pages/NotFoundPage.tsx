@@ -35,7 +35,9 @@ export function NotFoundPage() {
         </div>
       </main>
 
-      <footer className="p-4 text-center text-[11px] text-zinc-400">6S Management System</footer>
+      <footer className="p-4 text-center text-[11px] text-zinc-400">
+        {t("not_found.footer_title")}
+      </footer>
     </div>
   );
 }

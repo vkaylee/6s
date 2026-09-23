@@ -25,7 +25,9 @@
     "showing_count": "Showing {current} of {total} issues",
     "all_loaded": "All {total} issues loaded",
     "back": "Back",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "ok": "OK",
+    "failed": "Failed"
   },
   "auth": {
     "login": "Login",
@@ -148,6 +150,7 @@
     "no_location_data": "No weekly score data",
     "no_reporter_data": "No monthly leaderboard data",
     "points_unit": "pts",
+    "score_history_load_error": "Failed to load score history",
     "issues_unit": "issues",
     "cycle_weekly": "Weekly Cycle (Since Mon)",
     "cycle_monthly": "Monthly Cycle (Since 1st)",
@@ -782,6 +785,7 @@
     "sort_lowest_health": "Lowest Health",
     "sort_most_open": "Most Open Issues",
     "search_location": "Search area code / name...",
+    "drilldown": "Drill down ↗",
     "drilldown_title": "Issues in {target}",
     "drilldown_subtitle": "Click any issue to inspect before/after evidence and review log",
     "drilldown_empty": "No issues recorded in this area",
@@ -828,6 +832,7 @@
   "not_found": {
     "title": "404 - Page Not Found",
     "description": "The page you are looking for does not exist or has been moved.",
-    "back_home": "Back to Home"
+    "back_home": "Back to Home",
+    "footer_title": "6S Management System"
   }
 }

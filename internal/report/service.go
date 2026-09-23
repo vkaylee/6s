@@ -4,12 +4,70 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"6s/internal/auth"
 	"6s/internal/db"
 )
 
-const maxExportRows = 100_000
+const (
+	maxExportRows      = 10_000
+	maxExportRangeDays = 90
+)
+
+type reportBounds struct {
+	DateFrom     time.Time
+	DateTo       time.Time
+	SiteID       int64
+	LocationCode sql.NullString
+	UserID       int64
+	Role         string
+}
+
+func (b reportBounds) kpiParams() db.GetReportKPISummaryParams {
+	return db.GetReportKPISummaryParams{
+		DateFrom:     b.DateFrom,
+		DateTo:       b.DateTo,
+		SiteID:       b.SiteID,
+		LocationCode: b.LocationCode,
+		UserID:       b.UserID,
+		Role:         b.Role,
+	}
+}
+
+func (b reportBounds) categoryParams() db.GetCategoryBreakdownParams {
+	return db.GetCategoryBreakdownParams{
+		DateFrom:     b.DateFrom,
+		DateTo:       b.DateTo,
+		SiteID:       b.SiteID,
+		LocationCode: b.LocationCode,
+		UserID:       b.UserID,
+		Role:         b.Role,
+	}
+}
+
+func (b reportBounds) trendParams() db.GetIssueTrendsParams {
+	return db.GetIssueTrendsParams{
+		DateFrom:     b.DateFrom,
+		DateTo:       b.DateTo,
+		SiteID:       b.SiteID,
+		LocationCode: b.LocationCode,
+		UserID:       b.UserID,
+		Role:         b.Role,
+	}
+}
+
+func (b reportBounds) topTagParams(limit int32) db.GetTopViolatedTagsParams {
+	return db.GetTopViolatedTagsParams{
+		DateFrom:     b.DateFrom,
+		DateTo:       b.DateTo,
+		SiteID:       b.SiteID,
+		LocationCode: b.LocationCode,
+		UserID:       b.UserID,
+		Role:         b.Role,
+		Limit:        limit,
+	}
+}
 
 // KPISummary matches the executive dashboard summary requirements.
 type KPISummary struct {
@@ -58,10 +116,17 @@ type TeamKPI struct {
 	ConfirmedCauseCount int64  `json:"confirmed_cause_count"`
 }
 
-// ExportTeamFilter contains optional team filters for issue exports.
+// ExportTeamFilter contains optional filters for issue exports.
 type ExportTeamFilter struct {
 	AssignedTeamID *int64
 	MineTeam       *bool
+	DateRange      ExportDateRange
+}
+
+// ExportDateRange bounds the issue creation window of an export as [From, To).
+type ExportDateRange struct {
+	From time.Time
+	To   time.Time
 }
 
 // SummaryResponse formats the complete aggregation payload for ReportsPage.
@@ -74,8 +139,8 @@ type SummaryResponse struct {
 
 // Store defines database operations required by report service.
 type Store interface {
-	GetReportKPISummary(ctx context.Context, locationCode sql.NullString) (db.GetReportKPISummaryRow, error)
-	GetCategoryBreakdown(ctx context.Context, locationCode sql.NullString) ([]db.GetCategoryBreakdownRow, error)
+	GetReportKPISummary(ctx context.Context, arg db.GetReportKPISummaryParams) (db.GetReportKPISummaryRow, error)
+	GetCategoryBreakdown(ctx context.Context, arg db.GetCategoryBreakdownParams) ([]db.GetCategoryBreakdownRow, error)
 	GetIssueTrends(ctx context.Context, arg db.GetIssueTrendsParams) ([]db.GetIssueTrendsRow, error)
 	GetTopViolatedTags(ctx context.Context, arg db.GetTopViolatedTagsParams) ([]db.GetTopViolatedTagsRow, error)
 	ListIssuesForExport(ctx context.Context, arg db.ListIssuesForExportParams) ([]db.ListIssuesForExportRow, error)
@@ -109,8 +174,18 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 	if locationCode != "" {
 		locParam = sql.NullString{String: locationCode, Valid: true}
 	}
+	user, _ := auth.GetUserFromContext(ctx)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	bounds := reportBounds{
+		DateFrom:     today.AddDate(0, 0, -(days - 1)),
+		DateTo:       today.AddDate(0, 0, 1),
+		SiteID:       user.SiteID,
+		LocationCode: locParam,
+		UserID:       user.ID,
+		Role:         user.Role,
+	}
 
-	kpiRow, err := s.store.GetReportKPISummary(ctx, locParam)
+	kpiRow, err := s.store.GetReportKPISummary(ctx, bounds.kpiParams())
 	if err != nil {
 		return nil, fmt.Errorf("get kpi summary: %w", err)
 	}
@@ -132,7 +207,7 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 		ResolutionRate:      resRate,
 	}
 
-	catRows, err := s.store.GetCategoryBreakdown(ctx, locParam)
+	catRows, err := s.store.GetCategoryBreakdown(ctx, bounds.categoryParams())
 	if err != nil {
 		return nil, fmt.Errorf("get category breakdown: %w", err)
 	}
@@ -157,10 +232,7 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 		})
 	}
 
-	trendRows, err := s.store.GetIssueTrends(ctx, db.GetIssueTrendsParams{
-		Column1:      int32(days), //nolint:gosec
-		LocationCode: locParam,
-	})
+	trendRows, err := s.store.GetIssueTrends(ctx, bounds.trendParams())
 	if err != nil {
 		return nil, fmt.Errorf("get issue trends: %w", err)
 	}
@@ -174,10 +246,7 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 		})
 	}
 
-	tagRows, err := s.store.GetTopViolatedTags(ctx, db.GetTopViolatedTagsParams{
-		Limit:        10,
-		LocationCode: locParam,
-	})
+	tagRows, err := s.store.GetTopViolatedTags(ctx, bounds.topTagParams(10))
 	if err != nil {
 		return nil, fmt.Errorf("get top tags: %w", err)
 	}
@@ -202,14 +271,23 @@ func (s *ServiceImpl) GetSummary(ctx context.Context, days int, locationCode str
 	}, nil
 }
 
-// GetExportData fetches at most maxExportRows issues visible to the authenticated user.
-// The SQL query applies the same site and visibility policy as issue listing; the service cap protects alternate stores.
+// GetExportData fetches bounded, site-scoped issue rows for export.
 func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locationCode string, teamFilters ...ExportTeamFilter) ([]db.ListIssuesForExportRow, error) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok || user.ID <= 0 || user.SiteID <= 0 {
 		return nil, fmt.Errorf("authenticated user with site scope required for export")
 	}
-
+	dateRange := ExportDateRange{}
+	if len(teamFilters) > 0 {
+		dateRange = teamFilters[0].DateRange
+	}
+	if dateRange.From.IsZero() && dateRange.To.IsZero() {
+		today := time.Now().UTC().Truncate(24 * time.Hour)
+		dateRange = ExportDateRange{From: today.AddDate(0, 0, -29), To: today.AddDate(0, 0, 1)}
+	}
+	if dateRange.From.IsZero() || dateRange.To.IsZero() || !dateRange.To.After(dateRange.From) || dateRange.To.Sub(dateRange.From) > maxExportRangeDays*24*time.Hour {
+		return nil, fmt.Errorf("export date range must be between 1 and %d days", maxExportRangeDays)
+	}
 	var statusParam, catParam, locParam sql.NullString
 	if status != "" {
 		statusParam = sql.NullString{String: status, Valid: true}
@@ -234,7 +312,8 @@ func (s *ServiceImpl) GetExportData(ctx context.Context, status, category, locat
 	rows, err := s.store.ListIssuesForExport(ctx, db.ListIssuesForExportParams{
 		Status: statusParam, Category: catParam, LocationCode: locParam,
 		AssignedTeamID: assignedTeamID, MineTeam: mineTeam,
-		SiteID: user.SiteID, UserID: user.ID, Role: user.Role,
+		UserID: user.ID, DateFrom: sql.NullTime{Time: dateRange.From, Valid: true}, DateTo: sql.NullTime{Time: dateRange.To, Valid: true},
+		SiteID: user.SiteID, Role: user.Role,
 	})
 	if err != nil {
 		return nil, err

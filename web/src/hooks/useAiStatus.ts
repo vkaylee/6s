@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiClient } from "../api/client.ts";
+import { getAiStatus } from "../api/generated/index.ts";
 
 let cached: boolean | null = null;
 let request: Promise<boolean> | null = null;
@@ -7,9 +7,10 @@ let request: Promise<boolean> | null = null;
 /** Reads the server-side AI toggle once per session for every AI affordance. */
 export function loadAiStatus(): Promise<boolean> {
   if (cached !== null) return Promise.resolve(cached);
-  request ??= apiClient<{ enabled: boolean }>("/api/ai/status")
-    .then((response) => {
-      cached = response?.enabled === true;
+  request ??= getAiStatus({ throwOnError: true })
+    .then((res) => {
+      const payload = res.data as { data?: { enabled?: boolean }; enabled?: boolean };
+      cached = (payload.data?.enabled ?? payload.enabled) === true;
       return cached;
     })
     .catch(() => {

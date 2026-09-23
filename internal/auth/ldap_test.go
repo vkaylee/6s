@@ -3,7 +3,9 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/go-ldap/ldap/v3"
 )
@@ -201,6 +203,43 @@ func TestLiveLDAPClient_Coverage(t *testing.T) {
 	// Dial failure in Authenticate
 	if _, err := clientPlain.Authenticate("user", "pass"); err == nil {
 		t.Error("expected error for unreachable server in Authenticate, got nil")
+	}
+}
+func TestLiveLDAPClient_DialRetriesTransientFailureWithBoundedAttempts(t *testing.T) {
+	client := NewLiveLDAPClient(LDAPConfig{})
+	var calls int
+	client.dialFunc = func() (*ldap.Conn, error) {
+		calls++
+		return nil, fmt.Errorf("temporary failure: %w", ErrLDAPUnreachable)
+	}
+
+	started := time.Now()
+	_, err := client.dial()
+	if !errors.Is(err, ErrLDAPUnreachable) {
+		t.Fatalf("expected ErrLDAPUnreachable, got %v", err)
+	}
+	if calls != ldapDialAttempts {
+		t.Fatalf("expected %d bounded dial attempts, got %d", ldapDialAttempts, calls)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("LDAP retry backoff exceeded bound: %v", elapsed)
+	}
+}
+
+func TestLiveLDAPClient_DialDoesNotRetryNonRetryableFailure(t *testing.T) {
+	client := NewLiveLDAPClient(LDAPConfig{})
+	var calls int
+	client.dialFunc = func() (*ldap.Conn, error) {
+		calls++
+		return nil, ErrLDAPInvalidCredentials
+	}
+
+	_, err := client.dial()
+	if !errors.Is(err, ErrLDAPInvalidCredentials) {
+		t.Fatalf("expected invalid credentials error, got %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("non-retryable LDAP failure made %d attempts, want 1", calls)
 	}
 }
 

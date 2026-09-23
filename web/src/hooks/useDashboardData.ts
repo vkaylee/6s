@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { apiClient } from "../api/client.ts";
-import type { Tag } from "../api/generated/index.ts";
 import { subscribeIssueEvents } from "../api/issueEvents.ts";
+import {
+  fetchIssue,
+  fetchIssuePage,
+  fetchLocationLeaderboard,
+  fetchLocations,
+  fetchReporterLeaderboard,
+  fetchTags,
+} from "../api/operations.ts";
 import type { FilterState } from "../components/FilterDrawer.tsx";
 import type { FacetKey } from "../components/QuickFacets.tsx";
 import { hasCapability, type UserProfile } from "../store/authStore.ts";
@@ -40,18 +46,17 @@ const EMPTY_FILTERS: FilterState = {
   mineTeam: false,
 };
 
-export function normalizeTags(tags: Tag[]): TagItem[] {
+export function normalizeTags(tags: TagItem[]): TagItem[] {
   return tags.map((tag) => ({
-    tag_code: tag.code,
+    tag_code: tag.code || tag.tag_code || "",
     category: tag.category,
-    label_vi: tag.name_vi,
-    label_zh: tag.name_zh,
-    label_en: tag.name_en,
+    label_vi: tag.name_vi || tag.label_vi || "",
+    label_zh: tag.name_zh || tag.label_zh || "",
+    label_en: tag.name_en || tag.label_en,
     use_count: tag.use_count,
     is_preset: tag.is_preset,
   }));
 }
-
 interface UseDashboardDataOptions {
   accessToken: string | null;
   locale: string;
@@ -151,7 +156,7 @@ export function useDashboardData({
       return;
     }
     try {
-      const fetched = await apiClient<IssueItem>(`/api/issues/${issueId}`);
+      const fetched = await fetchIssue(issueId);
       if (fetched) setSelectedIssue(fetched);
     } catch {
       // ignore if not found
@@ -167,13 +172,10 @@ export function useDashboardData({
     const requestId = ++masterDataRequest.current;
     setDashboardErrors((prev) => ({ ...prev, masterData: false }));
     try {
-      const [locData, tagData] = await Promise.all([
-        apiClient<LocationItem[]>("/api/locations"),
-        apiClient<Tag[]>("/api/tags"),
-      ]);
+      const [locData, tagData] = await Promise.all([fetchLocations(), fetchTags()]);
       if (requestId !== masterDataRequest.current) return;
       setLocations(locData || []);
-      setTags(normalizeTags(tagData || []));
+      setTags(tagData || []);
     } catch {
       if (requestId === masterDataRequest.current) {
         setDashboardErrors((prev) => ({ ...prev, masterData: true }));
@@ -195,9 +197,9 @@ export function useDashboardData({
     const filters = customFilters || advancedFilters;
     const queryParams = buildIssueQuery(targetPage, filters);
     try {
-      const res = await apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
-        includeMeta: true,
-      });
+      const res = await fetchIssuePage(
+        Object.fromEntries(queryParams.entries()) as Record<string, unknown>,
+      );
       if (requestId !== issuesRequest.current) return;
       const list = res?.data || [];
       const meta = res?.pagination || { page: targetPage, limit: 20, total: list.length };
@@ -236,9 +238,7 @@ export function useDashboardData({
     setIssuePage(nextPage);
     const queryParams = buildIssueQuery(nextPage, advancedFilters);
     setIsLoadingMore(true);
-    apiClient<IssueItem[]>(`/api/issues?${queryParams.toString()}`, {
-      includeMeta: true,
-    })
+    fetchIssuePage(Object.fromEntries(queryParams.entries()) as Record<string, unknown>)
       .then((res) => {
         if (requestId !== issuesRequest.current) return;
         if (res?.pagination) setPaginationMeta(res.pagination);
@@ -275,8 +275,8 @@ export function useDashboardData({
     setDashboardErrors((prev) => ({ ...prev, leaderboards: false }));
     try {
       const [locHealth, repLeader] = await Promise.all([
-        apiClient<LocationHealthScore[]>("/api/leaderboard/locations"),
-        apiClient<ReporterLeaderboard[]>("/api/leaderboard/reporters"),
+        fetchLocationLeaderboard(),
+        fetchReporterLeaderboard(),
       ]);
       if (requestId !== leaderboardsRequest.current) return;
       setLocationHealth(locHealth || []);
@@ -323,7 +323,7 @@ export function useDashboardData({
       if (user) {
         loadIssues(true);
         if (selectedIssue) {
-          apiClient<IssueItem>(`/api/issues/${selectedIssue.id}`)
+          fetchIssue(selectedIssue.id)
             .then((updated) => {
               if (updated) setSelectedIssue(updated);
             })

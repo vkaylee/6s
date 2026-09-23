@@ -1,7 +1,7 @@
 import { AlertTriangle, Languages, Loader2, ShieldCheck, Sparkles, UserCog } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
-import { issueOperations } from "../api/operations.ts";
+import { fetchIssue, issueOperations, patchIssue } from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -588,11 +588,7 @@ export function IssueDetailModal({
   const canCloseIssue = serverActions ? serverActions.close === true : canClose;
   const handleQuickChangeCategory = async (newCat: IssueCategory) => {
     try {
-      const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: newCat }),
-      });
+      const updated = await patchIssue(currentIssue.id, { category: newCat });
       haptics.success();
       if (updated) {
         setCurrentIssue(updated);
@@ -611,11 +607,7 @@ export function IssueDetailModal({
       return;
     }
     try {
-      const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location_code: newLocCode }),
-      });
+      const updated = await patchIssue(currentIssue.id, { location_code: newLocCode });
       haptics.success();
       if (updated) {
         setCurrentIssue(updated);
@@ -629,7 +621,7 @@ export function IssueDetailModal({
   };
   const reloadCurrentIssue = async () => {
     try {
-      const fresh = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`);
+      const fresh = await fetchIssue(currentIssue.id);
       if (fresh) setCurrentIssue(fresh);
     } catch {
       // Keep the local copy when the refresh fails (offline or transient error).

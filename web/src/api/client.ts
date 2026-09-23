@@ -1,18 +1,15 @@
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
-import {
-  type Client,
-  createClient,
-  createConfig,
-  jsonBodySerializer,
-} from "./generated/client/index.ts";
+import { type Client, jsonBodySerializer } from "./generated/client/index.ts";
+import { client } from "./generated/client.gen.ts";
 import type { HttpMethod } from "./generated/core/types.gen.ts";
+import type { ErrorDetail, PaginationMeta } from "./generated/index.ts";
 import { refresh } from "./generated/index.ts";
 
 export interface ApiEnvelope<T> {
   data?: T;
-  error?: { code: string; message: string; details?: unknown };
-  pagination?: { page: number; limit: number; total: number };
+  error?: ErrorDetail;
+  pagination?: PaginationMeta;
 }
 
 export class ApiError extends Error {
@@ -157,10 +154,13 @@ export async function fetchAuthenticatedBlob(url: string, init?: RequestInit): P
   return res.blob();
 }
 
-export const sdkClient: Client = createClient(
-  createConfig({ baseUrl, fetch: authenticatedFetch, responseStyle: "fields" }),
-);
-sdkClient.interceptors.error.use((error, response) => {
+client.setConfig({
+  baseUrl,
+  fetch: authenticatedFetch,
+  responseStyle: "fields",
+  parseAs: "json",
+});
+client.interceptors.error.use((error, response) => {
   if (!response) throw error;
   const detail = isRecord(error) && isRecord(error.error) ? error.error : undefined;
   throw new ApiError(
@@ -170,6 +170,8 @@ sdkClient.interceptors.error.use((error, response) => {
     detail?.details,
   );
 });
+
+export const sdkClient: Client = client;
 
 export async function refreshAccessToken(): Promise<string | null> {
   const { getRefreshToken, setAuth, user, clearAuth } = useAuthStore.getState();
@@ -245,7 +247,7 @@ export async function apiClient<T>(
     responseStyle: "fields" as const,
     throwOnError: true as const,
   };
-  const result = await sdkClient.request(generatedOptions);
+  const result = await client.request(generatedOptions);
   const envelope = parseEnvelope<T>(result.data);
   if (envelope.data === undefined) {
     throw new ApiError(502, "API response is missing data", "INVALID_RESPONSE");

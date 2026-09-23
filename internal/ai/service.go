@@ -33,6 +33,7 @@ const (
 	timeFormatRFC3339         = "2006-01-02T15:04:05Z07:00"
 	defaultHTTPTimeout        = 30 * time.Second
 	defaultMinRequestInterval = 1 * time.Second
+	aiMaxRetries              = 2
 )
 
 // Store defines persistence operations required for AI management.
@@ -128,6 +129,14 @@ type Service struct {
 func NewService(store Store, cipher *crypto.Cipher, httpClient *http.Client, storageDir string) *Service {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
+	} else {
+		// Copy caller-owned clients: an explicit positive timeout is respected,
+		// while a missing one would leave gateway calls unbounded.
+		clientCopy := *httpClient
+		if clientCopy.Timeout <= 0 {
+			clientCopy.Timeout = defaultHTTPTimeout
+		}
+		httpClient = &clientCopy
 	}
 	return &Service{
 		store:       store,
@@ -352,6 +361,9 @@ func normalizeLangCode(lang string) string  { return NormalizeLangCode(lang) }
 func (s *Service) newOpenAIClient(baseURL, apiKey string) openai.Client {
 	opts := []option.RequestOption{
 		option.WithBaseURL(normalizeBaseURL(baseURL)),
+		// Chat completions have no application-side mutation; bounded SDK retries
+		// cover transient gateway failures while preserving prompt API behavior.
+		option.WithMaxRetries(aiMaxRetries),
 	}
 	if apiKey != "" {
 		opts = append(opts, option.WithAPIKey(apiKey))

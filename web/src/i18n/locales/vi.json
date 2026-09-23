@@ -25,7 +25,9 @@
     "showing_count": "Đang hiển thị {current} / {total} sự cố",
     "all_loaded": "Đã hiển thị tất cả {total} sự cố",
     "back": "Quay lại",
-    "saving": "Đang lưu…"
+    "saving": "Đang lưu…",
+    "ok": "OK",
+    "failed": "Thất bại"
   },
   "auth": {
     "login": "Đăng nhập",
@@ -148,6 +150,7 @@
     "no_location_data": "Chưa có dữ liệu chấm điểm tuần",
     "no_reporter_data": "Chưa có dữ liệu vinh danh tháng",
     "points_unit": "điểm",
+    "score_history_load_error": "Không thể tải lịch sử điểm",
     "issues_unit": "lỗi",
     "cycle_weekly": "Chu kỳ tuần (từ Thứ Hai)",
     "cycle_monthly": "Chu kỳ tháng (từ mùng 1)",
@@ -782,6 +785,7 @@
     "sort_lowest_health": "Điểm thấp nhất",
     "sort_most_open": "Nhiều lỗi nhất",
     "search_location": "Tìm chuyền / khu vực...",
+    "drilldown": "Xem chi tiết ↗",
     "drilldown_title": "Chi tiết sự cố tại {target}",
     "drilldown_subtitle": "Bấm vào từng sự cố để xem ảnh trước/sau và nhật ký xử lý",
     "drilldown_empty": "Không có sự cố nào ghi nhận tại khu vực này",
@@ -828,6 +832,7 @@
   "not_found": {
     "title": "404 - Không tìm thấy trang",
     "description": "Đường dẫn bạn truy cập không tồn tại hoặc đã bị thay đổi.",
-    "back_home": "Về trang chủ"
+    "back_home": "Về trang chủ",
+    "footer_title": "Hệ thống quản lý 6S"
   }
 }

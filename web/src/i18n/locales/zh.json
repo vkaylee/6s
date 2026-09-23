@@ -25,7 +25,9 @@
     "showing_count": "已显示 {current} / {total} 个问题",
     "all_loaded": "已加载全部 {total} 个问题",
     "back": "返回",
-    "saving": "正在保存…"
+    "saving": "正在保存…",
+    "ok": "确定",
+    "failed": "失败"
   },
   "auth": {
     "login": "登录",
@@ -148,6 +150,7 @@
     "no_location_data": "暂无周评分数据",
     "no_reporter_data": "暂无月度荣誉榜数据",
     "points_unit": "分",
+    "score_history_load_error": "无法加载积分记录",
     "issues_unit": "条",
     "cycle_weekly": "周周期 (本周一开始)",
     "cycle_monthly": "月周期 (本月1号开始)",
@@ -782,6 +785,7 @@
     "sort_lowest_health": "健康分最低",
     "sort_most_open": "未闭环最多",
     "search_location": "搜索产线/区域...",
+    "drilldown": "下钻详情 ↗",
     "drilldown_title": "{target} 的问题列表",
     "drilldown_subtitle": "点击具体问题可查看整改前/后对比图及记录",
     "drilldown_empty": "该区域暂无登记的问题记录",
@@ -828,6 +832,7 @@
   "not_found": {
     "title": "404 - 页面未找到",
     "description": "您访问的页面不存在或已被移动。",
-    "back_home": "返回首页"
+    "back_home": "返回首页",
+    "footer_title": "6S 管理系统"
   }
 }

@@ -908,6 +908,57 @@ func TestTranslate_CacheHit_NoGatewayCall(t *testing.T) {
 		t.Error("gateway should not be called when translation is cached")
 	}
 }
+func TestTranslate_RetriesTransientGatewayFailureWithBoundedAttempts(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		http.Error(w, "temporary gateway failure", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	store := &mockStore{cfg: db.AiConfig{
+		IsEnabled:      true,
+		BaseUrl:        server.URL,
+		DefaultModel:   "gpt-4o-mini",
+		ModelTranslate: "gpt-4o-mini",
+	}}
+	svc := NewService(store, nil, server.Client(), "")
+	svc.SetMinInterval(0)
+
+	_, err := svc.Translate(context.Background(), "source text", "en")
+	if err == nil {
+		t.Fatal("expected gateway failure")
+	}
+	if calls != aiMaxRetries+1 {
+		t.Fatalf("expected one initial request plus %d retries, got %d", aiMaxRetries, calls)
+	}
+}
+
+func TestTranslate_DoesNotRetryNonRetryableGatewayFailure(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		http.Error(w, "invalid request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	store := &mockStore{cfg: db.AiConfig{
+		IsEnabled:      true,
+		BaseUrl:        server.URL,
+		DefaultModel:   "gpt-4o-mini",
+		ModelTranslate: "gpt-4o-mini",
+	}}
+	svc := NewService(store, nil, server.Client(), "")
+	svc.SetMinInterval(0)
+
+	_, err := svc.Translate(context.Background(), "source text", "en")
+	if err == nil {
+		t.Fatal("expected gateway failure")
+	}
+	if calls != 1 {
+		t.Fatalf("non-retryable gateway response made %d requests, want 1", calls)
+	}
+}
 
 func TestTranslate_CacheMiss_SavesToCache(t *testing.T) {
 	callCount := 0

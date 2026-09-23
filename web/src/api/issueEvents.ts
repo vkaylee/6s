@@ -1,4 +1,4 @@
-import { apiClient } from "./client.ts";
+import { createAuthTicket } from "./generated/index.ts";
 
 /** Delay before retrying a dropped issue event stream. */
 export const ISSUE_EVENT_RECONNECT_DELAY_MS = 1000;
@@ -31,9 +31,10 @@ export function subscribeIssueEvents(
     if (!active || connecting) return;
     connecting = true;
     try {
-      const { ticket } = await apiClient<{ ticket: string }>("/api/auth/ticket", {
-        method: "POST",
-      });
+      const res = await createAuthTicket({ throwOnError: true });
+      const envelope = res.data as { data?: { ticket?: string }; ticket?: string };
+      const ticket = envelope?.data?.ticket ?? envelope?.ticket;
+      if (!ticket) throw new Error("Missing ticket in response");
       if (!active) return;
       const next = new EventSource(`/api/issues/events?ticket=${encodeURIComponent(ticket)}`);
       source = next;

@@ -30,6 +30,7 @@ import {
 import { Link } from "wouter";
 
 import { apiClient, fetchAuthenticatedBlob } from "../api/client.ts";
+import { fetchIssuePage, fetchLocations, fetchTags } from "../api/operations.ts";
 import { IssueCard } from "../components/IssueCard.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
@@ -188,8 +189,8 @@ export function ReportsPage() {
         apiClient<ReportSummaryResponse>(`/api/reports/summary?days=${daysRange}${locationQuery}`),
         apiClient<LocationHealthScore[]>(`/api/leaderboard/locations${leaderboardLocationQuery}`),
         apiClient<ReporterLeaderboard[]>(`/api/leaderboard/reporters${leaderboardLocationQuery}`),
-        apiClient<LocationItem[]>("/api/locations"),
-        apiClient<TagItem[]>("/api/tags"),
+        fetchLocations(),
+        fetchTags(),
       ]);
       if (requestId !== reportRequest.current) return;
       setSummaryData(summaryRes || null);
@@ -260,9 +261,9 @@ export function ReportsPage() {
           params.set("tag_code", selectedTagDrill);
         }
 
-        const res = await apiClient<IssueItem[]>(`/api/issues?${params.toString()}`, {
-          includeMeta: true,
-        });
+        const res = await fetchIssuePage(
+          Object.fromEntries(params.entries()) as Record<string, unknown>,
+        );
         if (isCancelled) return;
         const list = res?.data || [];
         const metaTotal = res?.pagination?.total ?? list.length;
@@ -577,7 +578,9 @@ export function ReportsPage() {
                   <span>⚠️</span>
                   <span>{t("reports.safety_alerts")}</span>
                 </span>
-                <span className="text-[10px] lowercase text-rose-400">drilldown ↗</span>
+                <span className="text-[10px] lowercase text-rose-400">
+                  {t("reports.drilldown")}
+                </span>
               </span>
               <div className="flex items-baseline justify-between mt-1">
                 <span className="text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400">
@@ -600,7 +603,9 @@ export function ReportsPage() {
                   <span>⏱️</span>
                   <span>{t("reports.overdue_alerts")}</span>
                 </span>
-                <span className="text-[10px] lowercase text-amber-400">drilldown ↗</span>
+                <span className="text-[10px] lowercase text-amber-400">
+                  {t("reports.drilldown")}
+                </span>
               </span>
               <div className="flex items-baseline justify-between mt-1">
                 <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">
@@ -990,7 +995,8 @@ export function ReportsPage() {
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-sm font-black text-blue-600 dark:text-blue-400">
-                            {rep.points > 0 ? `+${rep.points}` : rep.points} pts
+                            {rep.points > 0 ? `+${rep.points}` : rep.points}{" "}
+                            {t("leaderboard.points_unit")}
                           </div>
                           <span className="text-[10px] text-zinc-400 font-bold uppercase">
                             {t("reports.total_points")}

@@ -870,19 +870,64 @@ func (q *Queries) GetAssetByID(ctx context.Context, id int64) (Asset, error) {
 }
 
 const getCategoryBreakdown = `-- name: GetCategoryBreakdown :many
-SELECT category, COUNT(*)::bigint AS count
-FROM issues
-WHERE ($1::varchar IS NULL OR location_code = $1)
-GROUP BY category ORDER BY category ASC
+SELECT i.category, COUNT(*)::bigint AS count
+FROM issues i
+WHERE i.created_at >= $1::timestamptz
+  AND i.created_at < $2::timestamptz
+  AND i.site_id = $3::bigint
+  AND ($4::varchar IS NULL OR i.location_code = $4)
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = $5::bigint
+      OR i.assignee_id = $5::bigint
+      OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = $5::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = $5::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
+GROUP BY i.category ORDER BY i.category ASC
 `
+
+type GetCategoryBreakdownParams struct {
+	DateFrom     time.Time
+	DateTo       time.Time
+	SiteID       int64
+	LocationCode sql.NullString
+	UserID       int64
+	Role         string
+}
 
 type GetCategoryBreakdownRow struct {
 	Category string
 	Count    int64
 }
 
-func (q *Queries) GetCategoryBreakdown(ctx context.Context, locationCode sql.NullString) ([]GetCategoryBreakdownRow, error) {
-	rows, err := q.db.QueryContext(ctx, getCategoryBreakdown, locationCode)
+func (q *Queries) GetCategoryBreakdown(ctx context.Context, arg GetCategoryBreakdownParams) ([]GetCategoryBreakdownRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCategoryBreakdown,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.SiteID,
+		arg.LocationCode,
+		arg.UserID,
+		arg.Role,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -992,17 +1037,54 @@ func (q *Queries) GetIssueByUUID(ctx context.Context, clientUuid string) (Issue,
 
 const getIssueTrends = `-- name: GetIssueTrends :many
 SELECT d.day::date AS date_key,
-       COUNT(CASE WHEN i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
+       COUNT(CASE WHEN i.created_at >= $1::timestamptz
+                       AND i.created_at < $2::timestamptz
+                       AND i.created_at::date = d.day::date THEN 1 END)::bigint AS created_count,
        COUNT(CASE WHEN (i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date)) THEN 1 END)::bigint AS resolved_count
-FROM generate_series(CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day', CURRENT_DATE, INTERVAL '1 day') AS d(day)
+FROM generate_series(
+    date_trunc('day', $1::timestamptz),
+    date_trunc('day', $2::timestamptz) - INTERVAL '1 day',
+    INTERVAL '1 day'
+) AS d(day)
 LEFT JOIN issues i ON (i.created_at::date = d.day::date OR i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date))
-  AND ($2::varchar IS NULL OR i.location_code = $2)
+  AND i.site_id = $3::bigint
+  AND ($4::varchar IS NULL OR i.location_code = $4)
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = $5::bigint
+      OR i.assignee_id = $5::bigint
+      OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = $5::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = $5::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
 GROUP BY d.day ORDER BY d.day ASC
 `
 
 type GetIssueTrendsParams struct {
-	Column1      int32
+	DateFrom     time.Time
+	DateTo       time.Time
+	SiteID       int64
 	LocationCode sql.NullString
+	UserID       int64
+	Role         string
 }
 
 type GetIssueTrendsRow struct {
@@ -1012,7 +1094,14 @@ type GetIssueTrendsRow struct {
 }
 
 func (q *Queries) GetIssueTrends(ctx context.Context, arg GetIssueTrendsParams) ([]GetIssueTrendsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getIssueTrends, arg.Column1, arg.LocationCode)
+	rows, err := q.db.QueryContext(ctx, getIssueTrends,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.SiteID,
+		arg.LocationCode,
+		arg.UserID,
+		arg.Role,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1243,9 +1332,47 @@ SELECT
     COUNT(CASE WHEN status = 'INVALID' THEN 1 END)::bigint AS invalid_issues,
     COUNT(CASE WHEN category = '6S' AND status != 'CLOSED' THEN 1 END)::bigint AS safety_issues,
     COUNT(CASE WHEN status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours' THEN 1 END)::bigint AS overdue_issues
-FROM issues
-WHERE ($1::varchar IS NULL OR location_code = $1)
+FROM issues i
+WHERE i.created_at >= $1::timestamptz
+  AND i.created_at < $2::timestamptz
+  AND i.site_id = $3::bigint
+  AND ($4::varchar IS NULL OR i.location_code = $4)
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = $5::bigint
+      OR i.assignee_id = $5::bigint
+      OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = $5::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = $5::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
 `
+
+type GetReportKPISummaryParams struct {
+	DateFrom     time.Time
+	DateTo       time.Time
+	SiteID       int64
+	LocationCode sql.NullString
+	UserID       int64
+	Role         string
+}
 
 type GetReportKPISummaryRow struct {
 	TotalIssues         int64
@@ -1257,8 +1384,15 @@ type GetReportKPISummaryRow struct {
 	OverdueIssues       int64
 }
 
-func (q *Queries) GetReportKPISummary(ctx context.Context, locationCode sql.NullString) (GetReportKPISummaryRow, error) {
-	row := q.db.QueryRowContext(ctx, getReportKPISummary, locationCode)
+func (q *Queries) GetReportKPISummary(ctx context.Context, arg GetReportKPISummaryParams) (GetReportKPISummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getReportKPISummary,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.SiteID,
+		arg.LocationCode,
+		arg.UserID,
+		arg.Role,
+	)
 	var i GetReportKPISummaryRow
 	err := row.Scan(
 		&i.TotalIssues,
@@ -1466,14 +1600,48 @@ func (q *Queries) GetTeamMembership(ctx context.Context, arg GetTeamMembershipPa
 const getTopViolatedTags = `-- name: GetTopViolatedTags :many
 SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
 FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
-WHERE ($2::varchar IS NULL OR i.location_code = $2)
+WHERE i.created_at >= $1::timestamptz
+  AND i.created_at < $2::timestamptz
+  AND i.site_id = $3::bigint
+  AND ($4::varchar IS NULL OR i.location_code = $4)
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR i.creator_id = $5::bigint
+      OR i.assignee_id = $5::bigint
+      OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = $5::bigint
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR ($6::varchar = 'LINE_LEADER' AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = $5::bigint
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
 GROUP BY t.code, t.category, t.name_vi, t.name_zh, t.name_en
-ORDER BY violation_count DESC, t.code ASC LIMIT $1
+ORDER BY violation_count DESC, t.code ASC LIMIT $7::int
 `
 
 type GetTopViolatedTagsParams struct {
-	Limit        int32
+	DateFrom     time.Time
+	DateTo       time.Time
+	SiteID       int64
 	LocationCode sql.NullString
+	UserID       int64
+	Role         string
+	Limit        int32
 }
 
 type GetTopViolatedTagsRow struct {
@@ -1486,7 +1654,15 @@ type GetTopViolatedTagsRow struct {
 }
 
 func (q *Queries) GetTopViolatedTags(ctx context.Context, arg GetTopViolatedTagsParams) ([]GetTopViolatedTagsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getTopViolatedTags, arg.Limit, arg.LocationCode)
+	rows, err := q.db.QueryContext(ctx, getTopViolatedTags,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.SiteID,
+		arg.LocationCode,
+		arg.UserID,
+		arg.Role,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1872,6 +2048,51 @@ func (q *Queries) InsertScoreLog(ctx context.Context, arg InsertScoreLogParams) 
 		arg.RuleKey,
 		arg.Points,
 		arg.PenaltyDate,
+	)
+	return err
+}
+
+const insertScoreLogsForIssue = `-- name: InsertScoreLogsForIssue :exec
+INSERT INTO score_logs (
+    issue_id, target_type, target_id, rule_key, points, created_at, penalty_date
+)
+SELECT
+    $1::bigint,
+    t.target_type,
+    t.target_id,
+    t.rule_key,
+    t.points,
+    CURRENT_TIMESTAMP,
+    NULLIF(t.penalty_date, '')::date
+FROM (
+    SELECT
+        unnest($2::varchar[]) AS target_type,
+        unnest($3::varchar[]) AS target_id,
+        unnest($4::varchar[]) AS rule_key,
+        unnest($5::int[]) AS points,
+        unnest($6::varchar[]) AS penalty_date
+) AS t
+ON CONFLICT (issue_id, rule_key, penalty_date) WHERE penalty_date IS NOT NULL
+DO NOTHING
+`
+
+type InsertScoreLogsForIssueParams struct {
+	IssueID      int64
+	TargetTypes  []string
+	TargetIds    []string
+	RuleKeys     []string
+	Points       []int32
+	PenaltyDates []string
+}
+
+func (q *Queries) InsertScoreLogsForIssue(ctx context.Context, arg InsertScoreLogsForIssueParams) error {
+	_, err := q.db.ExecContext(ctx, insertScoreLogsForIssue,
+		arg.IssueID,
+		pq.Array(arg.TargetTypes),
+		pq.Array(arg.TargetIds),
+		pq.Array(arg.RuleKeys),
+		pq.Array(arg.Points),
+		pq.Array(arg.PenaltyDates),
 	)
 	return err
 }
@@ -2354,9 +2575,11 @@ WHERE ($1::varchar IS NULL OR i.status = $1)
   AND ($3::varchar IS NULL OR i.location_code = $3)
   AND ($4::bigint IS NULL OR i.assigned_team_id = $4::bigint)
   AND ($5::boolean IS NOT TRUE OR EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = $6::bigint AND tm.team_id = i.assigned_team_id))
-  AND ($7::bigint = 0 OR i.site_id = $7)
-  AND ($7::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $8::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($8::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($8::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $6::bigint AND tm2.team_id = i.assigned_team_id))
-GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 100000
+  AND ($7::timestamptz IS NULL OR i.created_at >= $7)
+  AND ($8::timestamptz IS NULL OR i.created_at < $8)
+  AND ($9::bigint = 0 OR i.site_id = $9)
+  AND ($9::bigint = 0 OR i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $6::bigint OR i.assignee_id = $6::bigint OR $10::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($10::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $6::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($10::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $6::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id)) OR EXISTS (SELECT 1 FROM team_memberships tm2 JOIN teams t2 ON t2.id = tm2.team_id AND t2.is_active JOIN users u2 ON u2.id = tm2.user_id AND u2.is_active WHERE tm2.user_id = $6::bigint AND tm2.team_id = i.assigned_team_id))
+GROUP BY i.id, loc.code, loc.name_vi, loc.name_zh, loc.name_en, u.id, res.id ORDER BY i.created_at DESC LIMIT 10000
 `
 
 type ListIssuesForExportParams struct {
@@ -2366,6 +2589,8 @@ type ListIssuesForExportParams struct {
 	AssignedTeamID sql.NullInt64
 	MineTeam       sql.NullBool
 	UserID         int64
+	DateFrom       sql.NullTime
+	DateTo         sql.NullTime
 	SiteID         int64
 	Role           string
 }
@@ -2400,6 +2625,8 @@ func (q *Queries) ListIssuesForExport(ctx context.Context, arg ListIssuesForExpo
 		arg.AssignedTeamID,
 		arg.MineTeam,
 		arg.UserID,
+		arg.DateFrom,
+		arg.DateTo,
 		arg.SiteID,
 		arg.Role,
 	)
