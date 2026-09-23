@@ -35,6 +35,10 @@ interface MediaErrorCopy {
   tone: "amber" | "blue" | "slate";
 }
 
+export function isRetryableMediaError(error: AuthenticatedImageError | null): boolean {
+  return error === "NETWORK_ERROR" || error === "UNKNOWN";
+}
+
 function errorCopy(error: AuthenticatedImageError | null, t: (key: string) => string) {
   switch (error) {
     case "FORBIDDEN":
