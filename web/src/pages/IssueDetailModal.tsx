@@ -959,31 +959,17 @@ export function IssueDetailModal({
               </div>
             ) : (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">
                     {t("issue_detail.photo_before_label")}
                   </span>
                   {!beforePhotoError && (
                     <span className="text-[11px] text-zinc-400">
-                      🔍 {t("issue_detail.tap_to_zoom")}
+                      {t("issue_detail.tap_to_zoom")}
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  disabled={Boolean(beforePhotoError)}
-                  onClick={() => {
-                    if (beforePhotoError) return;
-                    setZoomScale(1);
-                    const idx = photoList.findIndex(
-                      (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
-                    );
-                    setPreviewIndex(idx >= 0 ? idx : 0);
-                  }}
-                  className={`w-full text-left relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden ${
-                    beforePhotoError ? "cursor-default" : "group cursor-pointer"
-                  }`}
-                >
+                <div className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800">
                   <AuthenticatedImage
                     imageUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
                     alt={t("issue_detail.photo_before_alt")}
@@ -994,44 +980,41 @@ export function IssueDetailModal({
                     }`}
                   />
                   {!beforePhotoError && (
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
-                        🔍 {t("issue_detail.tap_to_zoom")}
+                    <button
+                      type="button"
+                      aria-label={t("issue_detail.tap_to_zoom")}
+                      onClick={() => {
+                        setZoomScale(1);
+                        const idx = photoList.findIndex(
+                          (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
+                        );
+                        setPreviewIndex(idx >= 0 ? idx : 0);
+                      }}
+                      className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+                    >
+                      <span className="rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100">
+                        {t("issue_detail.tap_to_zoom")}
                       </span>
-                    </div>
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             )}
 
             {/* Detail photo (Before) if available */}
             {currentIssue.photo_detail && (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">
                     {t("issue_detail.photo_detail_label")}
                   </span>
                   {!detailPhotoError && (
                     <span className="text-[11px] text-zinc-400">
-                      🔍 {t("issue_detail.tap_to_zoom")}
+                      {t("issue_detail.tap_to_zoom")}
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  disabled={Boolean(detailPhotoError)}
-                  onClick={() => {
-                    if (detailPhotoError) return;
-                    setZoomScale(1);
-                    const idx = photoList.findIndex(
-                      (p) => p.url === resolvePhotoUrl(currentIssue.photo_detail, "detail"),
-                    );
-                    setPreviewIndex(idx >= 0 ? idx : 1);
-                  }}
-                  className={`w-full text-left relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden ${
-                    detailPhotoError ? "cursor-default" : "group cursor-pointer"
-                  }`}
-                >
+                <div className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800">
                   <AuthenticatedImage
                     imageUrl={resolvePhotoUrl(currentIssue.photo_detail, "detail")}
                     alt={t("issue_detail.photo_detail_alt")}
@@ -1042,13 +1025,24 @@ export function IssueDetailModal({
                     }`}
                   />
                   {!detailPhotoError && (
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
-                        🔍 {t("issue_detail.tap_to_zoom")}
+                    <button
+                      type="button"
+                      aria-label={t("issue_detail.tap_to_zoom")}
+                      onClick={() => {
+                        setZoomScale(1);
+                        const idx = photoList.findIndex(
+                          (p) => p.url === resolvePhotoUrl(currentIssue.photo_detail, "detail"),
+                        );
+                        setPreviewIndex(idx >= 0 ? idx : 1);
+                      }}
+                      className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+                    >
+                      <span className="rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100">
+                        {t("issue_detail.tap_to_zoom")}
                       </span>
-                    </div>
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             )}
           </div>

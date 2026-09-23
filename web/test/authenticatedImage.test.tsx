@@ -1,6 +1,16 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
-import { AuthenticatedImage } from "../src/components/AuthenticatedImage.tsx";
+import {
+  AuthenticatedImage,
+  isRetryableMediaError,
+} from "../src/components/AuthenticatedImage.tsx";
+import { useI18nStore } from "../src/i18n/index.ts";
+
+afterEach(() => {
+  useI18nStore.setState({ locale: "vi" });
+});
+
+useI18nStore.setState({ locale: "en" });
 
 describe("AuthenticatedImage", () => {
   it("renders the resolved source and pending accessibility state", () => {
@@ -47,5 +57,14 @@ describe("AuthenticatedImage", () => {
     // SSR always shows a valid src (the URL passed) and aria-busy.
     expect(html).toContain('src="https://example.com/a.png"');
     expect(html).toContain('aria-busy="true"');
+  });
+
+  it("identifies retryable vs permanent media failure categories", () => {
+    expect(isRetryableMediaError("NETWORK_ERROR")).toBe(true);
+    expect(isRetryableMediaError("UNKNOWN")).toBe(true);
+    expect(isRetryableMediaError("FORBIDDEN")).toBe(false);
+    expect(isRetryableMediaError("UNAUTHORIZED")).toBe(false);
+    expect(isRetryableMediaError("NOT_FOUND")).toBe(false);
+    expect(isRetryableMediaError(null)).toBe(false);
   });
 });

@@ -313,9 +313,9 @@ describe("IssueDetailModal Component", () => {
         onRefresh={() => {}}
       />,
     );
-    const photoButton = (
-      Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]
-    ).find((item) => item.querySelector('img[alt="Trước khắc phục"]'));
+    const photoButton = container.querySelector(
+      'button[aria-label="Chạm ảnh để xem toàn màn hình"]',
+    ) as HTMLButtonElement | null;
     await act(async () => {
       photoButton?.click();
     });
@@ -360,10 +360,10 @@ describe("IssueDetailModal Component", () => {
       await promise;
     });
 
-    const photoButton = (
-      Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]
-    ).find((item) => item.querySelector('img[alt="Trước khắc phục"]'));
-    expect(photoButton?.disabled).toBe(true);
+    const photoButton = container.querySelector(
+      'button[aria-label="Chạm ảnh để xem toàn màn hình"]',
+    ) as HTMLButtonElement | null;
+    expect(photoButton).toBeNull();
     expect(container.textContent).toContain("Bạn không có quyền xem ảnh này");
     expect(container.textContent).not.toContain("Chạm ảnh để xem toàn màn hình");
 
