@@ -272,4 +272,41 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
     // A failed call must not masquerade as an empty-but-successful AI answer.
     expect(container.textContent).not.toContain("AI chưa tìm thấy thẻ phù hợp cho nội dung này.");
   });
+
+  it("expands the mobile sheet and frees list space while searching", async () => {
+    installFetch((url) => {
+      if (url.includes("/api/ai/status")) {
+        return new Response(JSON.stringify({ data: { enabled: false } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+
+    const container = await mount(
+      <TaxonomySelectorModal
+        isOpen={true}
+        onClose={() => {}}
+        tags={mockTags}
+        selectedTags={[]}
+        currentCategory={IssueCategory.S3}
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
+    const sheet = container.querySelector(".h-\\[85dvh\\]") as HTMLElement;
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(sheet).toBeTruthy();
+    expect(sheet.querySelector(".min-h-0.flex-1.overflow-y-auto")).toBeTruthy();
+    expect(input.placeholder).toContain("Tìm nhanh thẻ");
+
+    await act(async () => {
+      input.focus();
+    });
+    expect(container.querySelector(".h-\\[94dvh\\]")).toBeTruthy();
+    expect(container.textContent).not.toContain(
+      "Tìm kiếm và chọn thẻ sự cố để chuẩn hóa dữ liệu và tự động phân loại S",
+    );
+
+    await setInputValue(input, "dau");
+    expect(container.querySelector(".hidden.sm\\:flex")).toBeTruthy();
+  });
 });

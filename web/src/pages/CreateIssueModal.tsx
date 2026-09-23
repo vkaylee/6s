@@ -306,7 +306,7 @@ export function CreateIssueModal({
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto"
     >
-      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col max-h-[92vh]">
+      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col h-[94dvh] sm:h-auto sm:max-h-[90vh]">
         {/* Header */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -329,7 +329,7 @@ export function CreateIssueModal({
         </div>
 
         {/* Form Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-5">
           {/* 1S - 6S Selection with Micro-hints (SPEC.md Section 4.5) */}
           <div>
             <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">

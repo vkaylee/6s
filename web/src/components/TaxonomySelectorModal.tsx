@@ -59,6 +59,7 @@ export function TaxonomySelectorModal({
   });
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiRequested, setAiRequested] = useState(false);
@@ -220,9 +221,17 @@ export function TaxonomySelectorModal({
         aria-label={t("common.close")}
         className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-none"
       />
-      <div className="w-full sm:max-w-2xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh]">
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+      <div
+        className={`w-full sm:max-w-2xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col transition-all duration-200 ${
+          isSearchFocused || tagQuery.trim() ? "h-[94dvh]" : "h-[85dvh]"
+        } sm:h-auto sm:max-h-[82vh]`}
+      >
+        {/* Header - collapses subtitle when searching on mobile */}
+        <div
+          className={`border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between transition-all ${
+            isSearchFocused || tagQuery.trim() ? "p-3 sm:p-5" : "p-4 sm:p-5"
+          }`}
+        >
           <div>
             <h2
               id="taxonomy-modal-title"
@@ -231,9 +240,11 @@ export function TaxonomySelectorModal({
               <Tag className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>{t("issue.tags_modal_title")}</span>
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              {t("issue.tags_modal_desc")}
-            </p>
+            {!(isSearchFocused || tagQuery.trim()) && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                {t("issue.tags_modal_desc")}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -245,7 +256,7 @@ export function TaxonomySelectorModal({
           </button>
         </div>
         {/* Search & Category Filter Bar */}
-        <div className="p-4 space-y-3 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50">
+        <div className="p-3 sm:p-4 space-y-2 sm:space-y-3 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50">
           {/* Instant Search Bar + AI Suggest Button */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1 flex items-center">
@@ -253,6 +264,8 @@ export function TaxonomySelectorModal({
               <input
                 type="text"
                 value={tagQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
                 onChange={(e) => setTagQuery(e.target.value)}
                 placeholder={t("issue.tag_search_placeholder")}
                 className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-8 py-2.5 text-base text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[42px]"
@@ -286,7 +299,9 @@ export function TaxonomySelectorModal({
           </div>
 
           {/* S Category Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+          <div
+            className={`${tagQuery.trim() ? "hidden sm:flex" : "flex"} items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar`}
+          >
             <button
               type="button"
               onClick={() => setActiveTab("ALL")}
@@ -340,7 +355,7 @@ export function TaxonomySelectorModal({
             </div>
           )}
         {(aiSuggestions.existing_tags.length > 0 || aiSuggestions.proposed_tags.length > 0) && (
-          <div className="mx-4 mt-3 space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/20">
+          <div className="mx-4 mt-3 max-h-[30dvh] overflow-y-auto space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/20">
             {aiSuggestions.existing_tags.length > 0 && (
               <div>
                 <p className="mb-1 text-[11px] font-bold text-violet-800 dark:text-violet-300">
@@ -461,7 +476,7 @@ export function TaxonomySelectorModal({
         )}
 
         {/* Tag List Body */}
-        <div className="flex-1 overflow-y-auto p-4 max-h-[48vh] sm:max-h-[44vh]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
           {visibleTags.length === 0 ? (
             <div className="py-8 text-center space-y-3">
               <p className="text-xs text-zinc-400 font-medium">{t("issue.no_tags_found")}</p>

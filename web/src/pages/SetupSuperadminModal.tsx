@@ -132,8 +132,8 @@ export function SetupSuperadminModal({ isOpen, onSuccess, onClose }: SetupSupera
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
     >
-      <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 text-center">
+      <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
+        <div className="p-4 sm:p-6 border-b border-zinc-200 dark:border-zinc-800 text-center shrink-0">
           <div className="w-14 h-14 bg-gradient-to-tr from-amber-600 to-rose-600 text-white rounded-2xl mx-auto flex items-center justify-center font-black text-2xl mb-3 shadow-lg shadow-rose-600/30">
             👑
           </div>
@@ -145,7 +145,10 @@ export function SetupSuperadminModal({ isOpen, onSuccess, onClose }: SetupSupera
           </h2>
         </div>
 
-        <form onSubmit={handleSetup} className="p-6 space-y-4">
+        <form
+          onSubmit={handleSetup}
+          className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"
+        >
           {errorMsg && (
             <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300">
               {errorMsg}
