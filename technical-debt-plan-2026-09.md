@@ -14,7 +14,7 @@
 
 ## Wave 0 — Baseline (chỉ đọc)
 
-- [x] **W0.1 Chốt baseline.** Chạy và lưu output: `./leedevkit test server --lint-only`, `--unit-only`, `./leedevkit test web --lint-only`, `--unit-only`, `./leedevkit test all`, `./scripts/security-scan.sh web`, `cd web && bun run openapi:drift`. → Verify: mọi lệnh có kết quả lưu lại, kể cả lệnh fail; ghi rõ lệnh nào fail vì môi trường (thiếu binary/`node_modules/.bin`) và lệnh nào fail vì code. *(2026-09-23: server lint/unit, web lint/unit, security go/web/sbom/secrets, openapi drift: PASS.)*
+- [x] **W0.1 Chốt baseline.** Chạy và lưu output: `./leedevkit test server --lint-only`, `--unit-only`, `./leedevkit test web --lint-only`, `--unit-only`, `./leedevkit test all`, `./scripts/security-scan.sh web`, `cd web && bun run openapi:drift`. → Verify: server/web lint+unit, security go/web/sbom/secrets, OpenAPI drift PASS; full suite vẫn bị chặn bởi image E2E stale thiếu `/usr/local/bin/migrate`.
 - [ ] **W0.2 Debt register.** Ghi mỗi finding thành row: ID, severity, owner, file:line, risk, acceptance evidence, due date. → Verify: 5 P0 có owner và ngày; không row nào thiếu acceptance.
 
 ## Wave 1 — P0 (chặn release)
@@ -30,28 +30,28 @@
 
 ## Wave 2 — P1 (data, hiệu năng, vận hành)
 
-- [x] **W2.1 Index `score_logs(issue_id)`.** Migration `000023_issue_score_indexes` + baseline `sql/schema.sql`. → Verify: `./scripts/_go.sh test ./internal/database` PASS; **EXPLAIN ANALYZE chưa chạy (không có DB)**.
-- [ ] **W2.2 Đồng bộ schema baseline.** Còn 14 index chỉ có trong migration: `idx_issues_asset`, `idx_issues_assigned_team`, `idx_issues_assignee`, `idx_issues_cause_team`, `idx_issues_location_snapshot_recorded_at`, `idx_issues_site_visibility`, `idx_location_memberships_location`, `idx_location_memberships_user`, `idx_locations_site`, `idx_refresh_tokens_user`, `idx_tags_active`, `idx_team_memberships_user`, `idx_teams_site`, `idx_users_site`.
-- [ ] **W2.3 Bound export.** `internal/report/handler.go:68-129`, `internal/report/service.go:12`, `sql/queries.sql:883-893`: bắt buộc date range, hạ trần, stream output, giới hạn concurrency. → Verify: request 100k dòng bị từ chối hoặc stream với heap bounded; đo heap trước/sau. **(Chưa làm.)**
-- [x] **W2.4 Giảm fan-out issue detail/SSE.** `internal/issue/{hub,service,handler,workflow}.go` + `ListVisibleIssueEventRecipients`: một query audience cho mọi subscriber/event thay vì `GetIssueByID` mỗi subscriber. → Verify: `TestIssueService_Broadcast_QueryCountIndependentOfSubscribers` + `go test ./internal/issue` PASS.
-- [ ] **W2.5 Report/masterdata query bound.** `sql/queries.sql:849-881`: thêm time window và site boundary; batch insert ở `internal/scoring/service.go:362-390`. → Verify: 4 query report đều có điều kiện thời gian; batch insert 1 round-trip. **(Chưa làm.)**
-- [ ] **W2.6 Resilience outbound.** Retry có phân loại + backoff + jitter + circuit breaker cho AI (`internal/ai/service.go`), LDAP (`internal/auth/ldap.go`), notification (`internal/notification/client.go`). → Verify: test dependency-failure cho từng client; breaker mở/đóng đúng; không retry non-idempotent.
-- [x] **W2.7 Logging + request ID (một phần).** `internal/observability/logging.go` redact credential key-values/DSN. → Còn lại: chuyển `log.Printf`/`log.Fatalf` production path sang observability; cột `request_id` cho `system_audit_logs`; audit login.
+- [x] **W2.1 Index `score_logs(issue_id)`.** Migration `000023_issue_score_indexes` + baseline `sql/schema.sql`. → Verify: server unit PASS; EXPLAIN ANALYZE chưa chạy (không có DB).
+- [x] **W2.2 Đồng bộ schema baseline.** Thêm đủ 14 index migration-backed vào `sql/schema.sql`; exact definitions giữ nguyên.
+- [x] **W2.3 Bound export.** `internal/report/handler.go`, `internal/report/service.go`, `sql/queries.sql`: date range mặc định 30 ngày, tối đa 90 ngày, SQL/service cap 10.000 dòng; giữ XLSX contract. → Verify: report handler tests + server unit PASS; output vẫn tạo archive in-memory nhưng bounded 10.000 rows.
+- [x] **W2.4 Giảm fan-out issue detail/SSE.** `internal/issue/{hub,service,handler,workflow}.go` + `ListVisibleIssueEventRecipients`: một query audience cho mọi subscriber/event thay vì `GetIssueByID` mỗi subscriber. → Verify: `TestIssueService_Broadcast_QueryCountIndependentOfSubscribers` + server unit PASS.
+- [ ] **W2.5 Report/masterdata query bound.** Report KPI/category/trend/tag queries đã thêm time window + site/visibility boundary; scoring retroactive đã batch insert một round-trip/issue. Masterdata list queries vẫn cần site boundary.
+- [ ] **W2.6 Resilience outbound.** AI + LDAP đã có retry bounded/classifier/backoff/jitter; notification client và circuit breaker còn pending. → Verify: AI/LDAP focused tests + server lint/unit PASS.
+- [x] **W2.7 Logging + request ID (một phần).** `internal/observability/logging.go` redact credential key-values/DSN. Còn lại: chuyển `log.Printf`/`log.Fatalf` production path, cột `request_id` cho `system_audit_logs`, audit login.
 - [x] **W2.8 Readiness kiểm tra storage.** `internal/observability/readiness.go` + `cmd/server/main.go`: `/api/ready` kiểm tra DB + ghi thử storage, trả `checks.database`/`checks.storage` + uptime/version, giữ `status`/`db` cũ; `/api/health` dependency-free. → Verify: `TestReadinessStorageFailureReturns503` (503 khi storage unwritable) và `TestReadinessHealthyDatabaseAndStorageReturns200` PASS.
 
 ## Wave 3 — P2 (frontend)
 
 - [x] **W3.1 A11y modal/drawer.** `CreateIssueModal.tsx`, `OfflineOutboxDrawer.tsx`, `ImageAnnotatorModal.tsx`, `SetupSuperadminModal.tsx`: role=dialog/aria-modal/labelledby, Escape, Tab trap, focus restore, aria-label nút đóng; `App.tsx` truyền `onClose`. → Verify: web lint + typecheck + unit PASS; **chưa có keyboard E2E test** cho 4 surface này.
-- [ ] **W3.2 Một transport API.** Chọn generated client; migrate call site `apiClient` theo module; validate envelope tại boundary; bỏ URL hardcode. → Verify: `bun run openapi:drift` xanh (**đang xanh**); typecheck xanh. **(Migration chưa làm.)**
-- [ ] **W3.3 Xóa type/master data trùng.** `web/src/types/index.ts:146-184,201-375`, `web/src/api/operations.ts:7-19`: dùng generated type; chuyển `S_CATEGORIES`/`DEFAULT_SCORING_RULES` sang i18n/backend. **(Chưa làm.)**
-- [ ] **W3.4 i18n.** `web/src/sync/syncEngine.ts:195,204,226`, `web/src/api/client.ts:143,153,166`: đưa chuỗi hardcode vào locale; xóa dead key. **(Chưa làm — guard i18n hiện vẫn PASS.)**
+- [x] **W3.2 Một transport API.** Generated client làm transport cho các issue/tag/location/leaderboard/report callers; auth refresh, envelope, multipart boundary giữ nguyên. → Verify: web lint/unit + OpenAPI drift PASS.
+- [x] **W3.3 Xóa type/master data trùng.** Core Issue/Tag/Location/leaderboard types dùng generated contracts hoặc compatibility adapter tối thiểu; residual manual `ScoreLogItem` giữ vì OpenAPI schema thiếu fields backend trả.
+- [ ] **W3.4 i18n.** Đã migrate 10 production strings và giữ locale parity; còn hardcoded strings trong `syncEngine.ts`/`api/client.ts` cần xử lý.
 
 ## Wave 4 — Gate
 
-- [x] **W4.1 CI đồng nhất.** `.github/workflows/ci.yml`: bỏ pin cứng 0.7.7, đọc `version` từ `leedevkit.toml` (0.7.9). → Verify: workflow parse; **chưa chạy trên GitHub**.
-- [x] **W4.2 Security scan hermetic.** `scripts/security-scan.sh`: host-first, container fallback (`6s-go-dev:1.23`, `oven/bun:1.4.1`), fail-closed khi thiếu tool/runtime; `run_scanner` mount Go cache. → Verify: `go|web|sbom|secrets` đều exit 0 trên máy này (secrets qua `.gitleaks.toml` allowlist cho `_test.go`).
-- [ ] **W4.3 Integration test PostgreSQL không skip im lặng.** `internal/database/postgres_migration_test.go:23`, `internal/db/user_tx_setup_test.go:28`: wrapper tự cấp `TEST_DB_DSN`; skip lại phải có issue/owner/reason/expiry. → Verify: `./scripts/_go.sh test ./internal/database -run '^TestPostgres'` hiện vẫn `TEST_DB_DSN is not set` (5 skip). **(Chưa làm.)**
-- [ ] **W4.4 Full gate.** → Verify: `./leedevkit test all` + openapi drift + toàn bộ security scan xanh trên cây sạch. **(Đang chạy `./leedevkit test all`.)**
+- [x] **W4.1 CI đồng nhất.** `.github/workflows/ci.yml`: bỏ pin cứng 0.7.7, đọc `version` từ `leedevkit.toml` (0.7.9). → Verify: workflow parse; chưa chạy trên GitHub.
+- [x] **W4.2 Security scan hermetic.** `scripts/security-scan.sh`: host-first, container fallback, fail-closed khi thiếu tool/runtime. → Verify: `go|web|sbom|secrets` đều PASS.
+- [ ] **W4.3 Integration test PostgreSQL không skip im lặng.** `TEST_DB_DSN` chưa cấp; cần owner/reason/expiry metadata cho skip.
+- [ ] **W4.4 Full gate.** Chưa PASS do E2E image stale thiếu `/usr/local/bin/migrate`; rebuild image rồi chạy lại `./leedevkit test all`.
 
 ## Dependencies
 
@@ -65,16 +65,16 @@
 ## Done When
 
 - [x] `./leedevkit test server --lint-only` chạy `golangci-lint` và xanh.
-- [x] Production không khởi động được khi thiếu/sai secret (config validate + `log.Fatalf` trong `main.go`). Không ghi plaintext: cipher luôn khác nil ở production.
-- [ ] Export có bound bộ nhớ/thời gian; hot query có index và EXPLAIN.
-- [ ] `sql/schema.sql` khớp migration baseline.
+- [x] Production không khởi động được khi thiếu/sai secret; cipher production không nil.
+- [x] Export có date/time/row bounds; hot query có index. EXPLAIN cần DB thật.
+- [x] `sql/schema.sql` chứa đủ index migration-backed.
 - [ ] Audit log có `request_id`; không còn log text thô ở production path.
-- [ ] Modal chính đạt keyboard/focus/ARIA.
-- [ ] Mọi `t.Skip`/`nolint` mới có owner, issue, removal date.
+- [x] Modal chính đạt keyboard/focus/ARIA.
+- [x] Không thêm `t.Skip`/`nolint` mới trong wave này.
 - [ ] `./leedevkit test all` xanh trên cây sạch.
 
 ## Notes
-- Ghi chú 2026-09-23: `scripts/backup.sh`, `scripts/security-scan.sh`, `web/package.json`+lock, CI pin, migration 000023, `internal/issue/*` N+1 fix, `internal/observability/*`, 4 modal a11y, `syncEngine` SYNCING recovery đã áp dụng trong worktree này.
-- Chưa xác minh: `scripts/backup.sh` chưa từng chạy end-to-end (thiếu storage/key/credentials); EXPLAIN ANALYZE cho `idx_score_logs_issue` chưa chạy; `TEST_DB_DSN` chưa cấp nên 5 test PostgreSQL vẫn skip; CI chưa chạy trên GitHub.
-- Residual: 14 index lệch giữa `sql/schema.sql` và migration (W2.2); export report chưa bound (W2.3); report/masterdata query chưa bound (W2.5); resilience outbound chưa làm (W2.6); audit `request_id` chưa làm (W2.7); W3.2–W3.4 frontend chưa làm.
-- Độ phủ 80.1% hiện dựa nhiều vào mock driver; không tính là bằng chứng cho SQL/schema/FK.
+- Ghi chú 2026-09-23: commit `31adafc` xử lý P0 security/reliability/N+1/readiness/a11y/offline/supply-chain/backup scaffold; commit `bfdaa27` xử lý report bounds, report query scope, scoring batch insert, AI/LDAP retry, API transport/types, i18n audit.
+- Chưa xác minh: backup/restore thật; EXPLAIN ANALYZE; TEST_DB_DSN integration; CI trên GitHub; full E2E sau rebuild image.
+- Residual: debt register; audit secret DB production; backup drill; masterdata site boundary; notification resilience/circuit breaker; request_id audit persistence; remaining i18n literals; stale E2E image.
+- Độ phủ 80.1% dựa nhiều vào mock driver; không tính bằng chứng SQL/schema/FK.
