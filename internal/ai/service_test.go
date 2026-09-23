@@ -1186,6 +1186,112 @@ func TestReview_DisabledAI(t *testing.T) {
 	}
 }
 
+func suggestTagsFixture(gatewayURL string) *mockStore {
+	store := reviewTestFixture(gatewayURL, "")
+	store.tags = []db.Tag{
+		{Code: "DIRT", NameVi: "Bụi bẩn", NameZh: "污垢", NameEn: "Dirt", Category: "3S", Status: "APPROVED"},
+		{Code: "OIL_LEAK", NameVi: "Rò rỉ dầu", NameZh: "漏油", NameEn: "Oil leak", Category: "3S", Status: "APPROVED"},
+		{Code: "PENDING_DIRT", NameVi: "Bẩn mới", NameZh: "新污垢", NameEn: "New dirt", Category: "3S", Status: "PENDING"},
+		{Code: "SCRAP", NameVi: "Vật tư thừa", NameZh: "余料", NameEn: "Scrap", Category: "1S", Status: "APPROVED"},
+	}
+	return store
+}
+
+func TestSuggestTags_FiltersModelOutput(t *testing.T) {
+	var systemPrompt string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Messages) > 0 {
+			systemPrompt = body.Messages[0].Content
+		}
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": `{"existing_tags":["OIL_LEAK","PENDING_DIRT","SCRAP","OIL_LEAK","GHOST"],"proposed_tags":[{"name_vi":"Vết dầu mới","name_zh":"新油迹","name_en":"New oil stain","category":"3S"},{"name_vi":"Sai loại","name_zh":"错类","name_en":"Wrong cat","category":"1S"},{"name_vi":"","name_zh":"空","name_en":"Empty","category":"3S"}]}`}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	store := suggestTagsFixture(mockServer.URL)
+	svc := NewService(store, nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+
+	res, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "dầu trên sàn", Category: "3S"})
+	if err != nil {
+		t.Fatalf("SuggestTags: %v", err)
+	}
+	// Approved 3S codes only, deduplicated; pending and cross-category codes are dropped.
+	if len(res.ExistingTags) != 1 || res.ExistingTags[0] != "OIL_LEAK" {
+		t.Fatalf("existing_tags = %v, want [OIL_LEAK]", res.ExistingTags)
+	}
+	if len(res.ProposedTags) != 1 || res.ProposedTags[0].NameVi != "Vết dầu mới" {
+		t.Fatalf("proposed_tags = %+v, want the single valid 3S proposal", res.ProposedTags)
+	}
+	if !strings.Contains(systemPrompt, "OIL_LEAK") || strings.Contains(systemPrompt, "PENDING_DIRT") {
+		t.Fatalf("prompt must expose approved catalog only, got %q", systemPrompt)
+	}
+}
+
+func TestSuggestTags_RejectsInvalidInputAndDisabledAI(t *testing.T) {
+	store := suggestTagsFixture("http://unused")
+	svc := NewService(store, nil, nil, "")
+	svc.SetMinInterval(0)
+
+	if _, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "  ", Category: "3S"}); err == nil {
+		t.Fatal("expected error for empty query")
+	}
+	if _, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "dầu", Category: "9S"}); err == nil {
+		t.Fatal("expected error for invalid category")
+	}
+	if _, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: strings.Repeat("x", suggestQueryMaxRunes+1), Category: "3S"}); err == nil {
+		t.Fatal("expected error for oversized query")
+	}
+	if _, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "dầu", Category: "3S", Description: strings.Repeat("x", suggestDescriptionMaxRunes+1)}); err == nil {
+		t.Fatal("expected error for oversized description")
+	}
+
+	disabled := suggestTagsFixture("http://unused")
+	disabled.cfg.IsEnabled = false
+	_, err := NewService(disabled, nil, nil, "").SuggestTags(context.Background(), SuggestTagsRequest{Query: "dầu", Category: "3S"})
+	if err == nil {
+		t.Fatal("expected error when AI is disabled")
+	}
+	appErr, ok := err.(*apperror.AppError)
+	if !ok || appErr.Key != "ai.not_enabled" {
+		t.Fatalf("expected ai.not_enabled, got %v", err)
+	}
+}
+
+func TestSuggestTags_RejectsMalformedModelJSON(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": "not json at all"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	svc := NewService(suggestTagsFixture(mockServer.URL), nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+	_, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "dầu", Category: "3S"})
+	if err == nil {
+		t.Fatal("expected error for malformed model JSON")
+	}
+	if appErr, ok := err.(*apperror.AppError); !ok || appErr.Code != "AI_GATEWAY_ERROR" {
+		t.Fatalf("expected AI_GATEWAY_ERROR, got %v", err)
+	}
+}
+
 func TestReview_IssueNotFound(t *testing.T) {
 	store := reviewTestFixture("http://unused", "")
 	svc := NewService(store, nil, nil, "")

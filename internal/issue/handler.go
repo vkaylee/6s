@@ -163,6 +163,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	locationSnapshotSource := strings.TrimSpace(r.FormValue("location_snapshot_source"))
 	description := strings.TrimSpace(r.FormValue("description"))
 	tagsStr := strings.TrimSpace(r.FormValue("tags"))
+	proposedTagsStr := strings.TrimSpace(r.FormValue("proposed_tags"))
 
 	if clientUUID == "" || category == "" || locationCode == "" {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingIssueFields))
@@ -172,7 +173,15 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	var tags []string
 	if tagsStr != "" {
 		if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
-			log.Printf("invalid tags format: %v", err)
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+			return
+		}
+	}
+	var proposedTags []ProposedTag
+	if proposedTagsStr != "" {
+		if err := json.Unmarshal([]byte(proposedTagsStr), &proposedTags); err != nil {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+			return
 		}
 	}
 
@@ -222,10 +231,9 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		ClientUUID: clientUUID, Category: category, CauseType: causeType, LocationCode: locationCode,
 		LocationNameViSnapshot: locationNameViSnapshot, LocationNameZhSnapshot: locationNameZhSnapshot,
 		LocationNameEnSnapshot: locationNameEnSnapshot, LocationSnapshotSource: locationSnapshotSource,
-		Tags: tags, Description: description, AssetID: assetID, AssignedTeamID: assignedTeamID,
+		Tags: tags, ProposedTags: proposedTags, Description: description, AssetID: assetID, AssignedTeamID: assignedTeamID,
 		AssigneeID: assigneeID, PhotoBefore: photoBeforeHeader, PhotoDetail: photoDetailHeader,
 	}
-
 	resp, created, err := h.service.SyncIssue(r.Context(), syncReq, currentUser)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCategory) {

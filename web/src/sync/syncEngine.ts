@@ -10,6 +10,7 @@ import {
   saveDraftResolve,
 } from "../db/indexeddb.ts";
 import { useAuthStore } from "../store/authStore.ts";
+import type { ProposedTagItem } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 
 async function hasSupportedImageSignature(blob: Blob): Promise<boolean> {
@@ -55,6 +56,9 @@ export async function buildIssueSyncFormData(issue: DraftIssue): Promise<FormDat
   if (issue.assignee_id != null) formData.append("assignee_id", String(issue.assignee_id));
   formData.append("description", issue.description);
   formData.append("tags", JSON.stringify(issue.tags));
+  if (issue.proposed_tags?.length) {
+    formData.append("proposed_tags", JSON.stringify(issue.proposed_tags as ProposedTagItem[]));
+  }
   if (issue.location_name_vi_snapshot)
     formData.append("location_name_vi_snapshot", issue.location_name_vi_snapshot);
   if (issue.location_name_zh_snapshot)

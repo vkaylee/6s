@@ -83,10 +83,19 @@ func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, er
 		log.Printf("list tags for issue failed: %v", tagErr)
 	}
 	tags := make([]string, 0, len(tagRows))
+	tagDetails := make([]TagDetail, 0, len(tagRows))
 	for _, t := range tagRows {
 		tags = append(tags, t.Code)
+		tagDetails = append(tagDetails, TagDetail{
+			Code:     t.Code,
+			NameVi:   t.NameVi,
+			NameZh:   t.NameZh,
+			NameEn:   t.NameEn,
+			Category: t.Category,
+			Status:   t.Status,
+		})
 	}
-	resp := toIssueResponse(issue, loc.NameVi, tags, creator, resolver)
+	resp := toIssueResponse(issue, loc.NameVi, tags, tagDetails, creator, resolver)
 	if issue.Description.Valid && strings.TrimSpace(issue.Description.String) != "" {
 		targetLang := ai.NormalizeLangCode(i18n.FromContext(ctx))
 		h := ai.ComputeContentHash(issue.Description.String)
@@ -127,8 +136,17 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, filter ListFilter)
 		log.Printf("failed to list tags: %v", tagErr)
 	}
 	tagsByIssue := make(map[int64][]string, len(rows))
+	tagDetailsByIssue := make(map[int64][]TagDetail, len(rows))
 	for _, tr := range tagRows {
 		tagsByIssue[tr.IssueID] = append(tagsByIssue[tr.IssueID], tr.Code)
+		tagDetailsByIssue[tr.IssueID] = append(tagDetailsByIssue[tr.IssueID], TagDetail{
+			Code:     tr.Code,
+			NameVi:   tr.NameVi,
+			NameZh:   tr.NameZh,
+			NameEn:   tr.NameEn,
+			Category: tr.Category,
+			Status:   tr.Status,
+		})
 	}
 
 	items := make([]Response, 0, len(rows))
@@ -137,7 +155,7 @@ func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, filter ListFilter)
 		if t, ok := translations[i]; ok {
 			trans = &t
 		}
-		items = append(items, toFilteredRowResponse(r, tagsByIssue[r.ID], trans))
+		items = append(items, toFilteredRowResponse(r, tagsByIssue[r.ID], tagDetailsByIssue[r.ID], trans))
 	}
 
 	return items, total, nil
@@ -329,7 +347,7 @@ func (s *ServiceImpl) loadTranslationsForRows(ctx context.Context, rows []db.Lis
 	return translations
 }
 
-func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *string) Response {
+func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, tagDetails []TagDetail, trans *string) Response {
 	issue := db.Issue{
 		ID:              r.ID,
 		ClientUuid:      r.ClientUuid,
@@ -370,17 +388,23 @@ func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, trans *str
 			FullName: r.ResolverFullName.String,
 		}
 	}
-	resp := toIssueResponse(issue, r.LocationNameVi, tags, creator, resolver)
+	resp := toIssueResponse(issue, r.LocationNameVi, tags, tagDetails, creator, resolver)
 	resp.ScoreDeducted = r.ScoreDeducted
 	resp.TranslatedDescription = trans
 	return *resp
 }
 
-func toIssueResponse(issue db.Issue, locName string, tags []string, creator db.User, resolver *UserItem) *Response {
+func toIssueResponse(issue db.Issue, locName string, tags []string, tagDetails []TagDetail, creator db.User, resolver *UserItem) *Response {
+	if tags == nil {
+		tags = make([]string, 0)
+	}
+	if tagDetails == nil {
+		tagDetails = make([]TagDetail, 0)
+	}
 	resp := &Response{
 		ID: issue.ID, ClientUUID: issue.ClientUuid, Version: issue.Version, SiteID: issue.SiteID,
 		Category: issue.Category, CauseType: issue.CauseType, LocationCode: issue.LocationCode,
-		LocationName: locName, Tags: tags, Status: issue.Status, VisibilityClass: issue.VisibilityClass,
+		LocationName: locName, Tags: tags, TagDetails: tagDetails, Status: issue.Status, VisibilityClass: issue.VisibilityClass,
 		Creator:  UserItem{ID: creator.ID, Username: creator.Username, FullName: creator.FullName},
 		Resolver: resolver, CreatedAt: issue.CreatedAt.Format(time.RFC3339),
 	}

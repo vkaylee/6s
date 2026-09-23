@@ -175,6 +175,47 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toBe("");
   });
 
+  it("renders TaxonomySelectorModal pending tag section when pending tags exist", () => {
+    const tagsWithPending: TagItem[] = [
+      ...mockTags,
+      {
+        tag_code: "pending_custom",
+        category: IssueCategory.S3,
+        label_vi: "Dầu hộp số",
+        status: "PENDING",
+      },
+    ];
+    const html = renderToString(
+      <TaxonomySelectorModal
+        isOpen={true}
+        onClose={() => {}}
+        tags={tagsWithPending}
+        selectedTags={[]}
+        currentCategory={null}
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
+    expect(html).toContain("Thẻ của bạn đang chờ duyệt:");
+    expect(html).toContain("Dầu hộp số");
+    expect(html).toContain("⏳");
+  });
+
+  it("renders TaxonomySelectorModal AI suggestion trigger", () => {
+    const html = renderToString(
+      <TaxonomySelectorModal
+        isOpen={true}
+        onClose={() => {}}
+        tags={mockTags}
+        selectedTags={[]}
+        currentCategory={null}
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
+    expect(html).toContain("AI gợi ý");
+  });
+
   it("renders searchable LocationCombobox correctly", () => {
     const html = renderToString(
       <LocationCombobox locations={mockLocations} value="LINE_A1" onChange={() => {}} />,

@@ -216,15 +216,20 @@ type SystemSetting struct {
 }
 
 type Tag struct {
-	ID       int64
-	Code     string
-	NameVi   string
-	NameZh   string
-	NameEn   string
-	Category string
-	UseCount int32
-	IsPreset bool
-	IsActive bool
+	ID            int64
+	Code          string
+	NameVi        string
+	NameZh        string
+	NameEn        string
+	Category      string
+	UseCount      int32
+	IsPreset      bool
+	IsActive      bool
+	Status        string
+	CreatedBy     sql.NullInt64
+	ReviewedBy    sql.NullInt64
+	ReviewedAt    sql.NullTime
+	MergedTagCode sql.NullString
 }
 
 type Team struct {

@@ -61,6 +61,18 @@ export type Tag = {
     category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
     use_count: number;
     is_preset?: boolean;
+    is_active?: boolean;
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'MERGED';
+    created_by?: number;
+};
+
+export type TagDetail = {
+    code: string;
+    name_vi: string;
+    name_zh: string;
+    name_en: string;
+    category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'MERGED';
 };
 
 export type Issue = {
@@ -120,6 +132,10 @@ export type Issue = {
      */
     location_snapshot_recorded_at?: string;
     tags: Array<string>;
+    /**
+     * Tag metadata and lifecycle status chips for all viewers
+     */
+    tag_details?: Array<TagDetail>;
     description?: string;
     reject_reason?: string;
     photo_before: string;
@@ -759,6 +775,10 @@ export type SyncIssuesData = {
          * JSON array string, vd '["oil_leak", "safety_gear"]'
          */
         tags?: string;
+        /**
+         * JSON array string of {name_vi,name_zh,name_en,category}; up to 5 creator-owned pending tags
+         */
+        proposed_tags?: string;
         description?: string;
         /**
          * Ảnh toàn cảnh bối cảnh (<= 2MB, JPEG/PNG)
@@ -1808,6 +1828,45 @@ export type FollowUpAiReviewResponses = {
 
 export type FollowUpAiReviewResponse = FollowUpAiReviewResponses[keyof FollowUpAiReviewResponses];
 
+export type SuggestTagsWithAiData = {
+    body: {
+        query: string;
+        category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+        description?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/ai/suggest-tags';
+};
+
+export type SuggestTagsWithAiErrors = {
+    /**
+     * AI chưa bật hoặc input không hợp lệ
+     */
+    400: ErrorEnvelope;
+};
+
+export type SuggestTagsWithAiError = SuggestTagsWithAiErrors[keyof SuggestTagsWithAiErrors];
+
+export type SuggestTagsWithAiResponses = {
+    /**
+     * Tag gợi ý từ catalog đã duyệt và đề xuất mới
+     */
+    200: {
+        data: {
+            existing_tags: Array<string>;
+            proposed_tags: Array<{
+                name_vi: string;
+                name_zh: string;
+                name_en: string;
+                category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+            }>;
+        };
+    };
+};
+
+export type SuggestTagsWithAiResponse = SuggestTagsWithAiResponses[keyof SuggestTagsWithAiResponses];
+
 export type StreamIssueEventsData = {
     body?: never;
     path?: never;
@@ -2150,6 +2209,32 @@ export type UpdateTagStatusResponses = {
 };
 
 export type UpdateTagStatusResponse = UpdateTagStatusResponses[keyof UpdateTagStatusResponses];
+
+export type ReviewTagData = {
+    body: {
+        action: 'APPROVE' | 'REJECT' | 'MERGE';
+        /**
+         * Tag đích đã APPROVED khi gộp
+         */
+        merged_tag_code?: string;
+    };
+    path: {
+        code: string;
+    };
+    query?: never;
+    url: '/tags/{code}/review';
+};
+
+export type ReviewTagResponses = {
+    /**
+     * Kết quả cập nhật trạng thái tag
+     */
+    200: {
+        data: Tag;
+    };
+};
+
+export type ReviewTagResponse = ReviewTagResponses[keyof ReviewTagResponses];
 
 export type BatchUpdateTagStatusData = {
     body?: never;

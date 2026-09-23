@@ -31,6 +31,7 @@ import {
   IssueCategory,
   isBehaviorTag,
   type LocationItem,
+  type ProposedTagItem,
   resolveI18n,
   resolveLocationName,
   resolveTagLabel,
@@ -105,6 +106,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [photoError, setPhotoError] = useState(false);
   // Annotation Modal state
   const [annotatorTarget, setAnnotatorTarget] = useState<"wide" | "detail" | null>(null);
+  const [proposedTags, setProposedTags] = useState<ProposedTagItem[]>([]);
 
   // Hidden file input refs for Retake / Re-upload
   const wideInputRef = useRef<HTMLInputElement | null>(null);
@@ -167,7 +169,21 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     }
   };
   const handleAddCustomTag = (newTag: TagItem) => {
-    setLocalTags((prev) => [newTag, ...prev]);
+    const code = newTag.code || newTag.tag_code;
+    if (!code) return;
+    setLocalTags((prev) => [{ ...newTag, status: "PENDING" }, ...prev]);
+    setProposedTags((prev) => {
+      if (prev.some((tag) => tag.name_vi === newTag.name_vi)) return prev;
+      return [
+        ...prev,
+        {
+          name_vi: newTag.name_vi || code,
+          name_zh: newTag.name_zh || newTag.name_vi || code,
+          name_en: newTag.name_en || newTag.name_vi || code,
+          category: newTag.category || category || IssueCategory.S3,
+        },
+      ];
+    });
   };
   const processImageFile = useCallback(
     async (file: File | Blob, isWide: boolean) => {
@@ -340,6 +356,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         assigned_team_id: null,
         assignee_id: null,
         tags: selectedTags,
+        proposed_tags: proposedTags.length ? proposedTags : undefined,
         description: description.trim(),
         photo_before_blob: photoBefore,
         photo_detail_blob: photoDetail || undefined,
@@ -1058,17 +1075,30 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                             "bg-zinc-100 text-zinc-700 border-zinc-200"
                           : "bg-zinc-100 text-zinc-700 border-zinc-200";
 
+                        const isPending =
+                          tagObj?.status === "PENDING" ||
+                          proposedTags.some((pt) => pt.name_vi === (tagObj?.name_vi || tagCode));
                         return (
                           <span
                             key={tagCode}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-800 dark:text-zinc-200 shadow-sm"
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold text-zinc-800 dark:text-zinc-200 shadow-sm ${
+                              isPending
+                                ? "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/60 border-dashed"
+                                : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700"
+                            }`}
                           >
+                            {isPending && <span className="text-amber-500 text-[11px]">⏳</span>}
                             <span>{tagObj ? resolveTagLabel(tagObj, locale) : tagCode}</span>
                             {tagObj?.category && (
                               <span
                                 className={`text-[10px] px-1.5 py-0.2 rounded border font-mono font-black ${badgeColor}`}
                               >
                                 {tagObj.category}
+                              </span>
+                            )}
+                            {isPending && (
+                              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                {t("issue.tag_status_pending")}
                               </span>
                             )}
                             <button

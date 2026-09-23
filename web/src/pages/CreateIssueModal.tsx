@@ -531,18 +531,27 @@ export function CreateIssueModal({
                 {filteredTags.map((tag) => {
                   const code = tag.code || tag.tag_code || "";
                   const isChecked = selectedTags.includes(code);
+                  const isPending = tag.status === "PENDING";
                   return (
                     <button
                       key={code}
                       type="button"
                       onClick={() => handleToggleTag(code)}
                       className={`px-3 py-2 rounded-xl text-xs font-bold transition-all min-h-[44px] border ${
+                        isPending ? "border-dashed" : ""
+                      } ${
                         isChecked
-                          ? "bg-blue-600 border-blue-600 text-white"
-                          : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                          ? isPending
+                            ? "bg-amber-600 border-amber-600 text-white"
+                            : "bg-blue-600 border-blue-600 text-white"
+                          : isPending
+                            ? "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300"
+                            : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
-                      {resolveTagLabel(tag, locale)}
+                      {isPending
+                        ? `⏳ #${resolveTagLabel(tag, locale)}`
+                        : resolveTagLabel(tag, locale)}
                     </button>
                   );
                 })}

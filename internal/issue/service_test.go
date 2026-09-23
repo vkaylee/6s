@@ -61,6 +61,7 @@ type mockIssueStore struct {
 	auditErr     error
 	lastList     db.ListIssuesFilteredParams
 	lastCount    db.CountIssuesFilteredParams
+	pendingTags  []db.UpsertProposedTagParams
 }
 
 func newMockIssueStore() *mockIssueStore {
@@ -147,6 +148,24 @@ func (m *mockIssueStore) CreateIssueWithSideEffects(ctx context.Context, params 
 	}
 	m.outbox = append(m.outbox, buildOutbox(created.ID)...)
 	m.scoreLogs = append(m.scoreLogs, buildScores(created.ID)...)
+	return created, nil
+}
+
+// CreateIssueWithProposedTags mirrors the DB transaction: proposals become pending tag rows and
+// are linked to the issue in the same call, so a failure leaves neither behind.
+func (m *mockIssueStore) CreateIssueWithProposedTags(ctx context.Context, params db.CreateIssueParams, tags []string, proposed []db.UpsertProposedTagParams, buildOutbox func(int64) []db.CreateOutboxEntryParams, buildScores func(int64) []db.InsertScoreLogParams) (db.Issue, error) {
+	created, err := m.CreateIssueWithSideEffects(ctx, params, tags, buildOutbox, buildScores)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	for _, proposal := range proposed {
+		m.pendingTags = append(m.pendingTags, proposal)
+		if err := m.InsertIssueTag(ctx, db.InsertIssueTagParams{IssueID: created.ID, TagCode: proposal.Code}); err != nil {
+			delete(m.issues, created.ID)
+			delete(m.tags, created.ID)
+			return db.Issue{}, err
+		}
+	}
 	return created, nil
 }
 
@@ -1541,5 +1560,154 @@ func TestIssueService_Broadcast_QueryCountIndependentOfSubscribers(t *testing.T)
 	// Total query count must be exactly 2 (1 per broadcast, zero scaling with 15 subscribers).
 	if store.recipientCalls != 2 {
 		t.Fatalf("expected exactly 2 recipient queries across 2 broadcasts, got %d", store.recipientCalls)
+	}
+}
+
+func TestSyncIssue_ProposedTags_Workflow(t *testing.T) {
+	storageMgr, _ := storage.NewManager(t.TempDir())
+	store := newMockIssueStore()
+	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền A1"}
+	svc := NewService(store, storageMgr, nil)
+	creator := db.User{ID: 7, SiteID: 1, Role: "WORKER", Username: "worker7", FullName: "Worker 7", IsActive: true}
+	store.users[creator.ID] = creator
+
+	clientUUID := "c0a80101-0000-4000-8000-000000009999"
+	req := SyncIssueRequest{
+		ClientUUID:   clientUUID,
+		Category:     Category1S.String(),
+		LocationCode: "LINE_A1",
+		Tags:         []string{"scrap_material"},
+		ProposedTags: []ProposedTag{
+			{NameVi: "Thùng hỏng", NameZh: "破损箱", NameEn: "Broken bin", Category: "1S"},
+		},
+		PhotoBefore: createTestFileHeader(t, "photo_before", "before.jpg", testJPEGBytes),
+	}
+
+	resp, created, err := svc.SyncIssue(ctxFor(creator), req, creator)
+	if err != nil {
+		t.Fatalf("SyncIssue with proposed tags failed: %v", err)
+	}
+	if !created {
+		t.Fatal("expected created=true for new issue")
+	}
+	if len(resp.Tags) != 2 {
+		t.Fatalf("expected 2 tags on issue, got %v", resp.Tags)
+	}
+	if len(store.pendingTags) != 1 {
+		t.Fatalf("expected 1 pending tag stored, got %d", len(store.pendingTags))
+	}
+	pending := store.pendingTags[0]
+	if pending.Category != Category1S.String() || pending.NameVi != "Thùng hỏng" || !strings.HasPrefix(pending.Code, "pending_") {
+		t.Fatalf("unexpected pending tag payload: %+v", pending)
+	}
+	if !pending.CreatedBy.Valid || pending.CreatedBy.Int64 != 7 {
+		t.Fatalf("expected pending tag created_by=7, got %+v", pending.CreatedBy)
+	}
+
+	// Idempotency: replay the same request with clientUUID
+	resp2, created2, err2 := svc.SyncIssue(ctxFor(creator), req, creator)
+	if err2 != nil {
+		t.Fatalf("idempotent replay failed: %v", err2)
+	}
+	if created2 {
+		t.Fatal("expected created=false on replay")
+	}
+	if resp2.ID != resp.ID {
+		t.Fatalf("expected same issue ID on replay: %d vs %d", resp2.ID, resp.ID)
+	}
+
+	// Validation: more than 5 proposed tags rejected
+	tooMany := make([]ProposedTag, 6)
+	for i := 0; i < 6; i++ {
+		tooMany[i] = ProposedTag{NameVi: fmt.Sprintf("Tag %d", i), NameZh: "Tag", NameEn: "Tag", Category: "1S"}
+	}
+	_, _, err = svc.SyncIssue(ctxFor(creator), SyncIssueRequest{
+		ClientUUID:   "c0a80101-0000-4000-8000-000000009991",
+		Category:     Category1S.String(),
+		LocationCode: "LINE_A1",
+		ProposedTags: tooMany,
+		PhotoBefore:  createTestFileHeader(t, "photo_before", "before.jpg", testJPEGBytes),
+	}, creator)
+	if err == nil || !strings.Contains(err.Error(), "at most 5") {
+		t.Fatalf("expected error for >5 proposed tags, got %v", err)
+	}
+}
+
+func TestBuildProposedTagParams_ValidatesAndDeduplicates(t *testing.T) {
+	creator := db.User{ID: 7}
+	base := SyncIssueRequest{Category: Category1S.String()}
+
+	tests := []struct {
+		name      string
+		proposals []ProposedTag
+		wantErr   string
+		wantCount int
+	}{
+		{
+			name:      "missing translation",
+			proposals: []ProposedTag{{NameVi: "Thùng hỏng", NameEn: "Broken bin", Category: Category1S.String()}},
+			wantErr:   "names are required",
+		},
+		{
+			name:      "category mismatch",
+			proposals: []ProposedTag{{NameVi: "Thùng hỏng", NameZh: "破损箱", NameEn: "Broken bin", Category: Category2S.String()}},
+			wantErr:   "category is invalid",
+		},
+		{
+			name:      "name too long",
+			proposals: []ProposedTag{{NameVi: strings.Repeat("x", 256), NameZh: "箱", NameEn: "Bin", Category: Category1S.String()}},
+			wantErr:   "names are too long",
+		},
+		{
+			name: "duplicate proposals are collapsed",
+			proposals: []ProposedTag{
+				{NameVi: " Thùng hỏng ", NameZh: "破损箱", NameEn: "Broken bin", Category: Category1S.String()},
+				{NameVi: "Thùng hỏng", NameZh: "破损箱", NameEn: "Broken bin", Category: Category1S.String()},
+			},
+			wantCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := base
+			req.ProposedTags = tt.proposals
+			got, err := buildProposedTagParams(req, creator)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want substring %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("buildProposedTagParams: %v", err)
+			}
+			if len(got) != tt.wantCount {
+				t.Fatalf("got %d proposals, want %d", len(got), tt.wantCount)
+			}
+			if !strings.HasPrefix(got[0].Code, "pending_") {
+				t.Fatalf("proposal code is not pending-scoped: %q", got[0].Code)
+			}
+		})
+	}
+}
+
+func TestBuildProposedTagParams_CodeIsCreatorScoped(t *testing.T) {
+	req := SyncIssueRequest{
+		Category: Category1S.String(),
+		ProposedTags: []ProposedTag{{
+			NameVi: "Thùng hỏng", NameZh: "破损箱", NameEn: "Broken bin", Category: Category1S.String(),
+		}},
+	}
+	first, err := buildProposedTagParams(req, db.User{ID: 7})
+	if err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	second, err := buildProposedTagParams(req, db.User{ID: 8})
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+	if first[0].Code == second[0].Code {
+		t.Fatalf("different creators unexpectedly share pending code %q", first[0].Code)
 	}
 }

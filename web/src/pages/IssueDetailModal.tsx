@@ -1064,7 +1064,7 @@ export function IssueDetailModal({
                       <TagLabel
                         key={tagCode}
                         code={tagCode}
-                        tags={tags}
+                        tags={currentIssue.tag_details?.length ? currentIssue.tag_details : tags}
                         className="inline-flex items-center rounded-md bg-zinc-200/80 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 dark:bg-zinc-700/80 dark:text-zinc-300"
                       />
                     ))}

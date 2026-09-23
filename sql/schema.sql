@@ -133,10 +133,16 @@ CREATE TABLE IF NOT EXISTS tags (
     category VARCHAR(10) NOT NULL,
     use_count INT NOT NULL DEFAULT 1,
     is_preset BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'APPROVED' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'MERGED')),
+    created_by BIGINT REFERENCES users(id),
+    reviewed_by BIGINT REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    merged_tag_code VARCHAR(50) REFERENCES tags(code)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_code_lower ON tags (LOWER(code));
 CREATE INDEX IF NOT EXISTS idx_tags_active ON tags(is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_tags_status_owner ON tags(status, created_by);
 
 CREATE TABLE IF NOT EXISTS issues (
     id BIGSERIAL PRIMARY KEY,

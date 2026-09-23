@@ -1,5 +1,11 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { issueMutationPath, issueOperations, mutateIssue } from "../src/api/operations.ts";
+import {
+  issueMutationPath,
+  issueOperations,
+  mutateIssue,
+  reviewTag,
+  suggestTags,
+} from "../src/api/operations.ts";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { UserRole } from "../src/types/index.ts";
 
@@ -93,6 +99,50 @@ describe("OpenAPI-derived issue operations", () => {
         status: 403,
         code: "FORBIDDEN",
       });
+    } finally {
+      capture.restore();
+    }
+  });
+});
+
+describe("Tag lifecycle operations", () => {
+  it("posts the AI suggestion query and normalizes missing arrays", async () => {
+    const capture = captureFetch(() => jsonEnvelope({ existing_tags: ["oil_leak"] }));
+    try {
+      const result = await suggestTags({ query: "rò rỉ dầu", category: "3S" });
+      expect(capture.calls[0].url).toBe("/api/ai/suggest-tags");
+      expect(capture.calls[0].init.method).toBe("POST");
+      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({
+        query: "rò rỉ dầu",
+        category: "3S",
+      });
+      expect(result.existing_tags).toEqual(["oil_leak"]);
+      expect(result.proposed_tags).toEqual([]);
+    } finally {
+      capture.restore();
+    }
+  });
+
+  it("sends the review action and merge target to the tag review endpoint", async () => {
+    const capture = captureFetch(() => jsonEnvelope({ code: "pending_abc", status: "MERGED" }));
+    try {
+      await reviewTag("pending_abc", "MERGE", "oil_leak");
+      expect(capture.calls[0].url).toBe("/api/tags/pending_abc/review");
+      expect(capture.calls[0].init.method).toBe("PATCH");
+      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({
+        action: "MERGE",
+        merged_tag_code: "oil_leak",
+      });
+    } finally {
+      capture.restore();
+    }
+  });
+
+  it("omits the merge target for approve and reject", async () => {
+    const capture = captureFetch(() => jsonEnvelope({ code: "pending_abc", status: "APPROVED" }));
+    try {
+      await reviewTag("pending_abc", "APPROVE");
+      expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({ action: "APPROVE" });
     } finally {
       capture.restore();
     }

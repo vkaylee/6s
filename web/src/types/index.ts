@@ -121,6 +121,7 @@ export type IssueItem = Omit<
   assigned_team_name?: string | null;
   translated_description?: string | null;
   score_deducted?: number;
+  tag_details?: TagItem[];
 };
 
 export function resolveIssueVisibility(
@@ -147,6 +148,15 @@ export type LocationItem = Omit<OpenApiLocation, "qr_code"> & {
   is_active: boolean;
 };
 
+export type TagStatus = "PENDING" | "APPROVED" | "REJECTED" | "MERGED";
+
+export interface ProposedTagItem {
+  name_vi: string;
+  name_zh?: string;
+  name_en?: string;
+  category: string;
+}
+
 export type TagItem = Omit<Partial<OpenApiTag>, "category"> & {
   code?: string;
   name_vi?: string;
@@ -161,6 +171,9 @@ export type TagItem = Omit<Partial<OpenApiTag>, "category"> & {
   target_kind?: "OBJECT" | "BEHAVIOR";
   is_preset?: boolean;
   is_active?: boolean;
+  status?: TagStatus;
+  created_by?: number | null;
+  merged_tag_code?: string | null;
 };
 
 export type LocationHealthScore = OpenApiLocationHealthScore;

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client.ts";
-import { createTag, fetchTags } from "../api/operations.ts";
+import { createTag, fetchTags, reviewTag, type TagReviewAction } from "../api/operations.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useAiStatus } from "../hooks/useAiStatus.ts";
 import { type SupportedLocale, useI18nStore } from "../i18n/index.ts";
@@ -103,21 +103,27 @@ function TagCard({
   showToggle = false,
   onToggle,
   onEdit,
+  onReview,
 }: {
   tag: TagItemData;
   compact?: boolean;
   showToggle?: boolean;
   onToggle?: (code: string, active: boolean) => void;
   onEdit?: (tag: TagItemData) => void;
+  onReview?: (tag: TagItemData, action: TagReviewAction) => void;
 }) {
   const { t } = useI18nStore();
   const active = tag.is_active ?? true;
+  const pending = tag.status === "PENDING";
+  const rejected = tag.status === "REJECTED";
   return (
     <div
       className={`p-3.5 rounded-2xl border flex items-start justify-between gap-3 ${
-        active
-          ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40"
-          : "border-zinc-200/50 dark:border-zinc-800/40 bg-zinc-100/50 dark:bg-zinc-900/40 opacity-60"
+        pending
+          ? "border-amber-300 border-dashed bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20"
+          : active
+            ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40"
+            : "border-zinc-200/50 dark:border-zinc-800/40 bg-zinc-100/50 dark:bg-zinc-900/40 opacity-60"
       }`}
     >
       <div className="space-y-1 flex-1 min-w-0">
@@ -130,7 +136,17 @@ function TagCard({
           <span className="font-mono text-xs font-medium text-zinc-600 dark:text-zinc-300">
             {tag.code}
           </span>
-          {!compact && (
+          {pending && (
+            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
+              ⏳ {t("issue.tag_status_pending")}
+            </span>
+          )}
+          {rejected && (
+            <span className="text-[10px] font-bold text-zinc-500">
+              ⊘ {t("issue.tag_status_rejected")}
+            </span>
+          )}
+          {!compact && !pending && (
             <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
               {active ? t("admin.active_status") : t("admin.inactive_status")}
             </span>
@@ -158,7 +174,7 @@ function TagCard({
             {t("common.edit")}
           </button>
         )}
-        {showToggle && onToggle && (
+        {showToggle && onToggle && !pending && (
           <button
             type="button"
             onClick={() => tag.code && onToggle(tag.code, active)}
@@ -166,6 +182,24 @@ function TagCard({
           >
             {active ? t("admin.tag_btn_disable") : t("admin.tag_btn_enable")}
           </button>
+        )}
+        {pending && onReview && tag.code && (
+          <>
+            <button
+              type="button"
+              onClick={() => onReview(tag, "APPROVE")}
+              className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border border-emerald-300 text-emerald-700 dark:text-emerald-300"
+            >
+              {t("admin.tag_approve_btn")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onReview(tag, "REJECT")}
+              className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border border-rose-300 text-rose-700 dark:text-rose-300"
+            >
+              {t("admin.tag_reject_btn")}
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -485,7 +519,7 @@ export function IssueTagsPage() {
   const [suggestedCode, setSuggestedCode] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<TagItemData | null>(null);
-
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
   const loadTags = async () => {
     setLoading(true);
     try {
@@ -537,6 +571,31 @@ export function IssueTagsPage() {
     }
   };
 
+  const handleReview = async (tag: TagItemData, action: TagReviewAction) => {
+    if (!tag.code) return;
+    try {
+      const updated = await reviewTag(tag.code, action);
+      haptics.success();
+      setTags((prev) =>
+        prev.map((item) => (item.code === tag.code ? { ...item, ...updated } : item)),
+      );
+      await modalDialog.success(
+        t(action === "APPROVE" ? "admin.tag_approved_success" : "admin.tag_rejected_success"),
+      );
+    } catch {
+      haptics.errorOrConflict();
+      await modalDialog.alert(t("admin.tag_status_error"));
+    }
+  };
+
+  const pendingCount = useMemo(() => tags.filter((tag) => tag.status === "PENDING").length, [tags]);
+  const visibleTags = useMemo(
+    () =>
+      statusFilter === "ALL"
+        ? tags
+        : tags.filter((tag) => (tag.status || "APPROVED") === statusFilter),
+    [tags, statusFilter],
+  );
   const applyPack = async (pack: PackKey) => {
     try {
       if (pack === "ALL") {
@@ -666,7 +725,7 @@ export function IssueTagsPage() {
         <section className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-black uppercase tracking-wider text-zinc-500">
-              {t("admin.tags_tab")} ({tags.length})
+              {t("admin.tags_tab")} ({visibleTags.length})
             </h2>
             <button
               type="button"
@@ -674,6 +733,44 @@ export function IssueTagsPage() {
               className="text-xs font-bold text-blue-600 p-1"
             >
               ↻
+            </button>
+          </div>
+
+          {/* Status Tabs (All / Pending / Approved) */}
+          <div className="flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-2">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("ALL")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all min-h-[34px] ${
+                statusFilter === "ALL"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
+                  : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.tags_tab_all")} ({tags.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("PENDING")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all min-h-[34px] flex items-center gap-1 ${
+                statusFilter === "PENDING"
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              }`}
+            >
+              <span>⏳</span>
+              <span>{t("admin.tags_tab_pending", { count: pendingCount })}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("APPROVED")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all min-h-[34px] ${
+                statusFilter === "APPROVED"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
+                  : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+              }`}
+            >
+              {t("admin.tags_tab_approved")}
             </button>
           </div>
           <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 space-y-2">
@@ -702,16 +799,17 @@ export function IssueTagsPage() {
           </div>
           {loading ? (
             <div className="text-sm text-zinc-400 py-6 text-center">{t("admin.loading_tags")}</div>
-          ) : tags.length === 0 ? (
+          ) : visibleTags.length === 0 ? (
             <div className="text-sm text-zinc-400 py-6 text-center">{t("admin.empty_tags")}</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {tags.map((tag) => (
+              {visibleTags.map((tag) => (
                 <TagCard
                   key={tag.code}
                   tag={tag}
                   showToggle
                   onToggle={toggleStatus}
+                  onReview={handleReview}
                   onEdit={(t) => {
                     setEditingTag(t);
                     setModalOpen(true);

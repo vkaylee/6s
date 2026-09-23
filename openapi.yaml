@@ -175,7 +175,47 @@ components:
         is_preset:
           type: boolean
           default: false
+        is_active:
+          type: boolean
+          default: true
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, MERGED]
+          default: APPROVED
+        created_by:
+          type: integer
+          nullable: true
 
+    TagDetail:
+      type: object
+      required:
+        - code
+        - name_vi
+        - name_zh
+        - name_en
+        - category
+        - status
+      properties:
+        code:
+          type: string
+          example: oil_leak
+        name_vi:
+          type: string
+          example: Rò rỉ dầu
+        name_zh:
+          type: string
+          example: 漏油
+        name_en:
+          type: string
+          example: Oil leak
+        category:
+          type: string
+          enum: [1S, 2S, 3S, 4S, 5S, 6S]
+          example: 3S
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, MERGED]
+          example: APPROVED
     Issue:
       type: object
       required:
@@ -270,6 +310,11 @@ components:
           items:
             type: string
           example: ["oil_leak", "safety_gear"]
+        tag_details:
+          type: array
+          description: Tag metadata and lifecycle status chips for all viewers
+          items:
+            $ref: '#/components/schemas/TagDetail'
         description:
           type: string
           nullable: true
@@ -1279,6 +1324,9 @@ paths:
                 tags:
                   type: string
                   description: JSON array string, vd '["oil_leak", "safety_gear"]'
+                proposed_tags:
+                  type: string
+                  description: JSON array string of {name_vi,name_zh,name_en,category}; up to 5 creator-owned pending tags
                 description:
                   type: string
                 photo_before:
@@ -2468,6 +2516,64 @@ paths:
               schema:
                 type: object
 
+  /ai/suggest-tags:
+    post:
+      operationId: suggestTagsWithAi
+      summary: AI gợi ý tag chuẩn và tag đề xuất cho issue mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, category]
+              properties:
+                query:
+                  type: string
+                category:
+                  type: string
+                  enum: [1S, 2S, 3S, 4S, 5S, 6S]
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Tag gợi ý từ catalog đã duyệt và đề xuất mới
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [existing_tags, proposed_tags]
+                    properties:
+                      existing_tags:
+                        type: array
+                        items:
+                          type: string
+                      proposed_tags:
+                        type: array
+                        items:
+                          type: object
+                          required: [name_vi, name_zh, name_en, category]
+                          properties:
+                            name_vi:
+                              type: string
+                            name_zh:
+                              type: string
+                            name_en:
+                              type: string
+                            category:
+                              type: string
+                              enum: [1S, 2S, 3S, 4S, 5S, 6S]
+        '400':
+          description: AI chưa bật hoặc input không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /issues/events:
     get:
       operationId: streamIssueEvents
@@ -2794,6 +2900,42 @@ paths:
             application/json:
               schema:
                 type: object
+
+  /tags/{code}/review:
+    patch:
+      operationId: reviewTag
+      summary: Duyệt, từ chối hoặc gộp tag chờ duyệt (Requires permission `masterdata:manage`)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [APPROVE, REJECT, MERGE]
+                merged_tag_code:
+                  type: string
+                  description: Tag đích đã APPROVED khi gộp
+      responses:
+        '200':
+          description: Kết quả cập nhật trạng thái tag
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Tag'
 
   /tags/batch-status:
     post:

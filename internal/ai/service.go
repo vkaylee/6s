@@ -940,6 +940,142 @@ type ReviewSuggestion struct {
 	Tags      []string `json:"tags,omitempty"`
 }
 
+// SuggestTagsRequest defines input for POST /api/ai/suggest-tags.
+type SuggestTagsRequest struct {
+	Query       string `json:"query"`
+	Category    string `json:"category"`
+	Description string `json:"description"`
+}
+
+// SuggestedProposedTag is a new tag label the model proposes when no approved tag fits.
+type SuggestedProposedTag struct {
+	NameVi   string `json:"name_vi"`
+	NameZh   string `json:"name_zh"`
+	NameEn   string `json:"name_en"`
+	Category string `json:"category"`
+}
+
+// SuggestTagsResponse separates approved catalog matches from labels needing moderation.
+type SuggestTagsResponse struct {
+	ExistingTags []string               `json:"existing_tags"`
+	ProposedTags []SuggestedProposedTag `json:"proposed_tags"`
+}
+
+const (
+	suggestQueryMaxRunes       = 2000
+	suggestDescriptionMaxRunes = 4000
+	suggestMaxProposedTags     = 5
+)
+
+// SuggestTags asks enabled AI to select approved catalog codes and suggest new labels otherwise.
+// It never writes tags; callers decide whether to submit proposed labels for moderation.
+func (s *Service) SuggestTags(ctx context.Context, req SuggestTagsRequest) (SuggestTagsResponse, error) {
+	query := strings.TrimSpace(req.Query)
+	category := strings.TrimSpace(strings.ToUpper(req.Category))
+	description := strings.TrimSpace(req.Description)
+	if query == "" || len([]rune(query)) > suggestQueryMaxRunes {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "query is required and must be at most 2,000 characters")
+	}
+	if !validSuggestCategory(category) {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "category is invalid")
+	}
+	if len([]rune(description)) > suggestDescriptionMaxRunes {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "description is too long")
+	}
+	cfg, err := s.store.GetAIConfig(ctx)
+	if err != nil || !cfg.IsEnabled {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrAINotEnabled)
+	}
+	baseURL := strings.TrimSpace(cfg.BaseUrl)
+	model := strings.TrimSpace(resolvePurposeModel("summary", cfg))
+	if baseURL == "" {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrAIBaseURLMissing)
+	}
+	if model == "" {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrAIModelMissing)
+	}
+	catalog, err := s.store.ListTags(ctx)
+	if err != nil {
+		return SuggestTagsResponse{}, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err)
+	}
+	prompt := buildSuggestTagsPrompt(query, category, description, catalog)
+	client := s.newOpenAIClient(baseURL, s.getDecryptedAPIKey(cfg.ApiKey))
+	if err := s.waitRateLimit(ctx); err != nil {
+		return SuggestTagsResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
+	}
+	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{openai.SystemMessage(prompt), openai.UserMessage(query)},
+		Model:    model, Temperature: openai.Float(0.2),
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &openai.ResponseFormatJSONObjectParam{}},
+	})
+	if err != nil {
+		return SuggestTagsResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
+	}
+	return parseSuggestTagsResult(extractMessageContent(completion), category, catalog)
+}
+
+func validSuggestCategory(category string) bool {
+	switch category {
+	case "1S", "2S", "3S", "4S", "5S", "6S":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildSuggestTagsPrompt(query, category, description string, catalog []db.Tag) string {
+	parts := []string{"Return only JSON object with existing_tags (array of approved tag codes) and proposed_tags (array of objects with name_vi,name_zh,name_en,category). Never invent existing_tags codes. Use at most 5 proposed tags, each category " + category + ".", "Category: " + category, "Query: " + query, "Description: " + description, "Approved catalog:"}
+	for _, tag := range catalog {
+		if tag.Category == category && tag.Status == "APPROVED" {
+			parts = append(parts, fmt.Sprintf("%s | %s | %s | %s", tag.Code, tag.NameVi, tag.NameZh, tag.NameEn))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func parseSuggestTagsResult(raw, category string, catalog []db.Tag) (SuggestTagsResponse, error) {
+	var out struct {
+		ExistingTags []string               `json:"existing_tags"`
+		ProposedTags []SuggestedProposedTag `json:"proposed_tags"`
+	}
+	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &out); err != nil {
+		return SuggestTagsResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, "model returned invalid tag suggestion JSON").WithCause(err)
+	}
+	approved := make(map[string]struct{}, len(catalog))
+	for _, tag := range catalog {
+		if tag.Status == "APPROVED" && tag.Category == category {
+			approved[tag.Code] = struct{}{}
+		}
+	}
+	result := SuggestTagsResponse{ExistingTags: make([]string, 0, len(out.ExistingTags)), ProposedTags: make([]SuggestedProposedTag, 0, suggestMaxProposedTags)}
+	seen := make(map[string]struct{}, len(out.ExistingTags))
+	for _, code := range out.ExistingTags {
+		code = strings.TrimSpace(code)
+		if _, ok := approved[code]; !ok {
+			continue
+		}
+		if _, ok := seen[code]; ok {
+			continue
+		}
+		seen[code] = struct{}{}
+		result.ExistingTags = append(result.ExistingTags, code)
+	}
+	for _, proposal := range out.ProposedTags {
+		proposal.NameVi = strings.TrimSpace(proposal.NameVi)
+		proposal.NameZh = strings.TrimSpace(proposal.NameZh)
+		proposal.NameEn = strings.TrimSpace(proposal.NameEn)
+		proposal.Category = strings.TrimSpace(strings.ToUpper(proposal.Category))
+		if proposal.NameVi == "" || proposal.NameZh == "" || proposal.NameEn == "" || proposal.Category != category || len([]rune(proposal.NameVi)) > 255 || len([]rune(proposal.NameZh)) > 255 || len([]rune(proposal.NameEn)) > 255 {
+			continue
+		}
+		result.ProposedTags = append(result.ProposedTags, proposal)
+		if len(result.ProposedTags) >= suggestMaxProposedTags {
+			break
+		}
+	}
+	return result, nil
+}
+
 // ReviewResponse is the structured AI verdict for an issue report.
 type ReviewResponse struct {
 	Verdict    string           `json:"verdict"`

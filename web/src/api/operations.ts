@@ -3,10 +3,11 @@ import type {
   LocationHealthScore,
   LocationItem,
   PaginationMeta,
+  ProposedTagItem,
   ReporterLeaderboard,
   TagItem,
 } from "../types/index.ts";
-import { sdkClient } from "./client.ts";
+import { apiClient, sdkClient } from "./client.ts";
 import type {
   CloseIssueData,
   GetReporterLeaderboardData,
@@ -147,4 +148,44 @@ export async function fetchReporterLeaderboard(
 ): Promise<ReporterLeaderboard[]> {
   const result = await getReporterLeaderboard({ client: sdkClient, query, throwOnError: true });
   return result.data.data as ReporterLeaderboard[];
+}
+
+export interface TagSuggestionResult {
+  existing_tags: string[];
+  proposed_tags: ProposedTagItem[];
+}
+
+export interface SuggestTagsInput {
+  query: string;
+  category?: string | null;
+  description?: string;
+}
+
+/** AI tag suggestion; callers must gate on AI status before invoking. */
+export async function suggestTags(input: SuggestTagsInput): Promise<TagSuggestionResult> {
+  const result = await apiClient<TagSuggestionResult>("/api/ai/suggest-tags", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return {
+    existing_tags: result?.existing_tags ?? [],
+    proposed_tags: result?.proposed_tags ?? [],
+  };
+}
+
+export type TagReviewAction = "APPROVE" | "REJECT" | "MERGE";
+
+export async function reviewTag(
+  code: string,
+  action: TagReviewAction,
+  mergedTagCode?: string,
+): Promise<TagItem> {
+  return apiClient<TagItem>(`/api/tags/${encodeURIComponent(code)}/review`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(
+      action === "MERGE" ? { action, merged_tag_code: mergedTagCode } : { action },
+    ),
+  });
 }

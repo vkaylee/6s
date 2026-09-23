@@ -62,6 +62,7 @@ type Response struct {
 	LocationSnapshotSource     *string                      `json:"location_snapshot_source,omitempty"`
 	LocationSnapshotRecordedAt *string                      `json:"location_snapshot_recorded_at,omitempty"`
 	Tags                       []string                     `json:"tags"`
+	TagDetails                 []TagDetail                  `json:"tag_details"`
 	Description                *string                      `json:"description"`
 	TranslatedDescription      *string                      `json:"translated_description,omitempty"`
 	RejectReason               *string                      `json:"reject_reason"`
@@ -78,6 +79,16 @@ type Response struct {
 	ClosedAt                   *string                      `json:"closed_at"`
 	ResponsibilityHistory      []ResponsibilityHistoryEntry `json:"responsibility_history,omitempty"`
 	AllowedActions             *AllowedActions              `json:"allowed_actions,omitempty"`
+}
+
+// TagDetail carries display metadata and lifecycle status for an issue tag.
+type TagDetail struct {
+	Code     string `json:"code"`
+	NameVi   string `json:"name_vi"`
+	NameZh   string `json:"name_zh"`
+	NameEn   string `json:"name_en"`
+	Category string `json:"category"`
+	Status   string `json:"status"`
 }
 
 // UserItem formats summary user details in a Response.
@@ -211,6 +222,11 @@ type Store interface {
 type Atomic interface {
 	CreateIssueWithSideEffects(ctx context.Context, issueParams db.CreateIssueParams, tags []string, buildOutbox func(issueID int64) []db.CreateOutboxEntryParams, buildScores func(issueID int64) []db.InsertScoreLogParams) (db.Issue, error)
 	ResolveIssueAtomic(ctx context.Context, force bool, params db.ResolveIssueParams, forceParams db.ForceResolveIssueParams) (db.Issue, error)
+}
+
+// ProposedAtomic supports atomically persisting issues with proposed pending tags.
+type ProposedAtomic interface {
+	CreateIssueWithProposedTags(ctx context.Context, issueParams db.CreateIssueParams, tags []string, proposed []db.UpsertProposedTagParams, buildOutbox func(issueID int64) []db.CreateOutboxEntryParams, buildScores func(issueID int64) []db.InsertScoreLogParams) (db.Issue, error)
 }
 
 // ServiceImpl manages issue lifecycle and business rules.

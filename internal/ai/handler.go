@@ -224,6 +224,25 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	writeAIJSON(w, http.StatusOK, map[string]bool{"enabled": h.svc.IsEnabled(r.Context())})
 }
 
+// SuggestTags handles POST /api/ai/suggest-tags (Authenticated users).
+func (h *Handler) SuggestTags(w http.ResponseWriter, r *http.Request) {
+	var req SuggestTagsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAIAppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+	res, err := h.svc.SuggestTags(r.Context(), req)
+	if err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			writeAIAppError(w, r, appErr)
+			return
+		}
+		writeAIAppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	writeAIJSON(w, http.StatusOK, res)
+}
+
 // Review handles POST /api/ai/review (Authenticated users).
 func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 	var req ReviewRequest

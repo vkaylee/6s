@@ -113,6 +113,30 @@ describe("IssueCard Component", () => {
     expect(renderToString(<TagLabel code="clutter" tags={[tag]} />)).toContain("Đồ thừa");
     expect(renderToString(<TagLabel code="missing" tags={[tag]} />)).toContain("missing");
   });
+  it("renders pending and rejected tag status indicators", () => {
+    const previousLocale = useI18nStore.getState().locale;
+    useI18nStore.getState().setLocale("en");
+    try {
+      const pending = renderToString(
+        <TagLabel
+          code="pending_tag"
+          tags={[{ code: "pending_tag", name_en: "Pending", status: "PENDING" }]}
+        />,
+      );
+      const rejected = renderToString(
+        <TagLabel
+          code="rejected_tag"
+          tags={[{ code: "rejected_tag", name_en: "Rejected", status: "REJECTED" }]}
+        />,
+      );
+      expect(pending).toContain("⏳");
+      expect(pending).toContain("Pending review");
+      expect(rejected).toContain("⊘");
+      expect(rejected).toContain("Rejected");
+    } finally {
+      useI18nStore.getState().setLocale(previousLocale);
+    }
+  });
 
   it("renders IssueCardSkeleton placeholder with pulse animation", () => {
     const html = renderToString(<IssueCardSkeleton />);

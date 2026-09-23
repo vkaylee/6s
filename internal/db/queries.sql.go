@@ -74,6 +74,42 @@ func (q *Queries) AddTeamMembership(ctx context.Context, arg AddTeamMembershipPa
 	return err
 }
 
+const approveTag = `-- name: ApproveTag :one
+UPDATE tags
+SET status = 'APPROVED',
+    reviewed_by = $2,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code
+`
+
+type ApproveTagParams struct {
+	Code       string
+	ReviewedBy sql.NullInt64
+}
+
+func (q *Queries) ApproveTag(ctx context.Context, arg ApproveTagParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, approveTag, arg.Code, arg.ReviewedBy)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
+		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
+	)
+	return i, err
+}
+
 const claimOutboxTasks = `-- name: ClaimOutboxTasks :many
 UPDATE notification_outbox
 SET status = 'SENDING',
@@ -1533,6 +1569,32 @@ func (q *Queries) GetSystemSettings(ctx context.Context) (SystemSetting, error) 
 	return i, err
 }
 
+const getTagByCode = `-- name: GetTagByCode :one
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code FROM tags WHERE code = $1 LIMIT 1
+`
+
+func (q *Queries) GetTagByCode(ctx context.Context, code string) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTagByCode, code)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
+		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
+	)
+	return i, err
+}
+
 const getTeamByID = `-- name: GetTeamByID :one
 SELECT id, site_id, code, name, is_active, created_at FROM teams WHERE id = $1 LIMIT 1
 `
@@ -2271,7 +2333,7 @@ func (q *Queries) ListAllLocations(ctx context.Context) ([]Location, error) {
 }
 
 const listAllTags = `-- name: ListAllTags :many
-SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active FROM tags
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code FROM tags
 ORDER BY use_count DESC, id ASC
 `
 
@@ -2294,6 +2356,11 @@ func (q *Queries) ListAllTags(ctx context.Context) ([]Tag, error) {
 			&i.UseCount,
 			&i.IsPreset,
 			&i.IsActive,
+			&i.Status,
+			&i.CreatedBy,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.MergedTagCode,
 		); err != nil {
 			return nil, err
 		}
@@ -3073,8 +3140,8 @@ func (q *Queries) ListScoreLogsSince(ctx context.Context, createdAt time.Time) (
 }
 
 const listTags = `-- name: ListTags :many
-SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active FROM tags
-WHERE is_active = TRUE
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code FROM tags
+WHERE is_active = TRUE AND status = 'APPROVED'
 ORDER BY use_count DESC, id ASC
 `
 
@@ -3097,6 +3164,11 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 			&i.UseCount,
 			&i.IsPreset,
 			&i.IsActive,
+			&i.Status,
+			&i.CreatedBy,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.MergedTagCode,
 		); err != nil {
 			return nil, err
 		}
@@ -3112,7 +3184,7 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 }
 
 const listTagsForIssue = `-- name: ListTagsForIssue :many
-SELECT t.code, t.name_vi, t.name_zh, t.name_en, t.category
+SELECT t.code, t.name_vi, t.name_zh, t.name_en, t.category, t.status
 FROM tags t
 JOIN issue_tags it ON t.code = it.tag_code
 WHERE it.issue_id = $1
@@ -3124,6 +3196,7 @@ type ListTagsForIssueRow struct {
 	NameZh   string
 	NameEn   string
 	Category string
+	Status   string
 }
 
 func (q *Queries) ListTagsForIssue(ctx context.Context, issueID int64) ([]ListTagsForIssueRow, error) {
@@ -3141,6 +3214,7 @@ func (q *Queries) ListTagsForIssue(ctx context.Context, issueID int64) ([]ListTa
 			&i.NameZh,
 			&i.NameEn,
 			&i.Category,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -3156,7 +3230,7 @@ func (q *Queries) ListTagsForIssue(ctx context.Context, issueID int64) ([]ListTa
 }
 
 const listTagsForIssues = `-- name: ListTagsForIssues :many
-SELECT it.issue_id, t.code, t.name_vi, t.name_zh, t.name_en, t.category
+SELECT it.issue_id, t.code, t.name_vi, t.name_zh, t.name_en, t.category, t.status
 FROM tags t
 JOIN issue_tags it ON t.code = it.tag_code
 WHERE it.issue_id = ANY($1::bigint[])
@@ -3170,6 +3244,7 @@ type ListTagsForIssuesRow struct {
 	NameZh   string
 	NameEn   string
 	Category string
+	Status   string
 }
 
 func (q *Queries) ListTagsForIssues(ctx context.Context, issueIds []int64) ([]ListTagsForIssuesRow, error) {
@@ -3188,6 +3263,7 @@ func (q *Queries) ListTagsForIssues(ctx context.Context, issueIds []int64) ([]Li
 			&i.NameZh,
 			&i.NameEn,
 			&i.Category,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -3649,6 +3725,56 @@ func (q *Queries) ListVisibleIssueEventRecipients(ctx context.Context, arg ListV
 	return items, nil
 }
 
+const listVisibleTags = `-- name: ListVisibleTags :many
+SELECT id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code FROM tags
+WHERE is_active = TRUE
+  AND (status = 'APPROVED' OR (status = 'PENDING' AND (created_by = $1::bigint OR $2::varchar IN ('ADMIN', 'SUPERADMIN'))))
+ORDER BY use_count DESC, id ASC
+`
+
+type ListVisibleTagsParams struct {
+	UserID int64
+	Role   string
+}
+
+func (q *Queries) ListVisibleTags(ctx context.Context, arg ListVisibleTagsParams) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listVisibleTags, arg.UserID, arg.Role)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.NameVi,
+			&i.NameZh,
+			&i.NameEn,
+			&i.Category,
+			&i.UseCount,
+			&i.IsPreset,
+			&i.IsActive,
+			&i.Status,
+			&i.CreatedBy,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.MergedTagCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOutboxFailed = `-- name: MarkOutboxFailed :exec
 UPDATE notification_outbox
 SET status = 'FAILED',
@@ -3676,6 +3802,76 @@ WHERE id = $1 AND status = 'SENDING'
 func (q *Queries) MarkOutboxSent(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, markOutboxSent, id)
 	return err
+}
+
+const mergeTagIssuesDeduplicate = `-- name: MergeTagIssuesDeduplicate :exec
+DELETE FROM issue_tags AS old
+WHERE old.tag_code = $1
+  AND old.issue_id IN (SELECT other.issue_id FROM issue_tags AS other WHERE other.tag_code = $2)
+`
+
+type MergeTagIssuesDeduplicateParams struct {
+	TagCode   string
+	TagCode_2 string
+}
+
+func (q *Queries) MergeTagIssuesDeduplicate(ctx context.Context, arg MergeTagIssuesDeduplicateParams) error {
+	_, err := q.db.ExecContext(ctx, mergeTagIssuesDeduplicate, arg.TagCode, arg.TagCode_2)
+	return err
+}
+
+const mergeTagIssuesReassign = `-- name: MergeTagIssuesReassign :exec
+UPDATE issue_tags
+SET tag_code = $2
+WHERE tag_code = $1
+`
+
+type MergeTagIssuesReassignParams struct {
+	TagCode   string
+	TagCode_2 string
+}
+
+func (q *Queries) MergeTagIssuesReassign(ctx context.Context, arg MergeTagIssuesReassignParams) error {
+	_, err := q.db.ExecContext(ctx, mergeTagIssuesReassign, arg.TagCode, arg.TagCode_2)
+	return err
+}
+
+const mergeTagRecord = `-- name: MergeTagRecord :one
+UPDATE tags
+SET status = 'MERGED',
+    merged_tag_code = $2,
+    reviewed_by = $3,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code
+`
+
+type MergeTagRecordParams struct {
+	Code          string
+	MergedTagCode sql.NullString
+	ReviewedBy    sql.NullInt64
+}
+
+func (q *Queries) MergeTagRecord(ctx context.Context, arg MergeTagRecordParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, mergeTagRecord, arg.Code, arg.MergedTagCode, arg.ReviewedBy)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
+		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
+	)
+	return i, err
 }
 
 const patchIssue = `-- name: PatchIssue :one
@@ -3770,6 +3966,42 @@ func (q *Queries) PatchIssue(ctx context.Context, arg PatchIssueParams) (Issue, 
 		&i.CreatedAt,
 		&i.ResolvedAt,
 		&i.ClosedAt,
+	)
+	return i, err
+}
+
+const rejectTag = `-- name: RejectTag :one
+UPDATE tags
+SET status = 'REJECTED',
+    reviewed_by = $2,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code
+`
+
+type RejectTagParams struct {
+	Code       string
+	ReviewedBy sql.NullInt64
+}
+
+func (q *Queries) RejectTag(ctx context.Context, arg RejectTagParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, rejectTag, arg.Code, arg.ReviewedBy)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
+		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
 	)
 	return i, err
 }
@@ -4100,7 +4332,7 @@ const updateTagActiveStatus = `-- name: UpdateTagActiveStatus :one
 UPDATE tags
 SET is_active = $2
 WHERE code = $1
-RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code
 `
 
 type UpdateTagActiveStatusParams struct {
@@ -4121,6 +4353,11 @@ func (q *Queries) UpdateTagActiveStatus(ctx context.Context, arg UpdateTagActive
 		&i.UseCount,
 		&i.IsPreset,
 		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
 	)
 	return i, err
 }
@@ -4493,6 +4730,58 @@ func (q *Queries) UpsertNotificationConfig(ctx context.Context, arg UpsertNotifi
 	return i, err
 }
 
+const upsertProposedTag = `-- name: UpsertProposedTag :one
+INSERT INTO tags (
+    code, name_vi, name_zh, name_en, category, is_preset, is_active, status, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, FALSE, TRUE, 'PENDING', $6
+)
+ON CONFLICT (code) DO UPDATE SET
+    name_vi = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.name_vi ELSE tags.name_vi END,
+    name_zh = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.name_zh ELSE tags.name_zh END,
+    name_en = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.name_en ELSE tags.name_en END,
+    category = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.category ELSE tags.category END
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code
+`
+
+type UpsertProposedTagParams struct {
+	Code      string
+	NameVi    string
+	NameZh    string
+	NameEn    string
+	Category  string
+	CreatedBy sql.NullInt64
+}
+
+func (q *Queries) UpsertProposedTag(ctx context.Context, arg UpsertProposedTagParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, upsertProposedTag,
+		arg.Code,
+		arg.NameVi,
+		arg.NameZh,
+		arg.NameEn,
+		arg.Category,
+		arg.CreatedBy,
+	)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.NameVi,
+		&i.NameZh,
+		&i.NameEn,
+		&i.Category,
+		&i.UseCount,
+		&i.IsPreset,
+		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
+	)
+	return i, err
+}
+
 const upsertScoringRule = `-- name: UpsertScoringRule :one
 INSERT INTO scoring_rules (
     rule_key, points, description
@@ -4534,7 +4823,7 @@ ON CONFLICT (code) DO UPDATE SET
     name_zh = EXCLUDED.name_zh,
     name_en = EXCLUDED.name_en,
     category = EXCLUDED.category
-RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active
+RETURNING id, code, name_vi, name_zh, name_en, category, use_count, is_preset, is_active, status, created_by, reviewed_by, reviewed_at, merged_tag_code
 `
 
 type UpsertTagParams struct {
@@ -4566,6 +4855,11 @@ func (q *Queries) UpsertTag(ctx context.Context, arg UpsertTagParams) (Tag, erro
 		&i.UseCount,
 		&i.IsPreset,
 		&i.IsActive,
+		&i.Status,
+		&i.CreatedBy,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.MergedTagCode,
 	)
 	return i, err
 }

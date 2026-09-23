@@ -3,12 +3,15 @@ package masterdata
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"6s/internal/apperror"
+	"6s/internal/auth"
 	"6s/internal/db"
 	"6s/internal/i18n"
 	"6s/internal/response"
@@ -26,6 +29,16 @@ type Store interface {
 	UpsertTag(ctx context.Context, arg db.UpsertTagParams) (db.Tag, error)
 	UpdateTagActiveStatus(ctx context.Context, arg db.UpdateTagActiveStatusParams) (db.Tag, error)
 	SetAllTagsActiveStatus(ctx context.Context, isActive bool) error
+}
+
+type visibleTagStore interface {
+	ListVisibleTags(ctx context.Context, arg db.ListVisibleTagsParams) ([]db.Tag, error)
+}
+
+type tagReviewStore interface {
+	ApproveTag(ctx context.Context, arg db.ApproveTagParams) (db.Tag, error)
+	RejectTag(ctx context.Context, arg db.RejectTagParams) (db.Tag, error)
+	MergeTagAtomic(ctx context.Context, sourceCode, targetCode string, reviewerID int64) (db.Tag, error)
 }
 
 // Handler serves Master Data API endpoints.
@@ -50,14 +63,28 @@ type LocationResponse struct {
 
 // TagResponse formats tag details for API responses.
 type TagResponse struct {
-	Code     string `json:"code"`
-	NameVi   string `json:"name_vi"`
-	NameZh   string `json:"name_zh"`
-	NameEn   string `json:"name_en"`
-	Category string `json:"category"`
-	UseCount int32  `json:"use_count"`
-	IsPreset bool   `json:"is_preset"`
-	IsActive bool   `json:"is_active"`
+	Code      string `json:"code"`
+	NameVi    string `json:"name_vi"`
+	NameZh    string `json:"name_zh"`
+	NameEn    string `json:"name_en"`
+	Category  string `json:"category"`
+	UseCount  int32  `json:"use_count"`
+	IsPreset  bool   `json:"is_preset"`
+	IsActive  bool   `json:"is_active"`
+	Status    string `json:"status"`
+	CreatedBy *int64 `json:"created_by"`
+}
+
+// tagResponse projects a tag row onto the API contract.
+func tagResponse(t db.Tag) TagResponse {
+	var createdBy *int64
+	if t.CreatedBy.Valid {
+		createdBy = &t.CreatedBy.Int64
+	}
+	return TagResponse{
+		Code: t.Code, NameVi: t.NameVi, NameZh: t.NameZh, NameEn: t.NameEn, Category: t.Category,
+		UseCount: t.UseCount, IsPreset: t.IsPreset, IsActive: t.IsActive, Status: t.Status, CreatedBy: createdBy,
+	}
 }
 
 // ListLocations handles GET /api/locations.
@@ -240,26 +267,26 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListTags handles GET /api/tags.
+// ListTags handles GET /api/tags. Approved tags are public; a creator additionally sees the
+// pending tags they own, and Admin/SUPERADMIN see every pending tag. Rejected and merged tags
+// stay out of the picker because issue responses carry their own status details.
 func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
-	tags, err := h.store.ListTags(r.Context())
+	currentUser, authenticated := auth.GetUserFromContext(r.Context())
+	var tags []db.Tag
+	var err error
+	visibleStore, hasViewerQuery := h.store.(visibleTagStore)
+	if authenticated && hasViewerQuery {
+		tags, err = visibleStore.ListVisibleTags(r.Context(), db.ListVisibleTagsParams{UserID: currentUser.ID, Role: currentUser.Role})
+	} else {
+		tags, err = h.store.ListTags(r.Context())
+	}
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagQueryFailed).WithCause(err))
 		return
 	}
-
 	items := make([]TagResponse, 0, len(tags))
 	for _, t := range tags {
-		items = append(items, TagResponse{
-			Code:     t.Code,
-			NameVi:   t.NameVi,
-			NameZh:   t.NameZh,
-			NameEn:   t.NameEn,
-			Category: t.Category,
-			UseCount: t.UseCount,
-			IsPreset: t.IsPreset,
-			IsActive: t.IsActive,
-		})
+		items = append(items, tagResponse(t))
 	}
 
 	_ = response.JSON(w, http.StatusOK, items)
@@ -275,19 +302,83 @@ func (h *Handler) ListAllTags(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]TagResponse, 0, len(tags))
 	for _, t := range tags {
-		items = append(items, TagResponse{
-			Code:     t.Code,
-			NameVi:   t.NameVi,
-			NameZh:   t.NameZh,
-			NameEn:   t.NameEn,
-			Category: t.Category,
-			UseCount: t.UseCount,
-			IsPreset: t.IsPreset,
-			IsActive: t.IsActive,
-		})
+		items = append(items, tagResponse(t))
 	}
 
 	_ = response.JSON(w, http.StatusOK, items)
+}
+
+// TagReviewRequest defines an admin moderation decision for a pending tag.
+type TagReviewRequest struct {
+	Action        string `json:"action"`
+	MergedTagCode string `json:"merged_tag_code"`
+}
+
+// ReviewTag handles PATCH /api/tags/{code}/review (Admin only).
+func (h *Handler) ReviewTag(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+	code := strings.TrimSpace(chi.URLParam(r, "code"))
+	if code == "" {
+		code = strings.TrimSpace(r.PathValue("code"))
+	}
+	if code == "" {
+		code = strings.TrimSpace(r.URL.Query().Get("code"))
+	}
+	if code == "" {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagMissingFields))
+		return
+	}
+	reviewStore, ok := h.store.(tagReviewStore)
+	if !ok {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrTagUpdateFailed))
+		return
+	}
+	var req TagReviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+		return
+	}
+	reviewer := sql.NullInt64{Int64: currentUser.ID, Valid: currentUser.ID > 0}
+	var (
+		tag db.Tag
+		err error
+	)
+	switch strings.ToUpper(strings.TrimSpace(req.Action)) {
+	case "APPROVE":
+		tag, err = reviewStore.ApproveTag(r.Context(), db.ApproveTagParams{Code: code, ReviewedBy: reviewer})
+	case "REJECT":
+		tag, err = reviewStore.RejectTag(r.Context(), db.RejectTagParams{Code: code, ReviewedBy: reviewer})
+	case "MERGE":
+		target := strings.TrimSpace(req.MergedTagCode)
+		if target == "" {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagMissingFields))
+			return
+		}
+		tag, err = reviewStore.MergeTagAtomic(r.Context(), code, target, currentUser.ID)
+	default:
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest, "action must be APPROVE, REJECT, or MERGE"))
+		return
+	}
+	if err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagUpdateFailed).WithCause(err))
+		return
+	}
+	type auditStore interface {
+		InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
+	}
+	if aStore, ok := h.store.(auditStore); ok {
+		_ = aStore.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
+			UserID:      reviewer,
+			Action:      "TAG_" + strings.ToUpper(strings.TrimSpace(req.Action)),
+			TargetTable: "tags",
+			TargetID:    code,
+		})
+	}
+	_ = response.JSON(w, http.StatusOK, tagResponse(tag))
 }
 
 // UpdateTagStatusRequest defines payload to update tag active status.
@@ -320,16 +411,7 @@ func (h *Handler) UpdateTagStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = response.JSON(w, http.StatusOK, TagResponse{
-		Code:     tag.Code,
-		NameVi:   tag.NameVi,
-		NameZh:   tag.NameZh,
-		NameEn:   tag.NameEn,
-		Category: tag.Category,
-		UseCount: tag.UseCount,
-		IsPreset: tag.IsPreset,
-		IsActive: tag.IsActive,
-	})
+	_ = response.JSON(w, http.StatusOK, tagResponse(tag))
 }
 
 // BatchUpdateTagsStatusRequest defines payload for batch activating/deactivating tags.
@@ -405,14 +487,5 @@ func (h *Handler) UpsertTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = response.JSON(w, http.StatusOK, TagResponse{
-		Code:     tag.Code,
-		NameVi:   tag.NameVi,
-		NameZh:   tag.NameZh,
-		NameEn:   tag.NameEn,
-		Category: tag.Category,
-		UseCount: tag.UseCount,
-		IsPreset: tag.IsPreset,
-		IsActive: tag.IsActive,
-	})
+	_ = response.JSON(w, http.StatusOK, tagResponse(tag))
 }

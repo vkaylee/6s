@@ -211,7 +211,7 @@ export function IssueCard({
                 <TagLabel
                   key={tag}
                   code={tag}
-                  tags={tags}
+                  tags={issue.tag_details?.length ? issue.tag_details : tags}
                   className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
                 />
               ))}

@@ -1,4 +1,5 @@
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
+import type { ProposedTagItem } from "../types/index.ts";
 
 export interface DraftIssue {
   client_uuid: string;
@@ -13,6 +14,7 @@ export interface DraftIssue {
   assigned_team_id?: number | null;
   assignee_id?: number | null;
   tags: string[];
+  proposed_tags?: ProposedTagItem[];
   description: string;
   photo_before_blob: Blob;
   photo_detail_blob?: Blob;

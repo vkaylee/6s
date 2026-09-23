@@ -1,11 +1,10 @@
 package issue
 
 import (
-	"6s/internal/auth"
-	"6s/internal/db"
-	"6s/internal/storage"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"6s/internal/auth"
+	"6s/internal/db"
+	"6s/internal/storage"
 )
 
 // SyncIssueRequest parameters for POST /api/issues/sync.
@@ -27,12 +30,21 @@ type SyncIssueRequest struct {
 	LocationNameEnSnapshot string
 	LocationSnapshotSource string
 	Tags                   []string
+	ProposedTags           []ProposedTag
 	Description            string
 	AssetID                *int64
 	AssignedTeamID         *int64
 	AssigneeID             *int64
 	PhotoBefore            *multipart.FileHeader
 	PhotoDetail            *multipart.FileHeader
+}
+
+// ProposedTag is a creator-owned tag awaiting moderation.
+type ProposedTag struct {
+	NameVi   string `json:"name_vi"`
+	NameZh   string `json:"name_zh"`
+	NameEn   string `json:"name_en"`
+	Category string `json:"category"`
 }
 
 // resolveCreateResponsibility validates optional asset/team/assignee references and applies the
@@ -147,6 +159,46 @@ func normalizeLocationSnapshot(req SyncIssueRequest) (sql.NullString, sql.NullSt
 	return vi, zh, en, sql.NullString{String: source, Valid: source != ""}, recordedAt
 }
 
+const maxProposedTags = 5
+
+// buildProposedTagParams validates creator proposals and derives stable, creator-scoped tag codes.
+// Codes are deterministic so a retried sync reuses the same pending tag instead of duplicating it.
+func buildProposedTagParams(req SyncIssueRequest, currentUser db.User) ([]db.UpsertProposedTagParams, error) {
+	if len(req.ProposedTags) > maxProposedTags {
+		return nil, fmt.Errorf("at most %d proposed tags are allowed", maxProposedTags)
+	}
+	category := strings.TrimSpace(strings.ToUpper(req.Category))
+	seen := make(map[string]struct{}, len(req.ProposedTags))
+	params := make([]db.UpsertProposedTagParams, 0, len(req.ProposedTags))
+	for _, proposal := range req.ProposedTags {
+		nameVi := strings.TrimSpace(proposal.NameVi)
+		nameZh := strings.TrimSpace(proposal.NameZh)
+		nameEn := strings.TrimSpace(proposal.NameEn)
+		proposalCategory := strings.TrimSpace(strings.ToUpper(proposal.Category))
+		if nameVi == "" || nameZh == "" || nameEn == "" {
+			return nil, fmt.Errorf("proposed tag names are required")
+		}
+		if len([]rune(nameVi)) > 255 || len([]rune(nameZh)) > 255 || len([]rune(nameEn)) > 255 {
+			return nil, fmt.Errorf("proposed tag names are too long")
+		}
+		if !isValidCategory(proposalCategory) || proposalCategory != category {
+			return nil, fmt.Errorf("proposed tag category is invalid")
+		}
+		key := strings.ToLower(nameVi) + "\x00" + strings.ToLower(nameZh) + "\x00" + strings.ToLower(nameEn) + "\x00" + proposalCategory
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		hash := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", currentUser.ID, key)))
+		params = append(params, db.UpsertProposedTagParams{
+			Code: "pending_" + hex.EncodeToString(hash[:])[:40], NameVi: nameVi, NameZh: nameZh,
+			NameEn: nameEn, Category: proposalCategory,
+			CreatedBy: sql.NullInt64{Int64: currentUser.ID, Valid: currentUser.ID > 0},
+		})
+	}
+	return params, nil
+}
+
 // SyncIssue handles creating or idempotently returning an issue.
 func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, currentUser db.User) (*Response, bool, error) {
 	existing, err := s.store.GetIssueByUUID(ctx, req.ClientUUID)
@@ -157,6 +209,10 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 	atomicStore, ok := s.store.(Atomic)
 	if !ok {
 		return nil, false, errors.New("issue store does not support atomic creation")
+	}
+	proposedParams, propErr := buildProposedTagParams(req, currentUser)
+	if propErr != nil {
+		return nil, false, propErr
 	}
 	if _, err := s.store.GetLocationByCode(ctx, req.LocationCode); err != nil {
 		return nil, false, fmt.Errorf("%w: unknown location", ErrInvalidResponsibility)
@@ -202,17 +258,30 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 	buildOutbox := func(issueID int64) []db.CreateOutboxEntryParams {
 		return buildOutboxEntries(issueID, "NEW_ISSUE", req.Category, req.LocationCode, currentUser.FullName)
 	}
-	created, createErr := atomicStore.CreateIssueWithSideEffects(ctx, db.CreateIssueParams{
+	issueParams := db.CreateIssueParams{
 		ClientUuid: req.ClientUUID, SiteID: currentUser.SiteID, CreatorID: currentUser.ID,
 		Category: req.Category, CauseType: NormalizeCauseType(req.CauseType, req.Category), VisibilityClass: visibilityForCategory(req.Category),
 		LocationCode: req.LocationCode, Description: descVal, PhotoBefore: beforeBasename, PhotoDetail: detailBasename,
 		LocationNameViSnapshot: locationNameViSnapshot, LocationNameZhSnapshot: locationNameZhSnapshot, LocationNameEnSnapshot: locationNameEnSnapshot,
 		LocationSnapshotSource: snapshotSourceVal, LocationSnapshotRecordedAt: snapshotRecordedAt,
 		AssetID: assetID, AssignedTeamID: teamID, AssigneeID: assigneeID,
-	}, req.Tags, buildOutbox, func(issueID int64) []db.InsertScoreLogParams {
+	}
+	scoreBuilder := func(issueID int64) []db.InsertScoreLogParams {
 		score.IssueID = issueID
 		return []db.InsertScoreLogParams{score}
-	})
+	}
+	var created db.Issue
+	var createErr error
+	if len(proposedParams) > 0 {
+		propStore, ok := s.store.(ProposedAtomic)
+		if !ok {
+			cleanup()
+			return nil, false, errors.New("issue store does not support proposed tags")
+		}
+		created, createErr = propStore.CreateIssueWithProposedTags(ctx, issueParams, req.Tags, proposedParams, buildOutbox, scoreBuilder)
+	} else {
+		created, createErr = atomicStore.CreateIssueWithSideEffects(ctx, issueParams, req.Tags, buildOutbox, scoreBuilder)
+	}
 	if createErr != nil {
 		cleanup()
 		return nil, false, fmt.Errorf("failed to create issue: %w", createErr)

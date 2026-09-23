@@ -3,12 +3,14 @@ package masterdata
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"6s/internal/auth"
 	"6s/internal/db"
 )
 
@@ -104,6 +106,52 @@ func (m *mockMDStore) UpsertTag(_ context.Context, arg db.UpsertTagParams) (db.T
 	return t, nil
 }
 
+func (m *mockMDStore) ListVisibleTags(_ context.Context, arg db.ListVisibleTagsParams) ([]db.Tag, error) {
+	var visible []db.Tag
+	for _, t := range m.tags {
+		if !t.IsActive {
+			continue
+		}
+		if t.Status == "APPROVED" || (t.Status == "PENDING" && ((t.CreatedBy.Valid && t.CreatedBy.Int64 == arg.UserID) || arg.Role == auth.RoleAdmin.String() || arg.Role == auth.RoleSuperadmin.String())) {
+			visible = append(visible, t)
+		}
+	}
+	return visible, nil
+}
+
+func (m *mockMDStore) ApproveTag(_ context.Context, arg db.ApproveTagParams) (db.Tag, error) {
+	for i, t := range m.tags {
+		if t.Code == arg.Code {
+			m.tags[i].Status = "APPROVED"
+			m.tags[i].ReviewedBy = arg.ReviewedBy
+			return m.tags[i], nil
+		}
+	}
+	return db.Tag{}, errors.New("tag not found")
+}
+
+func (m *mockMDStore) RejectTag(_ context.Context, arg db.RejectTagParams) (db.Tag, error) {
+	for i, t := range m.tags {
+		if t.Code == arg.Code {
+			m.tags[i].Status = "REJECTED"
+			m.tags[i].ReviewedBy = arg.ReviewedBy
+			return m.tags[i], nil
+		}
+	}
+	return db.Tag{}, errors.New("tag not found")
+}
+
+func (m *mockMDStore) MergeTagAtomic(_ context.Context, sourceCode, targetCode string, reviewerID int64) (db.Tag, error) {
+	for i, t := range m.tags {
+		if t.Code == sourceCode {
+			m.tags[i].Status = "MERGED"
+			m.tags[i].MergedTagCode = sql.NullString{String: targetCode, Valid: true}
+			m.tags[i].ReviewedBy = sql.NullInt64{Int64: reviewerID, Valid: reviewerID > 0}
+			return m.tags[i], nil
+		}
+	}
+	return db.Tag{}, errors.New("tag not found")
+}
 func TestMasterDataHandler(t *testing.T) {
 	store := &mockMDStore{}
 	handler := NewHandler(store)
@@ -489,5 +537,74 @@ func TestMasterDataHandler_ErrorBranches(t *testing.T) {
 	errHandler.ListAllTags(rrListAllTags, reqListAllTags)
 	if rrListAllTags.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for list all tags error store, got %d", rrListAllTags.Code)
+	}
+}
+
+func TestTagLifecycleVisibilityAndReview(t *testing.T) {
+	store := &mockMDStore{tags: []db.Tag{
+		{Code: "approved", NameVi: "Approved", Category: "1S", IsActive: true, Status: "APPROVED"},
+		{Code: "own_pending", NameVi: "Own", Category: "1S", IsActive: true, Status: "PENDING", CreatedBy: sql.NullInt64{Int64: 7, Valid: true}},
+		{Code: "other_pending", NameVi: "Other", Category: "1S", IsActive: true, Status: "PENDING", CreatedBy: sql.NullInt64{Int64: 8, Valid: true}},
+		{Code: "rejected", NameVi: "Rejected", Category: "1S", IsActive: true, Status: "REJECTED"},
+	}}
+	handler := NewHandler(store)
+	worker := db.User{ID: 7, Role: auth.RoleUser.String(), IsActive: true}
+	workerReq := httptest.NewRequest(http.MethodGet, "/api/tags", nil).WithContext(context.WithValue(context.Background(), auth.UserContextKey, worker))
+	workerRR := httptest.NewRecorder()
+	handler.ListTags(workerRR, workerReq)
+	if workerRR.Code != http.StatusOK {
+		t.Fatalf("worker list tags status = %d", workerRR.Code)
+	}
+	var workerTags struct {
+		Data []TagResponse `json:"data"`
+	}
+	if err := json.Unmarshal(workerRR.Body.Bytes(), &workerTags); err != nil {
+		t.Fatalf("decode worker tags: %v", err)
+	}
+	if len(workerTags.Data) != 2 || workerTags.Data[0].Status == "REJECTED" || workerTags.Data[1].Status == "REJECTED" {
+		t.Fatalf("worker saw wrong tag visibility: %+v", workerTags.Data)
+	}
+
+	admin := db.User{ID: 1, Role: auth.RoleAdmin.String(), IsActive: true}
+	approveBody, _ := json.Marshal(TagReviewRequest{Action: "APPROVE"})
+	approveReq := httptest.NewRequest(http.MethodPatch, "/api/tags/own_pending/review", bytes.NewReader(approveBody)).WithContext(context.WithValue(context.Background(), auth.UserContextKey, admin))
+	approveReq.SetPathValue("code", "own_pending")
+	approveRR := httptest.NewRecorder()
+	handler.ReviewTag(approveRR, approveReq)
+	if approveRR.Code != http.StatusOK || store.tags[1].Status != "APPROVED" {
+		t.Fatalf("approve status = %d, tag = %+v", approveRR.Code, store.tags[1])
+	}
+
+	mergeBody, _ := json.Marshal(TagReviewRequest{Action: "MERGE", MergedTagCode: "approved"})
+	mergeReq := httptest.NewRequest(http.MethodPatch, "/api/tags/other_pending/review", bytes.NewReader(mergeBody)).WithContext(context.WithValue(context.Background(), auth.UserContextKey, admin))
+	mergeReq.SetPathValue("code", "other_pending")
+	mergeRR := httptest.NewRecorder()
+	handler.ReviewTag(mergeRR, mergeReq)
+	if mergeRR.Code != http.StatusOK || store.tags[2].Status != "MERGED" || !store.tags[2].MergedTagCode.Valid || store.tags[2].MergedTagCode.String != "approved" {
+		t.Fatalf("merge status = %d, tag = %+v", mergeRR.Code, store.tags[2])
+	}
+}
+
+func TestReviewTagRejectsMalformedAndIncompleteRequests(t *testing.T) {
+	store := &mockMDStore{tags: []db.Tag{{Code: "pending", IsActive: true, Status: "PENDING"}}}
+	handler := NewHandler(store)
+	admin := db.User{ID: 1, Role: auth.RoleAdmin.String(), IsActive: true}
+	base := func(body string) *http.Request {
+		req := httptest.NewRequest(http.MethodPatch, "/api/tags/pending/review", bytes.NewBufferString(body)).WithContext(context.WithValue(context.Background(), auth.UserContextKey, admin))
+		req.SetPathValue("code", "pending")
+		return req
+	}
+	for name, body := range map[string]string{
+		"bad json":             "{",
+		"unknown action":       `{"action":"NOPE"}`,
+		"missing merge target": `{"action":"MERGE"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			handler.ReviewTag(rr, base(body))
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", rr.Code)
+			}
+		})
 	}
 }

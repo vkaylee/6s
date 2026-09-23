@@ -1,9 +1,12 @@
-import { Check, Search, Tag, X } from "lucide-react";
+import { Check, Search, Sparkles, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { suggestTags } from "../api/operations.ts";
+import { useAiStatus } from "../hooks/useAiStatus.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import {
   IssueCategory,
   isBehaviorTag,
+  type ProposedTagItem,
   resolveTagLabel,
   S_CATEGORIES,
   type TagItem,
@@ -56,7 +59,28 @@ export function TaxonomySelectorModal({
   });
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<{
+    existing_tags: string[];
+    proposed_tags: ProposedTagItem[];
+  }>({ existing_tags: [], proposed_tags: [] });
+  const aiEnabled = useAiStatus();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const handleAiSuggest = async () => {
+    if (aiEnabled !== true || aiLoading) return;
+    setAiLoading(true);
+    setAiError(false);
+    try {
+      setAiSuggestions(
+        await suggestTags({ query: tagQuery.trim(), category: currentCategory, description: "" }),
+      );
+    } catch {
+      setAiError(true);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // Reset/sync tab with currentCategory whenever modal opens
   useEffect(() => {
@@ -203,26 +227,38 @@ export function TaxonomySelectorModal({
         </div>
         {/* Search & Category Filter Bar */}
         <div className="p-4 space-y-3 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50">
-          {/* Instant Search Bar */}
-          <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 absolute left-3 text-zinc-400 pointer-events-none" />
-            <input
-              type="text"
-              value={tagQuery}
-              onChange={(e) => setTagQuery(e.target.value)}
-              placeholder={t("issue.tag_search_placeholder")}
-              className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-8 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[42px]"
-            />
-            {tagQuery && (
-              <button
-                type="button"
-                onClick={() => setTagQuery("")}
-                aria-label={t("common.close")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-1"
-              >
-                <X className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            )}
+          {/* Instant Search Bar + AI Suggest Button */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-3 text-zinc-400 pointer-events-none" />
+              <input
+                type="text"
+                value={tagQuery}
+                onChange={(e) => setTagQuery(e.target.value)}
+                placeholder={t("issue.tag_search_placeholder")}
+                className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-8 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[42px]"
+              />
+              {tagQuery && (
+                <button
+                  type="button"
+                  onClick={() => setTagQuery("")}
+                  aria-label={t("common.close")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-1"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleAiSuggest}
+              disabled={aiEnabled !== true || aiLoading || !tagQuery.trim()}
+              title={aiEnabled === false ? t("admin.ai_disabled_reason") : undefined}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-bold text-white min-h-[42px] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              {aiLoading ? t("issue.ai_suggesting_tags") : t("issue.ai_suggest_tags_btn")}
+            </button>
           </div>
 
           {/* S Category Pills */}
@@ -263,6 +299,125 @@ export function TaxonomySelectorModal({
             })}
           </div>
         </div>
+
+        {/* AI Suggestions Box */}
+        {aiError && (
+          <p className="mx-4 mt-3 text-xs font-medium text-amber-700 dark:text-amber-400">
+            {t("issue.no_tags_found")}
+          </p>
+        )}
+        {(aiSuggestions.existing_tags.length > 0 || aiSuggestions.proposed_tags.length > 0) && (
+          <div className="mx-4 mt-3 space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/20">
+            {aiSuggestions.existing_tags.length > 0 && (
+              <div>
+                <p className="mb-1 text-[11px] font-bold text-violet-800 dark:text-violet-300">
+                  {t("issue.ai_suggest_existing_title")}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {aiSuggestions.existing_tags.map((code) => {
+                    const tag = tags.find((item) => (item.code || item.tag_code) === code);
+                    if (!tag) return null;
+                    const checked = selectedTags.includes(code);
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => handleTagClick(tag)}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold min-h-[36px] ${
+                          checked
+                            ? "border-blue-600 bg-blue-600 text-white"
+                            : "border-violet-200 bg-white text-violet-900 dark:border-violet-800 dark:bg-zinc-900 dark:text-violet-200"
+                        }`}
+                      >
+                        {checked ? "✓ " : "+ "}#{resolveTagLabel(tag, locale)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {aiSuggestions.proposed_tags.length > 0 && (
+              <div>
+                <p className="mb-1 text-[11px] font-bold text-violet-800 dark:text-violet-300">
+                  {t("issue.ai_suggest_proposed_title")}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {aiSuggestions.proposed_tags.map((proposal) => {
+                    const code =
+                      `c_${normalizeSearchText(proposal.name_vi).replace(/[^a-z0-9]+/g, "_")}`.slice(
+                        0,
+                        48,
+                      );
+                    const checked = selectedTags.includes(code);
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => {
+                          if (!checked)
+                            onAddCustomTag?.({
+                              ...proposal,
+                              code,
+                              use_count: 0,
+                              status: "PENDING",
+                            });
+                          onToggleTag(code);
+                          if (
+                            proposal.category &&
+                            Object.values(IssueCategory).includes(
+                              proposal.category as IssueCategory,
+                            )
+                          ) {
+                            onSelectCategory(proposal.category as IssueCategory);
+                          }
+                        }}
+                        className={`rounded-lg border border-dashed px-2.5 py-1.5 text-xs font-bold min-h-[36px] ${
+                          checked
+                            ? "border-amber-500 bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+                            : "border-amber-300 bg-white text-amber-900 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-200"
+                        }`}
+                      >
+                        {checked ? "✓ " : "+ "}⏳ {resolveTagLabel(proposal, locale)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Pending tags section */}
+        {tags.some((t) => t.status === "PENDING") && (
+          <div className="mx-4 mt-3 p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20">
+            <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300 mb-1.5">
+              {t("issue.tag_pending_section")}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {tags
+                .filter((t) => t.status === "PENDING")
+                .map((tag) => {
+                  const code = tag.code || tag.tag_code || "";
+                  const isChecked = selectedTags.includes(code);
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => handleTagClick(tag)}
+                      className={`px-2.5 py-1.5 rounded-lg border border-dashed text-xs font-bold min-h-[34px] flex items-center gap-1 ${
+                        isChecked
+                          ? "bg-amber-500 border-amber-600 text-white"
+                          : "bg-white dark:bg-zinc-900 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200"
+                      }`}
+                    >
+                      <span>⏳</span>
+                      <span>#{resolveTagLabel(tag, locale)}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
         {/* Feedback alert */}
         {autoFeedback && (

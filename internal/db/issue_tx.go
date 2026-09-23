@@ -71,6 +71,30 @@ func (q *Queries) CreateIssueWithSideEffects(
 	buildOutbox func(issueID int64) []CreateOutboxEntryParams,
 	buildScores func(issueID int64) []InsertScoreLogParams,
 ) (Issue, error) {
+	return q.createIssueAtomic(ctx, issueParams, tags, nil, buildOutbox, buildScores)
+}
+
+// CreateIssueWithProposedTags additionally persists creator-owned pending tags and links them to
+// the issue in the same transaction, so a proposal can never exist without its issue or vice versa.
+func (q *Queries) CreateIssueWithProposedTags(
+	ctx context.Context,
+	issueParams CreateIssueParams,
+	tags []string,
+	proposed []UpsertProposedTagParams,
+	buildOutbox func(issueID int64) []CreateOutboxEntryParams,
+	buildScores func(issueID int64) []InsertScoreLogParams,
+) (Issue, error) {
+	return q.createIssueAtomic(ctx, issueParams, tags, proposed, buildOutbox, buildScores)
+}
+
+func (q *Queries) createIssueAtomic(
+	ctx context.Context,
+	issueParams CreateIssueParams,
+	tags []string,
+	proposed []UpsertProposedTagParams,
+	buildOutbox func(issueID int64) []CreateOutboxEntryParams,
+	buildScores func(issueID int64) []InsertScoreLogParams,
+) (Issue, error) {
 	beginner, ok := q.db.(interface {
 		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 	})
@@ -103,6 +127,15 @@ func (q *Queries) CreateIssueWithSideEffects(
 			return rollback(fmt.Errorf("increment tag use count: %w", err))
 		}
 	}
+	for _, proposal := range proposed {
+		tag, err := txQueries.UpsertProposedTag(ctx, proposal)
+		if err != nil {
+			return rollback(fmt.Errorf("upsert proposed tag: %w", err))
+		}
+		if err := txQueries.InsertIssueTag(ctx, InsertIssueTagParams{IssueID: created.ID, TagCode: tag.Code}); err != nil {
+			return rollback(fmt.Errorf("insert proposed issue tag: %w", err))
+		}
+	}
 	if buildOutbox != nil {
 		for _, entry := range buildOutbox(created.ID) {
 			if _, err := txQueries.CreateOutboxEntry(ctx, entry); err != nil {
@@ -121,6 +154,68 @@ func (q *Queries) CreateIssueWithSideEffects(
 		return Issue{}, fmt.Errorf("commit issue creation: %w", err)
 	}
 	return created, nil
+}
+
+// MergeTagAtomic merges a source tag into a target tag inside one transaction.
+// It removes duplicate issue-tag associations, reassigns remaining associations to the target tag,
+// and updates the source tag status to MERGED with merged_tag_code pointing to target.
+func (q *Queries) MergeTagAtomic(ctx context.Context, sourceCode, targetCode string, reviewerID int64) (Tag, error) {
+	if sourceCode == targetCode {
+		return Tag{}, fmt.Errorf("cannot merge tag into itself")
+	}
+	beginner, ok := q.db.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+	})
+	if !ok {
+		return Tag{}, fmt.Errorf("database does not support transactions")
+	}
+	tx, err := beginner.BeginTx(ctx, nil)
+	if err != nil {
+		return Tag{}, fmt.Errorf("begin tag merge transaction: %w", err)
+	}
+	rollback := func(cause error) (Tag, error) {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return Tag{}, fmt.Errorf("%w; rollback tag merge: %v", cause, rollbackErr)
+		}
+		return Tag{}, cause
+	}
+	txQueries := q.WithTx(tx)
+
+	target, err := txQueries.GetTagByCode(ctx, targetCode)
+	if err != nil {
+		return rollback(fmt.Errorf("target tag not found: %w", err))
+	}
+	if target.Status != "APPROVED" {
+		return rollback(fmt.Errorf("target tag must be approved"))
+	}
+
+	if err := txQueries.MergeTagIssuesDeduplicate(ctx, MergeTagIssuesDeduplicateParams{
+		TagCode:   sourceCode,
+		TagCode_2: targetCode,
+	}); err != nil {
+		return rollback(fmt.Errorf("deduplicate merged tag issues: %w", err))
+	}
+
+	if err := txQueries.MergeTagIssuesReassign(ctx, MergeTagIssuesReassignParams{
+		TagCode:   sourceCode,
+		TagCode_2: targetCode,
+	}); err != nil {
+		return rollback(fmt.Errorf("reassign merged tag issues: %w", err))
+	}
+
+	merged, err := txQueries.MergeTagRecord(ctx, MergeTagRecordParams{
+		Code:          sourceCode,
+		MergedTagCode: sql.NullString{String: targetCode, Valid: true},
+		ReviewedBy:    sql.NullInt64{Int64: reviewerID, Valid: reviewerID > 0},
+	})
+	if err != nil {
+		return rollback(fmt.Errorf("update merged tag record: %w", err))
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Tag{}, fmt.Errorf("commit tag merge: %w", err)
+	}
+	return merged, nil
 }
 
 // ResolveIssueAtomic commits a normal or forced issue resolution in one transaction.

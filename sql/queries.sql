@@ -424,7 +424,13 @@ ORDER BY sal.created_at ASC, sal.id ASC;
 
 -- name: ListTags :many
 SELECT * FROM tags
+WHERE is_active = TRUE AND status = 'APPROVED'
+ORDER BY use_count DESC, id ASC;
+
+-- name: ListVisibleTags :many
+SELECT * FROM tags
 WHERE is_active = TRUE
+  AND (status = 'APPROVED' OR (status = 'PENDING' AND (created_by = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('ADMIN', 'SUPERADMIN'))))
 ORDER BY use_count DESC, id ASC;
 
 -- name: ListAllTags :many
@@ -453,6 +459,9 @@ ON CONFLICT (code) DO UPDATE SET
     name_en = EXCLUDED.name_en,
     category = EXCLUDED.category
 RETURNING *;
+
+-- name: GetTagByCode :one
+SELECT * FROM tags WHERE code = $1 LIMIT 1;
 
 -- name: IncrementTagUseCount :exec
 UPDATE tags
@@ -489,13 +498,13 @@ INSERT INTO issue_tags (
 ) ON CONFLICT DO NOTHING;
 
 -- name: ListTagsForIssue :many
-SELECT t.code, t.name_vi, t.name_zh, t.name_en, t.category
+SELECT t.code, t.name_vi, t.name_zh, t.name_en, t.category, t.status
 FROM tags t
 JOIN issue_tags it ON t.code = it.tag_code
 WHERE it.issue_id = $1;
 
 -- name: ListTagsForIssues :many
-SELECT it.issue_id, t.code, t.name_vi, t.name_zh, t.name_en, t.category
+SELECT it.issue_id, t.code, t.name_vi, t.name_zh, t.name_en, t.category, t.status
 FROM tags t
 JOIN issue_tags it ON t.code = it.tag_code
 WHERE it.issue_id = ANY(sqlc.arg('issue_ids')::bigint[])
@@ -1098,3 +1107,51 @@ RETURNING *;
 SELECT content_hash, translated_text
 FROM translation_cache
 WHERE content_hash = ANY(sqlc.arg('content_hashes')::varchar[]) AND target_lang = sqlc.arg('target_lang');
+
+-- name: ApproveTag :one
+UPDATE tags
+SET status = 'APPROVED',
+    reviewed_by = $2,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING *;
+
+-- name: RejectTag :one
+UPDATE tags
+SET status = 'REJECTED',
+    reviewed_by = $2,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING *;
+
+-- name: MergeTagIssuesDeduplicate :exec
+DELETE FROM issue_tags AS old
+WHERE old.tag_code = $1
+  AND old.issue_id IN (SELECT other.issue_id FROM issue_tags AS other WHERE other.tag_code = $2);
+
+-- name: MergeTagIssuesReassign :exec
+UPDATE issue_tags
+SET tag_code = $2
+WHERE tag_code = $1;
+
+-- name: MergeTagRecord :one
+UPDATE tags
+SET status = 'MERGED',
+    merged_tag_code = $2,
+    reviewed_by = $3,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING *;
+
+-- name: UpsertProposedTag :one
+INSERT INTO tags (
+    code, name_vi, name_zh, name_en, category, is_preset, is_active, status, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, FALSE, TRUE, 'PENDING', $6
+)
+ON CONFLICT (code) DO UPDATE SET
+    name_vi = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.name_vi ELSE tags.name_vi END,
+    name_zh = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.name_zh ELSE tags.name_zh END,
+    name_en = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.name_en ELSE tags.name_en END,
+    category = CASE WHEN tags.status = 'PENDING' THEN EXCLUDED.category ELSE tags.category END
+RETURNING *;
