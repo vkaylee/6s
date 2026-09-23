@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { fetchAuthenticatedBlob } from "../src/api/client.ts";
+import { ApiError, fetchAuthenticatedBlob } from "../src/api/client.ts";
+import { classifyAuthenticatedImageError } from "../src/hooks/useAuthenticatedImageUrl.ts";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { UserRole } from "../src/types/index.ts";
 
@@ -52,5 +53,28 @@ describe("fetchAuthenticatedBlob", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("classifyAuthenticatedImageError", () => {
+  it("classifies 401 as UNAUTHORIZED", () => {
+    expect(classifyAuthenticatedImageError(new ApiError(401, "unauthorized"))).toBe("UNAUTHORIZED");
+  });
+
+  it("classifies 403 as FORBIDDEN", () => {
+    expect(classifyAuthenticatedImageError(new ApiError(403, "forbidden"))).toBe("FORBIDDEN");
+  });
+
+  it("classifies 404 as NOT_FOUND", () => {
+    expect(classifyAuthenticatedImageError(new ApiError(404, "not found"))).toBe("NOT_FOUND");
+  });
+
+  it("classifies network TypeError as NETWORK_ERROR", () => {
+    expect(classifyAuthenticatedImageError(new TypeError("Failed to fetch"))).toBe("NETWORK_ERROR");
+  });
+
+  it("classifies unexpected errors as UNKNOWN", () => {
+    expect(classifyAuthenticatedImageError(new Error("random failure"))).toBe("UNKNOWN");
+    expect(classifyAuthenticatedImageError("string error")).toBe("UNKNOWN");
   });
 });

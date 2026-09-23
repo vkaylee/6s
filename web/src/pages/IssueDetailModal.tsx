@@ -10,6 +10,7 @@ import { SplitSlider } from "../components/SplitSlider.tsx";
 import { TagLabel } from "../components/TagLabel.tsx";
 import { type DraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
 import { useAiStatus } from "../hooks/useAiStatus.ts";
+import type { AuthenticatedImageError } from "../hooks/useAuthenticatedImageUrl.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
@@ -264,6 +265,8 @@ export function IssueDetailModal({
     null,
   );
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [beforePhotoError, setBeforePhotoError] = useState<AuthenticatedImageError | null>(null);
+  const [detailPhotoError, setDetailPhotoError] = useState<AuthenticatedImageError | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchDistanceRef = useRef<number | null>(null);
@@ -285,6 +288,11 @@ export function IssueDetailModal({
   const [streamingFollowUpAnswer, setStreamingFollowUpAnswer] = useState("");
   const previewIndexRef = useRef<number | null>(null);
   previewIndexRef.current = previewIndex;
+  useEffect(() => {
+    setBeforePhotoError(null);
+    setDetailPhotoError(null);
+  }, [currentIssue.id, currentIssue.photo_before, currentIssue.photo_detail]);
+
   useEffect(() => {
     if (!isOpen) return;
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
@@ -955,31 +963,43 @@ export function IssueDetailModal({
                   <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.photo_before_label")}
                   </span>
-                  <span className="text-[11px] text-zinc-400">
-                    🔍 {t("issue_detail.tap_to_zoom")}
-                  </span>
+                  {!beforePhotoError && (
+                    <span className="text-[11px] text-zinc-400">
+                      🔍 {t("issue_detail.tap_to_zoom")}
+                    </span>
+                  )}
                 </div>
                 <button
                   type="button"
+                  disabled={Boolean(beforePhotoError)}
                   onClick={() => {
+                    if (beforePhotoError) return;
                     setZoomScale(1);
                     const idx = photoList.findIndex(
                       (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
                     );
                     setPreviewIndex(idx >= 0 ? idx : 0);
                   }}
-                  className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
+                  className={`w-full text-left relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden ${
+                    beforePhotoError ? "cursor-default" : "group cursor-pointer"
+                  }`}
                 >
                   <AuthenticatedImage
                     imageUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
                     alt={t("issue_detail.photo_before_alt")}
-                    className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
+                    compact={false}
+                    onErrorStateChange={setBeforePhotoError}
+                    className={`w-full aspect-[4/3] object-cover transition-transform ${
+                      beforePhotoError ? "" : "group-hover:scale-101"
+                    }`}
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
-                      🔍 {t("issue_detail.tap_to_zoom")}
-                    </span>
-                  </div>
+                  {!beforePhotoError && (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
+                        🔍 {t("issue_detail.tap_to_zoom")}
+                      </span>
+                    </div>
+                  )}
                 </button>
               </div>
             )}
@@ -991,31 +1011,43 @@ export function IssueDetailModal({
                   <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
                     {t("issue_detail.photo_detail_label")}
                   </span>
-                  <span className="text-[11px] text-zinc-400">
-                    🔍 {t("issue_detail.tap_to_zoom")}
-                  </span>
+                  {!detailPhotoError && (
+                    <span className="text-[11px] text-zinc-400">
+                      🔍 {t("issue_detail.tap_to_zoom")}
+                    </span>
+                  )}
                 </div>
                 <button
                   type="button"
+                  disabled={Boolean(detailPhotoError)}
                   onClick={() => {
+                    if (detailPhotoError) return;
                     setZoomScale(1);
                     const idx = photoList.findIndex(
                       (p) => p.url === resolvePhotoUrl(currentIssue.photo_detail, "detail"),
                     );
                     setPreviewIndex(idx >= 0 ? idx : 1);
                   }}
-                  className="w-full text-left group relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden"
+                  className={`w-full text-left relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md focus:outline-hidden ${
+                    detailPhotoError ? "cursor-default" : "group cursor-pointer"
+                  }`}
                 >
                   <AuthenticatedImage
                     imageUrl={resolvePhotoUrl(currentIssue.photo_detail, "detail")}
                     alt={t("issue_detail.photo_detail_alt")}
-                    className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-101"
+                    compact={false}
+                    onErrorStateChange={setDetailPhotoError}
+                    className={`w-full aspect-[4/3] object-cover transition-transform ${
+                      detailPhotoError ? "" : "group-hover:scale-101"
+                    }`}
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
-                      🔍 {t("issue_detail.tap_to_zoom")}
-                    </span>
-                  </div>
+                  {!detailPhotoError && (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-xs">
+                        🔍 {t("issue_detail.tap_to_zoom")}
+                      </span>
+                    </div>
+                  )}
                 </button>
               </div>
             )}
@@ -1932,6 +1964,7 @@ export function IssueDetailModal({
               <AuthenticatedImage
                 imageUrl={previewPhoto.url}
                 alt={previewPhoto.alt}
+                compact={false}
                 style={{
                   transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoomScale})`,
                 }}

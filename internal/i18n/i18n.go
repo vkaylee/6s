@@ -68,6 +68,7 @@ const (
 	ErrIssuePatchForbidden      Key = "issue.patch_forbidden"
 	ErrIssueListFailed          Key = "issue.list_failed"
 	ErrIssueGetFailed           Key = "issue.get_failed"
+	ErrMediaForbidden           Key = "issue.media_forbidden"
 	ErrLocationQueryFailed      Key = "masterdata.location_query_failed"
 	ErrLocationMissingFields    Key = "masterdata.location_missing_fields"
 	ErrLocationCreateFailed     Key = "masterdata.location_create_failed"
@@ -148,6 +149,7 @@ var catalog = map[string]map[Key]string{
 		ErrIssuePatchForbidden:      "Bạn không có quyền chỉnh sửa issue này",
 		ErrIssueListFailed:          "Không thể lấy danh sách issue",
 		ErrIssueGetFailed:           "Không thể tải chi tiết issue",
+		ErrMediaForbidden:           "Bạn không có quyền truy cập hình ảnh này",
 		ErrLocationQueryFailed:      "Lỗi truy vấn danh mục vị trí",
 		ErrLocationMissingFields:    "Mã vị trí, tên tiếng Việt và QR code là bắt buộc",
 		ErrLocationCreateFailed:     "Không thể tạo vị trí (có thể trùng mã code hoặc qr_code)",
@@ -226,6 +228,7 @@ var catalog = map[string]map[Key]string{
 		ErrIssuePatchForbidden:      "You do not have permission to edit this issue",
 		ErrIssueListFailed:          "Failed to load issues list",
 		ErrIssueGetFailed:           "Failed to load issue details",
+		ErrMediaForbidden:           "You do not have permission to view this image",
 		ErrLocationQueryFailed:      "Failed to query locations",
 		ErrLocationMissingFields:    "Location code, Vietnamese name, and QR code are required",
 		ErrLocationCreateFailed:     "Failed to create location (code or qr_code may be duplicated)",
@@ -305,6 +308,7 @@ var catalog = map[string]map[Key]string{
 		ErrIssuePatchForbidden:      "您无权编辑此问题",
 		ErrIssueListFailed:          "获取问题列表失败",
 		ErrIssueGetFailed:           "获取问题详情失败",
+		ErrMediaForbidden:           "您无权查看此图片",
 		ErrLocationQueryFailed:      "查询位置列表失败",
 		ErrLocationMissingFields:    "位置代码、越南语名称和二维码为必填项",
 		ErrLocationCreateFailed:     "无法创建位置（代码或二维码可能已存在）",

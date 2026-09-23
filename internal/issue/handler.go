@@ -124,6 +124,10 @@ func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
 
 	f, err := h.service.OpenMedia(r.Context(), id, folder, filename)
 	if err != nil {
+		if errors.Is(err, ErrMediaForbidden) {
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrMediaForbidden))
+			return
+		}
 		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 		return
 	}

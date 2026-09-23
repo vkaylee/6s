@@ -144,6 +144,14 @@
     "after_alt": "改善后照片",
     "comparison_slider": "改善前后对比滑块"
   },
+  "media": {
+    "forbidden": "您无权查看此图片",
+    "unauthorized": "登录会话已过期",
+    "not_found": "图片文件已不存在",
+    "network_error": "无法连接以加载图片",
+    "load_error": "无法加载图片",
+    "retry": "重试"
+  },
   "leaderboard": {
     "location_health": "区域健康度",
     "top_reporters": "6S猎人榜",

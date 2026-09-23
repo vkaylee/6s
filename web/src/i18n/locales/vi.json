@@ -144,6 +144,14 @@
     "after_alt": "Sau khi khắc phục",
     "comparison_slider": "Thanh trượt so sánh trước và sau"
   },
+  "media": {
+    "forbidden": "Bạn không có quyền xem ảnh này",
+    "unauthorized": "Phiên đăng nhập đã hết hạn",
+    "not_found": "Tập tin ảnh không còn tồn tại",
+    "network_error": "Không thể kết nối để tải ảnh",
+    "load_error": "Không thể tải ảnh",
+    "retry": "Thử lại"
+  },
   "leaderboard": {
     "location_health": "Sức khỏe khu vực",
     "top_reporters": "Top Thợ săn 6S",

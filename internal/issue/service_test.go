@@ -1711,3 +1711,135 @@ func TestBuildProposedTagParams_CodeIsCreatorScoped(t *testing.T) {
 		t.Fatalf("different creators unexpectedly share pending code %q", first[0].Code)
 	}
 }
+
+func TestIssueService_OpenMedia_VisibilityRules(t *testing.T) {
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	// Create test media file in storage
+	photoPath := filepath.Join(tempDir, "before", "test_photo.jpg")
+	if err := os.WriteFile(photoPath, []byte("valid-image-bytes"), 0600); err != nil {
+		t.Fatalf("failed to write test photo: %v", err)
+	}
+
+	store := newMockIssueStore()
+	svc := NewService(store, storageMgr, nil)
+
+	// Seed users
+	creator := db.User{ID: 10, Username: "creator", Role: "USER", SiteID: 1, IsActive: true}
+	assignee := db.User{ID: 11, Username: "assignee", Role: "USER", SiteID: 1, IsActive: true}
+	teamMember := db.User{ID: 12, Username: "teammember", Role: "USER", SiteID: 1, IsActive: true}
+	lineLeaderA1 := db.User{
+		ID: 13, Username: "leader_a1", Role: "LINE_LEADER", SiteID: 1, IsActive: true,
+		AssignedLocationCode: sql.NullString{String: "LINE_A1", Valid: true},
+	}
+	lineLeaderB1 := db.User{
+		ID: 14, Username: "leader_b1", Role: "LINE_LEADER", SiteID: 1, IsActive: true,
+		AssignedLocationCode: sql.NullString{String: "LINE_B1", Valid: true},
+	}
+	safetyOfficer := db.User{ID: 15, Username: "safety", Role: "SAFETY_OFFICER", SiteID: 1, IsActive: true}
+	admin := db.User{ID: 16, Username: "admin", Role: "ADMIN", SiteID: 1, IsActive: true}
+	superadmin := db.User{ID: 17, Username: "superadmin", Role: "SUPERADMIN", SiteID: 1, IsActive: true}
+	otherWorker := db.User{ID: 18, Username: "other", Role: "USER", SiteID: 1, IsActive: true}
+	diffSiteWorker := db.User{ID: 19, Username: "diffsite", Role: "USER", SiteID: 2, IsActive: true}
+
+	for _, u := range []db.User{creator, assignee, teamMember, lineLeaderA1, lineLeaderB1, safetyOfficer, admin, superadmin, otherWorker, diffSiteWorker} {
+		store.users[u.ID] = u
+	}
+
+	// Seed team membership: team 5 -> user 12
+	store.memberships[5] = map[int64]struct{}{
+		teamMember.ID: {},
+	}
+
+	// Issue 1: SITE_PUBLIC (e.g. 1S category)
+	store.issues[1] = db.Issue{
+		ID:              1,
+		ClientUuid:      "c0a80101-0000-4000-8000-000000000001",
+		SiteID:          1,
+		CreatorID:       creator.ID,
+		Category:        "1S",
+		VisibilityClass: "SITE_PUBLIC",
+		LocationCode:    "LINE_A1",
+		PhotoBefore:     "test_photo.jpg",
+		Status:          StatusOpen.String(),
+	}
+
+	// Issue 2: SAFETY_RESTRICTED (e.g. 6S safety incident)
+	store.issues[2] = db.Issue{
+		ID:              2,
+		ClientUuid:      "c0a80101-0000-4000-8000-000000000002",
+		SiteID:          1,
+		CreatorID:       creator.ID,
+		AssigneeID:      sql.NullInt64{Int64: assignee.ID, Valid: true},
+		AssignedTeamID:  sql.NullInt64{Int64: 5, Valid: true},
+		Category:        "6S",
+		VisibilityClass: "SAFETY_RESTRICTED",
+		LocationCode:    "LINE_A1",
+		PhotoBefore:     "test_photo.jpg",
+		Status:          StatusOpen.String(),
+	}
+
+	t.Run("non-existent issue returns ErrIssueNotFound", func(t *testing.T) {
+		f, err := svc.OpenMedia(ctxFor(admin), 9999, "before", "test_photo.jpg")
+		if err != ErrIssueNotFound {
+			t.Fatalf("expected ErrIssueNotFound, got %v", err)
+		}
+		if f != nil {
+			f.Close()
+		}
+	})
+
+	t.Run("SITE_PUBLIC: same-site users can view, different site is forbidden", func(t *testing.T) {
+		// Same site worker can open
+		f, err := svc.OpenMedia(ctxFor(otherWorker), 1, "before", "test_photo.jpg")
+		if err != nil {
+			t.Fatalf("expected same site worker to open media, got %v", err)
+		}
+		_ = f.Close()
+
+		// Different site worker is forbidden
+		_, err = svc.OpenMedia(ctxFor(diffSiteWorker), 1, "before", "test_photo.jpg")
+		if !errors.Is(err, ErrMediaForbidden) {
+			t.Fatalf("expected ErrMediaForbidden for different site, got %v", err)
+		}
+	})
+
+	t.Run("SAFETY_RESTRICTED: allowed stakeholders can open", func(t *testing.T) {
+		allowedUsers := []db.User{
+			creator,
+			assignee,
+			teamMember,
+			lineLeaderA1, // Location matches issue location LINE_A1
+			safetyOfficer,
+			admin,
+			superadmin,
+		}
+
+		for _, u := range allowedUsers {
+			f, err := svc.OpenMedia(ctxFor(u), 2, "before", "test_photo.jpg")
+			if err != nil {
+				t.Fatalf("user %s (%s) should be allowed to view restricted media, got: %v", u.Username, u.Role, err)
+			}
+			_ = f.Close()
+		}
+	})
+
+	t.Run("SAFETY_RESTRICTED: unauthorized users are forbidden", func(t *testing.T) {
+		forbiddenUsers := []db.User{
+			otherWorker,  // Plain worker not involved
+			lineLeaderB1, // Line leader for LINE_B1, not LINE_A1
+			diffSiteWorker,
+		}
+
+		for _, u := range forbiddenUsers {
+			_, err := svc.OpenMedia(ctxFor(u), 2, "before", "test_photo.jpg")
+			if !errors.Is(err, ErrMediaForbidden) {
+				t.Fatalf("user %s (%s) should get ErrMediaForbidden, got: %v", u.Username, u.Role, err)
+			}
+		}
+	})
+}

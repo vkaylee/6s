@@ -24,6 +24,8 @@ type mockIssueService struct {
 	events     chan Event
 	eventErrs  map[int64]error
 	lastFilter ListFilter
+	mediaFile  *os.File
+	mediaErr   error
 }
 
 func (m *mockIssueService) SyncIssue(_ context.Context, _ SyncIssueRequest, _ db.User) (*Response, bool, error) {
@@ -78,6 +80,12 @@ func (m *mockIssueService) GetIssueByID(_ context.Context, id int64) (*Response,
 	return m.issueResp, nil
 }
 func (m *mockIssueService) OpenMedia(_ context.Context, _ int64, _, _ string) (*os.File, error) {
+	if m.mediaErr != nil {
+		return nil, m.mediaErr
+	}
+	if m.mediaFile != nil {
+		return m.mediaFile, nil
+	}
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -609,5 +617,60 @@ func TestIssueHandler_AdditionalCoverage(t *testing.T) {
 	handler.List(rrListParams, reqListParams)
 	if rrListParams.Code != http.StatusOK {
 		t.Errorf("expected 200 for list with params, got %d", rrListParams.Code)
+	}
+}
+func TestHandler_Media(t *testing.T) {
+	tmpFile, err := os.CreateTemp(t.TempDir(), "media-*.jpg")
+	if err != nil {
+		t.Fatalf("failed to create temp media file: %v", err)
+	}
+	defer tmpFile.Close()
+	if _, err := tmpFile.WriteString("fake-image-bytes"); err != nil {
+		t.Fatalf("failed to write temp media file: %v", err)
+	}
+
+	mockSvc := &mockIssueService{}
+	handler := NewHandler(mockSvc)
+
+	r := chi.NewRouter()
+	r.Get("/api/issues/{id}/media/{folder}/{filename}", handler.Media)
+
+	// 1. Forbidden media access returns 403 with ErrMediaForbidden
+	mockSvc.mediaErr = ErrMediaForbidden
+	reqForbidden := httptest.NewRequest(http.MethodGet, "/api/issues/42/media/before/photo.jpg", nil)
+	rrForbidden := httptest.NewRecorder()
+	r.ServeHTTP(rrForbidden, reqForbidden)
+	if rrForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for restricted media, got %d", rrForbidden.Code)
+	}
+	if !strings.Contains(rrForbidden.Body.String(), "issue.media_forbidden") {
+		t.Errorf("expected error body to contain issue.media_forbidden, got %s", rrForbidden.Body.String())
+	}
+
+	// 2. Not found media access returns 404
+	mockSvc.mediaErr = ErrIssueNotFound
+	reqNotFound := httptest.NewRequest(http.MethodGet, "/api/issues/42/media/before/missing.jpg", nil)
+	rrNotFound := httptest.NewRecorder()
+	r.ServeHTTP(rrNotFound, reqNotFound)
+	if rrNotFound.Code != http.StatusNotFound {
+		t.Errorf("expected 404 Not Found for missing issue media, got %d", rrNotFound.Code)
+	}
+
+	// 3. Bad ID returns 400
+	reqBadID := httptest.NewRequest(http.MethodGet, "/api/issues/invalid-id/media/before/photo.jpg", nil)
+	rrBadID := httptest.NewRecorder()
+	r.ServeHTTP(rrBadID, reqBadID)
+	if rrBadID.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for invalid id, got %d", rrBadID.Code)
+	}
+
+	// 4. Authorized media returns 200
+	mockSvc.mediaErr = nil
+	mockSvc.mediaFile = tmpFile
+	reqSuccess := httptest.NewRequest(http.MethodGet, "/api/issues/42/media/before/photo.jpg", nil)
+	rrSuccess := httptest.NewRecorder()
+	r.ServeHTTP(rrSuccess, reqSuccess)
+	if rrSuccess.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for authorized media, got %d", rrSuccess.Code)
 	}
 }

@@ -46,7 +46,15 @@ const locations = [
 ];
 
 /** Serves every endpoint the detail modal touches and echoes mutations onto the issue. */
-function installFetch({ ai = false, issue }: { ai?: boolean; issue: IssueItem }) {
+function installFetch({
+  ai = false,
+  issue,
+  mediaStatus = 200,
+}: {
+  ai?: boolean;
+  issue: IssueItem;
+  mediaStatus?: number;
+}) {
   calls = [];
   invalidateAiStatus();
   let serverIssue: IssueItem = { ...issue };
@@ -55,6 +63,9 @@ function installFetch({ ai = false, issue }: { ai?: boolean; issue: IssueItem })
     const body = typeof init?.body === "string" ? init.body : "";
     calls.push({ method: init?.method ?? "GET", url, body });
     const send = (data: unknown) => new Response(JSON.stringify({ data }), { status: 200 });
+    if (url.includes("/media/") && mediaStatus !== 200) {
+      return new Response("denied", { status: mediaStatus });
+    }
     if (url.includes("/api/ai/status")) return send({ enabled: ai });
     if (url.includes("/api/ai/cached")) return send({ cached: false });
     if (url.includes("score-logs")) return send([]);
@@ -328,6 +339,39 @@ describe("IssueDetailModal Component", () => {
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
+    expect(
+      container.querySelector("#issue-photo-preview-title")?.closest('[role="dialog"]'),
+    ).toBeFalsy();
+  });
+  it("disables photo zoom and shows permission message when media request returns 403", async () => {
+    installFetch({ issue: baseIssue(), mediaStatus: 403 });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      setTimeout(resolve, 50);
+      await promise;
+    });
+
+    const photoButton = (
+      Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]
+    ).find((item) => item.querySelector('img[alt="Trước khắc phục"]'));
+    expect(photoButton?.disabled).toBe(true);
+    expect(container.textContent).toContain("Bạn không có quyền xem ảnh này");
+    expect(container.textContent).not.toContain("Chạm ảnh để xem toàn màn hình");
+
+    await act(async () => {
+      photoButton?.click();
+    });
+    await act(async () => {});
+
     expect(
       container.querySelector("#issue-photo-preview-title")?.closest('[role="dialog"]'),
     ).toBeFalsy();

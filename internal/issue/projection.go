@@ -19,8 +19,11 @@ import (
 // OpenMedia authorizes issue visibility before opening its controlled attachment.
 func (s *ServiceImpl) OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error) {
 	issue, err := s.store.GetIssueByID(ctx, id)
-	if err != nil || !s.canViewIssue(ctx, issue) {
+	if err != nil {
 		return nil, ErrIssueNotFound
+	}
+	if !s.canViewIssue(ctx, issue) {
+		return nil, ErrMediaForbidden
 	}
 	return s.storageManager.OpenAttachment(folder, basename)
 }

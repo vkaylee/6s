@@ -14,6 +14,7 @@ import (
 // Domain errors.
 var (
 	ErrIssueNotFound          = errors.New("issue not found")
+	ErrMediaForbidden         = errors.New("media access forbidden")
 	ErrIssueConflict          = errors.New("issue version or status conflict")
 	ErrPermissionDenied       = errors.New("permission denied for action")
 	ErrInvalidCategory        = errors.New("invalid 6S category")
