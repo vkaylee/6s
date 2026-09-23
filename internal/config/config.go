@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,13 @@ import (
 // MinJWTSecretLen is the minimum accepted JWT HMAC secret length in bytes.
 // 32 bytes matches the HS256 output size (RFC 7518 §3.2 key requirements).
 const MinJWTSecretLen = 32
+
+// encryptionKeyLen is the AES-256 key size required by internal/crypto.
+const encryptionKeyLen = 32
+
+// placeholderSecretMarkers are values shipped in example templates. Accepting
+// them in a non-development environment would run production on a public secret.
+var placeholderSecretMarkers = []string{"change-me", "changeme", "development-", "dev-secret", "example"}
 
 // Config holds the system runtime configuration loaded from env or CLI flags.
 type Config struct {
@@ -83,18 +91,62 @@ func (c *Config) validate() error {
 		errs = append(errs, errors.New("DB_DSN must not connect over plaintext Postgres: use sslmode=require (or verify-full); set DEV_INSECURE=true only for local development"))
 	}
 
-	switch {
-	case strings.TrimSpace(c.JWTSecret) == "":
-		errs = append(errs, errors.New("JWT_SECRET is required: set the JWT_SECRET environment variable or pass -jwt-secret"))
-	case len(c.JWTSecret) < MinJWTSecretLen:
-		errs = append(errs, fmt.Errorf("JWT_SECRET must be at least %d bytes (got %d)", MinJWTSecretLen, len(c.JWTSecret)))
-	}
+	errs = append(errs, validateJWTSecret(c.JWTSecret, c.DevInsecure)...)
+	errs = append(errs, validateEncryptionKey(c.EncryptionKey, c.DevInsecure)...)
 
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		errs = append(errs, errors.New("TLS_CERT and TLS_KEY must be provided together"))
 	}
 
 	return errors.Join(errs...)
+}
+
+func validateJWTSecret(secret string, devInsecure bool) []error {
+	switch {
+	case strings.TrimSpace(secret) == "":
+		return []error{errors.New("JWT_SECRET is required: set the JWT_SECRET environment variable or pass -jwt-secret")}
+	case len(secret) < MinJWTSecretLen:
+		return []error{fmt.Errorf("JWT_SECRET must be at least %d bytes (got %d)", MinJWTSecretLen, len(secret))}
+	}
+	if !devInsecure && isPlaceholderSecret(secret) {
+		return []error{errors.New("JWT_SECRET must not use a template placeholder value; generate one with 'openssl rand -base64 48'")}
+	}
+	return nil
+}
+
+// validateEncryptionKey enforces the key internal/crypto can actually use.
+// Without it the server would start with a nil cipher and persist T1 secrets
+// (AI keys, notification tokens, AD bind passwords) as plaintext.
+func validateEncryptionKey(key string, devInsecure bool) []error {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		if devInsecure {
+			return nil
+		}
+		return []error{errors.New("APP_ENCRYPTION_KEY is required: set a base64-encoded or raw 32-byte key")}
+	}
+	decoded, decodeErr := base64.StdEncoding.DecodeString(trimmed)
+	raw := len(trimmed) == encryptionKeyLen
+	if decodeErr != nil && !raw {
+		return []error{fmt.Errorf("APP_ENCRYPTION_KEY must be a base64-encoded or raw %d-byte key", encryptionKeyLen)}
+	}
+	if decodeErr == nil && len(decoded) != encryptionKeyLen && !raw {
+		return []error{fmt.Errorf("APP_ENCRYPTION_KEY must decode to %d bytes (got %d)", encryptionKeyLen, len(decoded))}
+	}
+	if !devInsecure && isPlaceholderSecret(trimmed) {
+		return []error{errors.New("APP_ENCRYPTION_KEY must not use a template placeholder value")}
+	}
+	return nil
+}
+
+func isPlaceholderSecret(value string) bool {
+	lowered := strings.ToLower(value)
+	for _, marker := range placeholderSecretMarkers {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateDBDSN(dsn string) error {

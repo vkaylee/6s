@@ -1,3 +1,4 @@
+// Package main provides the standalone database migration CLI for 6S.
 package main
 
 import (
@@ -37,7 +38,9 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("database connection failed")
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	switch args[0] {
 	case "status":
 		return printStatus(ctx, db)

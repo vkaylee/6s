@@ -506,6 +506,46 @@ ORDER BY it.issue_id, t.code;
 DELETE FROM issue_tags
 WHERE issue_id = $1;
 
+-- name: ListVisibleIssueEventRecipients :many
+SELECT u.id
+FROM issues i
+JOIN users u ON u.id = ANY(sqlc.arg('user_ids')::bigint[])
+WHERE i.id = sqlc.arg('issue_id')::bigint
+  AND (i.site_id = 0 OR u.site_id = 0 OR i.site_id = u.site_id)
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR (i.assigned_team_id IS NOT NULL AND u.is_active AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          WHERE tm.team_id = i.assigned_team_id AND tm.user_id = u.id
+      ))
+      OR i.creator_id = u.id
+      OR i.assignee_id = u.id
+      OR u.role IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR (u.role = 'LINE_LEADER' AND EXISTS (
+          SELECT 1
+          FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = u.id
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR (u.role = 'LINE_LEADER' AND EXISTS (
+          SELECT 1
+          FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = u.id
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
+ORDER BY u.id;
+
 -- name: ListIssuesFiltered :many
 SELECT i.*,
        COALESCE((

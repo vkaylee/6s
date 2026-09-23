@@ -225,7 +225,7 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 	}
 	resp, getErr := s.GetIssueByID(ctx, created.ID)
 	if getErr == nil {
-		s.broadcast(Event{Type: EventIssueCreated, IssueID: created.ID})
+		s.broadcast(ctx, Event{Type: EventIssueCreated, IssueID: created.ID})
 	}
 	return resp, true, getErr
 }
@@ -302,7 +302,7 @@ func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest,
 	}
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
-		s.broadcast(Event{Type: EventIssueResolved, IssueID: updated.ID})
+		s.broadcast(ctx, Event{Type: EventIssueResolved, IssueID: updated.ID})
 	}
 	return res, err
 }
@@ -373,7 +373,7 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 	s.recordCloseReward(ctx, issue, rating)
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
-		s.broadcast(Event{Type: EventIssueClosed, IssueID: updated.ID})
+		s.broadcast(ctx, Event{Type: EventIssueClosed, IssueID: updated.ID})
 	}
 	return res, err
 }
@@ -413,7 +413,7 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
-		s.broadcast(Event{Type: EventIssueReopened, IssueID: updated.ID})
+		s.broadcast(ctx, Event{Type: EventIssueReopened, IssueID: updated.ID})
 	}
 	return res, err
 }
@@ -475,7 +475,7 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
-		s.broadcast(Event{Type: EventIssueInvalidated, IssueID: updated.ID})
+		s.broadcast(ctx, Event{Type: EventIssueInvalidated, IssueID: updated.ID})
 	}
 	return res, err
 }
@@ -594,7 +594,7 @@ func (s *ServiceImpl) PatchIssue(ctx context.Context, req PatchIssueRequest, cur
 	}
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
-		s.broadcast(Event{Type: EventIssueUpdated, IssueID: updated.ID})
+		s.broadcast(ctx, Event{Type: EventIssueUpdated, IssueID: updated.ID})
 	}
 	return res, err
 }

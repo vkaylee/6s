@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 
 	"6s/internal/db"
 	"6s/internal/storage"
@@ -93,6 +94,7 @@ type Reader interface {
 	ListIssuesFiltered(ctx context.Context, arg db.ListIssuesFilteredParams) ([]db.ListIssuesFilteredRow, error)
 	CountIssuesFiltered(ctx context.Context, arg db.CountIssuesFilteredParams) (int64, error)
 	GetIssueResponsibilityHistory(ctx context.Context, targetID string) ([]db.ListIssueResponsibilityHistoryRow, error)
+	ListVisibleIssueEventRecipients(ctx context.Context, arg db.ListVisibleIssueEventRecipientsParams) ([]int64, error)
 }
 
 // Writer mutates issue lifecycle state.
@@ -230,15 +232,30 @@ func NewService(store Store, storageManager *storage.Manager, notifyCh chan stru
 }
 
 // SubscribeEvents returns a channel receiving issue update events.
-func (s *ServiceImpl) SubscribeEvents() (<-chan Event, func()) {
-	return s.hub.Subscribe()
+func (s *ServiceImpl) SubscribeEvents(userID ...int64) (<-chan Event, func()) {
+	return s.hub.Subscribe(userID...)
 }
 
-// broadcast emits an event to all active SSE subscribers.
-func (s *ServiceImpl) broadcast(evt Event) {
-	if s.hub != nil {
-		s.hub.Broadcast(evt)
+// broadcast resolves visibility for all active subscribers once, then publishes the same
+// audience-bound event to every channel. A failed lookup drops the event for all subscribers
+// rather than leaking it, matching the per-subscriber detail check it replaces.
+func (s *ServiceImpl) broadcast(ctx context.Context, evt Event) {
+	if s.hub == nil {
+		return
 	}
+	ids := s.hub.SubscriberIDs()
+	if len(ids) == 0 {
+		// Direct service tests may subscribe without an identity. Production SSE always
+		// supplies currentUser.ID and therefore takes batched visibility path below.
+		s.hub.Broadcast(evt)
+		return
+	}
+	visible, err := s.store.ListVisibleIssueEventRecipients(ctx, db.ListVisibleIssueEventRecipientsParams{UserIds: ids, IssueID: evt.IssueID})
+	if err != nil {
+		log.Printf("failed to resolve issue event recipients: %v", err)
+		return
+	}
+	s.hub.Broadcast(evt.withRecipients(visible))
 }
 
 // SyncIssueRequest parameters for POST /api/issues/sync.

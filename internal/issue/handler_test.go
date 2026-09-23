@@ -91,7 +91,7 @@ func (m *mockIssueService) ListIssuesFiltered(_ context.Context, filter ListFilt
 	}
 	return []Response{*m.issueResp}, 1, nil
 }
-func (m *mockIssueService) SubscribeEvents() (<-chan Event, func()) {
+func (m *mockIssueService) SubscribeEvents(_ ...int64) (<-chan Event, func()) {
 	if m.events != nil {
 		return m.events, func() {}
 	}

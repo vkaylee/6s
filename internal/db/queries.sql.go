@@ -3353,6 +3353,75 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	return items, nil
 }
 
+const listVisibleIssueEventRecipients = `-- name: ListVisibleIssueEventRecipients :many
+SELECT u.id
+FROM issues i
+JOIN users u ON u.id = ANY($1::bigint[])
+WHERE i.id = $2::bigint
+  AND (i.site_id = 0 OR u.site_id = 0 OR i.site_id = u.site_id)
+  AND (
+      i.visibility_class = 'SITE_PUBLIC'
+      OR (i.assigned_team_id IS NOT NULL AND u.is_active AND EXISTS (
+          SELECT 1 FROM team_memberships tm
+          WHERE tm.team_id = i.assigned_team_id AND tm.user_id = u.id
+      ))
+      OR i.creator_id = u.id
+      OR i.assignee_id = u.id
+      OR u.role IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN')
+      OR (u.role = 'LINE_LEADER' AND EXISTS (
+          SELECT 1
+          FROM location_memberships lm
+          JOIN locations l ON l.code = lm.location_code
+          WHERE lm.user_id = u.id
+            AND lm.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND lm.is_active = TRUE
+            AND lm.valid_from <= CURRENT_TIMESTAMP
+            AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)
+      ))
+      OR (u.role = 'LINE_LEADER' AND EXISTS (
+          SELECT 1
+          FROM team_memberships tm
+          JOIN team_locations tl ON tl.team_id = tm.team_id
+          JOIN locations l ON l.code = tl.location_code
+          WHERE tm.user_id = u.id
+            AND tl.location_code = i.location_code
+            AND l.site_id = i.site_id
+            AND tl.valid_from <= CURRENT_TIMESTAMP
+            AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)
+      ))
+  )
+ORDER BY u.id
+`
+
+type ListVisibleIssueEventRecipientsParams struct {
+	UserIds []int64
+	IssueID int64
+}
+
+func (q *Queries) ListVisibleIssueEventRecipients(ctx context.Context, arg ListVisibleIssueEventRecipientsParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listVisibleIssueEventRecipients, pq.Array(arg.UserIds), arg.IssueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOutboxFailed = `-- name: MarkOutboxFailed :exec
 UPDATE notification_outbox
 SET status = 'FAILED',

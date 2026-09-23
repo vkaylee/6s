@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { type UserProfile, useAuthStore } from "../store/authStore.ts";
@@ -7,9 +7,10 @@ import { haptics } from "../utils/haptics.ts";
 interface SetupSuperadminModalProps {
   isOpen: boolean;
   onSuccess: () => void;
+  onClose?: () => void;
 }
 
-export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModalProps) {
+export function SetupSuperadminModal({ isOpen, onSuccess, onClose }: SetupSuperadminModalProps) {
   const { t } = useI18nStore();
   const { setAuth } = useAuthStore();
   const [username, setUsername] = useState("admin");
@@ -19,6 +20,47 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("aria-hidden"));
+    focusables()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && onClose) {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) {
     return null;
@@ -82,16 +124,25 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="setup-superadmin-modal-title"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+    >
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
         <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 text-center">
           <div className="w-14 h-14 bg-gradient-to-tr from-amber-600 to-rose-600 text-white rounded-2xl mx-auto flex items-center justify-center font-black text-2xl mb-3 shadow-lg shadow-rose-600/30">
             👑
           </div>
-          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">
+          <h2
+            id="setup-superadmin-modal-title"
+            className="text-xl font-black text-zinc-900 dark:text-zinc-100"
+          >
             {t("auth.setup_superadmin")}
           </h2>
-          <p className="text-xs text-zinc-500 mt-1">{t("auth.setup_superadmin_desc")}</p>
         </div>
 
         <form onSubmit={handleSetup} className="p-6 space-y-4">
@@ -191,6 +242,7 @@ export function SetupSuperadminModal({ isOpen, onSuccess }: SetupSuperadminModal
           <button
             type="submit"
             disabled={isLoading}
+            aria-label={t("auth.submit_setup")}
             className="w-full mt-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black text-sm p-3.5 rounded-xl shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 min-h-[52px]"
           >
             {isLoading ? (

@@ -1,0 +1,11 @@
+# Extends the default ruleset. The only allowlist is Go test fixtures that must
+# contain syntactically valid placeholder secrets to exercise config validation;
+# they are never shipped and never hold real credentials.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder secrets in Go test fixtures"
+paths = [
+    '''_test\.go$'''
+]

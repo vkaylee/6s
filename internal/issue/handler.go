@@ -34,7 +34,7 @@ type Service interface {
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
 	OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error)
 	ListIssuesFiltered(ctx context.Context, filter ListFilter) ([]Response, int64, error)
-	SubscribeEvents() (<-chan Event, func())
+	SubscribeEvents(userID ...int64) (<-chan Event, func())
 }
 
 // Handler handles Issue HTTP endpoints.
@@ -592,7 +592,8 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 
 // Events streams real-time issue updates via Server-Sent Events (SSE).
 func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
-	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
 		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrMissingAuth))
 		return
 	}
@@ -609,7 +610,7 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	eventsCh, unsubscribe := h.service.SubscribeEvents()
+	eventsCh, unsubscribe := h.service.SubscribeEvents(currentUser.ID)
 	defer unsubscribe()
 
 	ticker := time.NewTicker(25 * time.Second)
@@ -623,9 +624,12 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				return
 			}
-			// Re-check current visibility at delivery time; event payload contains only an ID.
-			if _, err := h.service.GetIssueByID(r.Context(), evt.IssueID); err != nil {
-				continue
+			// ServiceImpl resolves event visibility once for all subscribers. Keep the detail
+			// check for test doubles and legacy events that carry no resolved audience.
+			if _, resolved := evt.canDeliver(currentUser.ID); !resolved {
+				if _, err := h.service.GetIssueByID(r.Context(), evt.IssueID); err != nil {
+					continue
+				}
 			}
 			data, err := json.Marshal(evt)
 			if err != nil {

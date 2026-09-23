@@ -879,6 +879,7 @@ export function App() {
           loadMasterData();
           loadIssues();
         }}
+        onClose={() => setIsSetupOpen(false)}
       />
       <GlobalDialog />
     </>

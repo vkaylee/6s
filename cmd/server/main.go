@@ -8,7 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -33,15 +35,35 @@ import (
 	"6s/internal/storage"
 )
 
+const readinessVersion = "dev"
+
+var serverStartedAt = time.Now()
+
+type readinessChecks struct {
+	Database string `json:"database"`
+	Storage  string `json:"storage"`
+}
+
+type readinessPayload struct {
+	Status        string          `json:"status"`
+	DB            string          `json:"db"`
+	Version       string          `json:"version"`
+	UptimeSeconds int64           `json:"uptime_seconds"`
+	Checks        readinessChecks `json:"checks"`
+}
+
 func main() {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		log.Fatalf("invalid config: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	dbConn, err := database.Connect(ctx, cfg.DBDSN, database.DefaultPoolConfig())
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	connectCtx, cancelConnect := context.WithTimeout(rootCtx, 30*time.Second)
+	defer cancelConnect()
+	dbConn, err := database.Connect(connectCtx, cfg.DBDSN, database.DefaultPoolConfig())
 	if err != nil {
 		if dbConn != nil {
 			_ = dbConn.Close()
@@ -53,7 +75,7 @@ func main() {
 			log.Printf("error closing db: %v", err)
 		}
 	}()
-	if err := database.ValidateMigrations(ctx, dbConn); err != nil {
+	if err := database.ValidateMigrations(connectCtx, dbConn); err != nil {
 		log.Fatalf("database schema validation failed: %v", err)
 	}
 
@@ -61,13 +83,14 @@ func main() {
 	if cfg.EncryptionKey != "" {
 		c, err := crypto.NewCipher(cfg.EncryptionKey)
 		if err != nil {
-			log.Printf("warning: invalid APP_ENCRYPTION_KEY: %v", err)
-		} else {
-			cipher = c
+			log.Fatalf("invalid APP_ENCRYPTION_KEY: %v", err)
 		}
+		cipher = c
+	} else if !cfg.DevInsecure {
+		log.Fatalf("APP_ENCRYPTION_KEY is required in production")
 	}
 
-	r := setupRouter(dbConn, cfg, cipher, nil)
+	r := setupRouter(dbConn, cfg, cipher, nil, rootCtx)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%s", cfg.Port),
@@ -75,21 +98,33 @@ func main() {
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
-	if cfg.TLSCert != "" && cfg.TLSKey != "" {
-		log.Printf("Server listening with TLS on :%s", cfg.Port)
-		if err := server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
+	serverErrCh := make(chan error, 1)
+	go func() {
+		if cfg.TLSCert != "" && cfg.TLSKey != "" {
+			observability.Log("info", fmt.Sprintf("Server listening with TLS on :%s", cfg.Port), nil)
+			serverErrCh <- server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
+		} else {
+			observability.Log("info", fmt.Sprintf("Server listening on :%s", cfg.Port), nil)
+			serverErrCh <- server.ListenAndServe()
+		}
+	}()
+
+	select {
+	case err := <-serverErrCh:
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server terminated: %v", err)
 		}
-		return
-	}
-
-	log.Printf("Server listening on :%s", cfg.Port)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server terminated: %v", err)
+	case <-rootCtx.Done():
+		observability.Log("info", "shutdown signal received; draining active connections", nil)
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelShutdown()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			observability.Log("error", "server shutdown failed", map[string]any{"error": err.Error()})
+		}
 	}
 }
 
-func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) *chi.Mux {
+func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient, parentCtx ...context.Context) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -106,31 +141,61 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 		})
 	}
 	readinessHandler := func(w http.ResponseWriter, req *http.Request) {
-		if dbConn == nil {
-			_ = response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
-			return
+		databaseStatus := "disconnected"
+		storageStatus := "unwritable"
+		if dbConn != nil {
+			ctx, cancel := context.WithTimeout(req.Context(), time.Second)
+			err := dbConn.PingContext(ctx)
+			cancel()
+			if err == nil {
+				databaseStatus = "ok"
+			}
 		}
-		ctx, cancel := context.WithTimeout(req.Context(), time.Second)
-		defer cancel()
-		if err := dbConn.PingContext(ctx); err != nil {
-			_ = response.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "db": "disconnected"})
-			return
+
+		storageDir := "./data"
+		if cfg != nil && cfg.DataDir != "" {
+			storageDir = cfg.DataDir
 		}
-		_ = response.JSON(w, http.StatusOK, map[string]string{"status": "ok", "db": "ok"})
+		if err := observability.CheckStorageWritability(storageDir); err == nil {
+			storageStatus = "ok"
+		}
+
+		ready := databaseStatus == "ok" && storageStatus == "ok"
+		status := "not_ready"
+		statusCode := http.StatusServiceUnavailable
+		if ready {
+			status = "ok"
+			statusCode = http.StatusOK
+		}
+		payload := readinessPayload{
+			Status: status, DB: databaseStatus, Version: readinessVersion,
+			UptimeSeconds: int64(time.Since(serverStartedAt).Seconds()),
+			Checks:        readinessChecks{Database: databaseStatus, Storage: storageStatus},
+		}
+		if !ready {
+			observability.Log("warn", "readiness check failed", map[string]any{
+				"database": databaseStatus, "storage": storageStatus,
+			})
+		}
+		_ = response.JSON(w, statusCode, payload)
 	}
 	r.Get("/api/health", healthHandler)
 	r.Head("/api/health", healthHandler)
 	r.Get("/api/ready", readinessHandler)
 	r.Head("/api/ready", readinessHandler)
+	bgCtx := context.Background()
+	if len(parentCtx) > 0 && parentCtx[0] != nil {
+		bgCtx = parentCtx[0]
+	}
 	if dbConn != nil && cfg != nil {
-		registerAPIRoutes(r, dbConn, cfg, cipher, ldapClient)
+		registerAPIRoutes(bgCtx, r, dbConn, cfg, cipher, ldapClient)
 	}
 
 	registerStaticRoutes(r)
 	return r
 }
 
-func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) {
+func registerAPIRoutes(ctx context.Context, r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldapClient auth.LDAPClient) {
 	queries := db.New(dbConn)
 	jwtKey := []byte(cfg.JWTSecret)
 	tm := auth.NewTokenManager(jwtKey)
@@ -215,10 +280,10 @@ func registerAPIRoutes(r *chi.Mux, dbConn *sql.DB, cfg *config.Config, cipher *c
 		sr.Patch("/timezone", settingsHandler.UpdateTimezone)
 	})
 
-	registerBusinessRoutes(r, queries, authMw, cipher, cfg)
+	registerBusinessRoutes(ctx, r, queries, authMw, cipher, cfg)
 }
 
-func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, cfg *config.Config) {
+func registerBusinessRoutes(ctx context.Context, r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, cfg *config.Config) {
 	storageDir := cfg.DataDir
 	if storageDir == "" {
 		storageDir = "./data"
@@ -232,7 +297,7 @@ func registerBusinessRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middle
 
 	notifyCh := make(chan struct{}, 10)
 	registerIssueRoutes(r, queries, storageMgr, authMw, notifyCh)
-	registerScoringAndNotificationRoutes(r, queries, authMw, cipher, notifyCh, storageDir)
+	registerScoringAndNotificationRoutes(ctx, r, queries, authMw, cipher, notifyCh, storageDir)
 }
 
 func registerMasterDataRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware) {
@@ -315,7 +380,7 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 	r.With(authMw.Authenticate, auth.RequirePermission(auth.PermissionReportsExport)).Get("/api/issues/export", reportHandler.ExportXLSX)
 }
 
-func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
+func registerScoringAndNotificationRoutes(ctx context.Context, r *chi.Mux, queries *db.Queries, authMw *auth.Middleware, cipher *crypto.Cipher, notifyCh chan struct{}, storageDir string) {
 	scoringSvc := scoring.NewService(queries, nil)
 	scoringHandler := scoring.NewHandler(scoringSvc)
 	r.Route("/api/leaderboard", func(lbr chi.Router) {
@@ -366,12 +431,11 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		air.Post("/review", aiHandler.Review)
 		air.Post("/review-follow-up", aiHandler.FollowUp)
 	})
-	backgroundCtx := context.Background()
 	outboxWorker := notification.NewWorker(queries, httpSender, cipher, notifyCh)
-	go outboxWorker.Start(backgroundCtx)
+	go outboxWorker.Start(ctx)
 
 	factoryLoc := time.UTC
-	if settings, err := queries.GetSystemSettings(backgroundCtx); err == nil {
+	if settings, err := queries.GetSystemSettings(ctx); err == nil {
 		if loaded, loadErr := time.LoadLocation(settings.Timezone); loadErr == nil {
 			factoryLoc = loaded
 		} else {
@@ -379,7 +443,7 @@ func registerScoringAndNotificationRoutes(r *chi.Mux, queries *db.Queries, authM
 		}
 	}
 	cronRunner := cron.NewRunner(queries, factoryLoc, storageDir)
-	go cronRunner.Start(backgroundCtx)
+	go cronRunner.Start(ctx)
 }
 
 func timeoutByRoute(next http.Handler) http.Handler {

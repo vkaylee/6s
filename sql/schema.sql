@@ -305,6 +305,7 @@ CREATE INDEX IF NOT EXISTS idx_issue_tags_tag ON issue_tags(tag_code);
 CREATE INDEX IF NOT EXISTS idx_tags_use_count ON tags(use_count DESC);
 CREATE INDEX IF NOT EXISTS idx_score_logs_target ON score_logs(target_type, target_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_score_logs_rule ON score_logs(rule_key, created_at);
+CREATE INDEX IF NOT EXISTS idx_score_logs_issue ON score_logs(issue_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_score_logs_overdue ON score_logs(issue_id, rule_key, penalty_date) WHERE penalty_date IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON notification_outbox(status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_system_audit_target ON system_audit_logs(target_table, target_id, created_at);

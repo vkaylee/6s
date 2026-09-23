@@ -22,20 +22,22 @@ jobs:
           go-version-file: go.mod
           cache: true
           check-latest: false
-      - name: Install LeeDevKit 0.7.7 source distribution
+      - name: Install LeeDevKit (pinned to leedevkit.toml)
         shell: bash
         run: |
           set -euo pipefail
+          version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' leedevkit.toml)"
+          test -n "$version" || { echo "leedevkit.toml has no version" >&2; exit 1; }
           archive="$(mktemp)"
-          curl -fsSL https://github.com/vkaylee/leedevkit/archive/refs/tags/v0.7.7.tar.gz -o "$archive"
+          curl -fsSL "https://github.com/vkaylee/leedevkit/archive/refs/tags/v${version}.tar.gz" -o "$archive"
           mkdir .leedevkit
           tar -xzf "$archive" --strip-components=1 -C .leedevkit
           rm "$archive"
           DEVKIT_HOME="$PWD/.leedevkit" python3 .leedevkit/scripts/_devkit_integrity.py checksum
           printf '%s\n' '#!/bin/bash' 'exec "$(cd "$(dirname "$0")" && pwd)/.leedevkit/bin/leedevkit" "$@"' > leedevkit
           chmod +x leedevkit
-      - name: Install Go vulnerability scanner
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - name: Build pinned security scanner image
+        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.23 .
       - name: Server lint
         run: ./leedevkit test server --lint-only
       - name: Server unit tests
@@ -75,12 +77,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - name: Install LeeDevKit 0.7.7 source distribution
+      - name: Install LeeDevKit (pinned to leedevkit.toml)
         shell: bash
         run: |
           set -euo pipefail
+          version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' leedevkit.toml)"
+          test -n "$version" || { echo "leedevkit.toml has no version" >&2; exit 1; }
           archive="$(mktemp)"
-          curl -fsSL https://github.com/vkaylee/leedevkit/archive/refs/tags/v0.7.7.tar.gz -o "$archive"
+          curl -fsSL "https://github.com/vkaylee/leedevkit/archive/refs/tags/v${version}.tar.gz" -o "$archive"
           mkdir .leedevkit
           tar -xzf "$archive" --strip-components=1 -C .leedevkit
           rm "$archive"
@@ -127,10 +131,8 @@ jobs:
           go-version-file: go.mod
           cache: true
           check-latest: false
-      - name: Install pinned security scanners
-        run: |
-          go install github.com/anchore/syft/cmd/syft@v1.18.1
-          go install github.com/zricethezav/gitleaks/v8@v8.24.2
+      - name: Build pinned security scanner image
+        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.23 .
       - name: Generate SBOM
         run: ./scripts/security-scan.sh sbom
       - name: Secret scan

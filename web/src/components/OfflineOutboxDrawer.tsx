@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type DraftIssue,
   type DraftResolve,
@@ -27,6 +27,7 @@ export function OfflineOutboxDrawer({
   const [issues, setIssues] = useState<DraftIssue[]>([]);
   const [resolves, setResolves] = useState<DraftResolve[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -47,6 +48,52 @@ export function OfflineOutboxDrawer({
       loadData();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("aria-hidden"));
+    focusables()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const activeDialog = (document.activeElement as HTMLElement | null)?.closest(
+        '[role="dialog"]',
+      );
+      const eventDialog = (event.target as HTMLElement | null)?.closest('[role="dialog"]');
+      if ((activeDialog && activeDialog !== dialog) || (eventDialog && eventDialog !== dialog))
+        return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) {
     return null;
@@ -77,11 +124,21 @@ export function OfflineOutboxDrawer({
   const total = issues.length + resolves.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="outbox-drawer-title"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in"
+    >
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 h-full flex flex-col shadow-2xl border-l border-zinc-200 dark:border-zinc-800">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            <h2
+              id="outbox-drawer-title"
+              className="text-lg font-bold text-zinc-900 dark:text-zinc-100"
+            >
               {t("outbox.title", { total })}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("outbox.subtitle")}</p>
@@ -209,6 +266,7 @@ export function OfflineOutboxDrawer({
                         type="button"
                         aria-label={`${t("outbox.discard")} ${item.issue_id}`}
                         onClick={() => handleDeleteResolve(item.resolved_client_uuid)}
+                        className="text-xs text-rose-600 hover:text-rose-800 font-bold p-2 min-h-[44px]"
                       >
                         {t("outbox.discard")}
                       </button>

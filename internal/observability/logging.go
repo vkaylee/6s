@@ -11,9 +11,11 @@ import (
 )
 
 var (
-	emailPattern = regexp.MustCompile(`(?i)([a-z0-9])[a-z0-9._%+\-]*@([a-z0-9.\-]+\.[a-z]{2,})`)
-	phonePattern = regexp.MustCompile(`\+[0-9][0-9\s().-]{7,}[0-9]`)
-	queryPattern = regexp.MustCompile(`(?i)([?&](?:token|key|secret|password|app_token|webhook)=)[^&\s]+`)
+	emailPattern  = regexp.MustCompile(`(?i)([a-z0-9])[a-z0-9._%+\-]*@([a-z0-9.\-]+\.[a-z]{2,})`)
+	phonePattern  = regexp.MustCompile(`\+[0-9][0-9\s().-]{7,}[0-9]`)
+	queryPattern  = regexp.MustCompile(`(?i)([?&](?:token|key|secret|password|app_token|webhook)=)[^&\s]+`)
+	credKVPattern = regexp.MustCompile(`(?i)((?:password|secret|token|api_key|app_token|webhook)\s*[:=]\s*)[^\s,;&]+`)
+	dsnPattern    = regexp.MustCompile(`(?i)([a-z0-9+.-]+://[^:]+:)[^@]+(@)`)
 )
 
 // Log emits one JSON object with safe, structured fields.
@@ -110,8 +112,7 @@ func Redact(value any) any {
 	text = emailPattern.ReplaceAllString(text, `$1***@$2`)
 	text = phonePattern.ReplaceAllStringFunc(text, func(_ string) string { return "[REDACTED]" })
 	text = queryPattern.ReplaceAllString(text, `${1}[REDACTED]`)
-	for _, marker := range []string{"password=", "token=", "secret=", "app_token=", "webhook="} {
-		text = strings.ReplaceAll(text, marker, marker+"[REDACTED]")
-	}
+	text = credKVPattern.ReplaceAllString(text, `${1}[REDACTED]`)
+	text = dsnPattern.ReplaceAllString(text, `${1}[REDACTED]${2}`)
 	return text
 }

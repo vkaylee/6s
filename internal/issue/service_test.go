@@ -85,6 +85,10 @@ func (m *mockIssueStore) GetIssueByID(_ context.Context, id int64) (db.Issue, er
 	}
 	return iss, nil
 }
+func (m *mockIssueStore) ListVisibleIssueEventRecipients(_ context.Context, arg db.ListVisibleIssueEventRecipientsParams) ([]int64, error) {
+	// Test store default: return active subscriber IDs so workflow events remain observable.
+	return append([]int64(nil), arg.UserIds...), nil
+}
 
 func (m *mockIssueStore) GetIssueByUUID(_ context.Context, clientUUID string) (db.Issue, error) {
 	for _, iss := range m.issues {
@@ -182,12 +186,22 @@ func (m *mockIssueStore) ListTagsForIssues(_ context.Context, issueIDs []int64) 
 
 type countingIssueStore struct {
 	*mockIssueStore
-	tagCalls int
+	tagCalls       int
+	recipientCalls int
+	visibleFilter  func(arg db.ListVisibleIssueEventRecipientsParams) ([]int64, error)
 }
 
 func (c *countingIssueStore) ListTagsForIssues(_ context.Context, issueIDs []int64) ([]db.ListTagsForIssuesRow, error) {
 	c.tagCalls++
 	return c.mockIssueStore.ListTagsForIssues(context.Background(), issueIDs)
+}
+
+func (c *countingIssueStore) ListVisibleIssueEventRecipients(_ context.Context, arg db.ListVisibleIssueEventRecipientsParams) ([]int64, error) {
+	c.recipientCalls++
+	if c.visibleFilter != nil {
+		return c.visibleFilter(arg)
+	}
+	return c.mockIssueStore.ListVisibleIssueEventRecipients(context.Background(), arg)
 }
 
 func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
@@ -1456,5 +1470,76 @@ func TestIssueService_ResponsibilityHistoryActions(t *testing.T) {
 	}
 	if got := resp.ResponsibilityHistory[3].NewValue; string(got) != `{"cause_status":"CONFIRMED"}` {
 		t.Fatalf("cause verification payload not preserved: %s", got)
+	}
+}
+
+func TestIssueService_Broadcast_QueryCountIndependentOfSubscribers(t *testing.T) {
+	store := &countingIssueStore{
+		mockIssueStore: newMockIssueStore(),
+		visibleFilter: func(arg db.ListVisibleIssueEventRecipientsParams) ([]int64, error) {
+			var allowed []int64
+			for _, id := range arg.UserIds {
+				// Only odd IDs are visible to this issue in our test scenario.
+				if id%2 != 0 {
+					allowed = append(allowed, id)
+				}
+			}
+			return allowed, nil
+		},
+	}
+
+	tempDir := t.TempDir()
+	storageMgr, _ := storage.NewManager(tempDir)
+	svc := NewService(store, storageMgr, make(chan struct{}, 1))
+
+	// Subscribe 5 users (101, 102, 103, 104, 105).
+	subs := make(map[int64]<-chan Event)
+	for _, id := range []int64{101, 102, 103, 104, 105} {
+		ch, unsub := svc.SubscribeEvents(id)
+		defer unsub()
+		subs[id] = ch
+	}
+
+	ctx := context.Background()
+	svc.broadcast(ctx, Event{Type: EventIssueUpdated, IssueID: 42})
+
+	// Single batched query was executed despite 5 subscribers.
+	if store.recipientCalls != 1 {
+		t.Fatalf("expected exactly 1 recipient query for 5 subscribers, got %d", store.recipientCalls)
+	}
+
+	// Verify authorized subscribers (101, 103, 105) received event.
+	for _, id := range []int64{101, 103, 105} {
+		select {
+		case evt := <-subs[id]:
+			if evt.Type != EventIssueUpdated || evt.IssueID != 42 {
+				t.Fatalf("subscriber %d received unexpected event: %+v", id, evt)
+			}
+		case <-time.After(100 * time.Millisecond):
+			t.Fatalf("subscriber %d did not receive event", id)
+		}
+	}
+
+	// Verify unauthorized subscribers (102, 104) did not receive event.
+	for _, id := range []int64{102, 104} {
+		select {
+		case evt := <-subs[id]:
+			t.Fatalf("subscriber %d unexpectedly received event: %+v", id, evt)
+		default:
+			// Expected.
+		}
+	}
+
+	// Subscribe 10 more users (200..209).
+	for id := int64(200); id < 210; id++ {
+		_, unsub := svc.SubscribeEvents(id)
+		defer unsub()
+	}
+
+	svc.broadcast(ctx, Event{Type: EventIssueUpdated, IssueID: 42})
+
+	// Total query count must be exactly 2 (1 per broadcast, zero scaling with 15 subscribers).
+	if store.recipientCalls != 2 {
+		t.Fatalf("expected exactly 2 recipient queries across 2 broadcasts, got %d", store.recipientCalls)
 	}
 }

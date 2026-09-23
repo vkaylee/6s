@@ -9,6 +9,7 @@ import (
 func TestConfigLoadDefaults(t *testing.T) {
 	t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
 	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	cfg, err := Load([]string{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -25,7 +26,7 @@ func TestConfigLoadDefaults(t *testing.T) {
 func TestConfigLoadFlags(t *testing.T) {
 	t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
 	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
-	args := []string{"-port", "9090", "-data-dir", "/tmp/6s", "-encryption-key", "my-key"}
+	args := []string{"-port", "9090", "-data-dir", "/tmp/6s", "-encryption-key", "01234567890123456789012345678901"}
 	cfg, err := Load(args)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -37,14 +38,15 @@ func TestConfigLoadFlags(t *testing.T) {
 	if cfg.DataDir != "/tmp/6s" {
 		t.Errorf("expected dataDir /tmp/6s, got %s", cfg.DataDir)
 	}
-	if cfg.EncryptionKey != "my-key" {
-		t.Errorf("expected key my-key, got %s", cfg.EncryptionKey)
+	if cfg.EncryptionKey != "01234567890123456789012345678901" {
+		t.Errorf("expected key, got %s", cfg.EncryptionKey)
 	}
 }
 
 func TestConfigLoadEnv(t *testing.T) {
 	t.Setenv("SERVER_PORT", "7070")
 	t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
+	t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load([]string{})
@@ -85,10 +87,29 @@ func TestConfigLoadMissingRequiredFails(t *testing.T) {
 			wantSub: "at least 32 bytes",
 		},
 		{
+			name: "missing APP_ENCRYPTION_KEY",
+			setEnv: func(t *testing.T) {
+				t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
+				t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+				unsetenv(t, "APP_ENCRYPTION_KEY")
+			},
+			wantSub: "APP_ENCRYPTION_KEY is required",
+		},
+		{
+			name: "placeholder JWT_SECRET",
+			setEnv: func(t *testing.T) {
+				t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
+				t.Setenv("JWT_SECRET", "change-me-in-production-min-32-bytes")
+				t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
+			},
+			wantSub: "template placeholder",
+		},
+		{
 			name: "plaintext DSN",
 			setEnv: func(t *testing.T) {
 				t.Setenv("DB_DSN", "postgres://postgres:postgres@localhost:5432/6s_db?sslmode=disable")
 				t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+				t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
 			},
 			wantSub: "plaintext Postgres",
 		},
@@ -97,6 +118,7 @@ func TestConfigLoadMissingRequiredFails(t *testing.T) {
 			setEnv: func(t *testing.T) {
 				t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
 				t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+				t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
 				t.Setenv("TLS_CERT", "/certs/server.crt")
 			},
 			wantSub: "TLS_CERT and TLS_KEY",
@@ -133,6 +155,7 @@ func TestConfigPlainHTTPAllowedWithoutTLSFlags(t *testing.T) {
 	// TLS is optional at the app layer (a reverse proxy such as Caddy may
 	// terminate it); absent flags with valid DSN/secret must load cleanly.
 	t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
+	t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load([]string{})
@@ -146,6 +169,7 @@ func TestConfigPlainHTTPAllowedWithoutTLSFlags(t *testing.T) {
 
 func TestConfigJWTSecretMinimumLengthBoundary(t *testing.T) {
 	t.Setenv("DB_DSN", "postgres://user:secret@localhost:5432/6s_db?sslmode=require")
+	t.Setenv("APP_ENCRYPTION_KEY", "01234567890123456789012345678901")
 	t.Setenv("JWT_SECRET", strings.Repeat("k", MinJWTSecretLen))
 
 	if _, err := Load([]string{}); err != nil {

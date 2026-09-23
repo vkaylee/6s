@@ -1,5 +1,5 @@
 import { Camera, Check, ShieldAlert, Upload, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -65,6 +65,7 @@ export function CreateIssueModal({
   );
   const [assigneeId, setAssigneeId] = useState<number | null>(initialIssue?.assignee_id ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (initialIssue) {
@@ -84,6 +85,52 @@ export function CreateIssueModal({
       );
     }
   }, [initialIssue]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("aria-hidden"));
+    focusables()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const activeDialog = (document.activeElement as HTMLElement | null)?.closest(
+        '[role="dialog"]',
+      );
+      const eventDialog = (event.target as HTMLElement | null)?.closest('[role="dialog"]');
+      if ((activeDialog && activeDialog !== dialog) || (eventDialog && eventDialog !== dialog))
+        return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) {
     return null;
@@ -250,22 +297,33 @@ export function CreateIssueModal({
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-issue-modal-title"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto"
+    >
       <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-auto flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-full bg-rose-600 animate-pulse" />
-            <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
+            <h2
+              id="create-issue-modal-title"
+              className="text-lg font-black text-zinc-900 dark:text-zinc-100"
+            >
               {initialIssue ? t("issue.edit_title") : t("issue.create_title")}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label={t("common.close")}
             className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -496,6 +554,8 @@ export function CreateIssueModal({
               {t("issue.step_description")}
             </span>
             <textarea
+              id="create-issue-description"
+              aria-label={t("issue.step_description")}
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}

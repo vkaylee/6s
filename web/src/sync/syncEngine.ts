@@ -78,6 +78,17 @@ export interface SyncProgress {
   conflictCount: number;
 }
 
+/**
+ * SYNCING means a previous attempt may have completed before the client stopped.
+ * Such drafts must be retried: issue sync is idempotent by client_uuid, and a
+ * resolve retry either succeeds or surfaces the conflict for user resolution.
+ * Excluding SYNCING would strand those drafts forever.
+ */
+export function isRecoverableSyncStatus(
+  status: DraftIssue["sync_status"] | DraftResolve["sync_status"],
+): boolean {
+  return status === "PENDING" || status === "FAILED" || status === "SYNCING";
+}
 type ProgressListener = (progress: SyncProgress) => void;
 
 class SyncEngine {
@@ -168,12 +179,12 @@ class SyncEngine {
       const draftIssues = await getAllDraftIssues();
       const draftResolves = await getAllDraftResolves();
 
-      const pendingIssues = draftIssues.filter((i) => i.sync_status !== "SYNCING");
-      const pendingResolves = draftResolves.filter(
-        (r) => r.sync_status === "PENDING" || r.sync_status === "FAILED",
-      );
+      // SYNCING means previous attempt may have completed before the client stopped.
+      // Re-process it so interrupted uploads remain recoverable. Issue sync is idempotent
+      // by client_uuid; resolve retries preserve the draft and surface any resulting conflict.
+      const pendingIssues = draftIssues.filter((i) => isRecoverableSyncStatus(i.sync_status));
+      const pendingResolves = draftResolves.filter((r) => isRecoverableSyncStatus(r.sync_status));
       const conflictResolves = draftResolves.filter((r) => r.sync_status === "CONFLICT");
-
       const totalTasks = pendingIssues.length + pendingResolves.length;
       if (totalTasks === 0) {
         this.progress = {

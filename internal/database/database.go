@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	// Driver registration for database/sql.
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -31,6 +33,7 @@ type PoolConfig struct {
 	ConnMaxIdleTime time.Duration
 }
 
+// DefaultPoolConfig provides production connection pool defaults.
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
 		MaxOpenConns:    25,
@@ -40,6 +43,7 @@ func DefaultPoolConfig() PoolConfig {
 	}
 }
 
+// Connect opens and validates a PostgreSQL connection pool.
 func Connect(ctx context.Context, dsn string, poolCfg PoolConfig) (*sql.DB, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -180,7 +184,9 @@ func readLedger(ctx context.Context, conn *sql.Conn) (map[int64]MigrationInfo, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	ledger := make(map[int64]MigrationInfo)
 	for rows.Next() {
@@ -273,7 +279,9 @@ func MigrationStatus(ctx context.Context, db *sql.DB) ([]MigrationInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("acquire migration connection: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	exists, err := ledgerExists(operation, conn)
 	if err != nil {
@@ -318,7 +326,9 @@ func ValidateMigrations(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("acquire migration connection: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	exists, err := ledgerExists(operation, conn)
 	if err != nil {
@@ -349,94 +359,140 @@ func RunMigrations(ctx context.Context, db *sql.DB) (retErr error) {
 	}
 	operation, cancel := context.WithTimeout(ctx, timeouts.overall)
 	defer cancel()
-	conn, err := db.Conn(operation)
+
+	session, err := beginMigrationSession(operation, db, timeouts)
 	if err != nil {
-		return fmt.Errorf("acquire migration connection: %w", err)
+		return err
 	}
-	discard := false
 	defer func() {
-		if discard {
-			discardMigrationConn(conn)
-		}
-		if closeErr := conn.Close(); closeErr != nil && retErr == nil {
-			retErr = closeErr
+		if cleanupErr := session.finish(); cleanupErr != nil && retErr == nil {
+			retErr = cleanupErr
 		}
 	}()
 
-	lockContext, cancelLock := context.WithTimeout(operation, timeouts.lock)
+	ledger, err := prepareMigrationLedger(operation, session.conn, manifest)
+	if err != nil {
+		return err
+	}
+	return applyPendingMigrations(operation, session.conn, manifest, ledger, timeouts)
+}
+
+type migrationSession struct {
+	conn         *sql.Conn
+	timeouts     migrationTimeouts
+	discard      bool
+	locked       bool
+	statementSet bool
+}
+
+func beginMigrationSession(ctx context.Context, db *sql.DB, timeouts migrationTimeouts) (*migrationSession, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire migration connection: %w", err)
+	}
+	session := &migrationSession{conn: conn, timeouts: timeouts}
+
+	lockContext, cancelLock := context.WithTimeout(ctx, timeouts.lock)
 	defer cancelLock()
-	if _, err := conn.ExecContext(lockContext, `SELECT pg_advisory_lock(hashtextextended('6s schema migrations', 0))`); err != nil {
-		discard = true
-		return fmt.Errorf("acquire migration lock: %w", err)
+	if _, err := conn.ExecContext(lockContext, migrationLockSQL(true)); err != nil {
+		session.discard = true
+		_ = conn.Close()
+		return nil, fmt.Errorf("acquire migration lock: %w", err)
 	}
-	defer func() {
-		unlockContext, cancelUnlock := context.WithTimeout(context.Background(), timeouts.lock)
-		defer cancelUnlock()
-		if _, unlockErr := conn.ExecContext(unlockContext, `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`); unlockErr != nil {
-			discard = true
-			if retErr == nil {
-				retErr = fmt.Errorf("release migration lock: %w", unlockErr)
-			}
-		}
-	}()
+	session.locked = true
 
-	if err := setStatementTimeout(operation, conn, timeouts.statement); err != nil {
-		return fmt.Errorf("set migration statement timeout: %w", err)
+	if err := setStatementTimeout(ctx, conn, timeouts.statement); err != nil {
+		_ = session.finish()
+		return nil, fmt.Errorf("set migration statement timeout: %w", err)
 	}
-	defer func() {
-		resetContext, cancelReset := context.WithTimeout(context.Background(), timeouts.lock)
-		defer cancelReset()
-		if resetErr := resetStatementTimeout(resetContext, conn); resetErr != nil {
-			discard = true
-			if retErr == nil {
-				retErr = fmt.Errorf("reset migration statement timeout: %w", resetErr)
-			}
-		}
-	}()
+	session.statementSet = true
+	return session, nil
+}
 
-	exists, err := ledgerExists(operation, conn)
+func (s *migrationSession) finish() error {
+	var errs []error
+	if s.statementSet {
+		resetContext, cancelReset := context.WithTimeout(context.Background(), s.timeouts.lock)
+		if resetErr := resetStatementTimeout(resetContext, s.conn); resetErr != nil {
+			s.discard = true
+			errs = append(errs, fmt.Errorf("reset migration statement timeout: %w", resetErr))
+		}
+		cancelReset()
+	}
+	if s.locked {
+		unlockContext, cancelUnlock := context.WithTimeout(context.Background(), s.timeouts.lock)
+		if _, unlockErr := s.conn.ExecContext(unlockContext, migrationLockSQL(false)); unlockErr != nil {
+			s.discard = true
+			errs = append(errs, fmt.Errorf("release migration lock: %w", unlockErr))
+		}
+		cancelUnlock()
+	}
+	if s.discard {
+		discardMigrationConn(s.conn)
+	}
+	if closeErr := s.conn.Close(); closeErr != nil {
+		errs = append(errs, closeErr)
+	}
+	return errors.Join(errs...)
+}
+
+func migrationLockSQL(acquire bool) string {
+	if acquire {
+		return `SELECT pg_advisory_lock(hashtextextended('6s schema migrations', 0))`
+	}
+	return `SELECT pg_advisory_unlock(hashtextextended('6s schema migrations', 0))`
+}
+
+func prepareMigrationLedger(ctx context.Context, conn *sql.Conn, manifest []migrationAsset) (map[int64]MigrationInfo, error) {
+	exists, err := ledgerExists(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("inspect migration ledger: %w", err)
+		return nil, fmt.Errorf("inspect migration ledger: %w", err)
 	}
-	ledger := map[int64]MigrationInfo{}
-	if exists {
-		ledger, err = readLedger(operation, conn)
-		if err != nil {
-			return fmt.Errorf("read migration ledger: %w", err)
+	if !exists {
+		if _, err := conn.ExecContext(ctx, migrationLedgerDDL()); err != nil {
+			return nil, fmt.Errorf("create migration ledger: %w", err)
 		}
-		if err := validateLedger(manifest, ledger); err != nil {
-			return err
-		}
-	} else {
-		if _, err := conn.ExecContext(operation, migrationLedgerDDL()); err != nil {
-			return fmt.Errorf("create migration ledger: %w", err)
-		}
+		return map[int64]MigrationInfo{}, nil
 	}
+	ledger, err := readLedger(ctx, conn)
+	if err != nil {
+		return nil, fmt.Errorf("read migration ledger: %w", err)
+	}
+	if err := validateLedger(manifest, ledger); err != nil {
+		return nil, err
+	}
+	return ledger, nil
+}
 
+func applyPendingMigrations(ctx context.Context, conn *sql.Conn, manifest []migrationAsset, ledger map[int64]MigrationInfo, timeouts migrationTimeouts) error {
 	for _, asset := range manifest {
 		if _, applied := ledger[asset.version]; applied {
 			continue
 		}
-		statementContext, cancelStatement := context.WithTimeout(operation, timeouts.statement)
-		tx, err := conn.BeginTx(statementContext, nil)
-		if err == nil {
-			_, err = tx.ExecContext(statementContext, string(asset.body))
-		}
-		if err == nil {
-			_, err = tx.ExecContext(statementContext,
-				`INSERT INTO public.schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`,
-				asset.version, asset.name, asset.checksum,
-			)
-		}
-		if err == nil {
-			err = tx.Commit()
-		} else {
-			_ = tx.Rollback()
-		}
+		statementContext, cancelStatement := context.WithTimeout(ctx, timeouts.statement)
+		err := applyMigration(statementContext, conn, asset)
 		cancelStatement()
 		if err != nil {
 			return fmt.Errorf("apply migration %s: %w", asset.name, err)
 		}
 	}
 	return nil
+}
+
+func applyMigration(ctx context.Context, conn *sql.Conn, asset migrationAsset) error {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, string(asset.body)); err == nil {
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO public.schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`,
+			asset.version, asset.name, asset.checksum,
+		)
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }

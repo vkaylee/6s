@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -91,6 +94,64 @@ func TestReadinessUnavailableDBReturnsSafeError(t *testing.T) {
 	}
 	if strings.Contains(body, "top-secret") || strings.Contains(body, "database unavailable") {
 		t.Errorf("GET /api/ready leaked database error: %q", body)
+	}
+}
+
+func TestReadinessStorageFailureReturns503(t *testing.T) {
+	tempDir := t.TempDir()
+	storagePath := filepath.Join(tempDir, "storage-file")
+	if err := os.WriteFile(storagePath, []byte("not a directory"), 0600); err != nil {
+		t.Fatalf("failed to create storage blocker: %v", err)
+	}
+
+	db, err := sql.Open("mock_sql_driver", "test")
+	if err != nil {
+		t.Fatalf("failed to open mock db: %v", err)
+	}
+	defer db.Close()
+	cfg := &config.Config{DataDir: storagePath, JWTSecret: "test-secret-at-least-32-bytes-long-key!"}
+	r := setupRouter(db, cfg, nil, nil)
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/ready", nil))
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /api/ready: expected status %d, got %d", http.StatusServiceUnavailable, resp.Code)
+	}
+	var envelope struct {
+		Data readinessPayload `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode readiness response: %v", err)
+	}
+	if envelope.Data.Checks.Database != "ok" || envelope.Data.Checks.Storage != "unwritable" {
+		t.Fatalf("unexpected readiness checks: %+v", envelope.Data.Checks)
+	}
+}
+
+func TestReadinessHealthyDatabaseAndStorageReturns200(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	db, err := sql.Open("mock_sql_driver", "test")
+	if err != nil {
+		t.Fatalf("failed to open mock db: %v", err)
+	}
+	defer db.Close()
+	cfg := &config.Config{DataDir: t.TempDir(), JWTSecret: "test-secret-at-least-32-bytes-long-key!"}
+	r := setupRouter(db, cfg, nil, nil, ctx)
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/ready", nil))
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/ready: expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+	var envelope struct {
+		Data readinessPayload `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode readiness response: %v", err)
+	}
+	if envelope.Data.Status != "ok" || envelope.Data.Checks.Database != "ok" || envelope.Data.Checks.Storage != "ok" {
+		t.Fatalf("unexpected readiness payload: %+v", envelope.Data)
 	}
 }
 
@@ -202,7 +263,7 @@ func TestUploadsRouteRemoved(t *testing.T) {
 }
 func TestTimeoutByRouteLeavesSSEUnbounded(t *testing.T) {
 	done := make(chan struct{})
-	handler := timeoutByRoute(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := timeoutByRoute(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-done:
 		case <-r.Context().Done():
