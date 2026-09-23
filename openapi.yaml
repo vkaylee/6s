@@ -2526,15 +2526,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [query, category]
+              required: [query]
               properties:
                 query:
                   type: string
                 category:
                   type: string
                   enum: [1S, 2S, 3S, 4S, 5S, 6S]
-                description:
-                  type: string
       responses:
         '200':
           description: Tag gợi ý từ catalog đã duyệt và đề xuất mới

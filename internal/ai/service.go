@@ -976,7 +976,7 @@ func (s *Service) SuggestTags(ctx context.Context, req SuggestTagsRequest) (Sugg
 	if query == "" || len([]rune(query)) > suggestQueryMaxRunes {
 		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "query is required and must be at most 2,000 characters")
 	}
-	if !validSuggestCategory(category) {
+	if category != "" && !validSuggestCategory(category) {
 		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "category is invalid")
 	}
 	if len([]rune(description)) > suggestDescriptionMaxRunes {
@@ -1024,10 +1024,24 @@ func validSuggestCategory(category string) bool {
 }
 
 func buildSuggestTagsPrompt(query, category, description string, catalog []db.Tag) string {
-	parts := []string{"Return only JSON object with existing_tags (array of approved tag codes) and proposed_tags (array of objects with name_vi,name_zh,name_en,category). Never invent existing_tags codes. Use at most 5 proposed tags, each category " + category + ".", "Category: " + category, "Query: " + query, "Description: " + description, "Approved catalog:"}
+	categoryInstruction := "Use at most 5 proposed tags with category set to 1S, 2S, 3S, 4S, 5S, or 6S."
+	if category != "" {
+		categoryInstruction = "Use at most 5 proposed tags, each category " + category + "."
+	}
+	parts := []string{
+		"Return only JSON object with existing_tags (array of approved tag codes) and proposed_tags (array of objects with name_vi,name_zh,name_en,category). Never invent existing_tags codes. " + categoryInstruction,
+		"Query: " + query,
+	}
+	if category != "" {
+		parts = append(parts, "Category: "+category)
+	}
+	if description != "" {
+		parts = append(parts, "Description: "+description)
+	}
+	parts = append(parts, "Approved catalog:")
 	for _, tag := range catalog {
-		if tag.Category == category && tag.Status == "APPROVED" {
-			parts = append(parts, fmt.Sprintf("%s | %s | %s | %s", tag.Code, tag.NameVi, tag.NameZh, tag.NameEn))
+		if tag.Status == "APPROVED" && (category == "" || tag.Category == category) {
+			parts = append(parts, fmt.Sprintf("%s | %s | %s | %s | %s", tag.Code, tag.Category, tag.NameVi, tag.NameZh, tag.NameEn))
 		}
 	}
 	return strings.Join(parts, "\n")
@@ -1043,7 +1057,7 @@ func parseSuggestTagsResult(raw, category string, catalog []db.Tag) (SuggestTags
 	}
 	approved := make(map[string]struct{}, len(catalog))
 	for _, tag := range catalog {
-		if tag.Status == "APPROVED" && tag.Category == category {
+		if tag.Status == "APPROVED" && (category == "" || tag.Category == category) {
 			approved[tag.Code] = struct{}{}
 		}
 	}
@@ -1065,7 +1079,10 @@ func parseSuggestTagsResult(raw, category string, catalog []db.Tag) (SuggestTags
 		proposal.NameZh = strings.TrimSpace(proposal.NameZh)
 		proposal.NameEn = strings.TrimSpace(proposal.NameEn)
 		proposal.Category = strings.TrimSpace(strings.ToUpper(proposal.Category))
-		if proposal.NameVi == "" || proposal.NameZh == "" || proposal.NameEn == "" || proposal.Category != category || len([]rune(proposal.NameVi)) > 255 || len([]rune(proposal.NameZh)) > 255 || len([]rune(proposal.NameEn)) > 255 {
+		if category != "" && proposal.Category != category {
+			continue
+		}
+		if proposal.NameVi == "" || proposal.NameZh == "" || proposal.NameEn == "" || !validSuggestCategory(proposal.Category) || len([]rune(proposal.NameVi)) > 255 || len([]rune(proposal.NameZh)) > 255 || len([]rune(proposal.NameEn)) > 255 {
 			continue
 		}
 		result.ProposedTags = append(result.ProposedTags, proposal)

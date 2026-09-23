@@ -25,9 +25,12 @@ import (
 	"6s/internal/db"
 )
 
-// testCategory1S mirrors issue.Category1S; importing the issue package here
-// would create an import cycle in tests.
-const testCategory1S = "1S"
+// testCategory1S and testCategory6S mirror issue category constants; importing
+// the issue package here would create an import cycle in tests.
+const (
+	testCategory1S = "1S"
+	testCategory6S = "6S"
+)
 
 func TestVisionProbeImageIsValidPNG(t *testing.T) {
 	encoded := strings.TrimPrefix(testImageRedPNG, "data:image/png;base64,")
@@ -1289,6 +1292,45 @@ func TestSuggestTags_RejectsMalformedModelJSON(t *testing.T) {
 	}
 	if appErr, ok := err.(*apperror.AppError); !ok || appErr.Code != "AI_GATEWAY_ERROR" {
 		t.Fatalf("expected AI_GATEWAY_ERROR, got %v", err)
+	}
+}
+
+func TestSuggestTags_AllCategoriesWhenCategoryOmitted(t *testing.T) {
+	var gotPrompt string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Messages) > 0 {
+			gotPrompt = body.Messages[0].Content
+		}
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": `{"existing_tags":["SCRAP","OIL_LEAK"],"proposed_tags":[{"name_vi":"Nguy cơ mới","name_zh":"新风险","name_en":"New risk","category":"6S"}]}`}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	svc := NewService(suggestTagsFixture(mockServer.URL), nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+	res, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "nguy co"})
+	if err != nil {
+		t.Fatalf("SuggestTags without category: %v", err)
+	}
+	if len(res.ExistingTags) != 2 || res.ExistingTags[0] != "SCRAP" || res.ExistingTags[1] != "OIL_LEAK" {
+		t.Fatalf("existing tags = %v, want approved cross-category tags", res.ExistingTags)
+	}
+	if len(res.ProposedTags) != 1 || res.ProposedTags[0].Category != testCategory6S {
+		t.Fatalf("proposed tags = %+v, want category-preserving proposal", res.ProposedTags)
+	}
+	if !strings.Contains(gotPrompt, "SCRAP | 1S") || !strings.Contains(gotPrompt, "OIL_LEAK | 3S") {
+		t.Fatalf("categoryless prompt omitted approved cross-category catalog: %q", gotPrompt)
 	}
 }
 

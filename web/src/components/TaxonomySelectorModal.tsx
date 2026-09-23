@@ -60,23 +60,32 @@ export function TaxonomySelectorModal({
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiRequested, setAiRequested] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<{
     existing_tags: string[];
     proposed_tags: ProposedTagItem[];
   }>({ existing_tags: [], proposed_tags: [] });
   const aiEnabled = useAiStatus();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const suggestionCategory =
+    currentCategory ?? (activeTab !== "ALL" ? (activeTab as IssueCategory) : null);
   const handleAiSuggest = async () => {
-    if (aiEnabled !== true || aiLoading) return;
+    if (aiEnabled !== true || aiLoading || !tagQuery.trim()) return;
     setAiLoading(true);
-    setAiError(false);
+    setAiRequested(true);
+    setAiError(null);
+    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
     try {
       setAiSuggestions(
-        await suggestTags({ query: tagQuery.trim(), category: currentCategory, description: "" }),
+        await suggestTags({
+          query: tagQuery.trim(),
+          category: suggestionCategory ?? undefined,
+          description: "",
+        }),
       );
     } catch {
-      setAiError(true);
+      setAiError(t("issue.ai_suggest_failed"));
     } finally {
       setAiLoading(false);
     }
@@ -92,8 +101,18 @@ export function TaxonomySelectorModal({
         setActiveTab("ALL");
       }
       setTagQuery("");
+      setAiSuggestions({ existing_tags: [], proposed_tags: [] });
+      setAiError(null);
+      setAiRequested(false);
     }
   }, [isOpen, currentCategory, tags]);
+
+  // Suggestions answer one exact query; editing the text or scope invalidates them.
+  useEffect(() => {
+    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
+    setAiError(null);
+    setAiRequested(false);
+  }, [tagQuery, suggestionCategory]);
   const queryNorm = useMemo(() => normalizeSearchText(tagQuery), [tagQuery]);
   const isSearching = queryNorm.length > 0;
 
@@ -252,8 +271,13 @@ export function TaxonomySelectorModal({
             <button
               type="button"
               onClick={handleAiSuggest}
-              disabled={aiEnabled !== true || aiLoading || !tagQuery.trim()}
-              title={aiEnabled === false ? t("admin.ai_disabled_reason") : undefined}
+              title={
+                aiEnabled === false
+                  ? t("admin.ai_disabled_reason")
+                  : aiEnabled === null
+                    ? t("issue.ai_status_loading")
+                    : undefined
+              }
               className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-bold text-white min-h-[42px] disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
@@ -302,10 +326,19 @@ export function TaxonomySelectorModal({
 
         {/* AI Suggestions Box */}
         {aiError && (
-          <p className="mx-4 mt-3 text-xs font-medium text-amber-700 dark:text-amber-400">
-            {t("issue.no_tags_found")}
-          </p>
+          <div className="mx-4 mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+            {aiError}
+          </div>
         )}
+        {!aiLoading &&
+          !aiError &&
+          aiRequested &&
+          aiSuggestions.existing_tags.length === 0 &&
+          aiSuggestions.proposed_tags.length === 0 && (
+            <div className="mx-4 mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+              {t("issue.ai_no_suggestions")}
+            </div>
+          )}
         {(aiSuggestions.existing_tags.length > 0 || aiSuggestions.proposed_tags.length > 0) && (
           <div className="mx-4 mt-3 space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/20">
             {aiSuggestions.existing_tags.length > 0 && (

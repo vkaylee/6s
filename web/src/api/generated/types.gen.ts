@@ -1831,8 +1831,7 @@ export type FollowUpAiReviewResponse = FollowUpAiReviewResponses[keyof FollowUpA
 export type SuggestTagsWithAiData = {
     body: {
         query: string;
-        category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
-        description?: string;
+        category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
     };
     path?: never;
     query?: never;
