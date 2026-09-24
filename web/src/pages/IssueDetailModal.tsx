@@ -1,4 +1,15 @@
-import { AlertTriangle, Languages, Loader2, ShieldCheck, Sparkles, UserCog } from "lucide-react";
+import {
+  AlertTriangle,
+  Languages,
+  Loader2,
+  Package,
+  Pencil,
+  ShieldCheck,
+  Sparkles,
+  User,
+  UserCog,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
 import { fetchIssue, issueOperations, patchIssue } from "../api/operations.ts";
@@ -813,21 +824,30 @@ export function IssueDetailModal({
   const isOpenStatus = currentIssue.status === IssueStatus.OPEN;
   const isPendingReview = currentIssue.status === IssueStatus.PENDING_REVIEW;
   const isClosedStatus = currentIssue.status === IssueStatus.CLOSED;
-
   const statusBadge = isOpenStatus ? (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shrink-0">
-      ⚠️ {t("status.OPEN")}
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+      <span className="h-1.5 w-1.5 rounded-full bg-rose-600 dark:bg-rose-400" aria-hidden="true" />
+      {t("status.OPEN")}
     </span>
   ) : isPendingReview ? (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
-      ⏳ {t("status.PENDING_REVIEW")}
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+      <span
+        className="h-1.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-400"
+        aria-hidden="true"
+      />
+      {t("status.PENDING_REVIEW")}
     </span>
   ) : isClosedStatus ? (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-      ✓ {t("status.CLOSED")}
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+      <span
+        className="h-1.5 w-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"
+        aria-hidden="true"
+      />
+      {t("status.CLOSED")}
     </span>
   ) : (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shrink-0">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-500/10 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 dark:bg-zinc-500/15 dark:text-zinc-300">
+      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 dark:bg-zinc-400" aria-hidden="true" />
       {t("status.INVALID")}
     </span>
   );
@@ -850,54 +870,49 @@ export function IssueDetailModal({
         aria-modal="true"
         aria-labelledby="issue-detail-modal-title"
         tabIndex={-1}
-        className="w-full max-w-lg lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto sm:my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] lg:max-h-[90vh] 2xl:max-h-[85vh]"
+        className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:my-auto sm:rounded-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[calc(100dvh-1.5rem)] lg:max-h-[90vh] 2xl:max-h-[85vh]"
       >
-        {/* Header */}
-        <h2 id="issue-detail-modal-title" className="sr-only">
-          {t("issue_detail.modal_title", { id: currentIssue.id })}
-        </h2>
-        <div className="p-4 pt-5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            <span className="px-2 py-0.5 rounded-md font-black text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shrink-0">
+        <header className="sticky top-0 z-20 shrink-0 border-b border-zinc-200/80 bg-white/95 px-3.5 py-2.5 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/95 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="shrink-0 font-mono text-xs font-semibold tracking-tight text-zinc-400 dark:text-zinc-500">
+              #{currentIssue.id}
+            </span>
+            <span className="inline-flex shrink-0 items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
               {currentIssue.category}
             </span>
-            <span
-              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-[10px] border shrink-0 ${
-                causeType === "BEHAVIOR"
-                  ? "bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
-                  : "bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800"
-              }`}
+            <span aria-hidden="true" className="shrink-0 text-zinc-300 dark:text-zinc-700">
+              /
+            </span>
+            <h2
+              id="issue-detail-modal-title"
+              className="min-w-0 flex-1 truncate text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-lg"
+              title={resolvedLocationName}
             >
-              {causeType === "BEHAVIOR" ? "👤" : "📦"}
-              {causeType === "BEHAVIOR" ? t("issue.badge_behavior") : t("issue.badge_condition")}
-            </span>
-            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 px-1">
-              v{currentIssue.version}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {statusBadge}
-            {canEdit && (
+              {resolvedLocationName}
+            </h2>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingFull(true)}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  title={t("issue.edit")}
+                  aria-label={t("issue.edit")}
+                >
+                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setIsEditingFull(true)}
-                className="p-2 rounded-lg text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 hover:bg-blue-100 transition-colors flex items-center justify-center min-w-[40px] min-h-[40px]"
-                title={t("issue.edit")}
-                aria-label={t("issue.edit")}
+                onClick={onClose}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                aria-label={t("common.close")}
               >
-                <span>✏️</span>
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              aria-label={t("common.close")}
-            >
-              ✕
-            </button>
+            </div>
           </div>
-        </div>
+        </header>
 
         {isEditingCategory && (
           <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700 grid grid-cols-3 gap-2">
@@ -1055,10 +1070,31 @@ export function IssueDetailModal({
           {/* Right Column: Information, Actions, Rating & Score Breakdown (40% on 2K) */}
           <div className="lg:col-span-5 xl:col-span-5 2xl:col-span-4 p-4 lg:p-6 space-y-4 lg:overflow-y-auto bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col justify-between">
             <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {statusBadge}
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${
+                    causeType === "BEHAVIOR"
+                      ? "bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                      : "bg-blue-500/10 text-blue-800 dark:text-blue-300"
+                  }`}
+                >
+                  {causeType === "BEHAVIOR" ? (
+                    <User className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  )}
+                  <span>
+                    {causeType === "BEHAVIOR"
+                      ? t("issue.badge_behavior")
+                      : t("issue.badge_condition")}
+                  </span>
+                </span>
+                <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                  v{currentIssue.version}
+                </span>
+              </div>
               {/* Description & Tags */}
-              <h2 className="font-bold text-base leading-6 text-zinc-900 dark:text-zinc-100 break-words">
-                #{currentIssue.id} - {resolvedLocationName}
-              </h2>
               <div className="space-y-2.5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-700 dark:bg-zinc-800/80">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
                   <div className="flex flex-wrap items-center gap-2">
