@@ -683,6 +683,10 @@
     "overwrite_requested": "覆盖请求已提交"
   },
   "issue_detail": {
+    "modal_tabs_label": "问题详情分区",
+    "modal_tab_overview": "概览",
+    "modal_tab_ai": "AI 评审",
+    "modal_tab_history": "记录与积分",
     "quick_edit_category": "点击快速修改6S分类",
     "quick_edit_location": "点击快速修改车间位置",
     "update_location_error": "修改位置失败",
@@ -702,6 +706,7 @@
     "show_original": "查看原文",
     "translate_failed": "无法翻译此内容",
     "ai_review_btn": "使用 AI 分析",
+    "ai_tools_label": "AI 工具",
     "ai_disabled_reason": "AI 已关闭。请在设置 → AI 中启用。",
     "ai_reviewing": "正在分析…",
     "ai_review_failed": "无法分析此报告",

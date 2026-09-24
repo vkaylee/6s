@@ -948,4 +948,72 @@ describe("IssueDetailModal Component", () => {
     expect(closeCall?.method).toBe("POST");
     expect(closed).toBe(1);
   });
+
+  it("switches modal tabs and toggles anchored quick edit popovers", async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "admin",
+        full_name: "Admin User",
+        role: "ADMIN" as never,
+        capabilities: ["issue:close_any", "issue:close_own"],
+      },
+    });
+    const issue = baseIssue({
+      responsibility_history: [
+        {
+          id: 1,
+          action: "ASSIGN",
+          changed_by: 1,
+          changed_by_name: "Admin User",
+          old_value: null,
+          new_value: { assigned_team_id: 7 },
+          created_at: "2026-09-24T00:00:00Z",
+        },
+      ],
+    });
+    installFetch({ issue, ai: true });
+    const container = await mount(
+      <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+
+    // Initial Overview tab
+    expect(container.textContent).toContain("Tổng quan");
+    expect(container.textContent).toContain("Đánh giá AI");
+    expect(container.textContent).toContain("Lịch sử & Điểm số");
+
+    // Click AI review tab
+    const aiTab = Array.from(container.querySelectorAll('button[role="tab"]')).find((b) =>
+      b.textContent?.includes("Đánh giá AI"),
+    ) as HTMLButtonElement | undefined;
+    expect(aiTab).toBeDefined();
+    await act(async () => {
+      aiTab?.click();
+    });
+    await act(async () => {});
+    expect(aiTab?.getAttribute("aria-selected")).toBe("true");
+
+    // Click History tab
+    const historyTab = Array.from(container.querySelectorAll('button[role="tab"]')).find((b) =>
+      b.textContent?.includes("Lịch sử & Điểm số"),
+    ) as HTMLButtonElement | undefined;
+    expect(historyTab).toBeDefined();
+    await act(async () => {
+      historyTab?.click();
+    });
+    await act(async () => {});
+    expect(historyTab?.getAttribute("aria-selected")).toBe("true");
+    expect(container.textContent).toContain("Lịch sử phân công");
+
+    // Test quick category edit popover
+    const catEditBtn = container.querySelector(
+      'button[title="Chạm để sửa nhanh phân loại S"]',
+    ) as HTMLButtonElement | null;
+    expect(catEditBtn).not.toBeNull();
+    await act(async () => {
+      catEditBtn?.click();
+    });
+    await act(async () => {});
+    expect(catEditBtn?.getAttribute("aria-expanded")).toBe("true");
+  });
 });

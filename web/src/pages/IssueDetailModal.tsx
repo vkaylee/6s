@@ -1,14 +1,26 @@
 import {
   AlertTriangle,
+  Ban,
+  BarChart3,
+  Camera,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
   Languages,
   Loader2,
+  LockKeyhole,
+  Minus,
   Package,
   Pencil,
+  Plus,
   ShieldCheck,
   Sparkles,
+  Star,
   User,
   UserCog,
   X,
+  ZoomIn,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
@@ -78,6 +90,7 @@ interface IssueDetailModalProps {
   tags?: TagItem[];
 }
 
+type ModalTab = "overview" | "ai" | "history";
 export function IssueDetailModal({
   issue,
   isOpen,
@@ -157,6 +170,7 @@ export function IssueDetailModal({
     setPendingFollowUpQuestion(null);
     setStreamingFollowUpAnswer("");
     setShowOriginal(false);
+    setActiveTab("overview");
     setAssignmentAssetId(issue.asset_id ?? null);
     setAssignmentTeamId(issue.assigned_team_id ?? null);
     setAssignmentAssigneeId(issue.assignee_id ?? null);
@@ -273,6 +287,7 @@ export function IssueDetailModal({
   const [isEditingFull, setIsEditingFull] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [activeTab, setActiveTab] = useState<ModalTab>("overview");
   const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
   const [rejectReason, setRejectReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -877,19 +892,77 @@ export function IssueDetailModal({
             <span className="shrink-0 font-mono text-xs font-semibold tracking-tight text-zinc-400 dark:text-zinc-500">
               #{currentIssue.id}
             </span>
-            <span className="inline-flex shrink-0 items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              {currentIssue.category}
-            </span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  if (canEdit) {
+                    setIsEditingCategory((prev) => !prev);
+                    setIsEditingLocation(false);
+                  }
+                }}
+                disabled={!canEdit}
+                aria-expanded={isEditingCategory}
+                title={canEdit ? t("issue_detail.quick_edit_category") : undefined}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold transition ${
+                  canEdit
+                    ? "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 cursor-pointer"
+                    : "bg-zinc-100 dark:bg-zinc-800 cursor-default"
+                } text-zinc-700 dark:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
+              >
+                <span>{currentIssue.category}</span>
+                {canEdit && <Pencil className="h-2.5 w-2.5 opacity-60" aria-hidden="true" />}
+              </button>
+              {isEditingCategory && (
+                <div className="absolute left-0 top-full mt-1.5 z-30 p-2 bg-white dark:bg-zinc-850 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl grid grid-cols-3 gap-1.5 w-72 sm:w-80 animate-fade-in">
+                  {S_CATEGORIES.map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => handleQuickChangeCategory(s.key)}
+                      className={`p-2 rounded-xl text-xs font-black min-h-[40px] border transition ${
+                        currentIssue.category === s.key
+                          ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100"
+                          : "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {s.key} ({s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name})
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <span aria-hidden="true" className="shrink-0 text-zinc-300 dark:text-zinc-700">
               /
             </span>
-            <h2
-              id="issue-detail-modal-title"
-              className="min-w-0 flex-1 truncate text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-lg"
-              title={resolvedLocationName}
-            >
-              {resolvedLocationName}
-            </h2>
+            <div className="relative min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (canEdit && locations && locations.length > 0) {
+                    setIsEditingLocation((prev) => !prev);
+                    setIsEditingCategory(false);
+                  }
+                }}
+                disabled={!canEdit || !locations || locations.length === 0}
+                aria-expanded={isEditingLocation}
+                title={canEdit ? t("issue_detail.quick_edit_location") : undefined}
+                className={`w-full text-left truncate text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-sm ${
+                  canEdit ? "hover:underline cursor-pointer" : ""
+                }`}
+              >
+                {resolvedLocationName}
+              </button>
+              {isEditingLocation && locations && locations.length > 0 && (
+                <div className="absolute left-0 top-full mt-1.5 z-30 p-2.5 bg-white dark:bg-zinc-850 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-80 max-w-[calc(100vw-2rem)] animate-fade-in">
+                  <LocationCombobox
+                    locations={locations}
+                    value={currentIssue.location_code}
+                    onChange={handleQuickChangeLocation}
+                  />
+                </div>
+              )}
+            </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
               {canEdit && (
                 <button
@@ -913,70 +986,53 @@ export function IssueDetailModal({
             </div>
           </div>
         </header>
+        <nav
+          aria-label={t("issue_detail.modal_tabs_label")}
+          className="flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-200 bg-white px-3 pt-2 dark:border-zinc-800 dark:bg-zinc-900 sm:px-5"
+        >
+          {(
+            [
+              ["overview", "issue_detail.modal_tab_overview"],
+              ["ai", "issue_detail.modal_tab_ai"],
+              ["history", "issue_detail.modal_tab_history"],
+            ] as const
+          ).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              onClick={() => setActiveTab(tab)}
+              aria-selected={activeTab === tab}
+              className={`min-h-11 shrink-0 border-b-2 px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset sm:px-4 ${
+                activeTab === tab
+                  ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
+                  : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-200"
+              }`}
+            >
+              {t(label)}
+            </button>
+          ))}
+        </nav>
 
-        {isEditingCategory && (
-          <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700 grid grid-cols-3 gap-2">
-            {S_CATEGORIES.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => handleQuickChangeCategory(s.key)}
-                className={`p-2 rounded-xl text-xs font-black min-h-[44px] border ${
-                  currentIssue.category === s.key
-                    ? "bg-zinc-900 text-white"
-                    : "bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
-                }`}
-              >
-                {s.key} ({s.name_i18n ? resolveI18n(s.name_i18n, locale) : s.name})
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* In-place quick edit location dropdown */}
-        {isEditingLocation && locations && locations.length > 0 && (
-          <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700">
-            <LocationCombobox
-              locations={locations}
-              value={currentIssue.location_code}
-              onChange={handleQuickChangeLocation}
-            />
-          </div>
-        )}
         {/* Detail Content - 2 Columns on Desktop */}
         <div className="flex-1 overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-12 min-h-0">
           {/* Left Column: Visuals & Description (60% on 2K) */}
           <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-8 p-4 lg:p-6 space-y-4 lg:overflow-y-auto lg:border-r border-zinc-200 dark:border-zinc-800">
             {/* Split Slider if After photo exists, otherwise show Before photo */}
             {currentIssue.photo_after ? (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    {t("issue_detail.compare_slider_label")}
-                  </span>
-                  <span className="text-[11px] text-zinc-400">
-                    🔍 {t("issue_detail.tap_to_zoom")}
-                  </span>
-                </div>
-                <SplitSlider
-                  beforeUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
-                  afterUrl={resolvePhotoUrl(currentIssue.photo_after, "after")}
-                  onPhotoClick={(type) => {
-                    setZoomScale(1);
-                    if (type === "before") {
-                      const idx = photoList.findIndex(
-                        (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
-                      );
-                      setPreviewIndex(idx >= 0 ? idx : 0);
-                    } else {
-                      const idx = photoList.findIndex(
-                        (p) => p.url === resolvePhotoUrl(currentIssue.photo_after, "after"),
-                      );
-                      setPreviewIndex(idx >= 0 ? idx : photoList.length - 1);
-                    }
-                  }}
-                />
-              </div>
+              <SplitSlider
+                beforeUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
+                afterUrl={resolvePhotoUrl(currentIssue.photo_after, "after")}
+                onPhotoClick={(type) => {
+                  setZoomScale(1);
+                  const photoUrl = resolvePhotoUrl(
+                    type === "before" ? currentIssue.photo_before : currentIssue.photo_after,
+                    type,
+                  );
+                  const idx = photoList.findIndex((p) => p.url === photoUrl);
+                  setPreviewIndex(idx >= 0 ? idx : 0);
+                }}
+              />
             ) : (
               <div>
                 <div className="mb-2 flex items-center justify-between">
@@ -984,8 +1040,9 @@ export function IssueDetailModal({
                     {t("issue_detail.photo_before_label")}
                   </span>
                   {!beforePhotoError && (
-                    <span className="text-[11px] text-zinc-400">
-                      {t("issue_detail.tap_to_zoom")}
+                    <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
+                      <ZoomIn className="h-3 w-3" aria-hidden="true" />
+                      <span>{t("issue_detail.tap_to_zoom")}</span>
                     </span>
                   )}
                 </div>
@@ -1029,8 +1086,9 @@ export function IssueDetailModal({
                     {t("issue_detail.photo_detail_label")}
                   </span>
                   {!detailPhotoError && (
-                    <span className="text-[11px] text-zinc-400">
-                      {t("issue_detail.tap_to_zoom")}
+                    <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
+                      <ZoomIn className="h-3 w-3" aria-hidden="true" />
+                      <span>{t("issue_detail.tap_to_zoom")}</span>
                     </span>
                   )}
                 </div>
@@ -1095,7 +1153,11 @@ export function IssueDetailModal({
                 </span>
               </div>
               {/* Description & Tags */}
-              <div className="space-y-2.5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-700 dark:bg-zinc-800/80">
+              <div
+                className={`space-y-2.5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-700 dark:bg-zinc-800/80 ${
+                  activeTab !== "overview" && activeTab !== "ai" ? "hidden" : ""
+                }`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
                   <div className="flex flex-wrap items-center gap-2">
                     <span>
@@ -1137,63 +1199,63 @@ export function IssueDetailModal({
                     ))}
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2 dark:border-zinc-700/70">
-                  {aiEnabled === false ? (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                      {t("issue_detail.ai_disabled_reason")}
-                    </p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleAIReview}
-                      disabled={aiEnabled !== true || isReviewing}
-                      aria-disabled={aiEnabled !== true}
-                      aria-busy={isReviewing}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-transparent px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:border-violet-300 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-violet-700 dark:hover:bg-violet-950/40"
-                    >
-                      {isReviewing ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <Sparkles
-                          className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span>
-                        {isReviewing
-                          ? t("issue_detail.ai_reviewing")
-                          : t("issue_detail.ai_review_btn")}
-                      </span>
-                    </button>
-                  )}
-                  {currentIssue.description && (
-                    <button
-                      type="button"
-                      onClick={handleTranslate}
-                      disabled={aiEnabled !== true || isTranslating}
-                      aria-disabled={aiEnabled !== true}
-                      aria-busy={isTranslating}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-transparent px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/40"
-                    >
-                      {isTranslating ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <Languages
-                          className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span>
-                        {isTranslating
-                          ? t("issue_detail.translating")
-                          : translatedDesc && translatedLangRef.current === locale
-                            ? showOriginal
-                              ? t("issue_detail.translate_btn")
-                              : t("issue_detail.show_original")
-                            : t("issue_detail.translate_btn")}
-                      </span>
-                    </button>
-                  )}
+                <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700/70">
+                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:text-zinc-500">
+                    <Sparkles className="h-3 w-3" aria-hidden="true" />
+                    <span>{t("issue_detail.ai_tools_label")}</span>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    {aiEnabled === false ? (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                        {t("issue_detail.ai_disabled_reason")}
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleAIReview}
+                        disabled={aiEnabled !== true || isReviewing}
+                        aria-disabled={aiEnabled !== true}
+                        aria-busy={isReviewing}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-violet-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[132px] dark:bg-violet-500 dark:hover:bg-violet-400"
+                      >
+                        {isReviewing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        <span>
+                          {isReviewing
+                            ? t("issue_detail.ai_reviewing")
+                            : t("issue_detail.ai_review_btn")}
+                        </span>
+                      </button>
+                    )}
+                    {currentIssue.description && (
+                      <button
+                        type="button"
+                        onClick={handleTranslate}
+                        disabled={aiEnabled !== true || isTranslating}
+                        aria-disabled={aiEnabled !== true}
+                        aria-busy={isTranslating}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3.5 text-sm font-semibold text-indigo-700 transition-[background-color,border-color,transform] duration-150 hover:border-indigo-400 hover:bg-indigo-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[132px] dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/70"
+                      >
+                        {isTranslating ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Languages className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        <span>
+                          {isTranslating
+                            ? t("issue_detail.translating")
+                            : translatedDesc && translatedLangRef.current === locale
+                              ? showOriginal
+                                ? t("issue_detail.translate_btn")
+                                : t("issue_detail.show_original")
+                              : t("issue_detail.translate_btn")}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {currentIssue.reject_reason && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
@@ -1202,7 +1264,7 @@ export function IssueDetailModal({
                   </div>
                 )}
               </div>
-              {aiReview && (
+              {activeTab !== "history" && aiReview && (
                 <AIReviewPanel
                   review={aiReview}
                   currentIssue={currentIssue}
@@ -1222,7 +1284,9 @@ export function IssueDetailModal({
                 />
               )}
               <section
-                className="space-y-3.5 rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-2xs dark:border-zinc-700 dark:bg-zinc-800/80"
+                className={`space-y-3.5 rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-2xs dark:border-zinc-700 dark:bg-zinc-800/80 ${
+                  activeTab !== "overview" ? "hidden" : ""
+                }`}
                 aria-labelledby="assignment-title"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1481,7 +1545,9 @@ export function IssueDetailModal({
               {currentIssue.responsibility_history &&
                 currentIssue.responsibility_history.length > 0 && (
                   <section
-                    className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80"
+                    className={`space-y-2 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/80 ${
+                      activeTab !== "overview" && activeTab !== "history" ? "hidden" : ""
+                    }`}
                     aria-labelledby="responsibility-history-title"
                   >
                     <h3
@@ -1509,14 +1575,21 @@ export function IssueDetailModal({
                   </section>
                 )}
               {/* Score Impact Breakdown Card */}
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 space-y-2.5">
+              <div
+                className={`p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 space-y-2.5 ${
+                  activeTab !== "overview" && activeTab !== "history" ? "hidden" : ""
+                }`}
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                    📊 {t("issue_detail.score_breakdown_title")}
+                  <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                    <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t("issue_detail.score_breakdown_title")}
                   </span>
                   {currentIssue.score_rating && currentIssue.score_rating > 0 && (
-                    <span className="text-xs text-amber-500 font-bold">
-                      {"★".repeat(currentIssue.score_rating)}
+                    <span className="inline-flex items-center gap-0.5 text-amber-500">
+                      {[1, 2, 3, 4, 5].slice(0, currentIssue.score_rating).map((star) => (
+                        <Star key={star} className="h-3 w-3 fill-current" aria-hidden="true" />
+                      ))}
                     </span>
                   )}
                 </div>
@@ -1562,7 +1635,7 @@ export function IssueDetailModal({
             </div>
 
             {/* Bottom Actions Bar (Integrated in sidebar for desktop, sticky/accessible) */}
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-2 shrink-0">
+            <div className="sticky bottom-0 -mx-4 -mb-4 lg:-mx-6 lg:-mb-6 p-4 lg:p-6 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200/80 dark:border-zinc-800/80 flex flex-col gap-2 shrink-0 z-10 shadow-xs">
               {/* Action: Resolve (Upload after photo) */}
               {currentIssue.status === IssueStatus.OPEN && canResolveIssue && (
                 <div className="space-y-1.5">
@@ -1575,11 +1648,13 @@ export function IssueDetailModal({
                       onChange={handleResolveOfflineOrOnline}
                       className="hidden"
                     />
-                    <span>
-                      📸{" "}
-                      {isSubmitting
-                        ? t("issue_detail.processing_image")
-                        : t("issue_detail.capture_after")}
+                    <span className="inline-flex items-center gap-2">
+                      <Camera className="h-5 w-5" aria-hidden="true" />
+                      <span>
+                        {isSubmitting
+                          ? t("issue_detail.processing_image")
+                          : t("issue_detail.capture_after")}
+                      </span>
                     </span>
                   </label>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 px-1 text-center font-medium">
@@ -1604,10 +1679,17 @@ export function IssueDetailModal({
                           : "opacity-50 bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
                       }`}
                     >
-                      <span>
-                        {canCloseIssue
-                          ? `✓ ${t("issue.approve").toUpperCase()}`
-                          : `🔒 ${t("issue_detail.locked")}`}
+                      <span className="inline-flex items-center gap-1.5">
+                        {canCloseIssue ? (
+                          <Check className="h-4 w-4" aria-hidden="true" />
+                        ) : (
+                          <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        <span>
+                          {canCloseIssue
+                            ? t("issue.approve").toUpperCase()
+                            : t("issue_detail.locked")}
+                        </span>
                       </span>
                     </button>
 
@@ -1621,8 +1703,8 @@ export function IssueDetailModal({
                     </button>
                   </div>
                   {!canCloseIssue && closeDisabledReason && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium px-1 flex items-center gap-1">
-                      <span>⚠️</span>
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium px-1 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>{closeDisabledReason}</span>
                     </p>
                   )}
@@ -1635,9 +1717,9 @@ export function IssueDetailModal({
                   <button
                     type="button"
                     onClick={() => setShowConfirmAction(IssueStatus.INVALID)}
-                    className="w-full text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold py-3 px-4 rounded-xl min-h-[44px] flex items-center justify-center border border-rose-200 dark:border-rose-900/60 transition gap-1.5"
+                    className="w-full text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold py-2.5 px-4 rounded-xl min-h-[44px] flex items-center justify-center border border-rose-200 dark:border-rose-900/60 transition gap-1.5 active:scale-98 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                   >
-                    <span>⛔</span>
+                    <Ban className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span>{t("issue_detail.invalidate_btn_label")}</span>
                   </button>
                 )}
@@ -1659,16 +1741,20 @@ export function IssueDetailModal({
               <button
                 type="button"
                 onClick={() => setShowConfirmAction(null)}
-                className="text-zinc-400 hover:text-zinc-600 text-xs font-bold p-1"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                aria-label={t("common.close")}
               >
-                ✕
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
             {showConfirmAction === "CLOSE" && (
               <div className="space-y-3">
                 <div className="p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-2xl border border-zinc-200 dark:border-zinc-700 text-xs space-y-2">
                   <div className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                    <span>📋</span>
+                    <ClipboardList
+                      className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
+                      aria-hidden="true"
+                    />
                     <span>{t("issue_detail.close_checklist_title")}</span>
                   </div>
                   <label className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300 text-[11px] cursor-pointer">
@@ -1703,13 +1789,16 @@ export function IssueDetailModal({
                         key={star}
                         type="button"
                         onClick={() => setScoreRating(star)}
-                        className={`w-11 h-11 rounded-xl font-black text-lg flex items-center justify-center transition-all ${
+                        aria-label={`${star}/5`}
+                        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl transition-all ${
                           scoreRating >= star
                             ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
-                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                            : "bg-zinc-200 text-zinc-400 dark:bg-zinc-800"
                         }`}
                       >
-                        ★
+                        <span className="text-lg font-black leading-none" aria-hidden="true">
+                          ★
+                        </span>
                       </button>
                     ))}
                     {scoreRating === 5 && (
@@ -1854,7 +1943,7 @@ export function IssueDetailModal({
                 className="w-10 h-10 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-white font-bold flex items-center justify-center transition-colors pointer-events-auto cursor-pointer"
                 aria-label={t("common.close")}
               >
-                ✕
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -2020,9 +2109,10 @@ export function IssueDetailModal({
                         prev !== null && prev > 0 ? prev - 1 : photoList.length - 1,
                       );
                     }}
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-zinc-800 text-white transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     aria-label={t("issue_detail.previous_photo")}
                   >
-                    ◀
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -2031,20 +2121,23 @@ export function IssueDetailModal({
                         prev !== null && prev < photoList.length - 1 ? prev + 1 : 0,
                       );
                     }}
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-zinc-800 text-white transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     aria-label={t("issue_detail.next_photo")}
                   >
-                    ▶
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
                   </button>
-                  <div className="w-px h-5 bg-zinc-700 mx-0.5" />
+                  <div className="h-5 w-px bg-zinc-700 mx-0.5" />
                 </>
               )}
               <button
                 type="button"
                 onClick={() => setZoomScale((s) => Math.max(0.5, Number((s - 0.25).toFixed(2))))}
                 disabled={zoomScale <= 0.5}
-                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white text-xs font-bold transition-all cursor-pointer"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-zinc-800 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-zinc-700 disabled:opacity-40 cursor-pointer"
+                aria-label={t("issue_detail.zoom_out")}
               >
-                ➖ {t("issue_detail.zoom_out")}
+                <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("issue_detail.zoom_out")}
               </button>
               <button
                 type="button"
@@ -2052,7 +2145,8 @@ export function IssueDetailModal({
                   setZoomScale(1);
                   setPanOffset({ x: 0, y: 0 });
                 }}
-                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold transition-all min-w-[60px] text-center cursor-pointer"
+                className="min-h-11 min-w-[60px] rounded-xl bg-zinc-800 px-3 py-2 text-xs font-bold text-zinc-200 transition-all hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                aria-label={t("issue_detail.reset_zoom")}
               >
                 {Math.round(zoomScale * 100)}%
               </button>
@@ -2060,9 +2154,11 @@ export function IssueDetailModal({
                 type="button"
                 onClick={() => setZoomScale((s) => Math.min(4, Number((s + 0.25).toFixed(2))))}
                 disabled={zoomScale >= 4}
-                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white text-xs font-bold transition-all cursor-pointer"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-zinc-800 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-zinc-700 disabled:opacity-40 cursor-pointer"
+                aria-label={t("issue_detail.zoom_in")}
               >
-                ➕ {t("issue_detail.zoom_in")}
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("issue_detail.zoom_in")}
               </button>
               <div className="w-px h-5 bg-zinc-700 mx-0.5" />
               <button
@@ -2075,7 +2171,7 @@ export function IssueDetailModal({
                 className="px-3.5 py-2 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                 aria-label={t("common.close")}
               >
-                <span>✕</span>
+                <X className="h-4 w-4" aria-hidden="true" />
                 <span>{t("common.close")}</span>
               </button>
             </div>

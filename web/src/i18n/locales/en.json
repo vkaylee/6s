@@ -683,6 +683,10 @@
     "overwrite_requested": "Overwrite request submitted"
   },
   "issue_detail": {
+    "modal_tabs_label": "Issue detail sections",
+    "modal_tab_overview": "Overview",
+    "modal_tab_ai": "AI Review",
+    "modal_tab_history": "History & Scores",
     "quick_edit_category": "Tap to quick edit S category",
     "quick_edit_location": "Tap to quick edit location",
     "update_location_error": "Failed to update issue location",
@@ -702,6 +706,7 @@
     "show_original": "Show original",
     "translate_failed": "Failed to translate this content",
     "ai_review_btn": "Analyze with AI",
+    "ai_tools_label": "AI tools",
     "ai_disabled_reason": "AI is disabled. Enable it in Settings → AI.",
     "ai_reviewing": "Analyzing…",
     "ai_review_failed": "Failed to analyze this report",

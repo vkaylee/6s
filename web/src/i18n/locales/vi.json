@@ -683,6 +683,10 @@
     "overwrite_requested": "Đã gửi yêu cầu ghi đè"
   },
   "issue_detail": {
+    "modal_tabs_label": "Các phần nội dung sự cố",
+    "modal_tab_overview": "Tổng quan",
+    "modal_tab_ai": "Đánh giá AI",
+    "modal_tab_history": "Lịch sử & Điểm số",
     "quick_edit_category": "Chạm để sửa nhanh phân loại S",
     "quick_edit_location": "Chạm để sửa nhanh vị trí",
     "update_location_error": "Không thể đổi vị trí sự cố",
@@ -702,6 +706,7 @@
     "show_original": "Xem bản gốc",
     "translate_failed": "Không thể dịch nội dung này",
     "ai_review_btn": "Phân tích AI",
+    "ai_tools_label": "Công cụ AI",
     "ai_disabled_reason": "AI đang tắt. Hãy bật trong Cài đặt → AI.",
     "ai_reviewing": "Đang phân tích…",
     "ai_review_failed": "Không thể phân tích báo cáo này",
