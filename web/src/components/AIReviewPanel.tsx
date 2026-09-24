@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useState } from "react";
-import { useI18nStore } from "../i18n/index.ts";
+import { type SupportedLocale, useI18nStore } from "../i18n/index.ts";
 import {
   type IssueItem,
   type ProposedTagItem,
@@ -42,22 +42,98 @@ type AIReviewPanelProps = {
 const actionClass =
   "inline-flex min-h-7 items-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-1 text-[11px] font-semibold text-violet-700 shadow-2xs transition hover:border-violet-400 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-700 dark:bg-zinc-800 dark:text-violet-300 dark:hover:bg-violet-950/60";
 
-function renderInlineMarkdown(text: string): ReactNode[] {
+function resolveAIResponseLocale(text: string, fallbackLocale: SupportedLocale): SupportedLocale {
+  if (/[\u3400-\u9fff]/u.test(text)) return "zh";
+  if (/[ăâđêôơưĂÂĐÊÔƠƯà-ỹÀ-Ỹ]/u.test(text)) return "vi";
+  if (/[A-Za-z]/u.test(text)) return "en";
+  return fallbackLocale;
+}
+
+function TagPill({ code, tag, locale }: { code: string; tag: TagItem; locale: SupportedLocale }) {
+  const label = resolveTagLabel(tag, locale);
+  return (
+    <span
+      className="mx-0.5 inline-flex items-center rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-800 dark:border-violet-700 dark:bg-violet-950/60 dark:text-violet-200"
+      title={code}
+    >
+      {label}
+    </span>
+  );
+}
+
+function renderInlineMarkdown(
+  text: string,
+  tags: TagItem[],
+  proposedTags: ProposedTagItem[],
+  locale: SupportedLocale,
+): ReactNode[] {
   const parts: ReactNode[] = [];
-  const pattern =
-    /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\(https?:\/\/[^)]+\))/g;
+  const tagsByAlias: Record<string, TagItem> = {};
+  for (const tag of tags) {
+    const aliases = [tag.code, tag.tag_code, tag.name_vi, tag.name_zh, tag.name_en];
+    for (const alias of aliases) {
+      if (alias?.trim()) tagsByAlias[alias.trim()] = tag;
+    }
+  }
+  for (const proposal of proposedTags) {
+    const tag: TagItem = {
+      code: proposal.name_vi,
+      name_vi: proposal.name_vi,
+      name_zh: proposal.name_zh,
+      name_en: proposal.name_en,
+    };
+    for (const alias of [proposal.name_vi, proposal.name_zh, proposal.name_en]) {
+      if (alias?.trim()) tagsByAlias[alias.trim()] = tag;
+    }
+  }
+  const aliases = Object.keys(tagsByAlias).sort((a, b) => b.length - a.length);
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedAliases = aliases.map(escapeRegex);
+  const openingWrappers = "'\"‘“([{<«‹「『（【《〈";
+  const closingWrappers = "'\"’”)]}>»›」』）】》〉";
+  const wrapperPattern = (wrappers: string) => `(?:${[...wrappers].map(escapeRegex).join("|")})`;
+  const aliasPattern = escapedAliases.join("|");
+  const wrappedTagPattern = `${wrapperPattern(openingWrappers)}[ \\t]*#?(?:${aliasPattern})[ \\t]*${wrapperPattern(closingWrappers)}`;
+  const tagPattern = escapedAliases.length
+    ? `(?<![\\p{L}\\p{N}_-])(?:${wrappedTagPattern}|#?(?:${aliasPattern}))(?![\\p{L}\\p{N}_-])`
+    : "(?!x)x";
+  const pattern = new RegExp(
+    "(`[^`]+`|\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|\\[[^\\]]+\\]\\(https?:\\/\\/[^)]+\\)|" +
+      tagPattern +
+      ")",
+    "gu",
+  );
   let lastIndex = 0;
   for (const match of text.matchAll(pattern)) {
     const value = match[0];
     const index = match.index ?? 0;
     if (index > lastIndex) parts.push(text.slice(lastIndex, index));
-    if (value.startsWith("`") && value.endsWith("`")) {
+    const unwrapped = value.replace(
+      new RegExp(
+        `^(?:\\s|${wrapperPattern(openingWrappers)})+|(?:\\s|${wrapperPattern(closingWrappers)})+$`,
+        "gu",
+      ),
+      "",
+    );
+    const directAlias = unwrapped.startsWith("#") ? unwrapped.slice(1) : unwrapped;
+    const directTag = tagsByAlias[directAlias];
+    const inlineAlias = value.startsWith("`") && value.endsWith("`") ? value.slice(1, -1) : "";
+    const inlineTag = inlineAlias ? tagsByAlias[inlineAlias] : undefined;
+    if (directTag) {
+      parts.push(
+        <TagPill key={`${index}-tag`} code={directAlias} tag={directTag} locale={locale} />,
+      );
+    } else if (inlineTag) {
+      parts.push(
+        <TagPill key={`${index}-tag`} code={inlineAlias} tag={inlineTag} locale={locale} />,
+      );
+    } else if (value.startsWith("`") && value.endsWith("`")) {
       parts.push(
         <code
           key={`${index}-code`}
           className="rounded bg-zinc-200/70 px-1 py-0.5 font-mono text-[0.9em] dark:bg-zinc-700/70"
         >
-          {value.slice(1, -1)}
+          {inlineAlias}
         </code>,
       );
     } else if (
@@ -94,8 +170,19 @@ function renderInlineMarkdown(text: string): ReactNode[] {
   return parts;
 }
 
-function MarkdownText({ text }: { text: string }) {
+function MarkdownText({
+  text,
+  tags,
+  proposedTags = [],
+  locale,
+}: {
+  text: string;
+  tags: TagItem[];
+  proposedTags?: ProposedTagItem[];
+  locale: SupportedLocale;
+}) {
   const lines = text.split("\n");
+  const responseLocale = resolveAIResponseLocale(text, locale);
   return (
     <span className="block space-y-1">
       {lines.map((line) => {
@@ -103,7 +190,7 @@ function MarkdownText({ text }: { text: string }) {
         const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
         const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
         const content = heading?.[1] ?? bullet?.[1] ?? ordered?.[1] ?? line;
-        const rendered = renderInlineMarkdown(content);
+        const rendered = renderInlineMarkdown(content, tags, proposedTags, responseLocale);
         return (
           <Fragment key={line}>
             {heading ? (
@@ -209,11 +296,11 @@ export function AIReviewPanel({
       className={`animate-fade-in space-y-2 rounded-xl border p-3 text-xs [animation-duration:300ms] ${panelClass}`}
       aria-labelledby="ai-review-title"
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h3
             id="ai-review-title"
-            className="truncate text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200"
+            className="min-w-0 break-words text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200"
           >
             {t("issue_detail.ai_review_panel_title")}
           </h3>
@@ -225,7 +312,7 @@ export function AIReviewPanel({
         </div>
         <button
           type="button"
-          className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-zinc-700 transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 dark:text-zinc-200 dark:hover:bg-white/10"
+          className="inline-flex min-h-9 self-start items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-zinc-700 transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 dark:text-zinc-200 dark:hover:bg-white/10 sm:self-auto"
           onClick={() => setIsExpanded((expanded) => !expanded)}
           aria-expanded={isExpanded}
           aria-controls="ai-review-content"
@@ -244,7 +331,12 @@ export function AIReviewPanel({
         <div id="ai-review-content" className="space-y-2">
           {review.feedback && (
             <p className="text-zinc-800 dark:text-zinc-200">
-              <MarkdownText text={displayedFeedback} />
+              <MarkdownText
+                text={displayedFeedback}
+                tags={tags}
+                proposedTags={review.suggestion.proposed_tags}
+                locale={locale}
+              />
             </p>
           )}
           {(review.suggestion.category || review.suggestion.cause_type) && (
@@ -332,7 +424,12 @@ export function AIReviewPanel({
                     {turn.question}
                   </p>
                   <p className="mr-4 rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
-                    <MarkdownText text={turn.answer} />
+                    <MarkdownText
+                      text={turn.answer}
+                      tags={tags}
+                      proposedTags={review.suggestion.proposed_tags}
+                      locale={locale}
+                    />
                   </p>
                 </div>
               ))}
@@ -349,7 +446,12 @@ export function AIReviewPanel({
                 <p className="mr-4 rounded-lg bg-white/70 px-3 py-2 text-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
                   {streamingFollowUpAnswer ? (
                     <>
-                      <MarkdownText text={streamingFollowUpAnswer} />
+                      <MarkdownText
+                        text={streamingFollowUpAnswer}
+                        tags={tags}
+                        proposedTags={review.suggestion.proposed_tags}
+                        locale={locale}
+                      />
                       <span
                         className="ml-0.5 inline-block h-3 w-0.5 animate-pulse bg-violet-500 align-text-bottom"
                         aria-hidden="true"

@@ -106,6 +106,130 @@ it("renders markdown formatting in AI feedback and follow-up answers", () => {
   expect(html).not.toContain("*Check*");
 });
 
+it("renders AI tag codes as localized pills", () => {
+  const tags = [{ code: "WET_FLOOR", name_vi: "Sàn ướt", name_zh: "湿地面", name_en: "Wet floor" }];
+  const renderFeedback = (feedback: string) =>
+    renderToString(
+      <AIReviewPanel
+        review={review}
+        currentIssue={issue}
+        tags={tags}
+        value=""
+        selectedProposedTags={[]}
+        onSelectedProposedTagsChange={() => {}}
+        isAskingFollowUp={false}
+        pendingFollowUpQuestion={null}
+        streamingFollowUpAnswer=""
+        followUpCount={1}
+        followUpLimit={5}
+        followUpHistory={[{ question: "Check", answer: feedback }]}
+        onFollowUpQuestionChange={() => {}}
+        onApplySuggestion={() => {}}
+        onFollowUp={() => {}}
+      />,
+    );
+
+  const vietnamese = renderFeedback("Sàn có ' WET_FLOOR ' cần xử lý.");
+  expect(vietnamese).toContain("Sàn ướt");
+  expect(vietnamese).toContain('title="WET_FLOOR"');
+  expect(vietnamese).not.toContain("' Sàn ướt '");
+  expect(vietnamese).not.toContain("'WET_FLOOR'");
+
+  const chinese = renderFeedback("发现 #WET_FLOOR，需要处理。");
+  expect(chinese).toContain("湿地面");
+  expect(chinese).toContain('title="WET_FLOOR"');
+  const english = renderFeedback("Review `WET_FLOOR` before closing.");
+  expect(english).toContain("Wet floor");
+  expect(english).not.toContain("<code");
+
+  const proposedFeedback = renderToString(
+    <AIReviewPanel
+      review={{
+        ...review,
+        feedback:
+          "Hình ảnh xác nhận móc cẩu thiếu khóa an toàn. Thẻ ' Tràn đổ hóa chất nguy hiểm chưa xử lý ' chọn sai thực tế.",
+        suggestion: {
+          proposed_tags: [
+            {
+              name_vi: "Tràn đổ hóa chất nguy hiểm chưa xử lý",
+              name_zh: "未处理危险化学品泄漏",
+              name_en: "Unaddressed hazardous chemical spill",
+              category: "6S",
+            },
+          ],
+        },
+      }}
+      currentIssue={issue}
+      tags={tags}
+      value=""
+      selectedProposedTags={[]}
+      onSelectedProposedTagsChange={() => {}}
+      isAskingFollowUp={false}
+      pendingFollowUpQuestion={null}
+      streamingFollowUpAnswer=""
+      followUpCount={1}
+      followUpLimit={5}
+      followUpHistory={[
+        {
+          question: "Chi tiết",
+          answer:
+            "Hình ảnh xác nhận móc cẩu thiếu khóa an toàn. Thẻ ' Tràn đổ hóa chất nguy hiểm chưa xử lý ' chọn sai thực tế.",
+        },
+      ]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+  expect(proposedFeedback).toContain("Tràn đổ hóa chất nguy hiểm chưa xử lý");
+  expect(proposedFeedback).not.toContain("' Tràn đổ hóa chất nguy hiểm chưa xử lý '");
+  expect(proposedFeedback).not.toContain("Thẻ '");
+
+  const parenFeedback = renderToString(
+    <AIReviewPanel
+      review={{
+        ...review,
+        feedback:
+          "Phân loại 6S đúng nhưng chọn nhầm thẻ tràn đổ hóa chất ( Tràn đổ hóa chất nguy hiểm chưa xử lý ). Cần bỏ thẻ Tràn đổ hóa chất nguy hiểm chưa xử lý .",
+        suggestion: {
+          proposed_tags: [
+            {
+              name_vi: "Tràn đổ hóa chất nguy hiểm chưa xử lý",
+              name_zh: "未处理危险化学品泄漏",
+              name_en: "Unaddressed hazardous chemical spill",
+              category: "6S",
+            },
+          ],
+        },
+      }}
+      currentIssue={issue}
+      tags={tags}
+      value=""
+      selectedProposedTags={[]}
+      onSelectedProposedTagsChange={() => {}}
+      isAskingFollowUp={false}
+      pendingFollowUpQuestion={null}
+      streamingFollowUpAnswer=""
+      followUpCount={1}
+      followUpLimit={5}
+      followUpHistory={[
+        {
+          question: "Chi tiết",
+          answer:
+            "Phân loại 6S đúng nhưng chọn nhầm thẻ tràn đổ hóa chất ( Tràn đổ hóa chất nguy hiểm chưa xử lý ). Cần bỏ thẻ Tràn đổ hóa chất nguy hiểm chưa xử lý .",
+        },
+      ]}
+      onFollowUpQuestionChange={() => {}}
+      onApplySuggestion={() => {}}
+      onFollowUp={() => {}}
+    />,
+  );
+  expect(parenFeedback).not.toContain("( Tràn đổ hóa chất nguy hiểm chưa xử lý )");
+  expect(parenFeedback).not.toContain("( <span");
+  expect(parenFeedback).not.toContain("</span> )");
+  expect(parenFeedback).toContain("thẻ tràn đổ hóa chất <span");
+});
+
 it("allows only HTTPS markdown links in AI answers", () => {
   const html = renderToString(
     <AIReviewPanel
@@ -141,6 +265,8 @@ it("renders panel header with title and collapse toggle", () => {
   expect(html).toContain("Thu gọn");
   expect(html).toContain('aria-controls="ai-review-content"');
   expect(html).toContain('aria-expanded="true"');
+  expect(html).toContain("sm:flex-row");
+  expect(html).toContain("flex-wrap");
 });
 
 it("renders proposed new tags with apply buttons", () => {
