@@ -924,6 +924,47 @@ describe("IssueDetailModal Component", () => {
     expect(plain.textContent).not.toContain("CHỤP ẢNH KHẮC PHỤC");
   });
 
+  it("renders responsive action bar with wrapped resolve label and compact invalidate button", async () => {
+    installFetch({ issue: baseIssue() });
+    await act(async () => {
+      useAuthStore.setState({
+        user: {
+          id: 1,
+          username: "admin",
+          full_name: "Admin",
+          role: "ADMIN" as never,
+          capabilities: ["issue:invalidate", "issue:resolve"],
+        },
+      });
+    });
+
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue()}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+
+    const resolveLabel = container.querySelector("label.cursor-pointer");
+    expect(resolveLabel).not.toBeNull();
+    expect(resolveLabel?.className).toContain("min-w-0");
+    expect(resolveLabel?.className).toContain("flex-1");
+    expect(resolveLabel?.getAttribute("title")).toBeTruthy();
+
+    const labelText = resolveLabel?.querySelector("span > span");
+    expect(labelText).not.toBeNull();
+    expect(labelText?.className).toContain("text-center");
+    expect(labelText?.className).toContain("leading-tight");
+    expect(labelText?.className).not.toContain("truncate");
+
+    const invalidateBtn = button(container, "Bác bỏ báo cáo");
+    expect(invalidateBtn).toBeDefined();
+    expect(invalidateBtn?.className).toContain("w-14");
+    expect(invalidateBtn?.className).toContain("shrink-0");
+  });
+
   it("opens the full edit form prefilled with the current description for the reporter", async () => {
     installFetch({ issue: baseIssue() });
     await act(async () => {

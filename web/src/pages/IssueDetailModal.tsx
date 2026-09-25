@@ -1020,7 +1020,7 @@ export function IssueDetailModal({
         </nav>
 
         {/* Detail Content - 2 Columns on Desktop */}
-        <div className="flex-1 overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-12 min-h-0">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-12 min-h-0">
           {/* Left Column: Visuals & Description (60% on 2K) */}
           <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-8 p-4 lg:p-6 space-y-4 lg:overflow-y-auto lg:border-r border-zinc-200 dark:border-zinc-800">
             {/* Split Slider if After photo exists, otherwise show Before photo */}
@@ -1640,35 +1640,60 @@ export function IssueDetailModal({
             </div>
 
             {/* Bottom Actions Bar (Integrated in sidebar for desktop, sticky/accessible) */}
-            <div className="sticky bottom-0 -mx-4 -mb-4 lg:-mx-6 lg:-mb-6 p-4 lg:p-6 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200/80 dark:border-zinc-800/80 flex flex-col gap-2 shrink-0 z-10 shadow-xs">
-              {/* Action: Resolve (Upload after photo) */}
-              {currentIssue.status === IssueStatus.OPEN && canResolveIssue && (
-                <div className="space-y-1.5">
-                  <label className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-base py-4 px-6 rounded-2xl min-h-[64px] flex items-center justify-center space-x-2 shadow-lg">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      disabled={isSubmitting}
-                      onChange={handleResolveOfflineOrOnline}
-                      className="hidden"
-                    />
-                    <span className="inline-flex items-center gap-2">
-                      <Camera className="h-5 w-5" aria-hidden="true" />
-                      <span>
-                        {isSubmitting
-                          ? t("issue_detail.processing_image")
-                          : t("issue_detail.capture_after")}
-                      </span>
-                    </span>
-                  </label>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 px-1 text-center font-medium">
-                    {causeType === "BEHAVIOR"
-                      ? t("issue.photo_after_hint_behavior")
-                      : t("issue.photo_after_hint_condition")}
-                  </p>
-                </div>
-              )}
+            <div className="sticky bottom-0 -mx-4 -mb-4 lg:-mx-6 lg:-mb-6 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:p-6 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200/80 dark:border-zinc-800/80 flex flex-col gap-2 shrink-0 z-10 shadow-xs">
+              {/* Actions: Resolve & Invalidate for OPEN status (80-20 ergonomic split) */}
+              {currentIssue.status === IssueStatus.OPEN &&
+                (canResolveIssue || hasCapability(user, "issue:invalidate")) && (
+                  <div className="flex items-stretch gap-2 w-full min-w-0">
+                    {canResolveIssue && (
+                      <label
+                        title={
+                          causeType === "BEHAVIOR"
+                            ? t("issue.photo_after_hint_behavior")
+                            : t("issue.photo_after_hint_condition")
+                        }
+                        className="cursor-pointer flex-1 min-w-0 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black py-2.5 px-3 sm:px-4 rounded-2xl min-h-[56px] flex items-center justify-center shadow-md transition select-none"
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          disabled={isSubmitting}
+                          onChange={handleResolveOfflineOrOnline}
+                          className="hidden"
+                        />
+                        <span className="inline-flex items-center justify-center gap-2 min-w-0 text-center">
+                          <Camera className="h-5 w-5 shrink-0" aria-hidden="true" />
+                          {/* ponytail: wrap and center title on narrow viewports; add auto-scale font if translations exceed 3 lines */}
+                          <span className="text-xs sm:text-sm font-black tracking-wide leading-tight text-center">
+                            {isSubmitting
+                              ? t("issue_detail.processing_image")
+                              : t("issue_detail.capture_after")}
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+                    {hasCapability(user, "issue:invalidate") && (
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmAction(IssueStatus.INVALID)}
+                        title={t("issue_detail.invalidate_btn_label")}
+                        aria-label={t("issue_detail.invalidate_btn_label")}
+                        className={`inline-flex items-center justify-center rounded-2xl min-h-[56px] border border-rose-200 dark:border-rose-900/60 bg-rose-50 text-rose-600 hover:bg-rose-100 active:scale-98 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/50 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
+                          canResolveIssue
+                            ? "w-14 shrink-0 px-0"
+                            : "w-full py-2.5 px-4 text-xs font-bold gap-1.5"
+                        }`}
+                      >
+                        <Ban className="h-5 w-5 shrink-0" aria-hidden="true" />
+                        <span className={canResolveIssue ? "sr-only" : "inline"}>
+                          {t("issue_detail.invalidate_btn_label")}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
 
               {currentIssue.status === IssueStatus.PENDING_REVIEW &&
                 (canCloseIssue ? (
@@ -1708,19 +1733,6 @@ export function IssueDetailModal({
                     </div>
                   </div>
                 ))}
-
-              {/* Action: Invalidate (Bác bỏ) */}
-              {currentIssue.status === IssueStatus.OPEN &&
-                hasCapability(user, "issue:invalidate") && (
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmAction(IssueStatus.INVALID)}
-                    className="w-full text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold py-2.5 px-4 rounded-xl min-h-[44px] flex items-center justify-center border border-rose-200 dark:border-rose-900/60 transition gap-1.5 active:scale-98 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                  >
-                    <Ban className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{t("issue_detail.invalidate_btn_label")}</span>
-                  </button>
-                )}
             </div>
           </div>
         </div>
