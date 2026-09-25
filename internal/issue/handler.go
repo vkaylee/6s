@@ -369,6 +369,10 @@ func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 			return
 		}
+		if errors.Is(err, ErrIssueSelfReviewDenied) {
+			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueSelfReviewDenied))
+			return
+		}
 		if errors.Is(err, ErrPermissionDenied) {
 			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrIssueCloseForbidden))
 			return

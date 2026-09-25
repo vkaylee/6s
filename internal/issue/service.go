@@ -17,6 +17,7 @@ var (
 	ErrMediaForbidden         = errors.New("media access forbidden")
 	ErrIssueConflict          = errors.New("issue version or status conflict")
 	ErrPermissionDenied       = errors.New("permission denied for action")
+	ErrIssueSelfReviewDenied  = errors.New("issue cannot be self-reviewed")
 	ErrInvalidCategory        = errors.New("invalid 6S category")
 	ErrInvalidResponsibility  = errors.New("invalid responsibility reference")
 	ErrMissingExpectedVersion = errors.New("expected_version is required for responsibility changes")

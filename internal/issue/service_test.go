@@ -30,7 +30,7 @@ func seededPermissions(role string) []string {
 		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseOwn, auth.PermissionIssueCloseLine, auth.PermissionIssueReopen}
 	case "SAFETY_OFFICER":
 		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseAny, auth.PermissionIssueCloseSafety, auth.PermissionIssueReopen, auth.PermissionIssueInvalidate}
-	case "ADMIN":
+	case "ADMIN", "SUPERADMIN":
 		return []string{auth.PermissionIssueCreate, auth.PermissionIssueViewAll, auth.PermissionIssueResolve, auth.PermissionIssueCloseOwn, auth.PermissionIssueCloseLine, auth.PermissionIssueCloseAny, auth.PermissionIssueCloseSafety, auth.PermissionIssueReopen, auth.PermissionIssueInvalidate, auth.PermissionScoringManage, auth.PermissionADManage, auth.PermissionUserManage, auth.PermissionManage, auth.PermissionMasterdataManage}
 	default:
 		return nil
@@ -1257,7 +1257,8 @@ func TestIssueService_PermissionParity(t *testing.T) {
 	leaderOther := db.User{ID: 21, Username: "leader2", Role: "LINE_LEADER", IsActive: true, AssignedLocationCode: sql.NullString{String: "LINE_A2", Valid: true}}
 	safety := db.User{ID: 30, Username: "safety", Role: "SAFETY_OFFICER", IsActive: true}
 	admin := db.User{ID: 1, Username: "admin", Role: "ADMIN", IsActive: true}
-	for _, u := range []db.User{creator, stranger, leader, leaderOther, safety, admin} {
+	superadmin := db.User{ID: 2, Username: "superadmin", Role: "SUPERADMIN", IsActive: true}
+	for _, u := range []db.User{creator, stranger, leader, leaderOther, safety, admin, superadmin} {
 		mockStore.users[u.ID] = u
 	}
 
@@ -1339,9 +1340,10 @@ func TestIssueService_PermissionParity(t *testing.T) {
 	_, err := svc.CloseIssue(ctxFor(stranger), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, stranger)
 	deny(t, err, "USER stranger", "close others' 1S issue")
 
-	// Close: creator cannot close own issue when they are also the resolver (no self-approval).
 	_, err = svc.CloseIssue(ctxFor(creator), CloseIssueRequest{IssueID: normal.ID, ScoreRating: 3}, creator)
-	deny(t, err, "USER creator (self resolver)", "close own-resolved issue")
+	if err != ErrIssueSelfReviewDenied {
+		t.Errorf("USER creator (self resolver) should receive self-review error, got %v", err)
+	}
 	// Close: creator may close own issue resolved by another party (approval separate from fix).
 	resolver := db.User{ID: 44, Username: "resolver", Role: "USER", IsActive: true, AssignedLocationCode: sql.NullString{String: "LINE_A1", Valid: true}}
 	mockStore.users[resolver.ID] = resolver
@@ -1378,6 +1380,17 @@ func TestIssueService_PermissionParity(t *testing.T) {
 	adminClosed, err := svc.CloseIssue(ctxFor(admin), CloseIssueRequest{IssueID: adminIssue.ID, ScoreRating: 3}, admin)
 	if err != nil || adminClosed.Status != StatusClosed.String() {
 		t.Errorf("ADMIN close 6S issue failed: %v", err)
+	}
+
+	superadminIssue := newPendingIssue(t, Category3S.String(), "LINE_A1")
+	superadminClosed, err := svc.CloseIssue(ctxFor(superadmin), CloseIssueRequest{IssueID: superadminIssue.ID, ScoreRating: 4}, superadmin)
+	if err != nil || superadminClosed.Status != StatusClosed.String() {
+		t.Errorf("SUPERADMIN close normal issue failed: %v", err)
+	}
+	superadminSafetyIssue := newPendingIssue(t, Category6S.String(), "LINE_A1")
+	superadminSafetyClosed, err := svc.CloseIssue(ctxFor(superadmin), CloseIssueRequest{IssueID: superadminSafetyIssue.ID, ScoreRating: 4}, superadmin)
+	if err != nil || superadminSafetyClosed.Status != StatusClosed.String() {
+		t.Errorf("SUPERADMIN close 6S issue failed: %v", err)
 	}
 
 	// Close: fail closed without permission context.

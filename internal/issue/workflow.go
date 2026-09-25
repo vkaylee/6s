@@ -422,9 +422,8 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 	if !s.canCloseIssue(ctx, currentUser, issue) {
 		return nil, ErrPermissionDenied
 	}
-	// Approving one's own fix is never allowed: resolving and approving stay separate duties.
 	if issue.ResolverID.Valid && issue.ResolverID.Int64 == currentUser.ID {
-		return nil, ErrPermissionDenied
+		return nil, ErrIssueSelfReviewDenied
 	}
 
 	rating := req.ScoreRating

@@ -16,6 +16,7 @@ import (
 
 	"6s/internal/auth"
 	"6s/internal/db"
+	"6s/internal/i18n"
 )
 
 type mockIssueService struct {
@@ -527,6 +528,27 @@ func TestIssueHandler_AdditionalCoverage(t *testing.T) {
 	if rrCloseForbidden.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for close forbidden, got %d", rrCloseForbidden.Code)
 	}
+	mockSvc.err = ErrIssueSelfReviewDenied
+	reqSelfReview := httptest.NewRequest("POST", "/api/issues/1/close", bytes.NewReader([]byte("{}")))
+	reqSelfReview = reqSelfReview.WithContext(context.WithValue(reqSelfReview.Context(), auth.UserContextKey, user))
+	rrSelfReview := httptest.NewRecorder()
+	r.ServeHTTP(rrSelfReview, reqSelfReview)
+	if rrSelfReview.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for self-review, got %d", rrSelfReview.Code)
+	}
+	var selfReviewEnvelope struct {
+		Error struct {
+			Code string `json:"code"`
+			Key  string `json:"key"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(rrSelfReview.Body).Decode(&selfReviewEnvelope); err != nil {
+		t.Fatalf("decode self-review response: %v", err)
+	}
+	if selfReviewEnvelope.Error.Code != "FORBIDDEN" || selfReviewEnvelope.Error.Key != string(i18n.ErrIssueSelfReviewDenied) {
+		t.Errorf("expected self-review error key, got %+v", selfReviewEnvelope.Error)
+	}
+	mockSvc.err = ErrPermissionDenied
 
 	// Reopen Unauth, BadID, Forbidden
 	reqReopenUnauth := httptest.NewRequest("POST", "/api/issues/1/reopen", nil)

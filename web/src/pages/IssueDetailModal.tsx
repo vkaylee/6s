@@ -602,6 +602,8 @@ export function IssueDetailModal({
       ? hasCapability(user, "issue:close_own")
       : hasCapability(user, "issue:close_any"));
 
+  const isSelfResolved =
+    user?.id != null && currentIssue.resolver_id != null && user.id === currentIssue.resolver_id;
   const canClose =
     (isSafetyIssue && hasCapability(user, "issue:close_safety")) ||
     (!isSafetyIssue &&
@@ -609,15 +611,16 @@ export function IssueDetailModal({
         (user?.id === currentIssue.creator_id && hasCapability(user, "issue:close_own")) ||
         (hasCapability(user, "issue:close_line") &&
           user?.assigned_location_code === currentIssue.location_code)));
-  const closeDisabledReason =
-    isSafetyIssue && !hasCapability(user, "issue:close_safety")
+  const closeDisabledReason = isSelfResolved
+    ? t("issue_detail.self_review_blocked")
+    : isSafetyIssue && !hasCapability(user, "issue:close_safety")
       ? t("issue_detail.need_safety_officer")
       : hasCapability(user, "issue:close_line") &&
           user?.assigned_location_code &&
           user.assigned_location_code !== currentIssue.location_code
         ? t("issue_detail.only_assigned_line")
         : !canClose
-          ? t("issue_detail.need_line_leader")
+          ? t("issue_detail.review_not_allowed")
           : null;
   // allowed_actions from the API is authoritative for this row; capabilities only cover legacy
   // responses that omit the field, so a capability can never re-grant a server-denied action.
@@ -794,9 +797,11 @@ export function IssueDetailModal({
       setShowConfirmAction(null);
       onRefresh();
       onClose();
-    } catch {
+    } catch (error) {
       haptics.errorOrConflict();
-      modalDialog.alert(t("issue_detail.approve_failed"));
+      modalDialog.alert(
+        error instanceof ApiError ? error.message : t("issue_detail.approve_failed"),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1665,51 +1670,44 @@ export function IssueDetailModal({
                 </div>
               )}
 
-              {/* Action: Close (Duyệt đạt) */}
-              {currentIssue.status === IssueStatus.PENDING_REVIEW && (
-                <div className="space-y-1.5">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={!canCloseIssue || isSubmitting}
-                      onClick={() => setShowConfirmAction("CLOSE")}
-                      className={`flex-1 font-black text-sm py-4 px-4 rounded-2xl min-h-[56px] flex items-center justify-center space-x-1 shadow-md transition ${
-                        canCloseIssue
-                          ? "bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white"
-                          : "opacity-50 bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                      }`}
-                    >
-                      <span className="inline-flex items-center gap-1.5">
-                        {canCloseIssue ? (
-                          <Check className="h-4 w-4" aria-hidden="true" />
-                        ) : (
-                          <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                        )}
-                        <span>
-                          {canCloseIssue
-                            ? t("issue.approve").toUpperCase()
-                            : t("issue_detail.locked")}
-                        </span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={!canCloseIssue || isSubmitting}
-                      onClick={() => setShowConfirmAction("REOPEN")}
-                      className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs disabled:opacity-40"
-                    >
-                      {t("issue.reopen")}
-                    </button>
+              {currentIssue.status === IssueStatus.PENDING_REVIEW &&
+                (canCloseIssue ? (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => setShowConfirmAction("CLOSE")}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black text-sm py-4 px-4 rounded-2xl min-h-[56px] flex items-center justify-center space-x-1 shadow-md transition disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Check className="h-4 w-4" aria-hidden="true" />
+                        <span>{t("issue.approve").toUpperCase()}</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => setShowConfirmAction("REOPEN")}
+                        className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-2xl min-h-[56px] text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {t("issue.reopen")}
+                      </button>
+                    </div>
                   </div>
-                  {!canCloseIssue && closeDisabledReason && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium px-1 flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span>{closeDisabledReason}</span>
-                    </p>
-                  )}
-                </div>
-              )}
+                ) : (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                  >
+                    <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <div>
+                      <p className="font-bold">{t("status.PENDING_REVIEW")}</p>
+                      <p className="mt-0.5 text-[11px] text-amber-800/80 dark:text-amber-300/80">
+                        {closeDisabledReason}
+                      </p>
+                    </div>
+                  </div>
+                ))}
 
               {/* Action: Invalidate (Bác bỏ) */}
               {currentIssue.status === IssueStatus.OPEN &&

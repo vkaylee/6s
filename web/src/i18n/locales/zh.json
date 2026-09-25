@@ -741,6 +741,8 @@
     "need_safety_officer": "需安全员权限",
     "only_assigned_line": "仅可审核所负责的产线",
     "need_line_leader": "需产线组长权限",
+    "self_review_blocked": "该问题由您处理。需要其他审核人验收。",
+    "review_not_allowed": "该问题正在等待有权限的审核人验收。",
     "locked": "已锁定",
     "score_breakdown_title": "该问题的 6S 积分变动记录",
     "score_breakdown_empty": "该问题暂无积分变动",

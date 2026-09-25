@@ -741,6 +741,8 @@
     "need_safety_officer": "Safety Officer permission required",
     "only_assigned_line": "Only authorized for your assigned line",
     "need_line_leader": "Line Leader permission required",
+    "self_review_blocked": "You resolved this issue. Another reviewer must approve it.",
+    "review_not_allowed": "This issue is waiting for an authorized reviewer.",
     "locked": "Locked",
     "score_breakdown_title": "6S Score Impact of this Issue",
     "score_breakdown_empty": "No score transactions recorded for this issue",

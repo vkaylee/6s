@@ -741,6 +741,8 @@
     "need_safety_officer": "Cần quyền Safety Officer",
     "only_assigned_line": "Chỉ được duyệt chuyền phụ trách",
     "need_line_leader": "Cần quyền Line Leader trở lên",
+    "self_review_blocked": "Bạn đã xử lý sự cố này. Cần người khác nghiệm thu.",
+    "review_not_allowed": "Sự cố đang chờ người có quyền nghiệm thu.",
     "locked": "Khóa",
     "score_breakdown_title": "Biến động điểm 6S của sự cố",
     "score_breakdown_empty": "Chưa có ghi nhận cộng trừ điểm cho sự cố này",

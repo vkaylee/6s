@@ -63,6 +63,7 @@ const (
 	ErrInvalidCategory          Key = "issue.invalid_category"
 	ErrIssueSaveFailed          Key = "issue.save_failed"
 	ErrIssueCloseForbidden      Key = "issue.close_forbidden"
+	ErrIssueSelfReviewDenied    Key = "issue.self_review_denied"
 	ErrIssueReopenForbidden     Key = "issue.reopen_forbidden"
 	ErrIssueInvalidForbidden    Key = "issue.invalid_forbidden"
 	ErrIssuePatchForbidden      Key = "issue.patch_forbidden"
@@ -144,7 +145,7 @@ var catalog = map[string]map[Key]string{
 		ErrInvalidCategory:          "Phân loại 6S không hợp lệ (1S - 6S)",
 		ErrIssueSaveFailed:          "Không thể lưu issue: %v",
 		ErrIssueCloseForbidden:      "Bạn không có quyền duyệt đạt issue này",
-		ErrIssueReopenForbidden:     "Bạn không có quyền mở lại issue này",
+		ErrIssueSelfReviewDenied:    "Bạn không thể tự duyệt issue do chính mình xử lý. Cần người khác nghiệm thu.",
 		ErrIssueInvalidForbidden:    "Chỉ quản trị viên hoặc cán bộ an toàn mới được bác bỏ issue",
 		ErrIssuePatchForbidden:      "Bạn không có quyền chỉnh sửa issue này",
 		ErrIssueListFailed:          "Không thể lấy danh sách issue",
@@ -223,7 +224,7 @@ var catalog = map[string]map[Key]string{
 		ErrInvalidCategory:          "Invalid 6S category (1S - 6S)",
 		ErrIssueSaveFailed:          "Cannot save issue: %v",
 		ErrIssueCloseForbidden:      "You do not have permission to close this issue",
-		ErrIssueReopenForbidden:     "You do not have permission to reopen this issue",
+		ErrIssueSelfReviewDenied:    "You cannot approve an issue you resolved. Another reviewer must approve it.",
 		ErrIssueInvalidForbidden:    "Only admins or safety officers can invalidate this issue",
 		ErrIssuePatchForbidden:      "You do not have permission to edit this issue",
 		ErrIssueListFailed:          "Failed to load issues list",
@@ -303,7 +304,7 @@ var catalog = map[string]map[Key]string{
 		ErrInvalidCategory:          "无效的 6S 类别（1S - 6S）",
 		ErrIssueSaveFailed:          "无法保存问题: %v",
 		ErrIssueCloseForbidden:      "您无权审核关闭此问题",
-		ErrIssueReopenForbidden:     "您无权重新打开此问题",
+		ErrIssueSelfReviewDenied:    "您不能审核自己处理的问题。需要其他审核人验收。",
 		ErrIssueInvalidForbidden:    "仅管理员或安全员可作废此问题",
 		ErrIssuePatchForbidden:      "您无权编辑此问题",
 		ErrIssueListFailed:          "获取问题列表失败",

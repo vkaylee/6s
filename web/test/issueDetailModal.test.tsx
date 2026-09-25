@@ -7,7 +7,9 @@ import { invalidateAiStatus } from "../src/hooks/useAiStatus.ts";
 import { useI18nStore } from "../src/i18n/index.ts";
 import { IssueDetailModal } from "../src/pages/IssueDetailModal.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
+import { useDialogStore } from "../src/store/dialogStore.ts";
 import { useMasterdataStore } from "../src/store/masterdataStore.ts";
+
 import { IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
 
 beforeAll(() => {
@@ -711,7 +713,57 @@ describe("IssueDetailModal Component", () => {
     expect(refreshed).toBe(1);
     expect(closed).toBe(1);
   });
+  it("shows the server reason when approval is rejected", async () => {
+    installFetch({
+      issue: baseIssue({
+        status: IssueStatus.PENDING_REVIEW,
+        photo_after: "/api/issues/101/media/after/after.jpg",
+        allowed_actions: { assign: false, verify_cause: false, resolve: false, close: true },
+      }),
+    });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/close")) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "FORBIDDEN",
+              message:
+                "Bạn không thể tự duyệt issue do chính mình xử lý. Cần người khác nghiệm thu.",
+            },
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
 
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue({
+          status: IssueStatus.PENDING_REVIEW,
+          photo_after: "/api/issues/101/media/after/after.jpg",
+          allowed_actions: { assign: false, verify_cause: false, resolve: false, close: true },
+        })}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    await act(async () => {
+      button(container, "DUYỆT ĐẠT")?.click();
+    });
+    await act(async () => {
+      button(container, "Xác nhận")?.click();
+    });
+    await act(async () => {});
+
+    expect(useDialogStore.getState().options.message).toBe(
+      "Bạn không thể tự duyệt issue do chính mình xử lý. Cần người khác nghiệm thu.",
+    );
+    useDialogStore.getState().handleCancel();
+  });
   it("reopens a pending issue after confirmation, falling back to the documented default reason", async () => {
     installFetch({
       issue: baseIssue({
@@ -774,9 +826,42 @@ describe("IssueDetailModal Component", () => {
         onRefresh={() => {}}
       />,
     );
-    expect(button(container, "Khóa")?.disabled).toBe(true);
-    expect(container.textContent).toContain("Cần quyền Line Leader trở lên");
+    expect(button(container, "Khóa")).toBeUndefined();
+    expect(container.textContent).toContain("Sự cố đang chờ người có quyền nghiệm thu.");
+    expect(container.textContent).toContain("Chờ duyệt");
     expect(mutations()).toEqual([]);
+  });
+  it("explains that the resolver cannot self-approve", async () => {
+    installFetch({
+      issue: baseIssue({
+        status: IssueStatus.PENDING_REVIEW,
+        resolver_id: 7,
+        allowed_actions: { assign: false, verify_cause: false, resolve: false, close: false },
+      }),
+    });
+    useAuthStore.setState({
+      user: {
+        id: 7,
+        username: "resolver",
+        full_name: "Resolver",
+        role: "SUPERADMIN" as never,
+        capabilities: ["issue:close_any", "issue:close_safety"],
+      },
+    });
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue({
+          status: IssueStatus.PENDING_REVIEW,
+          resolver_id: 7,
+          allowed_actions: { assign: false, verify_cause: false, resolve: false, close: false },
+        })}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(button(container, "DUYỆT ĐẠT")).toBeUndefined();
+    expect(container.textContent).toContain("Cần người khác nghiệm thu");
   });
 
   it("lets an authorized safety viewer invalidate with the default reason and hides it from others", async () => {
