@@ -919,7 +919,7 @@ export function IssueDetailModal({
                 {canEdit && <Pencil className="h-2.5 w-2.5 opacity-60" aria-hidden="true" />}
               </button>
               {isEditingCategory && (
-                <div className="absolute left-0 top-full mt-1.5 z-30 p-2 bg-white dark:bg-zinc-850 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl grid grid-cols-3 gap-1.5 w-72 sm:w-80 animate-fade-in">
+                <div className="absolute left-0 top-full mt-1.5 z-30 p-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl grid grid-cols-3 gap-1.5 w-72 sm:w-80 animate-fade-in">
                   {S_CATEGORIES.map((s) => (
                     <button
                       key={s.key}
@@ -959,7 +959,7 @@ export function IssueDetailModal({
                 {resolvedLocationName}
               </button>
               {isEditingLocation && locations && locations.length > 0 && (
-                <div className="absolute left-0 top-full mt-1.5 z-30 p-2.5 bg-white dark:bg-zinc-850 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-80 max-w-[calc(100vw-2rem)] animate-fade-in">
+                <div className="absolute left-0 top-full mt-1.5 z-30 p-2.5 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-80 max-w-[calc(100vw-2rem)] animate-fade-in">
                   <LocationCombobox
                     locations={locations}
                     value={currentIssue.location_code}
@@ -1727,7 +1727,7 @@ export function IssueDetailModal({
 
         {/* Inline Action Confirmation Drawer (Glove Friendly, No Nested Modal Jump) */}
         {showConfirmAction && (
-          <div className="border-t border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-850 p-4 space-y-3 animate-fade-in shadow-inner">
+          <div className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4 space-y-3 animate-fade-in shadow-inner">
             <div className="flex items-center justify-between">
               <h3 className="font-black text-sm text-zinc-900 dark:text-zinc-100">
                 {showConfirmAction === "CLOSE"
@@ -1747,7 +1747,7 @@ export function IssueDetailModal({
             </div>
             {showConfirmAction === "CLOSE" && (
               <div className="space-y-3">
-                <div className="p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-2xl border border-zinc-200 dark:border-zinc-700 text-xs space-y-2">
+                <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 text-xs space-y-2">
                   <div className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                     <ClipboardList
                       className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
@@ -1759,7 +1759,7 @@ export function IssueDetailModal({
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4 dark:border-zinc-600 dark:bg-zinc-900 dark:checked:bg-blue-600 dark:focus:ring-offset-zinc-900"
                     />
                     <span>
                       {causeType === "BEHAVIOR"
@@ -1771,13 +1771,13 @@ export function IssueDetailModal({
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4 dark:border-zinc-600 dark:bg-zinc-900 dark:checked:bg-blue-600 dark:focus:ring-offset-zinc-900"
                     />
                     <span>{t("issue_detail.check_recurrence_prevented")}</span>
                   </label>
                 </div>
 
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800">
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/70">
                   <span className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-2">
                     {t("issue_detail.kaizen_rating_label")}
                   </span>
@@ -1788,10 +1788,10 @@ export function IssueDetailModal({
                         type="button"
                         onClick={() => setScoreRating(star)}
                         aria-label={`${star}/5`}
-                        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl transition-all ${
+                        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:focus-visible:ring-amber-400 ${
                           scoreRating >= star
                             ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-105"
-                            : "bg-zinc-200 text-zinc-400 dark:bg-zinc-800"
+                            : "bg-zinc-200 text-zinc-400 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-500 dark:hover:bg-zinc-700 dark:hover:text-zinc-400"
                         }`}
                       >
                         <span className="text-lg font-black leading-none" aria-hidden="true">
@@ -1808,7 +1808,7 @@ export function IssueDetailModal({
                 </div>
 
                 {canVerifyCause && currentIssue.cause_status === "UNVERIFIED" && (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-2">
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/70 space-y-2">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
                         {t("issue.close_cause_verification_title")}
@@ -1823,13 +1823,22 @@ export function IssueDetailModal({
                         setCloseCauseTeamId(event.target.value ? Number(event.target.value) : null)
                       }
                       aria-label={t("issue.close_cause_verification_title")}
-                      className="min-h-[44px] w-full rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-zinc-800 shadow-2xs dark:border-amber-800 dark:bg-zinc-900 dark:text-zinc-100"
+                      className="min-h-[44px] w-full rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-zinc-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-800/80 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:ring-amber-400"
                     >
-                      <option value="">{t("issue.no_cause_team")}</option>
+                      <option
+                        value=""
+                        className="bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100"
+                      >
+                        {t("issue.no_cause_team")}
+                      </option>
                       {teams
                         .filter((item) => item.is_active)
                         .map((item) => (
-                          <option key={item.id} value={item.id}>
+                          <option
+                            key={item.id}
+                            value={item.id}
+                            className="bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100"
+                          >
                             {item.name} ({item.code})
                           </option>
                         ))}
@@ -1855,7 +1864,7 @@ export function IssueDetailModal({
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   placeholder={t("issue_detail.reason_placeholder")}
-                  className="w-full bg-white dark:bg-zinc-900 border border-rose-300 dark:border-rose-700 rounded-xl p-3 text-base focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  className="w-full bg-white dark:bg-zinc-900 border border-rose-300 dark:border-rose-700 rounded-xl p-3 text-base text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             )}
@@ -1866,26 +1875,34 @@ export function IssueDetailModal({
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder={t("issue_detail.reason_placeholder")}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-base focus:outline-none"
+                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-base text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             )}
 
             <div className="flex gap-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => {
                   if (showConfirmAction === "CLOSE") handleConfirmClose();
                   if (showConfirmAction === "REOPEN") handleConfirmReopen();
                   if (showConfirmAction === IssueStatus.INVALID) handleConfirmInvalid();
                 }}
-                className="flex-1 bg-zinc-900 dark:bg-zinc-100 hover:bg-black dark:hover:bg-white text-white dark:text-zinc-900 font-black py-3 rounded-xl min-h-[48px] text-sm shadow-sm"
+                className={`flex-1 font-black py-3 rounded-xl min-h-[48px] text-sm shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                  showConfirmAction === "CLOSE"
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-emerald-600/20"
+                    : showConfirmAction === IssueStatus.INVALID
+                      ? "bg-rose-600 hover:bg-rose-700 text-white dark:bg-rose-600 dark:hover:bg-rose-500 shadow-rose-600/20"
+                      : "bg-zinc-900 dark:bg-zinc-100 hover:bg-black dark:hover:bg-white text-white dark:text-zinc-900"
+                }`}
               >
                 {t("common.confirm")}
               </button>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setShowConfirmAction(null)}
-                className="flex-1 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-xl min-h-[48px] text-sm"
+                className="flex-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-xl min-h-[48px] text-sm transition disabled:opacity-50"
               >
                 {t("common.cancel")}
               </button>
@@ -1926,7 +1943,7 @@ export function IssueDetailModal({
                   {previewPhoto.label}
                 </span>
                 {photoList.length > 1 && (
-                  <span className="px-2.5 py-1 rounded-full bg-zinc-850 border border-zinc-700/80 text-xs font-bold text-zinc-300 shadow-sm shrink-0">
+                  <span className="px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700/80 text-xs font-bold text-zinc-300 shadow-sm shrink-0">
                     {(previewIndex ?? 0) + 1} / {photoList.length}
                   </span>
                 )}

@@ -696,7 +696,16 @@ describe("IssueDetailModal Component", () => {
     });
     await act(async () => {});
     expect(container.textContent).toContain("Xác nhận duyệt đạt sự cố?");
-
+    const confirmTitle = Array.from(container.querySelectorAll("h3")).find(
+      (el) => el.textContent === "Xác nhận duyệt đạt sự cố?",
+    );
+    expect(confirmTitle).toBeDefined();
+    const drawer = confirmTitle?.closest("div.border-t");
+    expect(drawer?.className).toContain("dark:bg-zinc-900");
+    expect(drawer?.className).not.toContain("zinc-850");
+    const checkboxes = Array.from(drawer?.querySelectorAll('input[type="checkbox"]') ?? []);
+    expect(checkboxes.length).toBeGreaterThan(0);
+    expect(checkboxes[0]?.className).toContain("dark:bg-zinc-900");
     const stars = (Array.from(container.querySelectorAll("button")) as HTMLButtonElement[]).filter(
       (item) => (item.textContent ?? "").trim() === "★",
     );
