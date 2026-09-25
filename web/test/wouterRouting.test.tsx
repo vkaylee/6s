@@ -503,6 +503,59 @@ describe("Wouter UX & Routing Verification", () => {
     expect(html).toContain("Chờ phê duyệt cải tiến");
   });
 
+  it("renders IssueDetailModal over leaderboard route when selectedIssue is present", () => {
+    const reviewIssue = {
+      id: 102,
+      client_uuid: "uuid-102",
+      location_code: "LINE_A1",
+      category: IssueCategory.S3,
+      description: "Thùng dầu rò rỉ tại khu vực leaderboard",
+      status: IssueStatus.PENDING_REVIEW,
+      photo_before: "blob:mock-before",
+      photo_after: "blob:mock-after",
+      reporter_id: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1,
+      tags: [],
+    };
+
+    const html = renderToString(
+      <WithMockState
+        values={[
+          [reviewIssue], // 1. issues
+          [], // 2. locations
+          [], // 3. tags
+          [], // 4. locationHealth
+          [], // 5. reporters
+          "LOCATIONS", // 6. leaderboardTab
+          "ALL", // 7. activeFacet
+          "", // 8. searchQuery
+          "URGENT", // 9. sortOrder
+          false, // 10. isLoadingIssues
+          false, // 11. isLoadingMore
+          1, // 12. issuePage
+          null, // 13. paginationMeta
+          false, // 14. showAllLeaderboard
+          false, // 15. isFilterDrawerOpen
+          { statuses: [], categories: [], locationCodes: [] }, // 16. advancedFilters
+          false, // 17. isDrawerOpen
+          reviewIssue, // 18. selectedIssue (opens IssueDetailModal)
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          null, // 20. conflictItem
+          false, // 21. isSetupOpen
+        ]}
+      >
+        <Router ssrPath="/leaderboard/locations/LINE_A1">
+          <App />
+        </Router>
+      </WithMockState>,
+    );
+
+    expect(html).toContain("LINE_A1");
+    expect(html).toContain("Thùng dầu rò rỉ tại khu vực leaderboard");
+  });
+
   it("renders App skeleton when loading and leaderboard collapse", () => {
     const fourLocations = [
       {

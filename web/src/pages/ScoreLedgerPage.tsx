@@ -35,7 +35,7 @@ interface ScoreLedgerPageProps {
 
 export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPageProps) {
   const { t } = useI18nStore();
-  const [, setLocation] = useLocation();
+  const [currentPath, setLocation] = useLocation();
   const [logs, setLogs] = useState<ScoreLogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
     if (onSelectIssue) {
       onSelectIssue(issueId);
     } else {
-      setLocation(`/?issue_id=${issueId}`);
+      setLocation(`${currentPath}?issue_id=${issueId}`);
     }
   };
 

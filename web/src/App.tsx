@@ -306,7 +306,7 @@ export function App() {
                   id={params.code}
                   onSelectIssue={(issueId) => {
                     openIssueById(issueId);
-                    setLocation(`/?issue_id=${issueId}`, { replace: true });
+                    setLocation(`${currentPath}?issue_id=${issueId}`, { replace: true });
                   }}
                 />
               </ProtectedRoute>
@@ -320,7 +320,7 @@ export function App() {
                   id={params.id}
                   onSelectIssue={(issueId) => {
                     openIssueById(issueId);
-                    setLocation(`/?issue_id=${issueId}`, { replace: true });
+                    setLocation(`${currentPath}?issue_id=${issueId}`, { replace: true });
                   }}
                 />
               </ProtectedRoute>
@@ -830,29 +830,6 @@ export function App() {
                   }}
                 />
 
-                {selectedIssue && (
-                  <IssueDetailModal
-                    issue={selectedIssue}
-                    isOpen={true}
-                    onClose={() => {
-                      setSelectedIssue(null);
-                      const currentParams = new URLSearchParams(searchString);
-                      if (currentParams.has("issue_id")) {
-                        currentParams.delete("issue_id");
-                        const newSearch = currentParams.toString();
-                        setLocation(newSearch ? `${currentPath}?${newSearch}` : currentPath, {
-                          replace: true,
-                        });
-                      }
-                    }}
-                    onRefresh={() => {
-                      loadIssues(true);
-                      loadLeaderboards();
-                    }}
-                    locations={locations}
-                    tags={tags}
-                  />
-                )}
                 {conflictItem && (
                   <ConflictModal
                     resolveItem={conflictItem}
@@ -874,6 +851,29 @@ export function App() {
             <NotFoundPage />
           </Route>
         </Switch>
+        {selectedIssue && (
+          <IssueDetailModal
+            issue={selectedIssue}
+            isOpen={true}
+            onClose={() => {
+              setSelectedIssue(null);
+              const currentParams = new URLSearchParams(searchString);
+              if (currentParams.has("issue_id")) {
+                currentParams.delete("issue_id");
+                const newSearch = currentParams.toString();
+                setLocation(newSearch ? `${currentPath}?${newSearch}` : currentPath, {
+                  replace: true,
+                });
+              }
+            }}
+            onRefresh={() => {
+              loadIssues(true);
+              loadLeaderboards();
+            }}
+            locations={locations}
+            tags={tags}
+          />
+        )}
       </AppShell>
       <SetupSuperadminModal
         isOpen={isSetupOpen}
