@@ -3,6 +3,7 @@ import {
   highlightSegments,
   normalizeSearchText,
   scoreTag,
+  searchRecords,
   searchTags,
 } from "../src/utils/tagSearch.ts";
 
@@ -75,6 +76,34 @@ describe("tag search", () => {
 
   it("filters out items with score 0", () => {
     expect(searchTags(tags, "zzzzzzzz")).toEqual([]);
+  });
+
+  it("ranks location records by exact code and supports multilingual typo search", () => {
+    const locations = [
+      {
+        code: "LINE_A1",
+        name_vi: "Chuyền May A1",
+        name_en: "Sewing Line A1",
+        name_zh: "缝纫一号线",
+      },
+      {
+        code: "LINE_B2",
+        name_vi: "Chuyền May B2",
+        name_en: "Sewing Line B2",
+        name_zh: "缝纫二号线",
+      },
+      {
+        code: "WH_01",
+        name_vi: "Kho hóa chất",
+        name_en: "Chemical warehouse",
+        name_zh: "化学品仓库",
+      },
+    ];
+
+    expect(searchRecords(locations, "LINE_A1")[0]?.code).toBe("LINE_A1");
+    expect(searchRecords(locations, "may chuyen")[0]?.code).toBe("LINE_A1");
+    expect(searchRecords(locations, "缝纫二号線")[0]?.code).toBe("LINE_B2");
+    expect(searchRecords(locations, "warehous")[0]?.code).toBe("WH_01");
   });
 
   it("highlights multiple separated tokens across text", () => {

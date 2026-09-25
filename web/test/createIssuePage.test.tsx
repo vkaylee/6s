@@ -315,6 +315,8 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(html).toContain("Chuyền May A1");
     expect(html).toContain("Chuyền May B2");
     expect(html).toContain('placeholder="Tìm theo mã, tên tiếng Việt, tiếng Trung..."');
+    expect(html).toContain('type="search"');
+    expect(html).toContain("overscroll-contain");
   });
 
   it("renders empty location search message when no matches found", () => {

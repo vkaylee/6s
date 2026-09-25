@@ -8,6 +8,7 @@ import {
   resolveLocationName,
 } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
+import { searchRecords } from "../utils/tagSearch.ts";
 
 interface LocationComboboxProps {
   locations: LocationItem[];
@@ -18,15 +19,6 @@ interface LocationComboboxProps {
 
 const RECENT_LOCATIONS_KEY = "recent_locations";
 const RECENT_LIMIT = 3;
-
-function normalize(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .trim();
-}
 
 function readRecentLocations(): string[] {
   try {
@@ -49,22 +41,26 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
   const recentLocations = recentCodes
     .map((code) => locations.find((location) => location.code === code))
     .filter((location): location is LocationItem => Boolean(location));
-  const term = normalize(searchTerm);
-  const filteredLocations = locations.filter((location) => {
-    if (!term) return true;
-    return [location.code, location.name_vi, location.name_en, location.name_zh].some((name) =>
-      normalize(name ?? "").includes(term),
-    );
-  });
-  const visibleRecent = recentLocations.filter((location) => filteredLocations.includes(location));
+  const term = searchTerm.trim();
+  const rankedLocations = searchRecords(locations, searchTerm);
+  const visibleRecent = recentLocations.filter((location) => rankedLocations.includes(location));
+  const recentCodesVisible = new Set(visibleRecent.map((location) => location.code));
+  const availableLocations = rankedLocations.filter(
+    (location) => !recentCodesVisible.has(location.code),
+  );
   const showSearch = true;
 
   useEffect(() => {
     if (!isOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const isTouch =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 640);
     const timer = window.setTimeout(() => {
-      if (showSearch) searchRef.current?.focus();
+      if (showSearch && !isTouch) {
+        searchRef.current?.focus();
+      }
     }, 0);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closePicker();
@@ -76,7 +72,6 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, showSearch]);
-
   const closePicker = () => {
     setIsOpen(false);
     setSearchTerm("");
@@ -141,17 +136,23 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center"
+          className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="presentation"
         >
+          <button
+            type="button"
+            onClick={closePicker}
+            aria-label={t("common.close")}
+            className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-none"
+          />
           <section
             id={dialogId}
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${dialogId}-title`}
-            className="w-full sm:max-w-lg max-h-[92dvh] bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-fade-in"
+            className="w-full sm:max-w-lg max-h-[85dvh] bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-fade-in"
           >
-            <header className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
+            <header className="shrink-0 flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
               <h2
                 id={`${dialogId}-title`}
                 className="text-base font-bold text-zinc-900 dark:text-zinc-100"
@@ -168,7 +169,7 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
               </button>
             </header>
             {showSearch && (
-              <div className="p-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="shrink-0 p-3 border-b border-zinc-100 dark:border-zinc-800">
                 <label htmlFor={`${dialogId}-search`} className="sr-only">
                   {t("issue.search_location_placeholder")}
                 </label>
@@ -180,18 +181,35 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
                   <input
                     ref={searchRef}
                     id={`${dialogId}-search`}
+                    type="search"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
                     placeholder={t("issue.search_location_placeholder")}
-                    className="w-full min-h-12 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full min-h-12 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 pl-10 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      aria-label={t("common.cancel")}
+                      onClick={() => {
+                        setSearchTerm("");
+                        searchRef.current?.focus();
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    >
+                      <X className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
             <div
               role="listbox"
               aria-label={t("common.location")}
-              className="overflow-y-auto p-3 space-y-2"
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2"
             >
               {!term && visibleRecent.length > 0 && (
                 <div>
@@ -215,12 +233,12 @@ export function LocationCombobox({ locations, value, onChange, error }: Location
                     {t("common.all")}
                   </p>
                 )}
-                {filteredLocations.length === 0 ? (
+                {availableLocations.length === 0 && term ? (
                   <p className="py-8 text-center text-sm text-zinc-400">
                     {t("issue.no_locations_found")}
                   </p>
                 ) : (
-                  filteredLocations.map((location) => (
+                  availableLocations.map((location) => (
                     <LocationOption
                       key={location.code}
                       location={location}

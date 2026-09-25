@@ -1,4 +1,4 @@
-export interface TagSearchRecord {
+export interface SearchRecord {
   code?: string;
   tag_code?: string;
   name_vi?: string;
@@ -9,6 +9,8 @@ export interface TagSearchRecord {
   label_zh?: string;
   use_count?: number;
 }
+
+export interface TagSearchRecord extends SearchRecord {}
 
 export function normalizeSearchText(value: string): string {
   return value
@@ -50,7 +52,7 @@ function tokenMatches(token: string, text: string, words: string[]): boolean {
   });
 }
 
-function recordFields(record: TagSearchRecord): string[] {
+function recordFields(record: SearchRecord): string[] {
   return [
     record.code ?? record.tag_code ?? "",
     record.name_vi ?? record.label_vi ?? "",
@@ -59,7 +61,7 @@ function recordFields(record: TagSearchRecord): string[] {
   ].map(normalizeSearchText);
 }
 
-export function scoreTag(record: TagSearchRecord, query: string): number {
+export function scoreRecord(record: SearchRecord, query: string): number {
   const normalizedQuery = normalizeSearchText(query);
   if (!normalizedQuery) return 0;
 
@@ -88,18 +90,26 @@ export function scoreTag(record: TagSearchRecord, query: string): number {
   return score;
 }
 
-export function searchTags<T extends TagSearchRecord>(tags: T[], query: string): T[] {
-  if (!normalizeSearchText(query)) return [...tags];
-  return tags
-    .map((tag, index) => ({ tag, index, score: scoreTag(tag, query) }))
+export function searchRecords<T extends SearchRecord>(records: T[], query: string): T[] {
+  if (!normalizeSearchText(query)) return [...records];
+  return records
+    .map((record, index) => ({ record, index, score: scoreRecord(record, query) }))
     .filter((result) => result.score > 0)
     .sort(
       (left, right) =>
         right.score - left.score ||
-        (right.tag.use_count ?? 0) - (left.tag.use_count ?? 0) ||
+        (right.record.use_count ?? 0) - (left.record.use_count ?? 0) ||
         left.index - right.index,
     )
-    .map(({ tag }) => tag);
+    .map(({ record }) => record);
+}
+
+export function scoreTag(record: TagSearchRecord, query: string): number {
+  return scoreRecord(record, query);
+}
+
+export function searchTags<T extends TagSearchRecord>(tags: T[], query: string): T[] {
+  return searchRecords(tags, query);
 }
 
 export interface HighlightSegment {
