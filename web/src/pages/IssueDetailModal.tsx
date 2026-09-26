@@ -875,7 +875,7 @@ export function IssueDetailModal({
   const dateLocale = locale === "zh" ? "zh-CN" : locale === "en" ? "en-US" : "vi-VN";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 2xl:p-8 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 2xl:p-8 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
       {/* Backdrop overlay button for a11y click-outside */}
       <button
         type="button"
@@ -890,9 +890,9 @@ export function IssueDetailModal({
         aria-modal="true"
         aria-labelledby="issue-detail-modal-title"
         tabIndex={-1}
-        className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:my-auto sm:rounded-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[calc(100dvh-1.5rem)] lg:max-h-[90vh] 2xl:max-h-[85vh]"
+        className="flex w-full max-w-none sm:max-w-lg lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl flex-col overflow-hidden rounded-none sm:rounded-3xl border-0 sm:border border-zinc-200 dark:border-zinc-800 bg-white shadow-2xl dark:bg-zinc-900 h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] lg:max-h-[90vh] 2xl:max-h-[85vh] my-0 sm:my-auto"
       >
-        <header className="sticky top-0 z-20 shrink-0 border-b border-zinc-200/80 bg-white/95 px-3.5 py-2.5 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/95 sm:px-5">
+        <header className="sticky top-0 z-20 shrink-0 border-b border-zinc-200/80 bg-white/95 px-3.5 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sm:pt-2.5 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/95 sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="shrink-0 font-mono text-xs font-semibold tracking-tight text-zinc-400 dark:text-zinc-500">
               #{currentIssue.id}
@@ -1640,7 +1640,7 @@ export function IssueDetailModal({
             </div>
 
             {/* Bottom Actions Bar (Integrated in sidebar for desktop, sticky/accessible) */}
-            <div className="sticky bottom-0 -mx-4 -mb-4 lg:-mx-6 lg:-mb-6 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:p-6 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200/80 dark:border-zinc-800/80 flex flex-col gap-2 shrink-0 z-10 shadow-xs">
+            <div className="sticky bottom-0 -mx-4 -mb-4 lg:-mx-6 lg:-mb-6 p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:p-6 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200/80 dark:border-zinc-800/80 flex flex-col gap-2 shrink-0 z-10 shadow-xs">
               {/* Actions: Resolve & Invalidate for OPEN status (80-20 ergonomic split) */}
               {currentIssue.status === IssueStatus.OPEN &&
                 (canResolveIssue || hasCapability(user, "issue:invalidate")) && (
@@ -1739,7 +1739,7 @@ export function IssueDetailModal({
 
         {/* Inline Action Confirmation Drawer (Glove Friendly, No Nested Modal Jump) */}
         {showConfirmAction && (
-          <div className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4 space-y-3 animate-fade-in shadow-inner">
+          <div className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 space-y-3 animate-fade-in shadow-inner">
             <div className="flex items-center justify-between">
               <h3 className="font-black text-sm text-zinc-900 dark:text-zinc-100">
                 {showConfirmAction === "CLOSE"
