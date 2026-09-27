@@ -81,7 +81,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   if (await actionsTrigger.isVisible()) {
     await actionsTrigger.click();
   }
-  await detail.getByRole('button', { name: deleteLabel }).click();
+  await detail.getByRole('menuitem', { name: deleteLabel }).click();
   const reasonInput = detail.locator('textarea').first();
   await expect(reasonInput).toBeVisible();
   await reasonInput.fill('Duplicate report from UI dialog');
@@ -167,8 +167,9 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   expect(reportRestoredResponse.ok(), await reportRestoredResponse.text()).toBe(true);
   const reportRestored = (await reportRestoredResponse.json()).data;
   expect(Number(reportRestored.kpi.totalIssues)).toBe(Number(reportBefore.kpi.totalIssues));
-  await expect(deletedDetail.getByRole('button', { name: deleteLabel })).toBeVisible();
-  await expect(deletedDetail.getByRole('button', { name: restoreLabel })).toHaveCount(0);
+  await deletedDetail.getByRole('button', { name: actionsLabel }).click();
+  await expect(deletedDetail.getByRole('menuitem', { name: deleteLabel })).toBeVisible();
+  await expect(deletedDetail.getByRole('menuitem', { name: restoreLabel })).toHaveCount(0);
   await deletedDetail.getByRole('button', { name: /close|đóng|关闭/i }).first().click();
 
   await page.getByRole('button', { name: 'Advanced Filters', exact: true }).click();
