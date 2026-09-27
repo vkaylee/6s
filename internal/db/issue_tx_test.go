@@ -199,8 +199,9 @@ func issueValues(issue Issue) []driver.Value {
 		issue.ID, issue.ClientUuid, issue.Version, issue.SiteID, issue.CreatorID,
 		nil, nil, nil, issue.Category, issue.CauseType, issue.VisibilityClass,
 		issue.LocationCode, nil, nil, "UNVERIFIED", nil, nil, issue.PhotoBefore, nil, nil,
-		nil, nil, nil, nil, nil, int16(3), issue.Status, issue.CreatedAt, nil, nil,
+		nil, nil, nil, nil, nil, int16(3), issue.Status, issue.CreatedAt, nil, nil, nil, nil, nil,
 	}
+
 }
 
 func TestPatchIssueWithTagsAtomic_RollsBackAndCommits(t *testing.T) {
@@ -490,7 +491,7 @@ func TestCreateIssueWithSideEffects_RollbackOnSideEffectFailure(t *testing.T) {
 					return []CreateOutboxEntryParams{{IssueID: id, EventType: "NEW_ISSUE", Channel: "WXPUSHER"}}
 				},
 				func(id int64) []InsertScoreLogParams {
-					return []InsertScoreLogParams{{IssueID: id, TargetType: "LOCATION", TargetID: "LINE_A1", RuleKey: "penalty_normal", Points: -2}}
+					return []InsertScoreLogParams{{ID: id, TargetType: "LOCATION", TargetID: "LINE_A1", RuleKey: "penalty_normal", Points: -2}}
 				})
 			if tc.wantErr == (err == nil) {
 				t.Fatalf("error mismatch: wantErr=%v got %v", tc.wantErr, err)

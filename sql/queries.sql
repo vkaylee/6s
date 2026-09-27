@@ -404,8 +404,10 @@ SELECT t.id AS team_id,
        COUNT(DISTINCT c.id)::bigint AS confirmed_cause_count
 FROM teams t
 LEFT JOIN issues a ON a.assigned_team_id = t.id
+    AND a.deleted_at IS NULL
     AND a.created_at >= CURRENT_TIMESTAMP - make_interval(days => sqlc.arg('days')::int)
 LEFT JOIN issues c ON c.cause_team_id = t.id
+    AND c.deleted_at IS NULL
     AND c.cause_status = 'CONFIRMED'
     AND c.created_at >= CURRENT_TIMESTAMP - make_interval(days => sqlc.arg('days')::int)
 WHERE t.site_id = sqlc.arg('site_id')
@@ -475,6 +477,31 @@ WHERE client_uuid = $1 LIMIT 1;
 -- name: GetIssueByID :one
 SELECT * FROM issues
 WHERE id = $1 LIMIT 1;
+-- name: GetIssueByIDIncludingDeleted :one
+SELECT * FROM issues WHERE id = $1 LIMIT 1;
+
+-- name: LockIssueForUpdate :one
+SELECT * FROM issues WHERE id = $1 FOR UPDATE;
+
+-- name: SoftDeleteIssue :one
+UPDATE issues
+SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $2, delete_reason = $3, version = version + 1
+WHERE id = $1 AND deleted_at IS NULL AND version = $4
+RETURNING *;
+
+-- name: RestoreIssue :one
+UPDATE issues
+SET deleted_at = NULL, deleted_by = NULL, delete_reason = NULL, version = version + 1
+WHERE id = $1 AND deleted_at IS NOT NULL AND version = $2
+RETURNING *;
+
+-- name: CancelPendingOutboxForIssue :exec
+UPDATE notification_outbox
+SET status = 'CANCELLED', last_error = 'issue soft-deleted'
+WHERE issue_id = $1 AND status IN ('PENDING', 'SENDING');
+
+-- name: GetIssueDeletionState :one
+SELECT id, deleted_at FROM issues WHERE id = $1;
 
 -- name: CreateIssue :one
 INSERT INTO issues (
@@ -571,7 +598,8 @@ FROM issues i
 JOIN locations loc ON i.location_code = loc.code
 JOIN users u ON i.creator_id = u.id
 LEFT JOIN users res ON i.resolver_id = res.id
-WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.status = ANY(sqlc.narg('statuses')::varchar[]))
+WHERE ((sqlc.arg('deletion')::varchar = 'deleted' AND i.deleted_at IS NOT NULL) OR (sqlc.arg('deletion')::varchar <> 'deleted' AND i.deleted_at IS NULL))
+  AND (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.status = ANY(sqlc.narg('statuses')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR i.category = ANY(sqlc.narg('categories')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
   AND (sqlc.narg('tag_code')::varchar IS NULL OR EXISTS (SELECT 1 FROM issue_tags it WHERE it.issue_id = i.id AND it.tag_code = sqlc.narg('tag_code')::varchar))
@@ -587,7 +615,8 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountIssuesFiltered :one
 SELECT COUNT(*) FROM issues i
-WHERE (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.status = ANY(sqlc.narg('statuses')::varchar[]))
+WHERE ((sqlc.arg('deletion')::varchar = 'deleted' AND i.deleted_at IS NOT NULL) OR (sqlc.arg('deletion')::varchar <> 'deleted' AND i.deleted_at IS NULL))
+  AND (coalesce(cardinality(sqlc.narg('statuses')::varchar[]), 0) = 0 OR i.status = ANY(sqlc.narg('statuses')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('categories')::varchar[]), 0) = 0 OR i.category = ANY(sqlc.narg('categories')::varchar[]))
   AND (coalesce(cardinality(sqlc.narg('location_codes')::varchar[]), 0) = 0 OR i.location_code = ANY(sqlc.narg('location_codes')::varchar[]))
   AND (sqlc.narg('tag_code')::varchar IS NULL OR EXISTS (SELECT 1 FROM issue_tags it WHERE it.issue_id = i.id AND it.tag_code = sqlc.narg('tag_code')::varchar))
@@ -604,7 +633,7 @@ SET status = 'PENDING_REVIEW',
     photo_after = $3,
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
-WHERE id = $1 AND status = 'OPEN' AND version = $4
+WHERE id = $1 AND status = 'OPEN' AND deleted_at IS NULL AND version = $4
 RETURNING *;
 
 -- name: ForceResolveIssue :one
@@ -614,40 +643,39 @@ SET status = 'PENDING_REVIEW',
     photo_after = $3,
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
-WHERE id = $1
+WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
-
 -- name: CloseIssue :one
 UPDATE issues
 SET status = 'CLOSED',
     score_rating = $2,
     closed_at = CURRENT_TIMESTAMP,
     version = version + 1
-WHERE id = $1 
-  AND status = 'PENDING_REVIEW' 
+WHERE id = $1
+  AND deleted_at IS NULL
+  AND status = 'PENDING_REVIEW'
   AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version'))
 RETURNING *;
-
 -- name: ReopenIssue :one
 UPDATE issues
 SET status = 'OPEN',
     reject_reason = $2,
     version = version + 1
-WHERE id = $1 
-  AND status = 'PENDING_REVIEW' 
+WHERE id = $1
+  AND deleted_at IS NULL
+  AND status = 'PENDING_REVIEW'
   AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version'))
 RETURNING *;
-
 -- name: InvalidateIssue :one
 UPDATE issues
 SET status = 'INVALID',
     reject_reason = $2,
     version = version + 1
-WHERE id = $1 
-  AND status IN ('OPEN', 'PENDING_REVIEW') 
+WHERE id = $1
+  AND deleted_at IS NULL
+  AND status IN ('OPEN', 'PENDING_REVIEW')
   AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version'))
 RETURNING *;
-
 -- name: PatchIssue :one
 UPDATE issues
 SET category = COALESCE(sqlc.narg('category'), category),
@@ -662,22 +690,22 @@ SET category = COALESCE(sqlc.narg('category'), category),
     cause_team_id = CASE WHEN sqlc.arg('set_cause_team_id')::boolean THEN sqlc.narg('cause_team_id')::bigint ELSE cause_team_id END,
     cause_status = CASE WHEN sqlc.arg('set_cause_status')::boolean THEN COALESCE(sqlc.narg('cause_status'), 'UNVERIFIED') ELSE cause_status END,
     version = version + 1
-WHERE id = sqlc.arg('id') AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version')::int)
+WHERE id = sqlc.arg('id') AND deleted_at IS NULL AND (sqlc.narg('expected_version')::int IS NULL OR version = sqlc.narg('expected_version')::int)
 RETURNING *;
 -- name: CreateOutboxEntry :one
-INSERT INTO notification_outbox (
-    issue_id, event_type, channel, payload, status, next_retry_at
-) VALUES (
-    $1, $2, $3, $4, 'PENDING', CURRENT_TIMESTAMP
-)
+INSERT INTO notification_outbox (issue_id, event_type, channel, payload, status, next_retry_at)
+SELECT $1, $2, $3, $4, 'PENDING', CURRENT_TIMESTAMP
+WHERE EXISTS (SELECT 1 FROM issues WHERE id = $1 AND deleted_at IS NULL)
 RETURNING *;
 
 -- name: InsertScoreLog :exec
 INSERT INTO score_logs (
     issue_id, target_type, target_id, rule_key, points, created_at, penalty_date
-) VALUES (
-    $1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6
-);
+)
+SELECT i.id, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6
+FROM issues i
+WHERE i.id = $1 AND i.deleted_at IS NULL
+FOR UPDATE;
 
 -- name: GetScoringRules :many
 SELECT * FROM scoring_rules
@@ -703,25 +731,29 @@ SELECT COALESCE(SUM(points), 0)::bigint AS sum_points
 FROM score_logs
 WHERE target_type = 'LOCATION'
   AND target_id = $1
-  AND created_at >= $2;
+  AND score_logs.created_at >= $2
+  AND EXISTS (SELECT 1 FROM issues i WHERE i.id = score_logs.issue_id AND i.deleted_at IS NULL);
 
 -- name: CountOpenIssuesByLocation :one
 SELECT COUNT(*)::bigint AS open_count
 FROM issues
 WHERE location_code = $1
-  AND status = 'OPEN';
+  AND status = 'OPEN'
+  AND deleted_at IS NULL;
 
 -- name: CountOverdueIssuesByLocation :one
 SELECT COUNT(*)::bigint AS overdue_count
 FROM issues
 WHERE location_code = $1
   AND status = 'OPEN'
+  AND deleted_at IS NULL
   AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours';
 
 -- name: GetLocationLeaderboardStats :many
 WITH score_totals AS (
     SELECT target_id AS location_code, COALESCE(SUM(points), 0)::bigint AS sum_points
     FROM score_logs
+    JOIN issues si ON si.id = score_logs.issue_id AND si.deleted_at IS NULL
     WHERE target_type = 'LOCATION' AND score_logs.created_at >= sqlc.arg('created_at')
       AND (sqlc.narg('location_code')::varchar IS NULL OR score_logs.target_id = sqlc.narg('location_code'))
     GROUP BY target_id
@@ -730,6 +762,7 @@ WITH score_totals AS (
            COUNT(*) FILTER (WHERE status = 'OPEN')::bigint AS open_count,
            COUNT(*) FILTER (WHERE status = 'OPEN' AND issues.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours')::bigint AS overdue_count
     FROM issues
+    WHERE deleted_at IS NULL
     GROUP BY location_code
 )
 SELECT l.code AS location_code,
@@ -756,7 +789,7 @@ SELECT u.id AS user_id,
              THEN i.id END)::bigint AS safety_count
 FROM users u
 JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
-LEFT JOIN issues i ON i.id = sl.issue_id
+JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
 WHERE sl.created_at >= sqlc.arg('created_at')
 GROUP BY u.id, u.full_name
 ORDER BY points DESC, valid_count DESC, u.id ASC
@@ -764,16 +797,24 @@ LIMIT 50;
 
 
 -- name: ListScoreLogsSince :many
-SELECT * FROM score_logs
-WHERE created_at >= $1
-ORDER BY id ASC;
+SELECT sl.* FROM score_logs sl
+JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
+WHERE sl.created_at >= $1
+ORDER BY sl.id ASC;
 
 -- name: ListScoreLogsByIssue :many
 SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
+JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
 WHERE sl.issue_id = $1
 ORDER BY sl.id ASC;
+-- name: ListScoreLogsByIssueIncludingDeleted :many
+SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points, sl.created_at, sl.penalty_date, COALESCE(sr.description, sl.rule_key) AS rule_description
+FROM score_logs sl
+LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
+WHERE sl.issue_id = $1
+ORDER BY sl.created_at ASC, sl.id ASC;
 
 -- name: ListScoreLogsByTargetSince :many
 SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description,
@@ -783,7 +824,7 @@ SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description,
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
 LEFT JOIN issues i ON sl.issue_id = i.id
-WHERE sl.target_type = $1 AND sl.target_id = $2 AND sl.created_at >= $3
+WHERE sl.target_type = $1 AND sl.target_id = $2 AND sl.created_at >= $3 AND i.deleted_at IS NULL
 ORDER BY sl.created_at DESC, sl.id DESC;
 
 -- name: GetNotificationConfig :one
@@ -831,37 +872,34 @@ RETURNING *;
 
 -- name: ClaimOutboxTasks :many
 UPDATE notification_outbox
-SET status = 'SENDING',
-    next_retry_at = CURRENT_TIMESTAMP + INTERVAL '120 seconds'
+SET status = 'SENDING', next_retry_at = CURRENT_TIMESTAMP + INTERVAL '120 seconds'
 WHERE id IN (
     SELECT id FROM notification_outbox
-    WHERE (status = 'PENDING' AND next_retry_at <= CURRENT_TIMESTAMP)
-       OR (status = 'SENDING' AND next_retry_at < CURRENT_TIMESTAMP)
-    ORDER BY id ASC
-    LIMIT $1
-    FOR UPDATE SKIP LOCKED
+    WHERE ((notification_outbox.status = 'PENDING' AND notification_outbox.next_retry_at <= CURRENT_TIMESTAMP) OR (notification_outbox.status = 'SENDING' AND notification_outbox.next_retry_at < CURRENT_TIMESTAMP))
+      AND EXISTS (SELECT 1 FROM issues i WHERE i.id = notification_outbox.issue_id AND i.deleted_at IS NULL)
+    ORDER BY notification_outbox.id ASC LIMIT $1 FOR UPDATE SKIP LOCKED
 )
 RETURNING *;
 
 -- name: MarkOutboxSent :exec
-UPDATE notification_outbox
-SET status = 'SENT',
-    sent_at = CURRENT_TIMESTAMP
-WHERE id = $1 AND status = 'SENDING';
+UPDATE notification_outbox SET status = 'SENT', sent_at = CURRENT_TIMESTAMP
+WHERE notification_outbox.id = $1 AND notification_outbox.status = 'SENDING'
+  AND EXISTS (SELECT 1 FROM issues i WHERE i.id = notification_outbox.issue_id AND i.deleted_at IS NULL);
 
 -- name: MarkOutboxFailed :exec
-UPDATE notification_outbox
-SET status = 'FAILED',
-    last_error = $1
-WHERE id = $2 AND status = 'SENDING';
+UPDATE notification_outbox SET status = 'FAILED', last_error = $1
+WHERE notification_outbox.id = $2 AND notification_outbox.status = 'SENDING'
+  AND EXISTS (SELECT 1 FROM issues i WHERE i.id = notification_outbox.issue_id AND i.deleted_at IS NULL);
 
 -- name: RetryOutboxTask :exec
-UPDATE notification_outbox
-SET status = 'PENDING',
-    retry_count = retry_count + 1,
-    last_error = $1,
+UPDATE notification_outbox SET status = 'PENDING', retry_count = retry_count + 1, last_error = $1,
     next_retry_at = CURRENT_TIMESTAMP + ($2 * INTERVAL '1 second')
-WHERE id = $3 AND status = 'SENDING';
+WHERE notification_outbox.id = $3 AND notification_outbox.status = 'SENDING'
+  AND EXISTS (SELECT 1 FROM issues i WHERE i.id = notification_outbox.issue_id AND i.deleted_at IS NULL);
+
+-- name: CancelOutboxTask :exec
+UPDATE notification_outbox SET status = 'CANCELLED', last_error = $1
+WHERE id = $2 AND status = 'SENDING';
 
 -- name: GetLastCronTaskLog :one
 SELECT * FROM cron_task_logs
@@ -881,6 +919,7 @@ RETURNING *;
 SELECT id, location_code, created_at
 FROM issues
 WHERE status = 'OPEN'
+  AND deleted_at IS NULL
   AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'
 ORDER BY id ASC;
 
@@ -892,18 +931,22 @@ UNION
 SELECT photo_after AS photo_name FROM issues WHERE photo_after IS NOT NULL AND photo_after != '';
 
 -- name: InsertScoreLogsForIssue :exec
+WITH locked_issue AS (
+    SELECT id FROM issues WHERE id = sqlc.arg('issue_id')::bigint AND deleted_at IS NULL FOR UPDATE
+)
 INSERT INTO score_logs (
     issue_id, target_type, target_id, rule_key, points, created_at, penalty_date
 )
 SELECT
-    sqlc.arg('issue_id')::bigint,
+    locked_issue.id,
     t.target_type,
     t.target_id,
     t.rule_key,
     t.points,
     CURRENT_TIMESTAMP,
     NULLIF(t.penalty_date, '')::date
-FROM (
+FROM locked_issue
+CROSS JOIN (
     SELECT
         unnest(sqlc.arg('target_types')::varchar[]) AS target_type,
         unnest(sqlc.arg('target_ids')::varchar[]) AS target_id,
@@ -928,7 +971,8 @@ SELECT
     COUNT(CASE WHEN category = '6S' AND status != 'CLOSED' THEN 1 END)::bigint AS safety_issues,
     COUNT(CASE WHEN status = 'OPEN' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours' THEN 1 END)::bigint AS overdue_issues
 FROM issues i
-WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
+WHERE i.deleted_at IS NULL
+  AND i.created_at >= sqlc.arg('date_from')::timestamptz
   AND i.created_at < sqlc.arg('date_to')::timestamptz
   AND i.site_id = sqlc.arg('site_id')::bigint
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
@@ -962,7 +1006,8 @@ WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
 -- name: GetCategoryBreakdown :many
 SELECT i.category, COUNT(*)::bigint AS count
 FROM issues i
-WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
+WHERE i.deleted_at IS NULL
+  AND i.created_at >= sqlc.arg('date_from')::timestamptz
   AND i.created_at < sqlc.arg('date_to')::timestamptz
   AND i.site_id = sqlc.arg('site_id')::bigint
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
@@ -1005,7 +1050,7 @@ FROM generate_series(
     date_trunc('day', sqlc.arg('date_to')::timestamptz) - INTERVAL '1 day',
     INTERVAL '1 day'
 ) AS d(day)
-LEFT JOIN issues i ON (i.created_at::date = d.day::date OR i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date))
+LEFT JOIN issues i ON i.deleted_at IS NULL AND (i.created_at::date = d.day::date OR i.closed_at::date = d.day::date OR (i.closed_at IS NULL AND i.resolved_at::date = d.day::date))
   AND i.site_id = sqlc.arg('site_id')::bigint
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
   AND (
@@ -1039,7 +1084,8 @@ GROUP BY d.day ORDER BY d.day ASC;
 -- name: GetTopViolatedTags :many
 SELECT t.code AS tag_code, t.category, t.name_vi, t.name_zh, t.name_en, COUNT(it.issue_id)::bigint AS violation_count
 FROM issue_tags it JOIN tags t ON it.tag_code = t.code JOIN issues i ON i.id = it.issue_id
-WHERE i.created_at >= sqlc.arg('date_from')::timestamptz
+WHERE i.deleted_at IS NULL
+  AND i.created_at >= sqlc.arg('date_from')::timestamptz
   AND i.created_at < sqlc.arg('date_to')::timestamptz
   AND i.site_id = sqlc.arg('site_id')::bigint
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
@@ -1075,7 +1121,8 @@ ORDER BY violation_count DESC, t.code ASC LIMIT sqlc.arg('limit')::int;
 -- name: ListIssuesForExport :many
 SELECT i.id, i.client_uuid, i.category, i.location_code, loc.name_vi AS location_name_vi, loc.name_zh AS location_name_zh, loc.name_en AS location_name_en, i.status, i.description, i.reject_reason, u.username AS creator_username, u.full_name AS creator_full_name, res.username AS resolver_username, res.full_name AS resolver_full_name, i.score_rating, i.created_at, i.resolved_at, i.closed_at, COALESCE(STRING_AGG(it.tag_code, '; ' ORDER BY it.tag_code), '')::varchar AS tags_string
 FROM issues i JOIN locations loc ON i.location_code = loc.code JOIN users u ON i.creator_id = u.id LEFT JOIN users res ON i.resolver_id = res.id LEFT JOIN issue_tags it ON it.issue_id = i.id
-WHERE (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
+WHERE i.deleted_at IS NULL
+  AND (sqlc.narg('status')::varchar IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('category')::varchar IS NULL OR i.category = sqlc.narg('category'))
   AND (sqlc.narg('location_code')::varchar IS NULL OR i.location_code = sqlc.narg('location_code'))
   AND (sqlc.narg('assigned_team_id')::bigint IS NULL OR i.assigned_team_id = sqlc.narg('assigned_team_id')::bigint)

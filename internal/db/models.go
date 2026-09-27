@@ -92,6 +92,9 @@ type Issue struct {
 	CreatedAt                  time.Time
 	ResolvedAt                 sql.NullTime
 	ClosedAt                   sql.NullTime
+	DeletedAt                  sql.NullTime
+	DeletedBy                  sql.NullInt64
+	DeleteReason               sql.NullString
 }
 
 type IssueTag struct {

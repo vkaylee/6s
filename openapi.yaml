@@ -231,9 +231,8 @@ components:
         - category
         - location_code
         - tags
-        - photo_before
-        - status
         - created_at
+        - deleted_at
       properties:
         id:
           type: integer
@@ -343,17 +342,10 @@ components:
           type: string
           enum: [OPEN, PENDING_REVIEW, CLOSED, INVALID]
           example: OPEN
-        created_at:
-          type: string
+        deleted_at:
+          type: [string, 'null']
           format: date-time
-        resolved_at:
-          type: string
-          format: date-time
-          nullable: true
-        closed_at:
-          type: string
-          format: date-time
-          nullable: true
+          description: Soft-delete timestamp; null for active issues.
 
     LocationHealthScore:
       type: object
@@ -526,16 +518,22 @@ components:
 
     IssueAllowedActions:
       type: object
-      required: [assign, verify_cause, resolve, close]
+      required: [assign, verify_cause, resolve, close, delete, restore]
       properties:
-        assign:
-          type: boolean
-        verify_cause:
-          type: boolean
-        resolve:
-          type: boolean
-        close:
-          type: boolean
+        assign: {type: boolean}
+        verify_cause: {type: boolean}
+        resolve: {type: boolean}
+        close: {type: boolean}
+        delete: {type: boolean}
+        restore: {type: boolean}
+
+    IssueMutation:
+      type: object
+      required: [id, version, deleted_at]
+      properties:
+        id: {type: integer}
+        version: {type: integer}
+        deleted_at: {type: [string, 'null'], format: date-time}
 
     TeamKPI:
       type: object
@@ -1105,6 +1103,14 @@ paths:
           schema:
             type: string
             enum: [OPEN, PENDING_REVIEW, CLOSED, INVALID]
+        - name: deletion
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, deleted]
+            default: active
+          description: Deleted view requires issue:view_deleted.
         - name: category
           in: query
           description: Chấp nhận cả alias số nhiều `categories`
@@ -1176,8 +1182,12 @@ paths:
         - name: id
           in: path
           required: true
-          schema:
-            type: integer
+          schema: {type: integer}
+        - name: deletion
+          in: query
+          required: false
+          schema: {type: string, enum: [active, deleted], default: active}
+          description: Explicit deleted requires issue:view_deleted.
       responses:
         '200':
           description: Chi tiết issue
@@ -1581,6 +1591,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /issues/{id}/delete:
+    post:
+      operationId: deleteIssue
+      summary: Soft-delete an issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: integer}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, expected_version]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 1000}
+                expected_version: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Issue soft-deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/IssueMutation'}
+  /issues/{id}/restore:
+    post:
+      operationId: restoreIssue
+      summary: Restore a soft-deleted issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: integer}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version]
+              properties:
+                expected_version: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Issue restored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/IssueMutation'}
   /leaderboard/locations:
     get:
       operationId: getLocationLeaderboard
@@ -2687,8 +2754,11 @@ paths:
         - name: id
           in: path
           required: true
-          schema:
-            type: integer
+          schema: {type: integer}
+        - name: deletion
+          in: query
+          required: false
+          schema: {type: string, enum: [active, deleted], default: active}
       responses:
         '200':
           description: Danh sách score logs

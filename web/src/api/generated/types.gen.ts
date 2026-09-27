@@ -138,14 +138,15 @@ export type Issue = {
     tag_details?: Array<TagDetail>;
     description?: string;
     reject_reason?: string;
-    photo_before: string;
+    photo_before?: string;
     photo_detail?: string;
     photo_after?: string;
     score_rating?: number;
-    status: 'OPEN' | 'PENDING_REVIEW' | 'CLOSED' | 'INVALID';
-    created_at: string;
-    resolved_at?: string;
-    closed_at?: string;
+    status?: 'OPEN' | 'PENDING_REVIEW' | 'CLOSED' | 'INVALID';
+    /**
+     * Soft-delete timestamp; null for active issues.
+     */
+    deleted_at: string | null;
 };
 
 export type LocationHealthScore = {
@@ -230,6 +231,14 @@ export type IssueAllowedActions = {
     verify_cause: boolean;
     resolve: boolean;
     close: boolean;
+    delete: boolean;
+    restore: boolean;
+};
+
+export type IssueMutation = {
+    id: number;
+    version: number;
+    deleted_at: string | null;
 };
 
 export type TeamKpi = {
@@ -618,6 +627,10 @@ export type ListIssuesData = {
          */
         status?: 'OPEN' | 'PENDING_REVIEW' | 'CLOSED' | 'INVALID';
         /**
+         * Deleted view requires issue:view_deleted.
+         */
+        deletion?: 'active' | 'deleted';
+        /**
          * Chấp nhận cả alias số nhiều `categories`
          */
         category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
@@ -664,7 +677,12 @@ export type GetIssueData = {
     path: {
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Explicit deleted requires issue:view_deleted.
+         */
+        deletion?: 'active' | 'deleted';
+    };
     url: '/issues/{id}';
 };
 
@@ -979,6 +997,51 @@ export type InvalidateIssueResponses = {
 };
 
 export type InvalidateIssueResponse = InvalidateIssueResponses[keyof InvalidateIssueResponses];
+
+export type DeleteIssueData = {
+    body: {
+        reason: string;
+        expected_version: number;
+    };
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/issues/{id}/delete';
+};
+
+export type DeleteIssueResponses = {
+    /**
+     * Issue soft-deleted
+     */
+    200: {
+        data: IssueMutation;
+    };
+};
+
+export type DeleteIssueResponse = DeleteIssueResponses[keyof DeleteIssueResponses];
+
+export type RestoreIssueData = {
+    body: {
+        expected_version: number;
+    };
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/issues/{id}/restore';
+};
+
+export type RestoreIssueResponses = {
+    /**
+     * Issue restored
+     */
+    200: {
+        data: IssueMutation;
+    };
+};
+
+export type RestoreIssueResponse = RestoreIssueResponses[keyof RestoreIssueResponses];
 
 export type GetLocationLeaderboardData = {
     body?: never;
@@ -1799,6 +1862,15 @@ export type ReviewIssueWithAiData = {
     body: {
         issue_id: number;
         lang: string;
+        /**
+         * Thẻ mới người dùng đã chọn trước đó để AI biết và xem xét cùng bối cảnh
+         */
+        proposed_tags?: Array<{
+            name_vi: string;
+            name_zh?: string;
+            name_en?: string;
+            category: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+        }>;
     };
     path?: never;
     query?: never;
@@ -1951,7 +2023,9 @@ export type GetIssueScoreLogsData = {
     path: {
         id: number;
     };
-    query?: never;
+    query?: {
+        deletion?: 'active' | 'deleted';
+    };
     url: '/issues/{id}/score-logs';
 };
 

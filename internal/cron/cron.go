@@ -144,9 +144,9 @@ func (r *Runner) RunOverduePenaltyScan(ctx context.Context, penaltyDateStr strin
 
 	penalizedCount := 0
 	for _, iss := range issues {
-		// Insert score log with unique index uq_score_logs_overdue (idempotent)
+		// Insert score log with unique index uq_score_logs_overdue (idempotent).
 		insErr := r.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
-			IssueID:     iss.ID,
+			ID:          iss.ID,
 			TargetType:  "LOCATION",
 			TargetID:    iss.LocationCode,
 			RuleKey:     "penalty_overdue",

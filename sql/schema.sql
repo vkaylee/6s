@@ -174,7 +174,12 @@ CREATE TABLE IF NOT EXISTS issues (
     status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at TIMESTAMPTZ,
-    closed_at TIMESTAMPTZ
+    closed_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ,
+    deleted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    delete_reason TEXT,
+    CHECK ((deleted_at IS NULL AND deleted_by IS NULL AND delete_reason IS NULL)
+        OR (deleted_at IS NOT NULL AND deleted_by IS NOT NULL AND delete_reason IS NOT NULL AND char_length(delete_reason) BETWEEN 1 AND 1000))
 );
 
 CREATE TABLE IF NOT EXISTS issue_tags (
@@ -189,7 +194,7 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
     event_type VARCHAR(50) NOT NULL,
     channel VARCHAR(50) NOT NULL,
     payload JSONB NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'SENDING', 'SENT', 'FAILED', 'CANCELLED')),
     retry_count INT NOT NULL DEFAULT 0,
     max_retries INT NOT NULL DEFAULT 5,
     last_error TEXT,

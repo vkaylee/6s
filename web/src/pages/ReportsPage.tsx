@@ -30,6 +30,7 @@ import {
 import { Link } from "wouter";
 
 import { apiClient, fetchAuthenticatedBlob } from "../api/client.ts";
+import { subscribeIssueEvents } from "../api/issueEvents.ts";
 import { fetchIssuePage, fetchLocations, fetchTags } from "../api/operations.ts";
 import { IssueCard } from "../components/IssueCard.tsx";
 import { PageContainer } from "../components/PageContainer.tsx";
@@ -229,6 +230,13 @@ export function ReportsPage() {
   useEffect(() => {
     loadData();
   }, [daysRange, selectedLocationFilter]);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+    return subscribeIssueEvents(() => {
+      loadData();
+      if (activeTab === "TEAMS") loadTeamReport();
+    });
+  }, [activeTab, daysRange, selectedLocationFilter]);
   // Fetch drilldown issues from backend whenever drilldown filter or page changes
   useEffect(() => {
     if (!drilldownType) {

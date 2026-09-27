@@ -303,7 +303,7 @@ class SyncEngine {
         typeof err === "object" &&
         err !== null &&
         "status" in err &&
-        (err as { status: number }).status === 409
+        ((err as { status: number }).status === 409 || (err as { status: number }).status === 404)
       ) {
         return "CONFLICT";
       }

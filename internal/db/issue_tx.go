@@ -3,7 +3,9 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // PatchIssueWithTagsAtomic commits an issue patch and full tag replacement together.
@@ -78,7 +80,190 @@ func (q *Queries) patchIssueWithAuditAtomic(ctx context.Context, patch PatchIssu
 	return updated, nil
 }
 
-// CreateIssueWithSideEffects commits issue creation and all durable side effects together.
+// DeleteIssueAtomic soft-deletes an issue, cancels pending notifications, and writes audit atomically.
+func (q *Queries) DeleteIssueAtomic(ctx context.Context, params SoftDeleteIssueParams, audit InsertAuditLogParams) (Issue, error) {
+	return q.issueLifecycleAtomic(ctx, func(txq *Queries) (Issue, error) {
+		before, err := txq.LockIssueForUpdate(ctx, params.ID)
+		if err != nil {
+			return Issue{}, fmt.Errorf("lock issue for delete: %w", err)
+		}
+		updated, err := txq.SoftDeleteIssue(ctx, params)
+		if err != nil {
+			return Issue{}, fmt.Errorf("soft-delete issue: %w", err)
+		}
+		if err := txq.CancelPendingOutboxForIssue(ctx, params.ID); err != nil {
+			return Issue{}, fmt.Errorf("cancel issue notifications: %w", err)
+		}
+		audit.OldValue, _ = json.Marshal(map[string]any{"status": before.Status, "version": before.Version, "deleted_at": nullableTime(before.DeletedAt), "deleted_by": nullableInt(before.DeletedBy), "delete_reason": nullableString(before.DeleteReason)})
+		audit.NewValue, _ = json.Marshal(map[string]any{"status": updated.Status, "version": updated.Version, "deleted_at": nullableTime(updated.DeletedAt), "deleted_by": nullableInt(updated.DeletedBy), "delete_reason": nullableString(updated.DeleteReason)})
+		if err := txq.InsertAuditLog(ctx, audit); err != nil {
+			return Issue{}, fmt.Errorf("audit issue deletion: %w", err)
+		}
+		return updated, nil
+	})
+}
+
+// RestoreIssueAtomic restores an issue and writes audit atomically.
+func (q *Queries) RestoreIssueAtomic(ctx context.Context, params RestoreIssueParams, audit InsertAuditLogParams) (Issue, error) {
+	return q.issueLifecycleAtomic(ctx, func(txq *Queries) (Issue, error) {
+		before, err := txq.LockIssueForUpdate(ctx, params.ID)
+		if err != nil {
+			return Issue{}, fmt.Errorf("lock issue for restore: %w", err)
+		}
+		updated, err := txq.RestoreIssue(ctx, params)
+		if err != nil {
+			return Issue{}, fmt.Errorf("restore issue: %w", err)
+		}
+		audit.OldValue, _ = json.Marshal(map[string]any{"status": before.Status, "version": before.Version, "deleted_at": nullableTime(before.DeletedAt), "deleted_by": nullableInt(before.DeletedBy), "delete_reason": nullableString(before.DeleteReason)})
+		audit.NewValue, _ = json.Marshal(map[string]any{"status": updated.Status, "version": updated.Version, "deleted_at": nullableTime(updated.DeletedAt), "deleted_by": nullableInt(updated.DeletedBy), "delete_reason": nullableString(updated.DeleteReason)})
+		if err := txq.InsertAuditLog(ctx, audit); err != nil {
+			return Issue{}, fmt.Errorf("audit issue restoration: %w", err)
+		}
+		return updated, nil
+	})
+}
+
+func nullableTime(v sql.NullTime) any {
+	if !v.Valid {
+		return nil
+	}
+	return v.Time.Format(time.RFC3339)
+}
+func nullableInt(v sql.NullInt64) any {
+	if !v.Valid {
+		return nil
+	}
+	return v.Int64
+}
+func nullableString(v sql.NullString) any {
+	if !v.Valid {
+		return nil
+	}
+	return v.String
+}
+
+func (q *Queries) issueLifecycleAtomic(ctx context.Context, operation func(*Queries) (Issue, error)) (Issue, error) {
+	beginner, ok := q.db.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+	})
+	if !ok {
+		return Issue{}, fmt.Errorf("database does not support transactions")
+	}
+	tx, err := beginner.BeginTx(ctx, nil)
+	if err != nil {
+		return Issue{}, fmt.Errorf("begin issue lifecycle transaction: %w", err)
+	}
+	updated, err := operation(q.WithTx(tx))
+	if err != nil {
+		_ = tx.Rollback()
+		return Issue{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Issue{}, fmt.Errorf("commit issue lifecycle transaction: %w", err)
+	}
+	return updated, nil
+}
+
+// CloseIssueWithEffectsAtomic updates issue, writes score effects and audit under one row lock.
+func (q *Queries) CloseIssueWithEffectsAtomic(ctx context.Context, params CloseIssueParams, scores []InsertScoreLogParams, audit InsertAuditLogParams) (Issue, error) {
+	return q.lifecycleEffectsAtomic(ctx, func(txq *Queries) (Issue, error) {
+		before, err := txq.LockIssueForUpdate(ctx, params.ID)
+		if err != nil {
+			return Issue{}, err
+		}
+		updated, err := txq.CloseIssue(ctx, params)
+		if err != nil {
+			return Issue{}, err
+		}
+		if err := txq.insertScoreEffects(ctx, scores); err != nil {
+			return Issue{}, err
+		}
+		audit.OldValue, _ = json.Marshal(map[string]any{"status": before.Status, "version": before.Version})
+		audit.NewValue, _ = json.Marshal(map[string]any{"status": updated.Status, "version": updated.Version})
+		if err := txq.InsertAuditLog(ctx, audit); err != nil {
+			return Issue{}, err
+		}
+		return updated, nil
+	})
+}
+
+// ReopenIssueWithEffectsAtomic updates issue, writes score effects and audit under one row lock.
+func (q *Queries) ReopenIssueWithEffectsAtomic(ctx context.Context, params ReopenIssueParams, scores []InsertScoreLogParams, audit InsertAuditLogParams) (Issue, error) {
+	return q.lifecycleEffectsAtomic(ctx, func(txq *Queries) (Issue, error) {
+		before, err := txq.LockIssueForUpdate(ctx, params.ID)
+		if err != nil {
+			return Issue{}, err
+		}
+		updated, err := txq.ReopenIssue(ctx, params)
+		if err != nil {
+			return Issue{}, err
+		}
+		if err := txq.insertScoreEffects(ctx, scores); err != nil {
+			return Issue{}, err
+		}
+		audit.OldValue, _ = json.Marshal(map[string]any{"status": before.Status, "version": before.Version})
+		audit.NewValue, _ = json.Marshal(map[string]any{"status": updated.Status, "version": updated.Version})
+		if err := txq.InsertAuditLog(ctx, audit); err != nil {
+			return Issue{}, err
+		}
+		return updated, nil
+	})
+}
+
+// InvalidateIssueWithEffectsAtomic updates issue, writes score effects and audit under one row lock.
+func (q *Queries) InvalidateIssueWithEffectsAtomic(ctx context.Context, params InvalidateIssueParams, scores []InsertScoreLogParams, audit InsertAuditLogParams) (Issue, error) {
+	return q.lifecycleEffectsAtomic(ctx, func(txq *Queries) (Issue, error) {
+		before, err := txq.LockIssueForUpdate(ctx, params.ID)
+		if err != nil {
+			return Issue{}, err
+		}
+		updated, err := txq.InvalidateIssue(ctx, params)
+		if err != nil {
+			return Issue{}, err
+		}
+		if err := txq.insertScoreEffects(ctx, scores); err != nil {
+			return Issue{}, err
+		}
+		audit.OldValue, _ = json.Marshal(map[string]any{"status": before.Status, "version": before.Version})
+		audit.NewValue, _ = json.Marshal(map[string]any{"status": updated.Status, "version": updated.Version})
+		if err := txq.InsertAuditLog(ctx, audit); err != nil {
+			return Issue{}, err
+		}
+		return updated, nil
+	})
+}
+
+func (q *Queries) insertScoreEffects(ctx context.Context, scores []InsertScoreLogParams) error {
+	for _, score := range scores {
+		if err := q.InsertScoreLog(ctx, score); err != nil {
+			return fmt.Errorf("insert lifecycle score: %w", err)
+		}
+	}
+	return nil
+}
+
+func (q *Queries) lifecycleEffectsAtomic(ctx context.Context, operation func(*Queries) (Issue, error)) (Issue, error) {
+	beginner, ok := q.db.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+	})
+	if !ok {
+		return Issue{}, fmt.Errorf("database does not support transactions")
+	}
+	tx, err := beginner.BeginTx(ctx, nil)
+	if err != nil {
+		return Issue{}, fmt.Errorf("begin lifecycle effects transaction: %w", err)
+	}
+	updated, err := operation(q.WithTx(tx))
+	if err != nil {
+		_ = tx.Rollback()
+		return Issue{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Issue{}, fmt.Errorf("commit lifecycle effects transaction: %w", err)
+	}
+	return updated, nil
+}
+
 // buildOutbox receives the created issue and returns outbox rows with payloads bound to that ID.
 // buildScores receives the created issue and returns score rows bound to that ID.
 func (q *Queries) CreateIssueWithSideEffects(

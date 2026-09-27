@@ -92,15 +92,16 @@ func rowValuesForQuery(query string) []driver.Value {
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
 			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil, "UNVERIFIED", nil, nil,
-			"before.jpg", nil, nil, nil, nil, nil, nil, nil, int16(3), "OPEN", now, nil, nil,
+			"before.jpg", nil, nil, nil, nil, nil, nil, nil, int16(3), "OPEN", now, nil, nil, nil, nil, nil,
 			int64(0), "Loc1", "creator", "Creator A", nil, nil,
 		}
 	case strings.Contains(query, "GetIssueByID") || strings.Contains(query, "GetIssueByUUID"):
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
 			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil, "UNVERIFIED", nil, nil,
-			"before.jpg", nil, nil, nil, nil, nil, nil, nil, int16(3), "OPEN", now, nil, nil,
+			"before.jpg", nil, nil, nil, nil, nil, nil, nil, int16(3), "OPEN", now, nil, nil, nil, nil, nil,
 		}
+
 	case strings.Contains(query, "listIssuesForExport"):
 		return []driver.Value{
 			int64(1), "uuid", int32(1), "Creator A", nil, "1S", "CONDITION", "LOC1", "Loc Vi",
@@ -169,7 +170,8 @@ func rowValuesForQuery(query string) []driver.Value {
 		return []driver.Value{
 			int64(1), "uuid", int32(1), int64(1), int64(1), nil, nil, nil,
 			"1S", "CONDITION", "SITE_PUBLIC", "LOC1", nil, nil, "UNVERIFIED", nil, nil,
-			"before.jpg", nil, nil, nil, "OPEN", now, nil, nil,
+			"before.jpg", nil, nil, nil, nil, nil, nil, nil, int16(3), "OPEN", now, nil, nil,
+			nil, nil, nil, int64(0), "LOC1", "admin", "Admin", nil, nil,
 		}
 	}
 }

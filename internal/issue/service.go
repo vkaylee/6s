@@ -21,6 +21,8 @@ var (
 	ErrInvalidCategory        = errors.New("invalid 6S category")
 	ErrInvalidResponsibility  = errors.New("invalid responsibility reference")
 	ErrMissingExpectedVersion = errors.New("expected_version is required for responsibility changes")
+	ErrInvalidDeleteReason    = errors.New("delete reason must contain 1..1000 Unicode code points")
+	ErrInvalidExpectedVersion = errors.New("expected_version must be positive")
 )
 
 // ResponsibilityHistoryEntry represents a responsibility change in an issue.
@@ -40,6 +42,8 @@ type AllowedActions struct {
 	VerifyCause bool `json:"verify_cause"`
 	Resolve     bool `json:"resolve"`
 	Close       bool `json:"close"`
+	Delete      bool `json:"delete"`
+	Restore     bool `json:"restore"`
 }
 
 // Response represents the full API format for an issue according to SPEC.md section 6.3.
@@ -79,6 +83,7 @@ type Response struct {
 	CreatedAt                  string                       `json:"created_at"`
 	ResolvedAt                 *string                      `json:"resolved_at"`
 	ClosedAt                   *string                      `json:"closed_at"`
+	DeletedAt                  *string                      `json:"deleted_at"`
 	ResponsibilityHistory      []ResponsibilityHistoryEntry `json:"responsibility_history,omitempty"`
 	AllowedActions             *AllowedActions              `json:"allowed_actions,omitempty"`
 }
@@ -100,7 +105,6 @@ type UserItem struct {
 	FullName string `json:"full_name"`
 }
 
-// Reader reads and pages issues.
 type Reader interface {
 	GetIssueByID(ctx context.Context, id int64) (db.Issue, error)
 	GetIssueByUUID(ctx context.Context, clientUUID string) (db.Issue, error)
@@ -114,10 +118,9 @@ type Reader interface {
 type Writer interface {
 	CreateIssue(ctx context.Context, arg db.CreateIssueParams) (db.Issue, error)
 	ResolveIssue(ctx context.Context, arg db.ResolveIssueParams) (db.Issue, error)
-	ForceResolveIssue(ctx context.Context, arg db.ForceResolveIssueParams) (db.Issue, error)
-	CloseIssue(ctx context.Context, arg db.CloseIssueParams) (db.Issue, error)
-	ReopenIssue(ctx context.Context, arg db.ReopenIssueParams) (db.Issue, error)
-	InvalidateIssue(ctx context.Context, arg db.InvalidateIssueParams) (db.Issue, error)
+	CloseIssueWithEffectsAtomic(ctx context.Context, params db.CloseIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
+	ReopenIssueWithEffectsAtomic(ctx context.Context, params db.ReopenIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
+	InvalidateIssueWithEffectsAtomic(ctx context.Context, params db.InvalidateIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
 	PatchIssue(ctx context.Context, arg db.PatchIssueParams) (db.Issue, error)
 	PatchIssueWithTagsAtomic(ctx context.Context, arg db.PatchIssueParams, tags []string) (db.Issue, error)
 	PatchIssueWithAuditAtomic(ctx context.Context, patch db.PatchIssueParams, tags []string, audit []db.InsertAuditLogParams) (db.Issue, error)
@@ -126,6 +129,15 @@ type Writer interface {
 // ProposedPatchAtomic supports atomically patching an issue with newly selected pending tags.
 type ProposedPatchAtomic interface {
 	PatchIssueWithProposedTagsAtomic(ctx context.Context, patch db.PatchIssueParams, tags []string, proposed []db.UpsertProposedTagParams) (db.Issue, error)
+}
+type LifecycleAtomic interface {
+	DeleteIssueAtomic(ctx context.Context, params db.SoftDeleteIssueParams, audit db.InsertAuditLogParams) (db.Issue, error)
+	RestoreIssueAtomic(ctx context.Context, params db.RestoreIssueParams, audit db.InsertAuditLogParams) (db.Issue, error)
+}
+type LifecycleEffectsAtomic interface {
+	CloseIssueWithEffectsAtomic(ctx context.Context, params db.CloseIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
+	ReopenIssueWithEffectsAtomic(ctx context.Context, params db.ReopenIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
+	InvalidateIssueWithEffectsAtomic(ctx context.Context, params db.InvalidateIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
 }
 
 // ListFilter narrows an issue listing for list, count, and export parity.
@@ -137,31 +149,17 @@ type ListFilter struct {
 	Overdue        bool
 	AssignedTeamID *int64
 	MineTeam       bool
+	Deletion       string
 	Page           int
 	Limit          int
 }
 
-// toListParams maps the filter onto the shared list query parameters.
 func (f ListFilter) toListParams(user db.User) db.ListIssuesFilteredParams {
-	return db.ListIssuesFilteredParams{
-		Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode),
-		Overdue:        sql.NullBool{Bool: f.Overdue, Valid: f.Overdue},
-		AssignedTeamID: nullInt64(f.AssignedTeamID),
-		MineTeam:       sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam},
-		UserID:         user.ID, SiteID: user.SiteID, Role: user.Role,
-		Offset: int32(f.Offset()), Limit: int32(f.Limit), //nolint:gosec // bounded by the handler
-	}
+	return db.ListIssuesFilteredParams{Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode), Overdue: sql.NullBool{Bool: f.Overdue, Valid: f.Overdue}, AssignedTeamID: nullInt64(f.AssignedTeamID), MineTeam: sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam}, Deletion: f.Deletion, UserID: user.ID, SiteID: user.SiteID, Role: user.Role, Offset: int32(f.Offset()), Limit: int32(f.Limit)}
 }
 
-// toCountParams maps the filter onto the shared count query parameters.
 func (f ListFilter) toCountParams(user db.User) db.CountIssuesFilteredParams {
-	return db.CountIssuesFilteredParams{
-		Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode),
-		Overdue:        sql.NullBool{Bool: f.Overdue, Valid: f.Overdue},
-		AssignedTeamID: nullInt64(f.AssignedTeamID),
-		MineTeam:       sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam},
-		UserID:         user.ID, SiteID: user.SiteID, Role: user.Role,
-	}
+	return db.CountIssuesFilteredParams{Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode), Overdue: sql.NullBool{Bool: f.Overdue, Valid: f.Overdue}, AssignedTeamID: nullInt64(f.AssignedTeamID), MineTeam: sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam}, Deletion: f.Deletion, UserID: user.ID, SiteID: user.SiteID, Role: user.Role}
 }
 
 // Offset returns the zero-based row offset for the current page.
@@ -211,6 +209,20 @@ type DirectoryStore interface {
 // TranslationStore reads cached AI translations.
 type TranslationStore interface {
 	GetTranslationCacheBatch(ctx context.Context, arg db.GetTranslationCacheBatchParams) ([]db.GetTranslationCacheBatchRow, error)
+}
+type DeleteIssueRequest struct {
+	IssueID         int64
+	Reason          string
+	ExpectedVersion int32
+}
+type RestoreIssueRequest struct {
+	IssueID         int64
+	ExpectedVersion int32
+}
+type MutationResponse struct {
+	ID        int64   `json:"id"`
+	Version   int32   `json:"version"`
+	DeletedAt *string `json:"deleted_at"`
 }
 
 // Store is the full persistence surface required by the issue service.

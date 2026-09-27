@@ -3,6 +3,7 @@ import { subscribeIssueEvents } from "../api/issueEvents.ts";
 import {
   fetchIssue,
   fetchIssuePage,
+  fetchIssueWithDeletion,
   fetchLocationLeaderboard,
   fetchLocations,
   fetchReporterLeaderboard,
@@ -25,7 +26,11 @@ import {
 
 /** Shared list/count/export filter set; pagination parity depends on both callers using it. */
 function buildIssueQuery(page: number, filters: FilterState): URLSearchParams {
-  const queryParams = new URLSearchParams({ page: String(page), limit: "20" });
+  const queryParams = new URLSearchParams({
+    page: String(page),
+    limit: "20",
+    deletion: filters.deletion ?? "active",
+  });
   if (filters.statuses.length > 0) queryParams.set("statuses", filters.statuses.join(","));
   if (filters.categories.length > 0) queryParams.set("categories", filters.categories.join(","));
   if (filters.locationCodes.length > 0) {
@@ -44,6 +49,7 @@ const EMPTY_FILTERS: FilterState = {
   locationCodes: [],
   assignedTeamId: null,
   mineTeam: false,
+  deletion: "active",
 };
 
 export function normalizeTags(tags: TagItem[]): TagItem[] {
@@ -139,6 +145,8 @@ export function useDashboardData({
   const [advancedFilters, setAdvancedFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueItem | null>(null);
+  const selectedIssueRef = useRef<IssueItem | null>(null);
+  selectedIssueRef.current = selectedIssue;
   const [dashboardErrors, setDashboardErrors] = useState<DashboardDataErrors>({
     issues: false,
     masterData: false,
@@ -149,14 +157,17 @@ export function useDashboardData({
   const leaderboardsRequest = useRef(0);
   const canViewHealth = hasCapability(user, "reports:view");
 
-  const openIssueById = async (issueId: number) => {
+  const openIssueById = async (issueId: number, deletion: "active" | "deleted" = "active") => {
     const existing = issues.find((issue) => issue.id === issueId);
-    if (existing) {
+    if (existing && deletion === "active") {
       setSelectedIssue(existing);
       return;
     }
     try {
-      const fetched = await fetchIssue(issueId);
+      const fetched =
+        deletion === "deleted"
+          ? await fetchIssueWithDeletion(issueId, deletion)
+          : await fetchIssue(issueId);
       if (fetched) setSelectedIssue(fetched);
     } catch {
       // ignore if not found
@@ -165,8 +176,8 @@ export function useDashboardData({
 
   useEffect(() => {
     const issueId = new URLSearchParams(searchString).get("issue_id");
-    if (issueId) openIssueById(Number(issueId));
-  }, [searchString, issues]);
+    if (issueId) openIssueById(Number(issueId), advancedFilters.deletion);
+  }, [searchString, issues, advancedFilters.deletion]);
 
   const loadMasterData = async () => {
     const requestId = ++masterDataRequest.current;
@@ -304,9 +315,18 @@ export function useDashboardData({
     });
     let unsubscribeEvents: (() => void) | undefined;
     if (typeof window !== "undefined" && typeof EventSource !== "undefined" && accessToken) {
-      unsubscribeEvents = subscribeIssueEvents(() => {
+      unsubscribeEvents = subscribeIssueEvents((event) => {
         loadIssues(true);
         loadLeaderboards();
+        if (event?.type === "ISSUE_DELETED" || event?.type === "ISSUE_RESTORED") {
+          const current = selectedIssueRef.current;
+          if (current && current.id === event.issue_id && event.type) {
+            const deletion = event.type === "ISSUE_DELETED" ? "deleted" : "active";
+            fetchIssueWithDeletion(event.issue_id, deletion)
+              .then((updated) => setSelectedIssue(updated))
+              .catch(() => setSelectedIssue(null));
+          }
+        }
       });
     }
     return () => {
@@ -323,7 +343,11 @@ export function useDashboardData({
       if (user) {
         loadIssues(true);
         if (selectedIssue) {
-          fetchIssue(selectedIssue.id)
+          const deletion = selectedIssue.deleted_at ? "deleted" : "active";
+          (deletion === "deleted"
+            ? fetchIssueWithDeletion(selectedIssue.id, deletion)
+            : fetchIssue(selectedIssue.id)
+          )
             .then((updated) => {
               if (updated) setSelectedIssue(updated);
             })

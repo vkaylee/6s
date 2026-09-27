@@ -29,6 +29,7 @@ type Store interface {
 	UpsertScoringRule(ctx context.Context, arg db.UpsertScoringRuleParams) (db.ScoringRule, error)
 	ListScoreLogsSince(ctx context.Context, createdAt time.Time) ([]db.ScoreLog, error)
 	ListScoreLogsByIssue(ctx context.Context, issueID int64) ([]db.ListScoreLogsByIssueRow, error)
+	ListScoreLogsByIssueIncludingDeleted(ctx context.Context, issueID int64) ([]db.ListScoreLogsByIssueIncludingDeletedRow, error)
 	ListScoreLogsByTargetSince(ctx context.Context, arg db.ListScoreLogsByTargetSinceParams) ([]db.ListScoreLogsByTargetSinceRow, error)
 	InsertScoreLogsForIssue(ctx context.Context, arg db.InsertScoreLogsForIssueParams) error
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
@@ -236,19 +237,31 @@ func (s *Service) GetRules(ctx context.Context) ([]db.ScoringRule, error) {
 	return s.store.GetScoringRules(ctx)
 }
 
-// GetIssueScoreLogs retrieves score logs associated with a specific issue.
+// GetIssueScoreLogs returns score ledger entries for an active issue.
 func (s *Service) GetIssueScoreLogs(ctx context.Context, issueID int64) ([]ScoreLogItem, error) {
 	rows, err := s.store.ListScoreLogsByIssue(ctx, issueID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list score logs for issue: %w", err)
 	}
-
 	items := make([]ScoreLogItem, 0, len(rows))
-	for _, r := range rows {
-		items = append(items, mapScoreLogRow(
-			r.ID, r.IssueID, r.TargetType, r.TargetID, r.RuleKey, r.RuleDescription,
-			r.Points, r.CreatedAt, r.PenaltyDate, "", "", "",
-		))
+	for _, row := range rows {
+		items = append(items, mapScoreLogRow(row.ID, row.IssueID, row.TargetType, row.TargetID, row.RuleKey, row.RuleDescription, row.Points, row.CreatedAt, row.PenaltyDate, "", "", ""))
+	}
+	return items, nil
+}
+
+// GetIssueScoreLogsWithDeletion returns score ledger for explicit deleted-view requests.
+func (s *Service) GetIssueScoreLogsWithDeletion(ctx context.Context, issueID int64, deletion string) ([]ScoreLogItem, error) {
+	if deletion != "deleted" {
+		return s.GetIssueScoreLogs(ctx, issueID)
+	}
+	rows, err := s.store.ListScoreLogsByIssueIncludingDeleted(ctx, issueID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list score logs for issue: %w", err)
+	}
+	items := make([]ScoreLogItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, mapScoreLogRow(row.ID, row.IssueID, row.TargetType, row.TargetID, row.RuleKey, row.RuleDescription, row.Points, row.CreatedAt, row.PenaltyDate, "", "", ""))
 	}
 	return items, nil
 }

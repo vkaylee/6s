@@ -100,7 +100,13 @@ export type CauseStatus = NonNullable<OpenApiIssue["cause_status"]>;
  */
 export type IssueItem = Omit<
   OpenApiIssue,
-  "asset_id" | "assigned_team_id" | "assignee_id" | "cause_team_id" | "cause_status"
+  | "asset_id"
+  | "assigned_team_id"
+  | "assignee_id"
+  | "cause_team_id"
+  | "cause_status"
+  | "deleted_at"
+  | "allowed_actions"
 > & {
   asset_id?: number | null;
   assigned_team_id?: number | null;
@@ -121,6 +127,18 @@ export type IssueItem = Omit<
   assigned_team_name?: string | null;
   translated_description?: string | null;
   score_deducted?: number;
+  created_at: string;
+  resolved_at?: string;
+  closed_at?: string;
+  deleted_at?: string | null;
+  allowed_actions?: {
+    assign: boolean;
+    verify_cause: boolean;
+    resolve: boolean;
+    close: boolean;
+    delete?: boolean;
+    restore?: boolean;
+  };
   tag_details?: TagItem[];
 };
 

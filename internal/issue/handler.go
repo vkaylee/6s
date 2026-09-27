@@ -31,6 +31,8 @@ type Service interface {
 	ReopenIssue(ctx context.Context, req ReopenIssueRequest, currentUser db.User) (*Response, error)
 	InvalidateIssue(ctx context.Context, req InvalidateIssueRequest, currentUser db.User) (*Response, error)
 	PatchIssue(ctx context.Context, req PatchIssueRequest, currentUser db.User) (*Response, error)
+	DeleteIssue(ctx context.Context, req DeleteIssueRequest, currentUser db.User) (*MutationResponse, error)
+	RestoreIssue(ctx context.Context, req RestoreIssueRequest, currentUser db.User) (*MutationResponse, error)
 	GetIssueByID(ctx context.Context, id int64) (*Response, error)
 	OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error)
 	ListIssuesFiltered(ctx context.Context, filter ListFilter) ([]Response, int64, error)
@@ -64,6 +66,18 @@ func parseQueryValues(q map[string][]string, singularKey, pluralKey string) []st
 // List handles GET /api/issues.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	deletion := q.Get("deletion")
+	if deletion == "" {
+		deletion = "active"
+	}
+	if deletion != "active" && deletion != "deleted" {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	if deletion == "deleted" && !auth.HasPermission(r.Context(), auth.PermissionIssueViewDeleted) {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
 	statuses := parseQueryValues(q, "status", "statuses")
 	categories := parseQueryValues(q, "category", "categories")
 	locationCodes := parseQueryValues(q, "location_code", "location_codes")
@@ -73,7 +87,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	overdue := q.Get("overdue") == "true" || q.Get("overdue") == "1"
 	page, limit := response.ParsePageLimit(q, 20, 100)
-	filter := ListFilter{Statuses: statuses, Categories: categories, LocationCodes: locationCodes, TagCode: tagCode, Overdue: overdue, Page: page, Limit: limit}
+	filter := ListFilter{Statuses: statuses, Categories: categories, LocationCodes: locationCodes, TagCode: tagCode, Overdue: overdue, Deletion: deletion, Page: page, Limit: limit}
 	if raw := q.Get("assigned_team_id"); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 {
@@ -98,8 +112,26 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
-
-	resp, err := h.service.GetIssueByID(r.Context(), id)
+	deletion := r.URL.Query().Get("deletion")
+	if deletion == "" {
+		deletion = "active"
+	}
+	if deletion != "active" && deletion != "deleted" {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	if deletion == "deleted" && !auth.HasPermission(r.Context(), auth.PermissionIssueViewDeleted) {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
+	var resp *Response
+	if reader, ok := h.service.(interface {
+		GetIssueByIDWithDeletion(context.Context, int64, string) (*Response, error)
+	}); ok {
+		resp, err = reader.GetIssueByIDWithDeletion(r.Context(), id, deletion)
+	} else {
+		resp, err = h.service.GetIssueByID(r.Context(), id)
+	}
 	if err != nil {
 		if errors.Is(err, ErrIssueNotFound) {
 			_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
@@ -108,8 +140,76 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrIssueGetFailed).WithCause(err))
 		return
 	}
-
 	_ = response.JSON(w, http.StatusOK, resp)
+}
+
+type DeleteRequest struct {
+	Reason          string `json:"reason"`
+	ExpectedVersion int32  `json:"expected_version"`
+}
+type RestoreRequest struct {
+	ExpectedVersion int32 `json:"expected_version"`
+}
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+	id, err := response.ParseIDParam(r, "id")
+	if err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
+		return
+	}
+	var req DeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	out, err := h.service.DeleteIssue(r.Context(), DeleteIssueRequest{IssueID: id, Reason: req.Reason, ExpectedVersion: req.ExpectedVersion}, user)
+	if err != nil {
+		h.writeLifecycleError(w, r, err)
+		return
+	}
+	_ = response.JSON(w, http.StatusOK, out)
+}
+func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+	id, err := response.ParseIDParam(r, "id")
+	if err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID))
+		return
+	}
+	var req RestoreRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	out, err := h.service.RestoreIssue(r.Context(), RestoreIssueRequest{IssueID: id, ExpectedVersion: req.ExpectedVersion}, user)
+	if err != nil {
+		h.writeLifecycleError(w, r, err)
+		return
+	}
+	_ = response.JSON(w, http.StatusOK, out)
+}
+func (h *Handler) writeLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, ErrPermissionDenied):
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+	case errors.Is(err, ErrIssueNotFound):
+		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
+	case errors.Is(err, ErrInvalidDeleteReason), errors.Is(err, ErrInvalidExpectedVersion):
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+	case errors.Is(err, ErrIssueConflict):
+		_ = response.AppError(w, r, apperror.Conflict("ISSUE_CONFLICT", i18n.ErrIssueConflict))
+	default:
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+	}
 }
 
 // Media handles GET /api/issues/{id}/media/{folder}/{filename}.
@@ -119,10 +219,26 @@ func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
-	folder := chi.URLParam(r, "folder")
-	filename := chi.URLParam(r, "filename")
-
-	f, err := h.service.OpenMedia(r.Context(), id, folder, filename)
+	folder, filename, deletion := chi.URLParam(r, "folder"), chi.URLParam(r, "filename"), r.URL.Query().Get("deletion")
+	if deletion == "" {
+		deletion = "active"
+	}
+	if deletion != "active" && deletion != "deleted" {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	if deletion == "deleted" && !auth.HasPermission(r.Context(), auth.PermissionIssueViewDeleted) {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
+	var f *os.File
+	if reader, ok := h.service.(interface {
+		OpenMediaWithDeletion(context.Context, int64, string, string, string) (*os.File, error)
+	}); ok {
+		f, err = reader.OpenMediaWithDeletion(r.Context(), id, folder, filename, deletion)
+	} else {
+		f, err = h.service.OpenMedia(r.Context(), id, folder, filename)
+	}
 	if err != nil {
 		if errors.Is(err, ErrMediaForbidden) {
 			_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrMediaForbidden))
@@ -131,10 +247,7 @@ func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 		return
 	}
-	defer func() {
-		_ = f.Close()
-	}()
-
+	defer func() { _ = f.Close() }()
 	stat, err := f.Stat()
 	if err != nil {
 		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))

@@ -10,6 +10,8 @@ import type {
 import { apiClient, sdkClient } from "./client.ts";
 import type {
   CloseIssueData,
+  DeleteIssueData,
+  IssueMutation as GeneratedIssueMutation,
   GetReporterLeaderboardData,
   InvalidateIssueData,
   Issue,
@@ -20,6 +22,7 @@ import type {
 } from "./generated/index.ts";
 import {
   closeIssue,
+  deleteIssue as deleteIssueRequest,
   getIssue,
   getLocationLeaderboard,
   getReporterLeaderboard,
@@ -28,10 +31,13 @@ import {
   listLocations,
   listTags,
   reopenIssue,
+  restoreIssue as restoreIssueRequest,
   updateIssue,
   upsertTag,
 } from "./generated/index.ts";
 export type IssueMutation = "close" | "reopen" | "invalid";
+
+export type IssueDeletionReceipt = GeneratedIssueMutation;
 
 export type CloseIssueBody = NonNullable<CloseIssueData["body"]>;
 export type ReopenIssueBody = ReopenIssueData["body"];
@@ -92,6 +98,39 @@ export const issueOperations = {
 export async function fetchIssue(id: number): Promise<IssueItem> {
   const result = await getIssue({ client: sdkClient, path: { id }, throwOnError: true });
   return result.data.data as IssueItem;
+}
+
+export async function fetchIssueWithDeletion(
+  id: number,
+  deletion: "active" | "deleted",
+): Promise<IssueItem> {
+  return apiClient<IssueItem>(`/api/issues/${id}?${new URLSearchParams({ deletion }).toString()}`);
+}
+
+export async function deleteIssue(
+  id: number,
+  body: DeleteIssueData["body"],
+): Promise<IssueDeletionReceipt> {
+  const result = await deleteIssueRequest({
+    client: sdkClient,
+    path: { id },
+    body,
+    throwOnError: true,
+  });
+  return result.data.data;
+}
+
+export async function restoreIssue(
+  id: number,
+  expectedVersion: number,
+): Promise<IssueDeletionReceipt> {
+  const result = await restoreIssueRequest({
+    client: sdkClient,
+    path: { id },
+    body: { expected_version: expectedVersion },
+    throwOnError: true,
+  });
+  return result.data.data;
 }
 
 export async function fetchIssuePage(

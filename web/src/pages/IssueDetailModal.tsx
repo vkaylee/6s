@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Archive,
   Ban,
   BarChart3,
   Camera,
@@ -24,7 +25,13 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../api/client.ts";
-import { fetchIssue, issueOperations, patchIssue } from "../api/operations.ts";
+import {
+  deleteIssue,
+  fetchIssueWithDeletion,
+  issueOperations,
+  patchIssue,
+  restoreIssue,
+} from "../api/operations.ts";
 import { AIReviewPanel, type AIReviewResult } from "../components/AIReviewPanel.tsx";
 import { AuthenticatedImage } from "../components/AuthenticatedImage.tsx";
 import { LocationCombobox } from "../components/LocationCombobox.tsx";
@@ -91,6 +98,7 @@ interface IssueDetailModalProps {
 }
 
 type ModalTab = "overview" | "ai" | "history";
+type ConfirmAction = "CLOSE" | "REOPEN" | "INVALID" | "DELETE" | "RESTORE";
 export function IssueDetailModal({
   issue,
   isOpen,
@@ -103,6 +111,20 @@ export function IssueDetailModal({
   const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
   const storeUser = useAuthStore((s) => s.user);
   const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
+  const isOfflineGrace = useAuthStore((s) => s.isOfflineGrace);
+  const [isBrowserOnline, setIsBrowserOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine,
+  );
+  useEffect(() => {
+    const updateOnline = () => setIsBrowserOnline(true);
+    const updateOffline = () => setIsBrowserOnline(false);
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOffline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOffline);
+    };
+  }, []);
   const [currentIssue, setCurrentIssue] = useState<IssueItem>(issue);
   const causeType = detectCauseType(currentIssue.category, currentIssue.tags);
   const [isResponsibilityEditing, setIsResponsibilityEditing] = useState(false);
@@ -267,6 +289,7 @@ export function IssueDetailModal({
 
   // Apply one AI suggestion through the existing quick-edit PATCH flow.
   const handleApplySuggestion = async (patch: Record<string, unknown>) => {
+    if (currentIssue.deleted_at != null || !isBrowserOnline || isOfflineGrace) return;
     try {
       const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
         method: "PATCH",
@@ -291,12 +314,12 @@ export function IssueDetailModal({
   const [scoreRating, setScoreRating] = useState<number>(3); // Default 3 stars (SPEC.md Section 9.8.B)
   const [rejectReason, setRejectReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showConfirmAction, setShowConfirmAction] = useState<"CLOSE" | "REOPEN" | "INVALID" | null>(
-    null,
-  );
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [recoveryPending, setRecoveryPending] = useState(false);
+  const [showConfirmAction, setShowConfirmAction] = useState<ConfirmAction | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [beforePhotoError, setBeforePhotoError] = useState<AuthenticatedImageError | null>(null);
   const [detailPhotoError, setDetailPhotoError] = useState<AuthenticatedImageError | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchDistanceRef = useRef<number | null>(null);
@@ -473,13 +496,17 @@ export function IssueDetailModal({
   };
 
   useEffect(() => {
-    if (!isOpen || !issue?.id) {
+    if (!isOpen || !currentIssue?.id) {
       setIssueScoreLogs([]);
       return;
     }
     let isMounted = true;
     setLoadingScores(true);
-    apiClient<ScoreLogItem[]>(`/api/issues/${issue.id}/score-logs`)
+    apiClient<ScoreLogItem[]>(
+      `/api/issues/${currentIssue.id}/score-logs?${new URLSearchParams({
+        deletion: currentIssue.deleted_at != null ? "deleted" : "active",
+      }).toString()}`,
+    )
       .then((data: ScoreLogItem[]) => {
         if (isMounted) {
           setIssueScoreLogs(data || []);
@@ -498,13 +525,17 @@ export function IssueDetailModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, issue?.id]);
+  }, [isOpen, currentIssue?.id, currentIssue?.deleted_at]);
 
   // List of all viewable photos for this issue with category color badges
   const photoList = [
     currentIssue.photo_before
       ? {
-          url: resolvePhotoUrl(currentIssue.photo_before, "before"),
+          url: resolvePhotoUrl(
+            currentIssue.photo_before,
+            "before",
+            currentIssue.deleted_at != null ? "deleted" : "active",
+          ),
           alt: t("issue_detail.photo_before_alt"),
           label: t("slider.before"),
           badgeClass: "bg-amber-500 text-zinc-950 font-black shadow-amber-500/20",
@@ -512,7 +543,11 @@ export function IssueDetailModal({
       : null,
     currentIssue.photo_detail
       ? {
-          url: resolvePhotoUrl(currentIssue.photo_detail, "detail"),
+          url: resolvePhotoUrl(
+            currentIssue.photo_detail,
+            "detail",
+            currentIssue.deleted_at != null ? "deleted" : "active",
+          ),
           alt: t("issue_detail.photo_detail_alt"),
           label: t("issue.photo_detail_label"),
           badgeClass: "bg-blue-500 text-white font-black shadow-blue-500/20",
@@ -520,7 +555,11 @@ export function IssueDetailModal({
       : null,
     currentIssue.photo_after
       ? {
-          url: resolvePhotoUrl(currentIssue.photo_after, "after"),
+          url: resolvePhotoUrl(
+            currentIssue.photo_after,
+            "after",
+            currentIssue.deleted_at != null ? "deleted" : "active",
+          ),
           alt: t("slider.after_alt"),
           label: t("slider.after"),
           badgeClass: "bg-emerald-500 text-zinc-950 font-black shadow-emerald-500/20",
@@ -596,7 +635,11 @@ export function IssueDetailModal({
     locale,
   );
 
+  const isDeleted = currentIssue.deleted_at != null;
+  const mutationsOnline = isBrowserOnline && !isOfflineGrace;
   const canEdit =
+    !isDeleted &&
+    mutationsOnline &&
     currentIssue.status === IssueStatus.OPEN &&
     (user?.id === currentIssue.creator_id || user?.id === currentIssue.resolver_id
       ? hasCapability(user, "issue:close_own")
@@ -625,17 +668,110 @@ export function IssueDetailModal({
   // allowed_actions from the API is authoritative for this row; capabilities only cover legacy
   // responses that omit the field, so a capability can never re-grant a server-denied action.
   const serverActions = currentIssue.allowed_actions;
-  const canAssignResponsibility = serverActions
-    ? serverActions.assign === true
-    : hasCapability(user, "issue:assign");
-  const canVerifyCause = serverActions
-    ? serverActions.verify_cause === true
-    : hasCapability(user, "issue:verify_cause");
-  const canResolveIssue = serverActions
-    ? serverActions.resolve === true
-    : hasCapability(user, "issue:resolve");
-  const canCloseIssue = serverActions ? serverActions.close === true : canClose;
+  const canAssignResponsibility =
+    !isDeleted &&
+    (serverActions ? serverActions.assign === true : hasCapability(user, "issue:assign"));
+  const canVerifyCause =
+    !isDeleted &&
+    (serverActions
+      ? serverActions.verify_cause === true
+      : hasCapability(user, "issue:verify_cause"));
+  const canResolveIssue =
+    !isDeleted &&
+    (serverActions ? serverActions.resolve === true : hasCapability(user, "issue:resolve"));
+  const canCloseIssue = !isDeleted && (serverActions ? serverActions.close === true : canClose);
+  const canDeleteIssue =
+    !isDeleted &&
+    (currentIssue.allowed_actions?.delete === true ||
+      (!currentIssue.allowed_actions && hasCapability(user, "issue:delete")));
+  const canRestoreIssue =
+    isDeleted &&
+    (currentIssue.allowed_actions?.restore === true ||
+      (!currentIssue.allowed_actions && hasCapability(user, "issue:restore")));
+  const reloadCurrentIssue = async (): Promise<boolean> => {
+    const preferredDeletion = currentIssue.deleted_at != null ? "deleted" : "active";
+    const projections = [
+      preferredDeletion,
+      preferredDeletion === "active" ? "deleted" : "active",
+    ] as const;
+    for (const deletion of projections) {
+      try {
+        const fresh = await fetchIssueWithDeletion(currentIssue.id, deletion);
+        if (fresh) {
+          setCurrentIssue(fresh);
+          return true;
+        }
+      } catch {
+        // Try other projection; mutation response may be lost after state changed.
+      }
+    }
+    return false;
+  };
+  const handleConfirmDelete = async () => {
+    const reason = deleteReason.trim();
+    if (!canDeleteIssue || !mutationsOnline || isSubmitting || recoveryPending) return;
+    if (Array.from(reason).length < 1 || Array.from(reason).length > 1000) {
+      await modalDialog.alert(t("issue_detail.delete_reason_invalid"));
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await deleteIssue(currentIssue.id, {
+        reason,
+        expected_version: currentIssue.version,
+      });
+      const recovered = await reloadCurrentIssue();
+      setRecoveryPending(!recovered);
+      if (recovered) {
+        setDeleteReason("");
+        setShowConfirmAction(null);
+        haptics.success();
+        onRefresh();
+      } else {
+        await modalDialog.alert(t("issue_detail.delete_failed"));
+      }
+    } catch (error) {
+      haptics.errorOrConflict();
+      const recovered = await reloadCurrentIssue();
+      setRecoveryPending(!recovered);
+      await modalDialog.alert(
+        error instanceof ApiError && error.status === 409
+          ? t("issue_detail.delete_conflict")
+          : t("issue_detail.delete_failed"),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  const handleConfirmRestore = async () => {
+    if (!canRestoreIssue || !mutationsOnline || isSubmitting || recoveryPending) return;
+    setIsSubmitting(true);
+    try {
+      await restoreIssue(currentIssue.id, currentIssue.version);
+      const recovered = await reloadCurrentIssue();
+      setRecoveryPending(!recovered);
+      if (recovered) {
+        setShowConfirmAction(null);
+        haptics.success();
+        onRefresh();
+      } else {
+        await modalDialog.alert(t("issue_detail.restore_failed"));
+      }
+    } catch (error) {
+      haptics.errorOrConflict();
+      const recovered = await reloadCurrentIssue();
+      setRecoveryPending(!recovered);
+      await modalDialog.alert(
+        error instanceof ApiError && error.status === 409
+          ? t("issue_detail.delete_conflict")
+          : t("issue_detail.restore_failed"),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   const handleQuickChangeCategory = async (newCat: IssueCategory) => {
+    if (isDeleted || !mutationsOnline) return;
     try {
       const updated = await patchIssue(currentIssue.id, { category: newCat });
       haptics.success();
@@ -649,8 +785,8 @@ export function IssueDetailModal({
       modalDialog.alert(t("issue_detail.update_category_error"));
     }
   };
-
   const handleQuickChangeLocation = async (newLocCode: string) => {
+    if (isDeleted || !mutationsOnline) return;
     if (!newLocCode || newLocCode === currentIssue.location_code) {
       setIsEditingLocation(false);
       return;
@@ -666,14 +802,6 @@ export function IssueDetailModal({
     } catch {
       haptics.errorOrConflict();
       modalDialog.alert(t("issue_detail.update_location_error"));
-    }
-  };
-  const reloadCurrentIssue = async () => {
-    try {
-      const fresh = await fetchIssue(currentIssue.id);
-      if (fresh) setCurrentIssue(fresh);
-    } catch {
-      // Keep the local copy when the refresh fails (offline or transient error).
     }
   };
   const handleSaveResponsibility = async () => {
@@ -969,6 +1097,36 @@ export function IssueDetailModal({
               )}
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
+              {isDeleted && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-zinc-200 px-2 py-1 text-[10px] font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  <Archive className="h-3 w-3" aria-hidden="true" />
+                  {t("issue_detail.deleted_badge")}
+                </span>
+              )}
+              {canDeleteIssue && (
+                <button
+                  type="button"
+                  disabled={!mutationsOnline || isSubmitting || recoveryPending}
+                  onClick={() => setShowConfirmAction("DELETE")}
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                  title={t("issue_detail.delete_action")}
+                >
+                  <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t("issue_detail.delete_action")}</span>
+                </button>
+              )}
+              {canRestoreIssue && (
+                <button
+                  type="button"
+                  disabled={!mutationsOnline || isSubmitting || recoveryPending}
+                  onClick={() => setShowConfirmAction("RESTORE")}
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                  title={t("issue_detail.restore_action")}
+                >
+                  <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t("issue_detail.restore_action")}</span>
+                </button>
+              )}
               {canEdit && (
                 <button
                   type="button"
@@ -1026,13 +1184,22 @@ export function IssueDetailModal({
             {/* Split Slider if After photo exists, otherwise show Before photo */}
             {currentIssue.photo_after ? (
               <SplitSlider
-                beforeUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
-                afterUrl={resolvePhotoUrl(currentIssue.photo_after, "after")}
+                beforeUrl={resolvePhotoUrl(
+                  currentIssue.photo_before,
+                  "before",
+                  currentIssue.deleted_at != null ? "deleted" : "active",
+                )}
+                afterUrl={resolvePhotoUrl(
+                  currentIssue.photo_after,
+                  "after",
+                  currentIssue.deleted_at != null ? "deleted" : "active",
+                )}
                 onPhotoClick={(type) => {
                   setZoomScale(1);
                   const photoUrl = resolvePhotoUrl(
                     type === "before" ? currentIssue.photo_before : currentIssue.photo_after,
                     type,
+                    currentIssue.deleted_at != null ? "deleted" : "active",
                   );
                   const idx = photoList.findIndex((p) => p.url === photoUrl);
                   setPreviewIndex(idx >= 0 ? idx : 0);
@@ -1053,7 +1220,11 @@ export function IssueDetailModal({
                 </div>
                 <div className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800">
                   <AuthenticatedImage
-                    imageUrl={resolvePhotoUrl(currentIssue.photo_before, "before")}
+                    imageUrl={resolvePhotoUrl(
+                      currentIssue.photo_before,
+                      "before",
+                      currentIssue.deleted_at != null ? "deleted" : "active",
+                    )}
                     alt={t("issue_detail.photo_before_alt")}
                     compact={false}
                     onErrorStateChange={setBeforePhotoError}
@@ -1068,7 +1239,13 @@ export function IssueDetailModal({
                       onClick={() => {
                         setZoomScale(1);
                         const idx = photoList.findIndex(
-                          (p) => p.url === resolvePhotoUrl(currentIssue.photo_before, "before"),
+                          (p) =>
+                            p.url ===
+                            resolvePhotoUrl(
+                              currentIssue.photo_before,
+                              "before",
+                              currentIssue.deleted_at != null ? "deleted" : "active",
+                            ),
                         );
                         setPreviewIndex(idx >= 0 ? idx : 0);
                       }}
@@ -1099,7 +1276,11 @@ export function IssueDetailModal({
                 </div>
                 <div className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800">
                   <AuthenticatedImage
-                    imageUrl={resolvePhotoUrl(currentIssue.photo_detail, "detail")}
+                    imageUrl={resolvePhotoUrl(
+                      currentIssue.photo_detail,
+                      "detail",
+                      currentIssue.deleted_at != null ? "deleted" : "active",
+                    )}
                     alt={t("issue_detail.photo_detail_alt")}
                     compact={false}
                     onErrorStateChange={setDetailPhotoError}
@@ -1114,7 +1295,13 @@ export function IssueDetailModal({
                       onClick={() => {
                         setZoomScale(1);
                         const idx = photoList.findIndex(
-                          (p) => p.url === resolvePhotoUrl(currentIssue.photo_detail, "detail"),
+                          (p) =>
+                            p.url ===
+                            resolvePhotoUrl(
+                              currentIssue.photo_detail,
+                              "detail",
+                              currentIssue.deleted_at != null ? "deleted" : "active",
+                            ),
                         );
                         setPreviewIndex(idx >= 0 ? idx : 1);
                       }}
@@ -1642,7 +1829,8 @@ export function IssueDetailModal({
             {/* Bottom Actions Bar (Integrated in sidebar for desktop, sticky/accessible) */}
             <div className="sticky bottom-0 -mx-4 -mb-4 lg:-mx-6 lg:-mb-6 p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:p-6 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200/80 dark:border-zinc-800/80 flex flex-col gap-2 shrink-0 z-10 shadow-xs">
               {/* Actions: Resolve & Invalidate for OPEN status (80-20 ergonomic split) */}
-              {currentIssue.status === IssueStatus.OPEN &&
+              {!isDeleted &&
+                currentIssue.status === IssueStatus.OPEN &&
                 (canResolveIssue || hasCapability(user, "issue:invalidate")) && (
                   <div className="flex items-stretch gap-2 w-full min-w-0">
                     {canResolveIssue && (
@@ -1695,7 +1883,8 @@ export function IssueDetailModal({
                   </div>
                 )}
 
-              {currentIssue.status === IssueStatus.PENDING_REVIEW &&
+              {!isDeleted &&
+                currentIssue.status === IssueStatus.PENDING_REVIEW &&
                 (canCloseIssue ? (
                   <div className="space-y-1.5">
                     <div className="flex gap-2">
@@ -1746,7 +1935,11 @@ export function IssueDetailModal({
                   ? t("issue_detail.confirm_close_title")
                   : showConfirmAction === "REOPEN"
                     ? t("issue_detail.confirm_reopen_title")
-                    : t("issue_detail.confirm_invalid_title")}
+                    : showConfirmAction === IssueStatus.INVALID
+                      ? t("issue_detail.confirm_invalid_title")
+                      : showConfirmAction === "DELETE"
+                        ? t("issue_detail.delete_confirm_title")
+                        : t("issue_detail.restore_confirm_title")}
               </h3>
               <button
                 type="button"
@@ -1757,6 +1950,38 @@ export function IssueDetailModal({
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
+            {showConfirmAction === "DELETE" && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"
+                    aria-hidden="true"
+                  />
+                  <p>{t("issue_detail.delete_score_warning")}</p>
+                </div>
+                <label className="block space-y-1 text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  <span>{t("issue_detail.delete_reason_label")}</span>
+                  <textarea
+                    rows={3}
+                    maxLength={1000}
+                    value={deleteReason}
+                    onChange={(event) => setDeleteReason(event.target.value)}
+                    placeholder={t("issue_detail.delete_reason_placeholder")}
+                    className="w-full rounded-xl border border-rose-300 bg-white p-3 text-base text-zinc-900 focus:outline-none focus:ring-2 focus:ring-rose-500 dark:border-rose-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  />
+                </label>
+                {!mutationsOnline && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    {t("issue_detail.delete_offline")}
+                  </p>
+                )}
+              </div>
+            )}
+            {showConfirmAction === "RESTORE" && (
+              <p className="text-xs text-zinc-700 dark:text-zinc-300">
+                {t("issue_detail.delete_score_warning")}
+              </p>
+            )}
             {showConfirmAction === "CLOSE" && (
               <div className="space-y-3">
                 <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 text-xs space-y-2">
@@ -1894,11 +2119,13 @@ export function IssueDetailModal({
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={isSubmitting || recoveryPending}
                 onClick={() => {
                   if (showConfirmAction === "CLOSE") handleConfirmClose();
                   if (showConfirmAction === "REOPEN") handleConfirmReopen();
                   if (showConfirmAction === IssueStatus.INVALID) handleConfirmInvalid();
+                  if (showConfirmAction === "DELETE") handleConfirmDelete();
+                  if (showConfirmAction === "RESTORE") handleConfirmRestore();
                 }}
                 className={`flex-1 font-black py-3 rounded-xl min-h-[48px] text-sm shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed ${
                   showConfirmAction === "CLOSE"

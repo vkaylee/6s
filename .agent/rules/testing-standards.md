@@ -14,8 +14,14 @@ After implementing a change, the AI agent MUST:
 4. Record one explicit outcome in the final report:
    - **Tests added/updated:** list the scenarios covered; or
    - **No test change needed:** give a concrete, behavior-based justification.
-5. Run the applicable LeeDevKit test target and report the exact result. If verification cannot run, state why and leave the task unverified—not complete.
+5. Run the focused checks needed for fast feedback, then run the **full regression gate** `./leedevkit test all` before completion. A task is unverified and MUST NOT be reported complete until this command passes.
 6. Reconcile the completed tests against every applicable dimension in the pre-implementation Test Impact Matrix from `development-workflow.md`.
+
+The full regression gate MUST run for every change that can affect runtime, build output, generated code, persistence, API contracts, configuration, dependencies, or shared infrastructure. It covers all configured server, web, integration, and E2E targets. A narrower target, `--unit-only`, `--lint-only`, `--e2e-only`, `--pattern`, or a manual smoke test MAY supplement full regression but MUST NOT replace it.
+
+If `./leedevkit test all` cannot run or fails, the task remains incomplete. Report the exact failure and blocker; do not claim completion based on passing focused checks.
+
+Documentation-only, comment-only, deterministic formatting-only, or generated-artifact-only changes MAY omit full regression only when they cannot alter runtime or build behavior. The final report MUST state that reason.
 
 Tests MUST be added or updated for:
 - New or changed business logic or externally observable behavior

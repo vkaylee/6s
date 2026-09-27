@@ -1,4 +1,4 @@
-import { Camera, Check, Clock, Sparkles, Star, User, Wrench, XCircle } from "lucide-react";
+import { Archive, Camera, Check, Clock, Sparkles, Star, User, Wrench, XCircle } from "lucide-react";
 import { useI18nStore } from "../i18n/index.ts";
 import {
   IssueCategory,
@@ -41,7 +41,12 @@ export function IssueCard({
   const isOverdue = elapsedHours >= 48;
   const remainingHours = Math.max(0, 48 - elapsedHours);
 
-  const statusBadge = isOpen ? (
+  const statusBadge = issue.deleted_at ? (
+    <span className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+      {t("issue_detail.deleted_badge")}
+    </span>
+  ) : isOpen ? (
     <span
       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${
         isOverdue
@@ -81,7 +86,7 @@ export function IssueCard({
   );
 
   const scoreBadge =
-    issue.score_rating && issue.score_rating > 0 && isClosed ? (
+    !issue.deleted_at && issue.score_rating && issue.score_rating > 0 && isClosed ? (
       <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
         <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
         {issue.score_rating}
@@ -156,7 +161,11 @@ export function IssueCard({
             {issue.photo_before && (
               <div className="relative group/shrink-0">
                 <AuthenticatedImage
-                  imageUrl={resolvePhotoUrl(issue.photo_before, "before")}
+                  imageUrl={resolvePhotoUrl(
+                    issue.photo_before,
+                    "before",
+                    issue.deleted_at != null ? "deleted" : "active",
+                  )}
                   alt={t("slider.before_alt")}
                   loading="lazy"
                   className={`${
@@ -178,7 +187,11 @@ export function IssueCard({
             {issue.photo_after && (
               <div className="relative group/shrink-0">
                 <AuthenticatedImage
-                  imageUrl={resolvePhotoUrl(issue.photo_after, "after")}
+                  imageUrl={resolvePhotoUrl(
+                    issue.photo_after,
+                    "after",
+                    issue.deleted_at != null ? "deleted" : "active",
+                  )}
                   alt={t("slider.after_alt")}
                   loading="lazy"
                   className="w-28 h-20 sm:w-32 sm:h-22 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border-2 border-emerald-500/60 dark:border-emerald-500/80"

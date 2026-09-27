@@ -124,7 +124,8 @@ export function App() {
     advancedFilters.categories.length > 0 ||
     advancedFilters.locationCodes.length > 0 ||
     advancedFilters.assignedTeamId != null ||
-    advancedFilters.mineTeam;
+    advancedFilters.mineTeam ||
+    advancedFilters.deletion === "deleted";
   const masterTeams = useMasterdataStore((state) => state.teams);
   const loadMasterdataReference = useMasterdataStore((state) => state.loadReference);
   const selectedTeamLabel = advancedFilters.assignedTeamId
@@ -761,7 +762,9 @@ export function App() {
                               locations={locations}
                               teams={masterTeams}
                               tags={tags}
-                              onClick={() => setSelectedIssue(iss)}
+                              onClick={() =>
+                                openIssueById(iss.id, iss.deleted_at ? "deleted" : "active")
+                              }
                             />
                           ))}
                           {/* Load more controls & progress */}
@@ -828,6 +831,7 @@ export function App() {
                     setActiveFacet("ALL");
                     resetAdvancedFilters();
                   }}
+                  canViewDeleted={hasCapability(user, "issue:view_deleted")}
                 />
 
                 {conflictItem && (

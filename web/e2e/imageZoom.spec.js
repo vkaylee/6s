@@ -57,7 +57,9 @@ test("real issue image opens, zooms and closes on React surface", async ({
     name: /Trước khắc phục|Before resolution|改善前/i,
   });
   await expect(beforeImage).toBeVisible({ timeout: 15000 });
-  const beforeImageButton = beforeImage.locator("xpath=ancestor::button[1]");
+  const beforeImageButton = issueModal.getByRole("button", {
+    name: /Tap image to view full screen|Tap to zoom|Chạm để phóng to|点击放大/i,
+  }).first();
   await expect(beforeImageButton).toBeVisible({ timeout: 15000 });
 
   // Click the actual image card. IssueDetailModal opens the fullscreen preview dialog.
@@ -75,7 +77,7 @@ test("real issue image opens, zooms and closes on React surface", async ({
     name: /Phóng to|Zoom in|放大/i,
   });
   await zoomIn.click();
-  await expect(preview.getByRole("button", { name: /125%/ })).toBeVisible();
+  await expect(preview.locator("button").filter({ hasText: "125%" })).toBeVisible();
   await expect(previewImage).toHaveAttribute(
     "style",
     /scale\(1\.25\)/,
@@ -83,14 +85,14 @@ test("real issue image opens, zooms and closes on React surface", async ({
 
   // First double-click resets an already zoomed image; second double-click reaches 2.5x.
   await preview.locator('[role="application"]').dblclick();
-  await expect(preview.getByRole("button", { name: /100%/ })).toBeVisible();
+  await expect(preview.locator("button").filter({ hasText: "100%" })).toBeVisible();
   await preview.locator('[role="application"]').dblclick();
-  await expect(preview.getByRole("button", { name: /250%/ })).toBeVisible();
+  await expect(preview.locator("button").filter({ hasText: "250%" })).toBeVisible();
 
   // Reset and close through actual controls.
-  await preview.getByRole("button", { name: /250%/ }).click();
-  await expect(preview.getByRole("button", { name: /100%/ })).toBeVisible();
-  await preview.locator('button[aria-label="Close"]').filter({ hasText: "✕" }).first().click();
+  await preview.locator("button").filter({ hasText: "250%" }).click();
+  await expect(preview.locator("button").filter({ hasText: "100%" })).toBeVisible();
+  await preview.getByRole("button", { name: /Close|Đóng|关闭/i }).last().click();
   await expect(preview).toBeHidden();
   await expect(issueModal).toBeVisible();
 });

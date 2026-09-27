@@ -11,7 +11,7 @@ export const ISSUE_EVENT_RECONNECT_DELAY_MS = 1000;
  * updates for the rest of the session.
  */
 export function subscribeIssueEvents(
-  onIssue: () => void,
+  onIssue: (event?: { type?: string; issue_id?: number }) => void,
   reconnectDelayMs = ISSUE_EVENT_RECONNECT_DELAY_MS,
 ): () => void {
   let source: EventSource | null = null;
@@ -38,7 +38,17 @@ export function subscribeIssueEvents(
       if (!active) return;
       const next = new EventSource(`/api/issues/events?ticket=${encodeURIComponent(ticket)}`);
       source = next;
-      next.addEventListener("issue", onIssue);
+      next.addEventListener("issue", (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data) as {
+            type?: string;
+            issue_id?: number;
+          };
+          onIssue(payload);
+        } catch {
+          onIssue();
+        }
+      });
       next.onerror = () => {
         next.close();
         if (source === next) source = null;

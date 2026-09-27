@@ -16,10 +16,23 @@ import (
 	"time"
 )
 
-// OpenMedia authorizes issue visibility before opening its controlled attachment.
+// OpenMedia authorizes active issue media; deleted media requires explicit permission/filter.
 func (s *ServiceImpl) OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error) {
+	return s.openMedia(ctx, id, folder, basename, false)
+}
+func (s *ServiceImpl) OpenMediaWithDeletion(ctx context.Context, id int64, folder, basename, deletion string) (*os.File, error) {
+	return s.openMedia(ctx, id, folder, basename, deletion == "deleted")
+}
+func (s *ServiceImpl) openMedia(ctx context.Context, id int64, folder, basename string, includeDeleted bool) (*os.File, error) {
 	issue, err := s.store.GetIssueByID(ctx, id)
-	if err != nil {
+	if includeDeleted {
+		if reader, ok := s.store.(interface {
+			GetIssueByIDIncludingDeleted(context.Context, int64) (db.Issue, error)
+		}); ok {
+			issue, err = reader.GetIssueByIDIncludingDeleted(ctx, id)
+		}
+	}
+	if err != nil || (!includeDeleted && issue.DeletedAt.Valid) || (includeDeleted && issue.DeletedAt.Valid && !auth.HasPermission(ctx, auth.PermissionIssueViewDeleted)) {
 		return nil, ErrIssueNotFound
 	}
 	if !s.canViewIssue(ctx, issue) {
@@ -60,10 +73,31 @@ func (s *ServiceImpl) canViewIssue(ctx context.Context, issue db.Issue) bool {
 	return false
 }
 
-// GetIssueByID retrieves detailed issue response with the same visibility policy as list.
+// GetIssueByID retrieves active issue detail; deleted issues remain hidden.
 func (s *ServiceImpl) GetIssueByID(ctx context.Context, id int64) (*Response, error) {
-	issue, err := s.store.GetIssueByID(ctx, id)
-	if err != nil || !s.canViewIssue(ctx, issue) {
+	return s.getIssueByID(ctx, id, false)
+}
+
+// GetIssueByIDWithDeletion retrieves detail when caller explicitly requests deleted view.
+func (s *ServiceImpl) GetIssueByIDWithDeletion(ctx context.Context, id int64, deletion string) (*Response, error) {
+	return s.getIssueByID(ctx, id, deletion == "deleted")
+}
+
+func (s *ServiceImpl) getIssueByID(ctx context.Context, id int64, includeDeleted bool) (*Response, error) {
+	var issue db.Issue
+	var err error
+	if includeDeleted {
+		reader, ok := s.store.(interface {
+			GetIssueByIDIncludingDeleted(context.Context, int64) (db.Issue, error)
+		})
+		if !ok {
+			return nil, ErrIssueNotFound
+		}
+		issue, err = reader.GetIssueByIDIncludingDeleted(ctx, id)
+	} else {
+		issue, err = s.store.GetIssueByID(ctx, id)
+	}
+	if err != nil || (!includeDeleted && issue.DeletedAt.Valid) || (includeDeleted && issue.DeletedAt.Valid && !auth.HasPermission(ctx, auth.PermissionIssueViewDeleted)) || !s.canViewIssue(ctx, issue) {
 		return nil, ErrIssueNotFound
 	}
 
@@ -279,14 +313,12 @@ func (s *ServiceImpl) allowedActionsFor(ctx context.Context, issue db.Issue) *Al
 	if !ok {
 		return nil
 	}
+	if issue.DeletedAt.Valid {
+		return &AllowedActions{Restore: auth.HasPermission(ctx, auth.PermissionIssueRestore)}
+	}
 	open := issue.Status == StatusOpen.String()
 	review := issue.Status == StatusPendingReview.String()
-	return &AllowedActions{
-		Assign:      (open || review) && auth.HasPermission(ctx, auth.PermissionIssueAssign),
-		VerifyCause: (open || review) && auth.HasPermission(ctx, auth.PermissionIssueVerifyCause),
-		Resolve:     open && s.canResolveIssue(ctx, user, issue),
-		Close:       review && s.canCloseIssue(ctx, user, issue) && !(issue.ResolverID.Valid && issue.ResolverID.Int64 == user.ID),
-	}
+	return &AllowedActions{Assign: (open || review) && auth.HasPermission(ctx, auth.PermissionIssueAssign), VerifyCause: (open || review) && auth.HasPermission(ctx, auth.PermissionIssueVerifyCause), Resolve: open && s.canResolveIssue(ctx, user, issue), Close: review && s.canCloseIssue(ctx, user, issue) && !(issue.ResolverID.Valid && issue.ResolverID.Int64 == user.ID), Delete: auth.HasPermission(ctx, auth.PermissionIssueDelete)}
 }
 
 // canResolveIssue reports whether the caller may resolve this issue: the assignee, a member of the
@@ -372,11 +404,11 @@ func toFilteredRowResponse(r db.ListIssuesFilteredRow, tags []string, tagDetails
 		PhotoBefore:     r.PhotoBefore,
 		PhotoDetail:     r.PhotoDetail,
 		PhotoAfter:      r.PhotoAfter,
-		ScoreRating:     r.ScoreRating,
 		Status:          r.Status,
 		CreatedAt:       r.CreatedAt,
 		ResolvedAt:      r.ResolvedAt,
 		ClosedAt:        r.ClosedAt,
+		DeletedAt:       r.DeletedAt,
 	}
 	creator := db.User{
 		ID:       r.CreatorID,
@@ -408,8 +440,11 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, tagDetails [
 		ID: issue.ID, ClientUUID: issue.ClientUuid, Version: issue.Version, SiteID: issue.SiteID,
 		Category: issue.Category, CauseType: issue.CauseType, LocationCode: issue.LocationCode,
 		LocationName: locName, Tags: tags, TagDetails: tagDetails, Status: issue.Status, VisibilityClass: issue.VisibilityClass,
-		Creator:  UserItem{ID: creator.ID, Username: creator.Username, FullName: creator.FullName},
-		Resolver: resolver, CreatedAt: issue.CreatedAt.Format(time.RFC3339),
+		Creator: UserItem{ID: creator.ID, Username: creator.Username, FullName: creator.FullName}, Resolver: resolver, CreatedAt: issue.CreatedAt.Format(time.RFC3339),
+	}
+	if issue.DeletedAt.Valid {
+		deletedAt := issue.DeletedAt.Time.Format(time.RFC3339)
+		resp.DeletedAt = &deletedAt
 	}
 	if issue.LocationNameViSnapshot.Valid {
 		value := issue.LocationNameViSnapshot.String

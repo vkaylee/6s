@@ -16,6 +16,8 @@ export function getE2EConfig() {
       "http://server:8080",
     username: process.env.E2E_USERNAME || "e2e-admin",
     password: process.env.E2E_PASSWORD || "E2EAdmin123!",
+    workerUsername: process.env.E2E_WORKER_USERNAME || "e2e-worker",
+    workerPassword: process.env.E2E_WORKER_PASSWORD || "E2EWorker123!",
     locationCode: process.env.E2E_LOCATION_CODE || "E2E_LINE",
     otherLocationCode: process.env.E2E_OTHER_LOCATION_CODE || "E2E_OTHER_LINE",
   };

@@ -475,6 +475,33 @@ func (m *mockIssueStore) InvalidateIssue(_ context.Context, arg db.InvalidateIss
 	m.issues[iss.ID] = iss
 	return iss, nil
 }
+func (m *mockIssueStore) CloseIssueWithEffectsAtomic(ctx context.Context, arg db.CloseIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error) {
+	iss, err := m.CloseIssue(ctx, arg)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	m.scoreLogs = append(m.scoreLogs, scores...)
+	m.auditLogs = append(m.auditLogs, audit)
+	return iss, nil
+}
+func (m *mockIssueStore) ReopenIssueWithEffectsAtomic(ctx context.Context, arg db.ReopenIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error) {
+	iss, err := m.ReopenIssue(ctx, arg)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	m.scoreLogs = append(m.scoreLogs, scores...)
+	m.auditLogs = append(m.auditLogs, audit)
+	return iss, nil
+}
+func (m *mockIssueStore) InvalidateIssueWithEffectsAtomic(ctx context.Context, arg db.InvalidateIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error) {
+	iss, err := m.InvalidateIssue(ctx, arg)
+	if err != nil {
+		return db.Issue{}, err
+	}
+	m.scoreLogs = append(m.scoreLogs, scores...)
+	m.auditLogs = append(m.auditLogs, audit)
+	return iss, nil
+}
 
 func (m *mockIssueStore) PatchIssue(_ context.Context, arg db.PatchIssueParams) (db.Issue, error) {
 	iss, ok := m.issues[arg.ID]

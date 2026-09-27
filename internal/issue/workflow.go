@@ -270,8 +270,8 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 		LocationSnapshotSource: snapshotSourceVal, LocationSnapshotRecordedAt: snapshotRecordedAt,
 		AssetID: assetID, AssignedTeamID: teamID, AssigneeID: assigneeID,
 	}
-	scoreBuilder := func(issueID int64) []db.InsertScoreLogParams {
-		score.IssueID = issueID
+	buildScore := func(issueID int64) []db.InsertScoreLogParams {
+		score.ID = issueID
 		return []db.InsertScoreLogParams{score}
 	}
 	var created db.Issue
@@ -282,9 +282,9 @@ func (s *ServiceImpl) SyncIssue(ctx context.Context, req SyncIssueRequest, curre
 			cleanup()
 			return nil, false, errors.New("issue store does not support proposed tags")
 		}
-		created, createErr = propStore.CreateIssueWithProposedTags(ctx, issueParams, req.Tags, proposedParams, buildOutbox, scoreBuilder)
+		created, createErr = propStore.CreateIssueWithProposedTags(ctx, issueParams, req.Tags, proposedParams, buildOutbox, buildScore)
 	} else {
-		created, createErr = atomicStore.CreateIssueWithSideEffects(ctx, issueParams, req.Tags, buildOutbox, scoreBuilder)
+		created, createErr = atomicStore.CreateIssueWithSideEffects(ctx, issueParams, req.Tags, buildOutbox, buildScore)
 	}
 	if createErr != nil {
 		cleanup()
@@ -326,6 +326,71 @@ func (s *ServiceImpl) saveSyncPhotos(req SyncIssueRequest) (string, sql.NullStri
 	}
 
 	return beforeBasename, detailBasename, nil
+}
+
+// DeleteIssue soft-deletes issue and cancels pending notifications atomically.
+func (s *ServiceImpl) DeleteIssue(ctx context.Context, req DeleteIssueRequest, currentUser db.User) (*MutationResponse, error) {
+	reason := strings.TrimSpace(req.Reason)
+	if req.ExpectedVersion <= 0 {
+		return nil, ErrInvalidExpectedVersion
+	}
+	if n := len([]rune(reason)); n < 1 || n > 1000 {
+		return nil, ErrInvalidDeleteReason
+	}
+	if !auth.HasPermission(ctx, auth.PermissionIssueDelete) || (currentUser.Role != auth.RoleAdmin.String() && currentUser.Role != auth.RoleSuperadmin.String()) {
+		return nil, ErrPermissionDenied
+	}
+	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
+	if err != nil || (currentUser.SiteID != 0 && issue.SiteID != 0 && issue.SiteID != currentUser.SiteID) {
+		return nil, ErrIssueNotFound
+	}
+	if issue.DeletedAt.Valid {
+		return nil, ErrIssueConflict
+	}
+	atomicStore, ok := s.store.(LifecycleAtomic)
+	if !ok {
+		return nil, errors.New("issue store does not support lifecycle transactions")
+	}
+	updated, err := atomicStore.DeleteIssueAtomic(ctx, db.SoftDeleteIssueParams{ID: req.IssueID, DeletedBy: sql.NullInt64{Int64: currentUser.ID, Valid: true}, DeleteReason: sql.NullString{String: reason, Valid: true}, Version: req.ExpectedVersion}, db.InsertAuditLogParams{UserID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, Action: "ISSUE_DELETE", TargetTable: "issues", TargetID: strconv.FormatInt(req.IssueID, 10)})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %v", ErrIssueConflict, err)
+		}
+		return nil, err
+	}
+	deletedAt := updated.DeletedAt.Time.Format(time.RFC3339)
+	s.broadcast(ctx, Event{Type: EventIssueDeleted, IssueID: updated.ID, Version: updated.Version, DeletedAt: &deletedAt})
+	return &MutationResponse{ID: updated.ID, Version: updated.Version, DeletedAt: &deletedAt}, nil
+}
+
+// RestoreIssue clears soft-delete metadata atomically without adding score entries.
+func (s *ServiceImpl) RestoreIssue(ctx context.Context, req RestoreIssueRequest, currentUser db.User) (*MutationResponse, error) {
+	if req.ExpectedVersion <= 0 {
+		return nil, ErrInvalidExpectedVersion
+	}
+	if !auth.HasPermission(ctx, auth.PermissionIssueRestore) || (currentUser.Role != auth.RoleAdmin.String() && currentUser.Role != auth.RoleSuperadmin.String()) {
+		return nil, ErrPermissionDenied
+	}
+	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
+	if err != nil || (currentUser.SiteID != 0 && issue.SiteID != 0 && issue.SiteID != currentUser.SiteID) {
+		return nil, ErrIssueNotFound
+	}
+	if !issue.DeletedAt.Valid {
+		return nil, ErrIssueConflict
+	}
+	atomicStore, ok := s.store.(LifecycleAtomic)
+	if !ok {
+		return nil, errors.New("issue store does not support lifecycle transactions")
+	}
+	updated, err := atomicStore.RestoreIssueAtomic(ctx, db.RestoreIssueParams{ID: req.IssueID, Version: req.ExpectedVersion}, db.InsertAuditLogParams{UserID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, Action: "ISSUE_RESTORE", TargetTable: "issues", TargetID: strconv.FormatInt(req.IssueID, 10)})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %v", ErrIssueConflict, err)
+		}
+		return nil, err
+	}
+	s.broadcast(ctx, Event{Type: EventIssueRestored, IssueID: updated.ID, Version: updated.Version})
+	return &MutationResponse{ID: updated.ID, Version: updated.Version, DeletedAt: nil}, nil
 }
 
 // ResolveIssueRequest parameters for POST /api/issues/{id}/resolve.
@@ -432,17 +497,16 @@ func (s *ServiceImpl) CloseIssue(ctx context.Context, req CloseIssueRequest, cur
 	}
 
 	expectedV := expectedVersion(req.ExpectedVersion)
-
-	updated, err := s.store.CloseIssue(ctx, db.CloseIssueParams{
-		ID:              issue.ID,
-		ScoreRating:     sql.NullInt16{Int16: rating, Valid: true},
-		ExpectedVersion: expectedV,
-	})
+	closeParams := db.CloseIssueParams{ID: issue.ID, ScoreRating: sql.NullInt16{Int16: rating, Valid: true}, ExpectedVersion: expectedV}
+	scores := s.closeRewardScores(ctx, issue, rating)
+	atomic, ok := s.store.(LifecycleEffectsAtomic)
+	if !ok {
+		return nil, errors.New("issue store does not support atomic close")
+	}
+	updated, err := atomic.CloseIssueWithEffectsAtomic(ctx, closeParams, scores, db.InsertAuditLogParams{UserID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, Action: "CLOSE_ISSUE", TargetTable: "issues", TargetID: strconv.FormatInt(issue.ID, 10)})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to close issue: %v", ErrIssueConflict, err)
 	}
-
-	s.recordCloseReward(ctx, issue, rating)
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
 		s.broadcast(ctx, Event{Type: EventIssueClosed, IssueID: updated.ID})
@@ -471,18 +535,19 @@ func (s *ServiceImpl) ReopenIssue(ctx context.Context, req ReopenIssueRequest, c
 	}
 
 	expectedV := expectedVersion(req.ExpectedVersion)
-
-	updated, err := s.store.ReopenIssue(ctx, db.ReopenIssueParams{
-		ID:              issue.ID,
-		RejectReason:    sql.NullString{String: req.RejectReason, Valid: req.RejectReason != ""},
-		ExpectedVersion: expectedV,
-	})
+	scores := []db.InsertScoreLogParams{}
+	if score, ok := s.configuredScore(ctx, issue.ID, "LOCATION", issue.LocationCode, "penalty_reopen", -2, false); ok {
+		scores = append(scores, score)
+	}
+	params := db.ReopenIssueParams{ID: issue.ID, RejectReason: sql.NullString{String: req.RejectReason, Valid: req.RejectReason != ""}, ExpectedVersion: expectedV}
+	atomic, ok := s.store.(LifecycleEffectsAtomic)
+	if !ok {
+		return nil, errors.New("issue store does not support atomic reopen")
+	}
+	updated, err := atomic.ReopenIssueWithEffectsAtomic(ctx, params, scores, db.InsertAuditLogParams{UserID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, Action: "REOPEN_ISSUE", TargetTable: "issues", TargetID: strconv.FormatInt(issue.ID, 10)})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to reopen: %v", ErrIssueConflict, err)
 	}
-
-	s.recordConfiguredScore(ctx, issue.ID, "LOCATION", issue.LocationCode, "penalty_reopen", int32(-2), false)
-
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
 		s.broadcast(ctx, Event{Type: EventIssueReopened, IssueID: updated.ID})
@@ -513,38 +578,20 @@ func (s *ServiceImpl) InvalidateIssue(ctx context.Context, req InvalidateIssueRe
 	}
 
 	expectedV := expectedVersion(req.ExpectedVersion)
-
-	updated, err := s.store.InvalidateIssue(ctx, db.InvalidateIssueParams{
-		ID:              issue.ID,
-		RejectReason:    sql.NullString{String: req.Reason, Valid: req.Reason != ""},
-		ExpectedVersion: expectedV,
-	})
+	scores := []db.InsertScoreLogParams{}
+	if score, ok := s.configuredScore(ctx, issue.ID, "USER", strconv.FormatInt(issue.CreatorID, 10), "penalty_reporter_invalid", -5, false); ok {
+		scores = append(scores, score)
+	}
+	params := db.InvalidateIssueParams{ID: issue.ID, RejectReason: sql.NullString{String: req.Reason, Valid: req.Reason != ""}, ExpectedVersion: expectedV}
+	audit := db.InsertAuditLogParams{UserID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, Action: "INVALIDATE_ISSUE", TargetTable: "issues", TargetID: strconv.FormatInt(issue.ID, 10)}
+	atomic, ok := s.store.(LifecycleEffectsAtomic)
+	if !ok {
+		return nil, errors.New("issue store does not support atomic invalidate")
+	}
+	updated, err := atomic.InvalidateIssueWithEffectsAtomic(ctx, params, scores, audit)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to invalidate: %v", ErrIssueConflict, err)
 	}
-
-	oldVal, oErr := json.Marshal(map[string]string{"status": issue.Status})
-	if oErr != nil {
-		log.Printf("marshal oldVal failed: %v", oErr)
-	}
-	newVal, nErr := json.Marshal(map[string]string{"status": "INVALID"})
-	if nErr != nil {
-		log.Printf("marshal newVal failed: %v", nErr)
-	}
-	s.recordConfiguredScore(ctx, issue.ID, "USER", strconv.FormatInt(issue.CreatorID, 10), "penalty_reporter_invalid", int32(-5), false)
-	if alErr := s.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-		UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
-		Action:      "INVALIDATE_ISSUE",
-		TargetTable: "issues",
-		TargetID:    strconv.FormatInt(issue.ID, 10),
-		OldValue:    oldVal,
-		NewValue:    newVal,
-		IpAddress:   sql.NullString{},
-		UserAgent:   sql.NullString{},
-	}); alErr != nil {
-		log.Printf("failed to log audit for invalidate: %v", alErr)
-	}
-
 	res, err := s.GetIssueByID(ctx, updated.ID)
 	if err == nil {
 		s.broadcast(ctx, Event{Type: EventIssueInvalidated, IssueID: updated.ID})

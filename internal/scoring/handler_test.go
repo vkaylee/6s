@@ -61,7 +61,7 @@ func (m *mockHandlerService) UpdateRules(_ context.Context, _ UpdateRulesRequest
 	return m.err
 }
 
-func (m *mockHandlerService) GetIssueScoreLogs(_ context.Context, _ int64) ([]ScoreLogItem, error) {
+func (m *mockHandlerService) GetIssueScoreLogsWithDeletion(_ context.Context, _ int64, _ string) ([]ScoreLogItem, error) {
 	if m.err != nil {
 		return nil, m.err
 	}

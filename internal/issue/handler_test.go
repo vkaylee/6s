@@ -70,6 +70,18 @@ func (m *mockIssueService) PatchIssue(_ context.Context, _ PatchIssueRequest, _ 
 	}
 	return m.issueResp, nil
 }
+func (m *mockIssueService) DeleteIssue(_ context.Context, _ DeleteIssueRequest, _ db.User) (*MutationResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &MutationResponse{}, nil
+}
+func (m *mockIssueService) RestoreIssue(_ context.Context, _ RestoreIssueRequest, _ db.User) (*MutationResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &MutationResponse{}, nil
+}
 
 func (m *mockIssueService) GetIssueByID(_ context.Context, id int64) (*Response, error) {
 	if err, ok := m.eventErrs[id]; ok {

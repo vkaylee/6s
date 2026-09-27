@@ -20,6 +20,7 @@ type Store interface {
 	RetryOutboxTask(ctx context.Context, arg db.RetryOutboxTaskParams) error
 	CreateOutboxEntry(ctx context.Context, arg db.CreateOutboxEntryParams) (db.NotificationOutbox, error)
 	GetNotificationConfig(ctx context.Context) (db.NotificationConfig, error)
+	GetIssueDeletionState(ctx context.Context, issueID int64) (db.GetIssueDeletionStateRow, error)
 }
 
 // Worker processes notification outbox rows reliably.
@@ -98,6 +99,9 @@ func (w *Worker) ProcessBatch(ctx context.Context) {
 }
 
 func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cfg DecryptedConfig) {
+	if task.Status != "SENDING" || w.issueDeleted(ctx, task.IssueID) {
+		return
+	}
 	sendErr := w.sender.Send(ctx, task.Channel, string(task.Payload), cfg)
 	if sendErr == nil {
 		if err := w.store.MarkOutboxSent(ctx, task.ID); err != nil {
@@ -105,38 +109,30 @@ func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cf
 		}
 		return
 	}
-
 	observability.Log("error", "notification delivery failed", map[string]any{"task_id": task.ID, "channel": task.Channel, "error": sendErr.Error()})
 	if task.RetryCount+1 >= task.MaxRetries {
-		if err := w.store.MarkOutboxFailed(ctx, db.MarkOutboxFailedParams{
-			ID:        task.ID,
-			LastError: sql.NullString{String: "notification delivery failed", Valid: true},
-		}); err != nil {
+		if err := w.store.MarkOutboxFailed(ctx, db.MarkOutboxFailedParams{ID: task.ID, LastError: sql.NullString{String: "notification delivery failed", Valid: true}}); err != nil {
 			observability.Log("error", "notification task failure update failed", map[string]any{"error": err.Error()})
 		}
-
-		// Fallback to LAN Webhook if WxPusher fails completely (SPEC.md Section 8.1)
-		if task.Channel == ChannelWxPusher {
-			if _, err := w.store.CreateOutboxEntry(ctx, db.CreateOutboxEntryParams{
-				IssueID:   task.IssueID,
-				EventType: task.EventType,
-				Channel:   ChannelLANWebhook,
-				Payload:   task.Payload,
-			}); err != nil {
+		if task.Channel == ChannelWxPusher && !w.issueDeleted(ctx, task.IssueID) {
+			if _, err := w.store.CreateOutboxEntry(ctx, db.CreateOutboxEntryParams{IssueID: task.IssueID, EventType: task.EventType, Channel: ChannelLANWebhook, Payload: task.Payload}); err != nil {
 				observability.Log("error", "notification fallback creation failed", map[string]any{"error": err.Error()})
 			}
 		}
-	} else {
-		// Exponential backoff: math.Pow(3, retryCount+1) * 5 seconds
-		backoffSec := int32(math.Pow(3, float64(task.RetryCount+1)) * 5) //nolint:gosec
-		if err := w.store.RetryOutboxTask(ctx, db.RetryOutboxTaskParams{
-			ID:        task.ID,
-			LastError: sql.NullString{String: "notification delivery failed", Valid: true},
-			Column2:   backoffSec,
-		}); err != nil {
-			observability.Log("error", "notification retry update failed", map[string]any{"error": err.Error()})
-		}
+		return
 	}
+	if w.issueDeleted(ctx, task.IssueID) {
+		return
+	}
+	backoffSec := int32(math.Pow(3, float64(task.RetryCount+1)) * 5) //nolint:gosec
+	if err := w.store.RetryOutboxTask(ctx, db.RetryOutboxTaskParams{ID: task.ID, LastError: sql.NullString{String: "notification delivery failed", Valid: true}, Column2: backoffSec}); err != nil {
+		observability.Log("error", "notification retry update failed", map[string]any{"error": err.Error()})
+	}
+}
+
+func (w *Worker) issueDeleted(ctx context.Context, issueID int64) bool {
+	state, err := w.store.GetIssueDeletionState(ctx, issueID)
+	return err != nil || state.DeletedAt.Valid
 }
 func (w *Worker) loadDecryptedConfig(ctx context.Context) (DecryptedConfig, error) {
 	cfgRow, err := w.store.GetNotificationConfig(ctx)

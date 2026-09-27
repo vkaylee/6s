@@ -21,7 +21,7 @@ type BusinessService interface {
 	GetReporterLeaderboard(ctx context.Context, locationCode string) ([]ReporterItem, error)
 	GetRules(ctx context.Context) ([]db.ScoringRule, error)
 	UpdateRules(ctx context.Context, req UpdateRulesRequest, adminUserID int64) error
-	GetIssueScoreLogs(ctx context.Context, issueID int64) ([]ScoreLogItem, error)
+	GetIssueScoreLogsWithDeletion(ctx context.Context, issueID int64, deletion string) ([]ScoreLogItem, error)
 	GetTargetScoreLogsInCycle(ctx context.Context, targetType, targetID string) ([]ScoreLogItem, error)
 }
 
@@ -62,8 +62,19 @@ func (h *Handler) GetIssueScoreLogs(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidID).WithCause(err))
 		return
 	}
-
-	items, err := h.service.GetIssueScoreLogs(r.Context(), id)
+	deletion := r.URL.Query().Get("deletion")
+	if deletion == "" {
+		deletion = "active"
+	}
+	if deletion != "active" && deletion != "deleted" {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
+		return
+	}
+	if deletion == "deleted" && !auth.HasPermission(r.Context(), auth.PermissionIssueViewDeleted) {
+		_ = response.AppError(w, r, apperror.Forbidden(i18n.ErrForbidden))
+		return
+	}
+	items, err := h.service.GetIssueScoreLogsWithDeletion(r.Context(), id, deletion)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrScoreLogsFailed).WithCause(err))
 		return

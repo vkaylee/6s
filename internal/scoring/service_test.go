@@ -76,6 +76,9 @@ func (m *mockScoringStore) ListScoreLogsByIssue(_ context.Context, _ int64) ([]d
 	return m.issueLogs, nil
 }
 
+func (m *mockScoringStore) ListScoreLogsByIssueIncludingDeleted(_ context.Context, _ int64) ([]db.ListScoreLogsByIssueIncludingDeletedRow, error) {
+	return nil, nil
+}
 func (m *mockScoringStore) ListScoreLogsByTargetSince(_ context.Context, _ db.ListScoreLogsByTargetSinceParams) ([]db.ListScoreLogsByTargetSinceRow, error) {
 	return m.targetLogs, nil
 }

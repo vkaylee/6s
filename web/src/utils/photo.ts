@@ -2,18 +2,16 @@
 export function resolvePhotoUrl(
   url?: string | null,
   _fallbackFolder: "before" | "detail" | "after" = "before",
+  deletion?: "active" | "deleted",
 ): string {
   if (!url) {
     return "";
   }
-  if (
-    url.startsWith("/") ||
-    url.startsWith("http://") ||
-    url.startsWith("https://") ||
-    url.startsWith("data:") ||
-    url.startsWith("blob:")
-  ) {
+  if (url.startsWith("data:") || url.startsWith("blob:")) {
     return url;
+  }
+  if (url.startsWith("/") || url.startsWith("http://") || url.startsWith("https://")) {
+    return deletion === "deleted" ? `${url}${url.includes("?") ? "&" : "?"}deletion=deleted` : url;
   }
   return "";
 }

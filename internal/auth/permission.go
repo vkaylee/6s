@@ -13,6 +13,9 @@ import (
 const (
 	PermissionIssueCreate      = "issue:create"
 	PermissionIssueViewAll     = "issue:view_all"
+	PermissionIssueViewDeleted = "issue:view_deleted"
+	PermissionIssueDelete      = "issue:delete"
+	PermissionIssueRestore     = "issue:restore"
 	PermissionIssueResolve     = "issue:resolve"
 	PermissionIssueCloseOwn    = "issue:close_own"
 	PermissionIssueCloseLine   = "issue:close_line"
@@ -35,7 +38,8 @@ const (
 // CatalogCapabilities is the stable capability catalog exposed to clients.
 // SUPERADMIN receives every entry regardless of mutable role_permissions rows.
 var CatalogCapabilities = []string{
-	PermissionIssueCreate, PermissionIssueViewAll, PermissionIssueResolve,
+	PermissionIssueCreate, PermissionIssueViewAll, PermissionIssueViewDeleted,
+	PermissionIssueDelete, PermissionIssueRestore, PermissionIssueResolve,
 	PermissionIssueCloseOwn, PermissionIssueCloseLine, PermissionIssueCloseAny,
 	PermissionIssueCloseSafety, PermissionIssueReopen, PermissionIssueInvalidate,
 	PermissionIssueAssign, PermissionIssueVerifyCause,

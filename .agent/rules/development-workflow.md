@@ -85,5 +85,8 @@ The final report for a code task MUST state:
 - Pass, fail, skip, and warning results
 - Checks that could not run and why
 - Remaining risks or explicitly non-applicable test dimensions
+- The result of `./leedevkit test all` for every runtime/build/API/persistence/configuration/dependency/shared-infrastructure change
+
+For those changes, `./leedevkit test all` MUST pass before completion. Focused checks, manual smoke tests, and target-specific commands do not satisfy this requirement by themselves. If full regression cannot run or fails, report task incomplete with exact failure.
 
 The phrases “tests pass” or “covered edge cases” are insufficient without scenarios and verification evidence.

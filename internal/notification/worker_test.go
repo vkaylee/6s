@@ -13,14 +13,16 @@ import (
 )
 
 type mockNotificationStore struct {
-	tasks    []db.NotificationOutbox
-	sentIDs  []int64
-	failIDs  []int64
-	retried  []db.RetryOutboxTaskParams
-	created  []db.CreateOutboxEntryParams
-	cfg      db.NotificationConfig
-	cfgErr   error
-	claimErr error
+	tasks     []db.NotificationOutbox
+	sentIDs   []int64
+	failIDs   []int64
+	retried   []db.RetryOutboxTaskParams
+	created   []db.CreateOutboxEntryParams
+	cfg       db.NotificationConfig
+	cfgErr    error
+	claimErr  error
+	deleted   map[int64]bool
+	deleteErr error
 }
 
 func (m *mockNotificationStore) ClaimOutboxTasks(_ context.Context, _ int32) ([]db.NotificationOutbox, error) {
@@ -59,6 +61,13 @@ func (m *mockNotificationStore) GetNotificationConfig(_ context.Context) (db.Not
 	return m.cfg, nil
 }
 
+func (m *mockNotificationStore) GetIssueDeletionState(_ context.Context, issueID int64) (db.GetIssueDeletionStateRow, error) {
+	if m.deleteErr != nil {
+		return db.GetIssueDeletionStateRow{}, m.deleteErr
+	}
+	return db.GetIssueDeletionStateRow{ID: issueID, DeletedAt: sql.NullTime{Valid: m.deleted != nil && m.deleted[issueID]}}, nil
+}
+
 type mockSender struct {
 	failChannel string
 }
@@ -76,6 +85,7 @@ func TestOutboxWorker_HappyPath(t *testing.T) {
 			{
 				ID:         1,
 				IssueID:    10,
+				Status:     "SENDING",
 				EventType:  "NEW_ISSUE",
 				Channel:    ChannelWxPusher,
 				Payload:    json.RawMessage(`{"issue_id":10,"category":"3S"}`),
@@ -103,6 +113,7 @@ func TestOutboxWorker_RetryAndFallback(t *testing.T) {
 		tasks: []db.NotificationOutbox{
 			{
 				ID:         2,
+				Status:     "SENDING",
 				IssueID:    20,
 				EventType:  "NEW_ISSUE",
 				Channel:    ChannelWxPusher,
@@ -165,7 +176,7 @@ func TestOutboxWorker_ConfigAndErrorBranches(t *testing.T) {
 			PublicBaseUrl:    "http://6s.lan",
 		},
 		tasks: []db.NotificationOutbox{
-			{ID: 1, Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
+			{ID: 1, IssueID: 10, Status: "SENDING", Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
 		},
 	}
 	sender := &mockSender{}
@@ -181,7 +192,7 @@ func TestOutboxWorker_ConfigAndErrorBranches(t *testing.T) {
 	// 2. sql.ErrNoRows returns default config
 	store.cfgErr = sql.ErrNoRows
 	store.tasks = []db.NotificationOutbox{
-		{ID: 2, Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
+		{ID: 2, IssueID: 10, Status: "SENDING", Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
 	}
 	worker.ProcessBatch(ctx)
 	if len(store.sentIDs) != 2 {

@@ -364,6 +364,8 @@ func registerIssueRoutes(r *chi.Mux, queries *db.Queries, storageMgr *storage.Ma
 		ir.Post("/{id}/close", issueHandler.Close)
 		ir.Post("/{id}/reopen", issueHandler.Reopen)
 		ir.Post("/{id}/invalidate", issueHandler.Invalid)
+		ir.Post("/{id}/delete", issueHandler.Delete)
+		ir.Post("/{id}/restore", issueHandler.Restore)
 		ir.Patch("/{id}", issueHandler.Patch)
 	})
 

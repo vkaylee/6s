@@ -9,12 +9,15 @@ import {
   type TeamItem,
 } from "../types/index.ts";
 
+export type IssueDeletionFilter = "active" | "deleted";
+
 export interface FilterState {
   statuses: string[];
   categories: string[];
   locationCodes: string[];
   assignedTeamId?: number | null;
   mineTeam?: boolean;
+  deletion?: IssueDeletionFilter;
 }
 
 interface FilterDrawerProps {
@@ -25,6 +28,7 @@ interface FilterDrawerProps {
   filters: FilterState;
   onApply: (filters: FilterState) => void;
   onReset: () => void;
+  canViewDeleted?: boolean;
 }
 
 export function FilterDrawer({
@@ -35,6 +39,7 @@ export function FilterDrawer({
   filters,
   onApply,
   onReset,
+  canViewDeleted = false,
 }: FilterDrawerProps) {
   const { t, locale } = useI18nStore();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -126,7 +131,8 @@ export function FilterDrawer({
     filters.categories.length +
     filters.locationCodes.length +
     (filters.assignedTeamId != null ? 1 : 0) +
-    (filters.mineTeam ? 1 : 0);
+    (filters.mineTeam ? 1 : 0) +
+    (filters.deletion === "deleted" ? 1 : 0);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -251,6 +257,30 @@ export function FilterDrawer({
             </div>
           </div>
 
+          {canViewDeleted && (
+            <div className="space-y-2">
+              <span className="block text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                {t("filters.deletion")}
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {(["active", "deleted"] as const).map((deletion) => (
+                  <button
+                    key={deletion}
+                    type="button"
+                    aria-pressed={filters.deletion === deletion}
+                    onClick={() => onApply({ ...filters, deletion })}
+                    className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                      filters.deletion === deletion
+                        ? "border-rose-600 bg-rose-600 text-white shadow-xs"
+                        : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {t(`filters.deletion_${deletion}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Location Selector (Multi-select Chips) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

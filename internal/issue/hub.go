@@ -13,16 +13,18 @@ const (
 	EventIssueClosed      EventType = "ISSUE_CLOSED"
 	EventIssueReopened    EventType = "ISSUE_REOPENED"
 	EventIssueInvalidated EventType = "ISSUE_INVALIDATED"
+	EventIssueDeleted     EventType = "ISSUE_DELETED"
+	EventIssueRestored    EventType = "ISSUE_RESTORED"
 )
 
 // Event is dispatched over SSE when an issue mutates.
 type Event struct {
-	Type    EventType `json:"type"`
-	IssueID int64     `json:"issue_id"`
+	Type      EventType `json:"type"`
+	IssueID   int64     `json:"issue_id"`
+	Version   int32     `json:"version,omitempty"`
+	DeletedAt *string   `json:"deleted_at,omitempty"`
 
-	// recipients is the subscriber audience resolved once per broadcast. It is unexported so
-	// it never reaches the wire; nil means the audience was not resolved and the delivery
-	// point must re-check visibility through the issue detail projection.
+	// recipients is the subscriber audience resolved once per broadcast. A nil value is a legacy event.
 	recipients *eventRecipients
 }
 

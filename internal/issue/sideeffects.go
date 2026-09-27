@@ -25,15 +25,38 @@ func (s *ServiceImpl) recordConfiguredScore(ctx context.Context, issueID int64, 
 		log.Printf("skipping score for rule %s: invalid points %d", ruleKey, rule.Points)
 		return
 	}
-	if scErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{
-		IssueID:    issueID,
-		TargetType: targetType,
-		TargetID:   targetID,
-		RuleKey:    ruleKey,
-		Points:     rule.Points,
-	}); scErr != nil {
+	if scErr := s.store.InsertScoreLog(ctx, db.InsertScoreLogParams{ID: issueID, TargetType: targetType, TargetID: targetID, RuleKey: ruleKey, Points: rule.Points}); scErr != nil {
 		log.Printf("failed to log score %s: %v", ruleKey, scErr)
 	}
+}
+func (s *ServiceImpl) configuredScore(ctx context.Context, issueID int64, targetType, targetID, ruleKey string, fallback int32, award bool) (db.InsertScoreLogParams, bool) {
+	rule, err := s.store.GetScoringRuleByKey(ctx, ruleKey)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return db.InsertScoreLogParams{}, false
+		}
+		rule.Points = fallback
+	}
+	if (award && rule.Points <= 0) || (!award && rule.Points >= 0) {
+		return db.InsertScoreLogParams{}, false
+	}
+	return db.InsertScoreLogParams{ID: issueID, TargetType: targetType, TargetID: targetID, RuleKey: ruleKey, Points: rule.Points}, true
+}
+func (s *ServiceImpl) closeRewardScores(ctx context.Context, issue db.Issue, rating int16) []db.InsertScoreLogParams {
+	var scores []db.InsertScoreLogParams
+	key, fallback := "reward_reporter_normal", int32(2)
+	if issue.Category == Category6S.String() {
+		key, fallback = "reward_reporter_safety", int32(5)
+	}
+	if score, ok := s.configuredScore(ctx, issue.ID, "USER", strconv.FormatInt(issue.CreatorID, 10), key, fallback, true); ok {
+		scores = append(scores, score)
+	}
+	if rating >= 4 {
+		if score, ok := s.configuredScore(ctx, issue.ID, "LOCATION", issue.LocationCode, "bonus_kaizen", 1, true); ok {
+			scores = append(scores, score)
+		}
+	}
+	return scores
 }
 
 // buildOutboxEntries builds notification outbox rows for both channels with a shared payload.
