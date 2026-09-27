@@ -20,7 +20,60 @@ export async function compressImage(
   }
 
   return new Promise<Blob>((resolve, reject) => {
-    // If createImageBitmap is supported
+    const renderWithImageElement = () => {
+      if (
+        typeof Image === "undefined" ||
+        typeof URL === "undefined" ||
+        typeof URL.createObjectURL !== "function" ||
+        typeof document === "undefined"
+      ) {
+        reject(new Error("Image decoding is unavailable"));
+        return;
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      const cleanup = () => URL.revokeObjectURL(url);
+      img.onload = () => {
+        cleanup();
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else resolve(file);
+          },
+          "image/jpeg",
+          quality,
+        );
+      };
+      img.onerror = () => {
+        cleanup();
+        reject(new Error("Failed to load image for compression"));
+      };
+      img.src = url;
+    };
+
+    // Safari may expose createImageBitmap but reject camera formats it cannot decode.
     if (typeof createImageBitmap !== "undefined") {
       createImageBitmap(file)
         .then((bitmap) => {
@@ -73,53 +126,10 @@ export async function compressImage(
 
           resolve(file);
         })
-        .catch(reject);
+        .catch(renderWithImageElement);
       return;
     }
 
-    // Fallback using HTMLImageElement
-    if (typeof Image !== "undefined" && typeof URL !== "undefined") {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        let { width, height } = img;
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(file);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          (blob) => {
-            if (blob) resolve(blob);
-            else resolve(file);
-          },
-          "image/jpeg",
-          quality,
-        );
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Failed to load image for compression"));
-      };
-      img.src = url;
-      return;
-    }
-
-    resolve(file);
+    renderWithImageElement();
   });
 }

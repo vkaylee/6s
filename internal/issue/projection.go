@@ -522,7 +522,17 @@ func formatPhotoURL(issueID int64, folder, filename string) string {
 	if filename == "" {
 		return ""
 	}
-	if strings.HasPrefix(filename, "/") || strings.HasPrefix(filename, "data:") {
+	if strings.HasPrefix(filename, "data:") {
+		return filename
+	}
+	legacyPrefix := "/uploads/" + folder + "/"
+	if strings.HasPrefix(filename, legacyPrefix) {
+		basename := strings.TrimPrefix(filename, legacyPrefix)
+		if basename != "" && !strings.Contains(basename, "/") {
+			filename = basename
+		}
+	}
+	if strings.HasPrefix(filename, "/api/issues/") || strings.HasPrefix(filename, "http://") || strings.HasPrefix(filename, "https://") {
 		return filename
 	}
 	return fmt.Sprintf("/api/issues/%d/media/%s/%s", issueID, folder, filename)
