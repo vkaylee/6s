@@ -20,9 +20,8 @@ test.describe("Clipboard Paste Image Upload", () => {
   }) => {
     const { baseURL, username, password } = getE2EConfig();
 
-    // 1. Authenticate API and verify test locations exist
-    const session = await loginViaAPI(request, username, password);
-    await ensureLocationsViaAPI(request, session.access_token);
+    await loginViaAPI(request, username, password);
+    await ensureLocationsViaAPI(request);
 
     // 2. Log in through UI and open Create Issue page
     await loginViaUI(page, username, password);

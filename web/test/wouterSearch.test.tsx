@@ -17,7 +17,6 @@ describe("Wouter deep linking with useSearch", () => {
         full_name: "Inspector Guy",
         role: UserRole.LINE_LEADER,
       },
-      accessToken: "mock-token",
       isOfflineGrace: false,
     });
   });

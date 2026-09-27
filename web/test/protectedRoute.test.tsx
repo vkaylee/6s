@@ -9,7 +9,6 @@ describe("ProtectedRoute component", () => {
   beforeEach(() => {
     useAuthStore.setState({
       user: null,
-      accessToken: null,
       isOfflineGrace: false,
       isLoading: false,
     });
@@ -51,7 +50,6 @@ describe("ProtectedRoute component", () => {
         full_name: "Admin User",
         role: UserRole.ADMIN,
       },
-      accessToken: "mock-token",
     });
 
     const html = renderToString(
@@ -76,7 +74,6 @@ describe("ProtectedRoute component", () => {
         role: UserRole.USER,
         capabilities: [],
       },
-      accessToken: "worker-token",
     });
 
     const html = renderToString(
@@ -100,7 +97,6 @@ describe("ProtectedRoute component", () => {
         role: UserRole.ADMIN,
         capabilities: ["settings:manage"],
       },
-      accessToken: "token",
     });
 
     const allowedHtml = renderToString(
@@ -126,7 +122,6 @@ describe("ProtectedRoute component", () => {
     useAuthStore.setState({
       isLoading: false,
       user: { id: 1, username: "admin", full_name: "Admin", role: UserRole.ADMIN },
-      accessToken: "token",
     });
     const html = renderToString(
       <Router ssrPath="/admin/permissions">
@@ -148,7 +143,6 @@ describe("ProtectedRoute component", () => {
         role: UserRole.ADMIN,
         // capabilities missing (old session)
       },
-      accessToken: "token",
     });
 
     const html = renderToString(

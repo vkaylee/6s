@@ -1,19 +1,18 @@
 // @ts-check
 import { expect, test } from "@playwright/test";
-import { getE2EConfig, loginViaUI } from "./helpers.js";
+import { getE2EConfig, injectAuthCookies, loginViaUI } from "./helpers.js";
 
 test("login form preserves password whitespace while trimming username", async ({ page }) => {
   const { baseURL } = getE2EConfig();
   let requestBody;
   await page.route("**/api/auth/login", async (route) => {
     requestBody = JSON.parse(route.request().postData() || "{}");
+    await injectAuthCookies(page, baseURL);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         data: {
-          access_token: "e2e-access-token",
-          refresh_token: "e2e-refresh-token",
           user: {
             id: 1,
             username: "worker01",

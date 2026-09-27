@@ -11,8 +11,8 @@ describe("SplitSlider Component", () => {
         onPhotoClick={() => {}}
       />,
     );
-    expect(html).toContain("/api/issues/1/media/before/test.jpg");
-    expect(html).toContain("/api/issues/1/media/after/test.jpg");
+    expect(html.match(/<img\b/g)?.length).toBe(2);
+    expect(html.match(/aria-busy="true"/g)?.length).toBe(2);
   });
 
   it("constrains its container to a bounded box so absolute images do not cover the modal", () => {

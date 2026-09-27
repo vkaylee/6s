@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -252,6 +253,12 @@ func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		_ = response.AppError(w, r, apperror.NotFound(i18n.ErrIssueNotFound))
 		return
+	}
+	switch strings.ToLower(filepath.Ext(stat.Name())) {
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
 	}
 	w.Header().Set("Cache-Control", "private, no-cache")
 	http.ServeContent(w, r, stat.Name(), stat.ModTime(), f)

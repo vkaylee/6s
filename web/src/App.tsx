@@ -68,11 +68,11 @@ function ScrollToTop() {
 
 export function App() {
   const { t, locale } = useI18nStore();
-  const { user, accessToken, restoreSession } = useAuthStore();
+  const { user, restoreSession } = useAuthStore();
   const { initTheme } = useThemeStore();
   const [currentPath, setLocation] = useLocation();
   const searchString = useSearch();
-  const dashboard = useDashboardData({ accessToken, locale, searchString, user });
+  const dashboard = useDashboardData({ locale, searchString, user });
   const [conflictItem, setConflictItem] = useState<DraftResolve | null>(null);
   const { isSetupOpen, setIsSetupOpen } = useSetupStatus();
   const pushRoute = useRouteHistoryStore((state) => state.push);

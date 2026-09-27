@@ -133,6 +133,9 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r.Use(middleware.Recoverer)
 	r.Use(timeoutByRoute)
 	r.Use(i18n.Middleware)
+	if cfg != nil {
+		r.Use(auth.NewCSRFMiddleware(!cfg.DevInsecure))
+	}
 	// Liveness is dependency-free so orchestrators restart only stopped processes.
 	healthHandler := func(w http.ResponseWriter, _ *http.Request) {
 		_ = response.JSON(w, http.StatusOK, map[string]string{
@@ -212,6 +215,7 @@ func registerAPIRoutes(ctx context.Context, r *chi.Mux, dbConn *sql.DB, cfg *con
 
 	ticketMgr := auth.NewTicketManager()
 	authHandler := auth.NewHandler(queries, tm, limiter, cipher, ldapClient, ticketMgr)
+	authHandler.SetSecureCookies(!cfg.DevInsecure)
 	authMw := auth.NewMiddleware(tm, queries, ticketMgr)
 	adHandler := auth.NewADConfigHandler(queries, cipher, ldapClient)
 	permissionHandler := auth.NewPermissionHandler(queries)
@@ -229,6 +233,7 @@ func registerAPIRoutes(ctx context.Context, r *chi.Mux, dbConn *sql.DB, cfg *con
 		// Authenticated auth routes
 		ar.Group(func(pr chi.Router) {
 			pr.Use(authMw.Authenticate)
+			pr.Get("/me", authHandler.Me)
 			pr.Post("/ticket", authHandler.CreateTicket)
 			pr.Post("/revoke", authHandler.Revoke)
 			pr.Get("/sessions", authHandler.Sessions)

@@ -54,7 +54,7 @@ describe("IssueCard Component", () => {
       resolver_name: "Thợ Sửa B",
     };
     const html = renderToString(<IssueCard issue={issueWithAfter} onClick={() => {}} />);
-    expect(html).toContain("after.jpg");
+    expect(html.match(/<img\b/g)?.length).toBe(2);
     expect(html).toContain("Thợ Sửa B");
   });
 

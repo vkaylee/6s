@@ -406,7 +406,7 @@ describe("IssueDetailModal Component", () => {
       container.querySelector("#issue-photo-preview-title")?.closest('[role="dialog"]'),
     ).toBeFalsy();
   });
-  it("disables photo zoom and shows permission message when media request returns 403", async () => {
+  it("disables photo zoom and shows image error when native media loading fails", async () => {
     installFetch({ issue: baseIssue(), mediaStatus: 403 });
     const container = await mount(
       <IssueDetailModal
@@ -418,16 +418,14 @@ describe("IssueDetailModal Component", () => {
     );
 
     await act(async () => {
-      const { promise, resolve } = Promise.withResolvers<void>();
-      setTimeout(resolve, 50);
-      await promise;
+      container.querySelector("img")?.dispatchEvent(new Event("error"));
     });
 
     const photoButton = container.querySelector(
       'button[aria-label="Chạm ảnh để xem toàn màn hình"]',
     ) as HTMLButtonElement | null;
     expect(photoButton).toBeNull();
-    expect(container.textContent).toContain("Bạn không có quyền xem ảnh này");
+    expect(container.textContent).toContain("Không thể tải ảnh");
     expect(container.textContent).not.toContain("Chạm ảnh để xem toàn màn hình");
 
     await act(async () => {

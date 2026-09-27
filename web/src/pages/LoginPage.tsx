@@ -41,19 +41,14 @@ export function LoginPage() {
     setErrorMsg("");
 
     try {
-      const res = await apiClient<{
-        access_token: string;
-        refresh_token: string;
-        user: UserProfile;
-      }>("/api/auth/login", {
+      const res = await apiClient<{ user: UserProfile }>("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: trimmedUsername, password }),
         skipAuth: true,
       });
-
       haptics.success();
-      await setAuth(res.user, res.access_token, res.refresh_token);
+      await setAuth(res.user);
       setLocation(returnTo, { replace: true });
     } catch (err: unknown) {
       haptics.errorOrConflict();

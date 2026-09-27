@@ -20,8 +20,6 @@ interface AuthenticatedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
   onErrorStateChange?: (error: AuthenticatedImageError | null) => void;
 }
 
-const EMPTY_SRC = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
-
 const BROKEN_ICON =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Cpath d='m3 16 5-5 4 4 3-3 6 6'/%3E%3Ccircle cx='9' cy='8' r='1.5'/%3E%3C/svg%3E\")";
 
@@ -121,7 +119,7 @@ export function AuthenticatedImage({
   ...props
 }: AuthenticatedImageProps) {
   const { t } = useI18nStore();
-  const { blobUrl, error, retry } = useAuthenticatedImageUrl(imageUrl);
+  const { blobUrl, error, setError, reloadKey, retry } = useAuthenticatedImageUrl(imageUrl);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [showSkeleton, setShowSkeleton] = useState(false);
 
@@ -145,6 +143,7 @@ export function AuthenticatedImage({
 
   const handleError: ReactEventHandler<HTMLImageElement> = (event) => {
     setStatus("error");
+    setError("UNKNOWN");
     onError?.(event);
   };
 
@@ -160,12 +159,7 @@ export function AuthenticatedImage({
           backgroundSize: "1.5rem 1.5rem",
         }
       : undefined;
-  const src =
-    status === "error"
-      ? EMPTY_SRC
-      : typeof window === "undefined"
-        ? (imageUrl ?? undefined)
-        : (blobUrl ?? EMPTY_SRC);
+  const src = status === "error" ? undefined : (blobUrl ?? undefined);
 
   const retryMedia = () => {
     setStatus("loading");
@@ -175,6 +169,7 @@ export function AuthenticatedImage({
   return (
     <>
       <img
+        key={reloadKey}
         {...props}
         className={`${className ?? ""} ${placeholderState}`}
         style={placeholderStyle ? { ...props.style, ...placeholderStyle } : props.style}

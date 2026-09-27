@@ -278,6 +278,11 @@ export type AdConfig = {
     updated_at?: string;
 };
 
+/**
+ * Double-submit value matching the readable 6s_csrf cookie; required for unsafe same-origin requests.
+ */
+export type CsrfToken = string;
+
 export type LoginData = {
     body: {
         username: string;
@@ -303,14 +308,10 @@ export type LoginError = LoginErrors[keyof LoginErrors];
 
 export type LoginResponses = {
     /**
-     * Đăng nhập thành công
+     * Đăng nhập thành công; auth cookies set in response headers.
      */
     200: {
         data: {
-            access_token: string;
-            expires_in: number;
-            refresh_token: string;
-            refresh_expires_in: number;
             user: UserSummary;
         };
     };
@@ -319,8 +320,12 @@ export type LoginResponses = {
 export type LoginResponse = LoginResponses[keyof LoginResponses];
 
 export type RefreshData = {
-    body: {
-        refresh_token: string;
+    body?: never;
+    headers: {
+        /**
+         * Double-submit value matching the readable 6s_csrf cookie; required for unsafe same-origin requests.
+         */
+        'X-CSRF-Token': string;
     };
     path?: never;
     query?: never;
@@ -329,7 +334,7 @@ export type RefreshData = {
 
 export type RefreshErrors = {
     /**
-     * Refresh token đã hết hạn hoặc bị thu hồi
+     * Refresh cookie hết hạn hoặc bị thu hồi
      */
     401: ErrorEnvelope;
 };
@@ -338,14 +343,10 @@ export type RefreshError = RefreshErrors[keyof RefreshErrors];
 
 export type RefreshResponses = {
     /**
-     * Token được làm mới thành công
+     * Phiên được làm mới thành công; rotated cookies set in response headers.
      */
     200: {
         data: {
-            access_token: string;
-            expires_in: number;
-            refresh_token: string;
-            refresh_expires_in: number;
             user: UserSummary;
         };
     };
@@ -353,15 +354,54 @@ export type RefreshResponses = {
 
 export type RefreshResponse = RefreshResponses[keyof RefreshResponses];
 
+export type GetCurrentUserData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/me';
+};
+
+export type GetCurrentUserErrors = {
+    /**
+     * Access cookie thiếu, hết hạn hoặc không hợp lệ
+     */
+    401: ErrorEnvelope;
+};
+
+export type GetCurrentUserError = GetCurrentUserErrors[keyof GetCurrentUserErrors];
+
+export type GetCurrentUserResponses = {
+    /**
+     * Current authenticated user
+     */
+    200: {
+        data: UserSummary;
+    };
+};
+
+export type GetCurrentUserResponse = GetCurrentUserResponses[keyof GetCurrentUserResponses];
+
 export type RevokeSessionData = {
-    body: {
-        refresh_token_id?: number;
-        user_id?: number;
+    body?: never;
+    headers: {
+        /**
+         * Double-submit value matching the readable 6s_csrf cookie; required for unsafe same-origin requests.
+         */
+        'X-CSRF-Token': string;
     };
     path?: never;
     query?: never;
     url: '/auth/revoke';
 };
+
+export type RevokeSessionErrors = {
+    /**
+     * Chưa xác thực
+     */
+    401: ErrorEnvelope;
+};
+
+export type RevokeSessionError = RevokeSessionErrors[keyof RevokeSessionErrors];
 
 export type RevokeSessionResponses = {
     /**
@@ -2085,7 +2125,12 @@ export type GetSetupStatusResponses = {
 export type GetSetupStatusResponse = GetSetupStatusResponses[keyof GetSetupStatusResponses];
 
 export type SetupSuperadminData = {
-    body?: never;
+    body: {
+        username: string;
+        password: string;
+        full_name: string;
+        email?: string;
+    };
     path?: never;
     query?: never;
     url: '/auth/setup';
@@ -2093,10 +2138,12 @@ export type SetupSuperadminData = {
 
 export type SetupSuperadminResponses = {
     /**
-     * Kết quả setup
+     * Setup successful; auth cookies set in response headers.
      */
     200: {
-        [key: string]: unknown;
+        data: {
+            user: UserSummary;
+        };
     };
 };
 

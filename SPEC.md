@@ -524,76 +524,17 @@ Cấu trúc JSON lưu trong cột `notification_outbox.payload`. Các giá trị
 
 ## 6. API SPECIFICATION
 Format dữ liệu: `application/json` hoặc `multipart/form-data`.
-Authentication: Header `Authorization: Bearer <ACCESS_TOKEN>`.
-Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3.
+Authentication: same-origin HttpOnly cookies. Server sets `6s_access` (`HttpOnly; Secure` in production; `SameSite=Strict; Path=/api`) and `6s_refresh` (`HttpOnly; Secure` in production; `SameSite=Strict; Path=/api/auth`). Cookie `6s_csrf` is readable by browser and must be echoed as `X-CSRF-Token` for unsafe requests. No `Authorization: Bearer` fallback, no wildcard credentialed CORS.
+Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3. Auth responses use `Cache-Control: no-store` and never include token values.
 
-### 6.1. Authentication & Token Lifecycle
-- `POST /api/auth/login` (Hỗ trợ Local & Active Directory / LDAP)
-  - Rate Limit: Tối đa 5 lần thử sai / 1 phút / IP, vượt ngưỡng trả HTTP 429. Khi chạy sau reverse proxy, backend CHỈ tin `X-Forwarded-For` từ danh sách proxy cấu hình trước (env `TRUSTED_PROXIES`) — không trust header từ client trực tiếp.
-  - Khóa theo tài khoản: 10 lần sai liên tiếp trong 15 phút cho cùng `username`/`badge_code` -> tạm khóa 15 phút (bộ đếm in-memory theo tài khoản, reset khi đăng nhập thành công), ghi `system_audit_logs` (`action = 'LOGIN_LOCKED'`) để Admin biết công nhân nào bị khóa.
-  - **Chuẩn JWT Token (.agent/rules/access-control.md)**:
-    - Runtime hiện có default `JWT_SECRET` cho môi trường dev; production MUST override bằng environment/CLI. Đây là khoản cần harden: production phải fail fast khi thiếu secret hợp lệ, tuyệt đối không dùng default secret.
-    - Payload chỉ chứa claims tối giản: `sub` (user_id dạng int/string), `exp`, `iat`. Tuyệt đối không nhúng PII, tên, hay danh sách roles vào JWT payload.
-    - Role và quyền được tra cứu trực tiếp theo `sub` từ PostgreSQL/cache tại middleware xác thực.
-    - Thời hạn Access Token: tối đa `3600` giây (60 phút) cho mobile/web. Refresh Token: tối đa 30 ngày.
-  - Luồng xác thực linh hoạt (Hybrid Auth Flow):
-    1. Thử xác thực nội bộ trước (`auth_source='LOCAL'` bằng Argon2id, hoặc `badge_code`) để tài khoản quản trị local luôn dùng được khi AD bật hoặc AD gặp sự cố.
-    2. Nếu không khớp nội bộ, đọc cấu hình AD từ bảng `ad_configs` trong DB:
-       - Nếu `is_enabled = 1`:
-         - Backend kết nối tới AD Domain Controller theo cấu hình trong DB qua LDAPS (`port 636`) hoặc StartTLS (`port 389`).
-         - Sử dụng service bind (`bind_dn` / `bind_password` sau khi giải mã AES-256-GCM) để tìm kiếm người dùng theo `user_filter`, sau đó bind auth bằng mật khẩu người dùng cung cấp.
-         - **Xác thực thành công** — đối chiếu danh tính theo LDAP DN trước, KHÔNG tạo tài khoản theo tên người dùng nhập vào:
-           - Tìm bản ghi theo `ad_dn` (không phân biệt hoa/thường). Nếu có từ 2 bản ghi trở lên khớp DN -> từ chối (401) vì danh tính mơ hồ.
-           - Nếu bản ghi AD đã tồn tại: dùng lại đúng bản ghi đó và chỉ cập nhật `full_name`, `email`, `last_login_at`. Giữ nguyên `role`, `site_id` và các gán kèm do Admin thiết lập; KHÔNG đồng bộ lại `role` từ nhóm AD ở mỗi lần đăng nhập.
-           - Nếu `username` đã tồn tại nhưng thuộc `auth_source='LOCAL'` hoặc có `ad_dn` khác -> từ chối (401), không tự ghép danh tính AD với tài khoản local.
-           - Nếu chưa có bản ghi nào: tự động khởi tạo (JIT) với `auth_source='AD'`, `site_id` = site `DEFAULT`, map `displayName` -> `full_name`, `mail` -> `email`, role theo nhóm AD (`group_admin_dn`, `group_safety_dn`, `group_leader_dn`, mặc định `USER`). Tranh chấp tạo đồng thời được xử lý bằng cách đọc lại theo DN và chỉ chấp nhận khi đúng danh tính AD.
-           - Cấp Access Token (1h) + Refresh Token (30 ngày).
-       - Nếu `is_enabled = 0`: So khớp hoàn toàn bằng Argon2id trong PostgreSQL (tài khoản nội bộ).
-    3. **Phân loại thất bại** (không gộp chung, nhưng luôn trả thông báo trung tính cho client):
-       - `LDAP Result Code 49 (Invalid Credentials)` hoặc không tìm thấy user trong AD: trả 401 và tính vào bộ đếm khóa theo tài khoản.
-       - Lỗi vận hành (DNS, timeout, TLS handshake, AD down, sai/không giải mã được `bind_password`, đọc cấu hình AD lỗi, lỗi ghi JIT vào PostgreSQL): trả 500, chỉ giới hạn theo IP, KHÔNG tính vào bộ đếm khóa tài khoản và KHÔNG ghi `LOGIN_LOCKED`. Lý do thất bại được ghi log theo bước (`ad_config`, `ad_config_decrypt`, `ldap_authentication`, `jit_provision`) không kèm mật khẩu hay DN thô.
-       - Không có fallback từ tài khoản AD sang mật khẩu local cho cùng `username`; kênh cứu hộ là tài khoản `auth_source='LOCAL'` riêng.
-  - Trả về (HTTP 200 - Envelope):
-    ```json
-    {
-      "data": {
-        "access_token": "...",
-        "expires_in": 3600,
-        "refresh_token": "...",
-        "refresh_expires_in": 2592000,
-        "user": {
-          "id": 1,
-          "username": "...",
-          "auth_source": "AD",
-          "role": "LINE_LEADER",
-          "assigned_location_code": "LINE_A2",
-          "full_name": "..."
-        }
-      }
-    }
-    ```
-- `POST /api/auth/refresh`
-  - Body: `{"refresh_token": "..."}`
-  - Xử lý: Tra cứu `refresh_tokens`. Nếu hợp lệ và chưa bị thu hồi (`revoked_at IS NULL`), cấp mới cặp `access_token` và `refresh_token` (Token Rotation chống tái sử dụng).
-  - Trả về (HTTP 200 - Envelope):
-    ```json
-    {
-      "data": {
-        "access_token": "...",
-        "expires_in": 3600,
-        "refresh_token": "...",
-        "refresh_expires_in": 2592000
-      }
-    }
-    ```
-- `POST /api/auth/revoke` (Đăng xuất hoặc thu hồi thiết bị mất)
-  - Header: Role Admin hoặc chính chủ Token
-  - Body: `{"refresh_token_id": 123}` hoặc `{"user_id": 5}` (Admin cưỡng chế thu hồi toàn bộ phiên đăng nhập của nhân viên nghỉ việc/mất máy).
-  - Ghi vết `system_audit_logs`.
-  - Trả về (HTTP 200 - Envelope): `{"data": {"revoked": true}}`.
-
-- `GET /api/auth/sessions` (Liệt kê phiên hoạt động của chính user; kèm `?user_id=` khi Admin — phục vụ màn "Thu hồi thiết bị mất", vì `/revoke` cần `refresh_token_id` mà client không thể biết nếu không có endpoint này)
-  - Trả về (HTTP 200 - Envelope): `{"data": [{"id": 123, "device_info": "...", "created_at": "...", "expires_at": "..."}]}`
+### 6.1. Authentication & Cookie Lifecycle
+- `POST /api/auth/login` (Local hoặc Active Directory / LDAP): gửi username/password. Thành công đặt ba cookie auth/CSRF và trả `data.user`; access/refresh token không xuất hiện trong body, URL, log hoặc referrer.
+- `POST /api/auth/refresh`: không có request body; đọc `6s_refresh`, xoay refresh token và đặt lại cookies. Gửi `X-CSRF-Token` khớp `6s_csrf`.
+- `GET /api/auth/me`: yêu cầu `6s_access`, trả `data` là `UserSummary`; dùng khôi phục profile sau reload.
+- `POST /api/auth/revoke`: request không body; yêu cầu CSRF, thu hồi phiên hiện tại và xóa `6s_access`, `6s_refresh`, `6s_csrf`. Admin vẫn có thể thu hồi phiên khác theo endpoint quản trị hiện hữu.
+- `GET /api/auth/sessions`: liệt kê phiên hoạt động; `?user_id=` chỉ dành cho Admin.
+- Access JWT giữ thời hạn 15 phút, refresh-token rotation 7 ngày như cấu hình hiện hành. Cookie Secure bắt buộc production; triển khai sau TLS termination phải giữ HTTPS tới browser.
+- Mọi request unsafe phải cùng-origin và kiểm tra `Origin`/`Referer`; không dùng wildcard CORS. Protected media vẫn kiểm tra authorization server-side.
 
 ### 6.2. Master Data: Locations & Tags
 - `GET /api/locations`
@@ -989,8 +930,8 @@ Gồm 2 object stores độc lập:
 }
 ```
 ### 7.2.1. Quản lý Session Client
-- Tuân thủ chuẩn bảo mật Mục 7.3.4: `access_token` (1h) chỉ lưu trong bộ nhớ RAM (Zustand store `authStore`), không lưu vào bất kỳ Web Storage nào.
-- `refresh_token` (30 ngày) được lưu trữ an toàn trong IndexedDB (`6s_local_db`), kết hợp Content Security Policy `default-src 'self'` để chống rủi ro XSS. Tuyệt đối không dùng `localStorage` để lưu credentials.
+- Auth credentials chỉ nằm trong HttpOnly cookies do server quản lý; browser JavaScript và IndexedDB không nhận hoặc lưu `access_token`/`refresh_token`.
+- IndexedDB chỉ lưu profile tối thiểu để giữ Offline Grace Mode và draft; mọi thao tác online vẫn phải được server xác thực bằng cookie.
 
 ### 7.3. Cơ chế Auto-Sync & Xử lý Xung đột Ngoại tuyến (Offline Concurrency Resolution)
 1. **Lắng nghe mạng**:
@@ -1007,10 +948,10 @@ Gồm 2 object stores độc lập:
        - Hai lựa chọn xử lý rõ ràng: `[Ghi đè bản ghi]` (nếu có thẩm quyền) hoặc `[Lưu ảnh về máy & Hủy bản nháp]` để đảm bảo zero-data-loss mà không gây mơ hồ cho công nhân.
      - **Lỗi mạng**: Reset trạng thái về lại `PENDING` để lần sau thử lại.
 3. **Cơ chế Duy trì Phiên Ngoại Tuyến (Offline Session Grace Period)**:
-   - Khi di chuyển vào vùng mất sóng Wi-Fi, nếu JWT Access Token hết hạn (sau 3600 giây / 60 phút), client **tuyệt đối không đăng xuất hoặc chuyển hướng về màn hình Login**.
-   - Client duy trì chế độ `Offline Grace Mode`: Tiếp tục cho phép lưu draft issues và ảnh vào IndexedDB gắn với user ID/profile đã cache.
-   - Khi thiết bị phát hiện có mạng trở lại: Tự động chạy `POST /api/auth/refresh` bằng Refresh Token trong nền. Nếu refresh thành công, tiến trình Auto-Sync tự động kích hoạt. Chỉ yêu cầu đăng nhập lại nếu Refresh Token (30 ngày) đã thực sự hết hạn hoặc bị thu hồi.
-4. **Lưu trữ Token phía Client**: `access_token` giữ trong memory (Zustand, không đụng storage); `refresh_token` lưu IndexedDB của `6s_local_db` (không dùng LocalStorage — cùng chính sách với draft, và không bị đọc bởi mọi script cùng origin dễ dàng hơn). Kèm CSP `default-src 'self'` cho PWA dùng chung tablet, chống XSS đánh cắp token.
+   - Khi offline, client vẫn cho phép lưu draft issues và ảnh vào IndexedDB gắn với user/profile đã cache; cached profile không chứng minh authorization online.
+   - Khi online trở lại: gọi `POST /api/auth/refresh` không body với cookies và `X-CSRF-Token`; chỉ yêu cầu đăng nhập lại khi cookie refresh hết hạn hoặc bị thu hồi.
+   - Browser JavaScript và IndexedDB không nhận hoặc lưu access/refresh token. Sau reload, gọi `GET /api/auth/me` để khôi phục user summary.
+   - Protected media dùng URL server same-origin, không token query string; cookie tự động gửi bởi browser.
 
 ## 8. THÔNG BÁO WECHAT QUA WXPUSHER & WEBHOOK DỰ PHÒNG NỘI BỘ
 

@@ -319,6 +319,7 @@ export function IssueDetailModal({
   const [deleteReason, setDeleteReason] = useState("");
   const [beforePhotoError, setBeforePhotoError] = useState<AuthenticatedImageError | null>(null);
   const [detailPhotoError, setDetailPhotoError] = useState<AuthenticatedImageError | null>(null);
+  const anyPhotoError = beforePhotoError || detailPhotoError;
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -1211,14 +1212,17 @@ export function IssueDetailModal({
                   <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">
                     {t("issue_detail.photo_before_label")}
                   </span>
-                  {!beforePhotoError && (
+                  {!anyPhotoError && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
                       <ZoomIn className="h-3 w-3" aria-hidden="true" />
                       <span>{t("issue_detail.tap_to_zoom")}</span>
                     </span>
                   )}
                 </div>
-                <div className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800">
+                <div
+                  className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800"
+                  onErrorCapture={() => setBeforePhotoError("UNKNOWN")}
+                >
                   <AuthenticatedImage
                     imageUrl={resolvePhotoUrl(
                       currentIssue.photo_before,
@@ -1227,12 +1231,13 @@ export function IssueDetailModal({
                     )}
                     alt={t("issue_detail.photo_before_alt")}
                     compact={false}
+                    onError={() => setBeforePhotoError("UNKNOWN")}
                     onErrorStateChange={setBeforePhotoError}
                     className={`w-full aspect-[4/3] object-cover transition-transform ${
-                      beforePhotoError ? "" : "group-hover:scale-101"
+                      anyPhotoError ? "" : "group-hover:scale-101"
                     }`}
                   />
-                  {!beforePhotoError && (
+                  {!anyPhotoError && (
                     <button
                       type="button"
                       aria-label={t("issue_detail.tap_to_zoom")}
@@ -1267,14 +1272,17 @@ export function IssueDetailModal({
                   <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">
                     {t("issue_detail.photo_detail_label")}
                   </span>
-                  {!detailPhotoError && (
+                  {!anyPhotoError && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
                       <ZoomIn className="h-3 w-3" aria-hidden="true" />
                       <span>{t("issue_detail.tap_to_zoom")}</span>
                     </span>
                   )}
                 </div>
-                <div className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800">
+                <div
+                  className="group relative w-full overflow-hidden rounded-2xl border border-zinc-200 shadow-md dark:border-zinc-800"
+                  onErrorCapture={() => setDetailPhotoError("UNKNOWN")}
+                >
                   <AuthenticatedImage
                     imageUrl={resolvePhotoUrl(
                       currentIssue.photo_detail,
@@ -1283,12 +1291,13 @@ export function IssueDetailModal({
                     )}
                     alt={t("issue_detail.photo_detail_alt")}
                     compact={false}
+                    onError={() => setDetailPhotoError("UNKNOWN")}
                     onErrorStateChange={setDetailPhotoError}
                     className={`w-full aspect-[4/3] object-cover transition-transform ${
-                      detailPhotoError ? "" : "group-hover:scale-101"
+                      anyPhotoError ? "" : "group-hover:scale-101"
                     }`}
                   />
-                  {!detailPhotoError && (
+                  {!anyPhotoError && (
                     <button
                       type="button"
                       aria-label={t("issue_detail.tap_to_zoom")}

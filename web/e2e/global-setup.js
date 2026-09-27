@@ -35,19 +35,35 @@ export default async function globalSetup(config) {
         if (!ready.ok()) {
           lastFailure = `readiness returned HTTP ${ready.status()}`;
         } else {
-          // Readiness can precede the seed service. Require a real login too.
+          // Safe request bootstraps readable CSRF cookie before login mutation.
+          const csrfBootstrap = await api.get("/api/auth/setup-status", {
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          if (!csrfBootstrap.ok()) {
+            lastFailure = `CSRF bootstrap returned HTTP ${csrfBootstrap.status()}`;
+            continue;
+          }
+          const csrfCookie = (await api.storageState()).cookies.find(
+            (cookie) => cookie.name === "6s_csrf",
+          );
           const login = await api.post("/api/auth/login", {
             timeout: REQUEST_TIMEOUT_MS,
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Origin: new URL(baseURL).origin,
+              "X-CSRF-Token": csrfCookie?.value || "",
+            },
             data: { username, password },
           });
           if (!login.ok()) {
             lastFailure = `seed account login returned HTTP ${login.status()}`;
           } else {
             const payload = await login.json();
-            const session = payload?.data;
-            if (!session?.access_token || session.user?.username !== username) {
-              lastFailure = "seed account login returned an incomplete session";
+            const user = payload?.data?.user;
+            const state = await api.storageState();
+            const cookieNames = new Set(state.cookies.map((cookie) => cookie.name));
+            if (!user || user.username !== username || !cookieNames.has("6s_access") || !cookieNames.has("6s_refresh") || !cookieNames.has("6s_csrf")) {
+              lastFailure = "seed account login returned incomplete user/cookie session";
             } else {
               return;
             }

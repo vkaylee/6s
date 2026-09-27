@@ -53,21 +53,29 @@ func TestMiddleware_Authenticate(t *testing.T) {
 		t.Errorf("expected 401 for missing header, got %d", rr.Code)
 	}
 
-	// 2. Valid token
+	// Authorization headers no longer authenticate requests.
 	token, _, _ := tm.GenerateAccessToken(1)
+	reqBearer := httptest.NewRequest("GET", "/protected", nil)
+	reqBearer.Header.Set("Authorization", "Bearer "+token)
+	rrBearer := httptest.NewRecorder()
+	handler.ServeHTTP(rrBearer, reqBearer)
+	if rrBearer.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for Authorization header, got %d", rrBearer.Code)
+	}
+
+	// Valid access cookie.
 	reqValid := httptest.NewRequest("GET", "/protected", nil)
-	reqValid.Header.Set("Authorization", "Bearer "+token)
+	reqValid.AddCookie(&http.Cookie{Name: AccessCookieName, Value: token})
 	rrValid := httptest.NewRecorder()
 	handler.ServeHTTP(rrValid, reqValid)
 	if rrValid.Code != http.StatusOK {
-		t.Errorf("expected 200 for valid token, got %d", rrValid.Code)
+		t.Errorf("expected 200 for valid access cookie, got %d", rrValid.Code)
 	}
-	// 2c. Valid single-use ticket via query param
 	ticket, err := ticketMgr.Issue(1)
 	if err != nil {
 		t.Fatalf("failed to issue ticket: %v", err)
 	}
-	reqTicket := httptest.NewRequest("GET", "/protected?ticket="+ticket, nil)
+	reqTicket := httptest.NewRequest("GET", "/api/issues/events?ticket="+ticket, nil)
 	rrTicket := httptest.NewRecorder()
 	handler.ServeHTTP(rrTicket, reqTicket)
 	if rrTicket.Code != http.StatusOK {

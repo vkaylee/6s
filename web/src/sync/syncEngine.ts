@@ -156,7 +156,7 @@ class SyncEngine {
    */
   public async probeAndSync() {
     try {
-      const res = await fetch("/api/health", { method: "HEAD" });
+      const res = await fetch("/api/health", { method: "HEAD", credentials: "include" });
       if (res.ok) {
         await this.triggerSync();
       } else {

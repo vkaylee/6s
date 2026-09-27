@@ -50,11 +50,10 @@ describe("AuthenticatedImage", () => {
     expect(html).not.toContain("src=");
   });
 
-  it("renders transparent GIF placeholder for SSR loading state", () => {
+  it("renders protected remote URLs for native cookie-authenticated loading", () => {
     const html = renderToString(
       <AuthenticatedImage imageUrl="https://example.com/a.png" alt="Test" />,
     );
-    // SSR always shows a valid src (the URL passed) and aria-busy.
     expect(html).toContain('src="https://example.com/a.png"');
     expect(html).toContain('aria-busy="true"');
   });

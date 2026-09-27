@@ -60,7 +60,6 @@ describe("Page-level headers", () => {
         full_name: "Worker One",
         role: UserRole.LINE_LEADER,
       },
-      accessToken: "mock-token",
       isOfflineGrace: false,
     });
   });

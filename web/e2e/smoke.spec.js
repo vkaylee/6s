@@ -30,26 +30,19 @@ test.describe("Smoke & Critical User Flows", () => {
     const { username, password, baseURL } = getE2EConfig();
 
     // 1. Pre-seed two deterministic issues in distinct locations via API
-    const session = await loginViaAPI(request, username, password);
-    const { targetLoc, otherLoc } = await ensureLocationsViaAPI(
-      request,
-      session.access_token,
-    );
+    await loginViaAPI(request, username, password);
+    const { targetLoc, otherLoc } = await ensureLocationsViaAPI(request);
 
     const targetDesc = `TargetAreaIssue_${Date.now()}`;
     const excludedDesc = `ExcludedAreaIssue_${Date.now()}`;
 
-    const issueTarget = await createDeterministicIssue(
-      request,
-      session.access_token,
-      {
-        locationCode: targetLoc,
-        description: targetDesc,
-        category: "1S",
-      },
-    );
+    const issueTarget = await createDeterministicIssue(request, {
+      locationCode: targetLoc,
+      description: targetDesc,
+      category: "1S",
+    });
 
-    await createDeterministicIssue(request, session.access_token, {
+    await createDeterministicIssue(request, {
       locationCode: otherLoc,
       description: excludedDesc,
       category: "2S",
@@ -93,11 +86,11 @@ test.describe("Smoke & Critical User Flows", () => {
     expect(download.suggestedFilename()).toMatch(/\.xlsx$/i);
   });
 
-  test("expired access token refresh recovers transparently during XLSX export", async ({
+  test("expired cookie session refresh recovers transparently during XLSX export", async ({
     page,
   }) => {
-    // Note: simulates access token expiry specifically during CSV export via constrained routing.
-    // Client must catch 401, execute POST /api/auth/refresh, retry export with new token, and deliver download.
+    // Simulates access cookie expiry during XLSX export via constrained routing.
+    // Client must refresh the cookie session, retry export, and deliver download.
     const { username, password, baseURL } = getE2EConfig();
 
     await loginViaUI(page, username, password);
@@ -116,7 +109,7 @@ test.describe("Smoke & Critical User Flows", () => {
           body: JSON.stringify({
             error: {
               code: "UNAUTHORIZED",
-              message: "Access token expired",
+              message: "Access cookie expired",
             },
           }),
         });
@@ -125,7 +118,7 @@ test.describe("Smoke & Critical User Flows", () => {
       }
     });
 
-    // Both token refresh, retried export response, and download are strictly required.
+    // Cookie refresh, retried export response, and download are strictly required.
     const refreshPromise = page.waitForResponse(
       (res) => res.url().includes("/api/auth/refresh") && res.status() === 200,
       { timeout: 15000 },
@@ -144,6 +137,9 @@ test.describe("Smoke & Critical User Flows", () => {
     ]);
 
     expect(refreshResponse.status()).toBe(200);
+    const refreshPayload = await refreshResponse.json();
+    expect(refreshPayload.data?.user).toBeTruthy();
+    expect(Object.keys(refreshPayload.data || {})).toEqual(["user"]);
     expect(retriedExportResponse.status()).toBe(200);
     expect(download.suggestedFilename()).toMatch(/\.xlsx$/i);
 

@@ -54,7 +54,7 @@ describe("LoginPage Component", () => {
       length: 0,
       key: () => null,
     };
-    useAuthStore.setState({ user: null, accessToken: null, isLoading: false });
+    useAuthStore.setState({ user: null, isLoading: false });
   });
 
   afterEach(() => {

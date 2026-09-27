@@ -1,5 +1,6 @@
 // @ts-check
 import { Buffer } from "node:buffer";
+import { request as playwrightRequest } from "@playwright/test";
 
 // Valid 1x1 PNG byte sequence.
 export const MINIMAL_PNG = Buffer.from(
@@ -63,16 +64,32 @@ export async function loginViaUI(page, customUser, customPass) {
 }
 
 /**
- * Performs API login to obtain access and refresh tokens.
+ * Creates an isolated Playwright API context with its own cookie jar.
+ */
+export async function createAPIContext() {
+  const { baseURL } = getE2EConfig();
+  return playwrightRequest.newContext({ baseURL });
+}
+
+/**
+ * Performs API login and stores the auth cookies in the request context jar.
  */
 export async function loginViaAPI(request, customUser, customPass) {
   const { baseURL, username, password } = getE2EConfig();
+  const bootstrap = await request.get(`${baseURL}/api/auth/setup-status`);
+  if (!bootstrap.ok()) {
+    throw new Error(`API CSRF bootstrap failed with status ${bootstrap.status()}`);
+  }
   const res = await request.post(`${baseURL}/api/auth/login`, {
     data: {
       username: customUser || username,
       password: customPass || password,
     },
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: new URL(baseURL).origin,
+      ...(await csrfHeaders(request)),
+    },
   });
 
   if (!res.ok()) {
@@ -82,18 +99,42 @@ export async function loginViaAPI(request, customUser, customPass) {
   }
 
   const json = await res.json();
-  return json.data;
+  const user = json?.data?.user;
+  const state = await request.storageState();
+  const cookieNames = new Set(state.cookies.map((cookie) => cookie.name));
+  if (!user || !cookieNames.has("6s_access") || !cookieNames.has("6s_refresh") || !cookieNames.has("6s_csrf")) {
+    throw new Error("API login returned an incomplete user/cookie session");
+  }
+  return user;
+}
+
+/** Returns the double-submit CSRF header for unsafe API requests. */
+export async function csrfHeaders(request) {
+  const { baseURL } = getE2EConfig();
+  const state = await request.storageState();
+  const csrf = state.cookies.find((cookie) => cookie.name === "6s_csrf")?.value;
+  if (!csrf) {
+    throw new Error("API session is missing the 6s_csrf cookie");
+  }
+  return { Origin: new URL(baseURL).origin, "X-CSRF-Token": csrf };
+}
+
+/** Injects cookie-auth session state into a browser context for mocked login responses. */
+export async function injectAuthCookies(page, baseURL) {
+  await page.context().addCookies([
+    { name: "6s_access", value: "mock-access-cookie", url: baseURL, httpOnly: true },
+    { name: "6s_refresh", value: "mock-refresh-cookie", url: baseURL, httpOnly: true },
+    { name: "6s_csrf", value: "mock-csrf-cookie", url: baseURL },
+  ]);
 }
 
 /**
  * Ensures two distinct locations exist for isolated filter assertions.
  * Never falls back to unverified locations; requires bootstrap/seed to supply them.
  */
-export async function ensureLocationsViaAPI(request, token) {
+export async function ensureLocationsViaAPI(request) {
   const { baseURL, locationCode, otherLocationCode } = getE2EConfig();
-  const headers = { Authorization: `Bearer ${token}` };
-
-  const locRes = await request.get(`${baseURL}/api/locations`, { headers });
+  const locRes = await request.get(`${baseURL}/api/locations`);
   if (!locRes.ok()) {
     throw new Error(
       `Failed to list locations via API: ${locRes.status()} ${await locRes.text()}`,
@@ -122,9 +163,9 @@ export async function ensureLocationsViaAPI(request, token) {
 /**
  * Creates a deterministic issue via POST /api/issues/sync without swallowing errors.
  */
-export async function createDeterministicIssue(request, token, options) {
+export async function createDeterministicIssue(request, options) {
   const { baseURL } = getE2EConfig();
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = await csrfHeaders(request);
 
   if (!options?.locationCode) {
     throw new Error("createDeterministicIssue requires locationCode");
@@ -157,3 +198,4 @@ export async function createDeterministicIssue(request, token, options) {
   const syncData = await syncRes.json();
   return syncData.data;
 }
+

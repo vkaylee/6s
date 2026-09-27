@@ -410,7 +410,7 @@ func TestAIConfigRouteRequiresAdminOrSuperadmin(t *testing.T) {
 				t.Fatalf("failed to generate token: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/api/config/ai", nil)
-			req.Header.Set("Authorization", "Bearer "+token)
+			req.AddCookie(&http.Cookie{Name: auth.AccessCookieName, Value: token})
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 			if rec.Code != tc.wantStatus {
@@ -459,7 +459,7 @@ func TestLeaderboardRoutesRequireReportsView(t *testing.T) {
 			}
 			for _, path := range paths {
 				req := httptest.NewRequest(http.MethodGet, path, nil)
-				req.Header.Set("Authorization", "Bearer "+token)
+				req.AddCookie(&http.Cookie{Name: auth.AccessCookieName, Value: token})
 				rec := httptest.NewRecorder()
 				r.ServeHTTP(rec, req)
 				if tc.wantStatus >= 0 && rec.Code != tc.wantStatus {

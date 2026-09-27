@@ -64,7 +64,6 @@ export function normalizeTags(tags: TagItem[]): TagItem[] {
   }));
 }
 interface UseDashboardDataOptions {
-  accessToken: string | null;
   locale: string;
   searchString: string;
   user: UserProfile | null;
@@ -75,12 +74,7 @@ export interface DashboardDataErrors {
   masterData: boolean;
   leaderboards: boolean;
 }
-export function useDashboardData({
-  accessToken,
-  locale,
-  searchString,
-  user,
-}: UseDashboardDataOptions) {
+export function useDashboardData({ locale, searchString, user }: UseDashboardDataOptions) {
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [tags, setTags] = useState<TagItem[]>([]);
@@ -314,7 +308,7 @@ export function useDashboardData({
       wasSyncing = progress.isSyncing;
     });
     let unsubscribeEvents: (() => void) | undefined;
-    if (typeof window !== "undefined" && typeof EventSource !== "undefined" && accessToken) {
+    if (typeof window !== "undefined" && typeof EventSource !== "undefined") {
       unsubscribeEvents = subscribeIssueEvents((event) => {
         loadIssues(true);
         loadLeaderboards();
@@ -334,7 +328,7 @@ export function useDashboardData({
       unsub();
       syncEngine.stop();
     };
-  }, [user, accessToken]);
+  }, [user]);
 
   const previousLocale = useRef(locale);
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
+import { logout } from "../api/client.ts";
 import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { hasCapability, useAuthStore } from "../store/authStore.ts";
@@ -19,7 +20,6 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
   const { t } = useI18nStore();
   const storeUser = useAuthStore((s) => s.user);
   const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
-  const clearAuth = useAuthStore((s) => s.clearAuth);
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
@@ -311,7 +311,7 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
                     type="button"
                     onClick={() => {
                       setIsProfileOpen(false);
-                      clearAuth();
+                      void logout();
                     }}
                     className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2 transition-colors min-h-[40px]"
                   >

@@ -50,32 +50,25 @@ func NewMiddleware(tokenManager *TokenManager, userGetter UserGetter, ticketMana
 }
 
 func (m *Middleware) extractUserID(r *http.Request) (int64, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			return 0, apperror.Unauthorized(i18n.ErrInvalidAuthFmt)
-		}
-		userID, err := m.tokenManager.ValidateAccessToken(strings.TrimSpace(parts[1]))
-		if err != nil {
-			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
-		}
-		return userID, nil
-	}
-
-	if qTicket := strings.TrimSpace(r.URL.Query().Get("ticket")); qTicket != "" && m.ticketManager != nil {
+	if qTicket := strings.TrimSpace(r.URL.Query().Get("ticket")); qTicket != "" && r.URL.Path == "/api/issues/events" && m.ticketManager != nil {
 		userID, err := m.ticketManager.Consume(qTicket)
 		if err != nil {
 			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
 		}
 		return userID, nil
 	}
-
+	if accessToken := cookieValue(r, AccessCookieName); accessToken != "" {
+		userID, err := m.tokenManager.ValidateAccessToken(accessToken)
+		if err != nil {
+			return 0, apperror.Unauthorized(i18n.ErrInvalidToken).WithCause(err)
+		}
+		return userID, nil
+	}
 	return 0, apperror.Unauthorized(i18n.ErrMissingAuth)
 }
 
-// Authenticate extracts Bearer JWT token, validates it, fetches the user from DB,
-// and puts the user model into request context.
+// Authenticate extracts the access cookie, validates it, fetches the user from
+// DB, and puts the user model into request context.
 func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, err := m.extractUserID(r)

@@ -12,7 +12,7 @@ async function settleUntil(predicate: () => boolean) {
 }
 
 describe("EventSource Ticket Flow", () => {
-  it("fetches ticket before opening EventSource URL", async () => {
+  it("fetches ticket with cookie credentials and CSRF before opening EventSource URL", async () => {
     useAuthStore.setState({
       user: {
         id: 42,
@@ -20,19 +20,23 @@ describe("EventSource Ticket Flow", () => {
         full_name: "Worker 42",
         role: UserRole.USER,
       },
-      accessToken: "valid-jwt-token-42",
-      getRefreshToken: async () => null,
+      isOfflineGrace: false,
+      isLoading: false,
     });
 
     const originalFetch = globalThis.fetch;
+    const originalDocument = globalThis.document;
     let ticketRequested = false;
+    globalThis.document = { cookie: "6s_csrf=event-csrf-token" } as unknown as Document;
 
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/api/auth/ticket")) {
         ticketRequested = true;
-        const authHeader = new Headers(init?.headers).get("Authorization");
-        expect(authHeader).toBe("Bearer valid-jwt-token-42");
+        const headers = new Headers(init?.headers);
+        expect(init?.credentials).toBe("include");
+        expect(headers.get("X-CSRF-Token")).toBe("event-csrf-token");
+        expect(headers.get("Authorization")).toBeNull();
         return new Response(JSON.stringify({ ticket: "stream-ticket-xyz-789" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -50,10 +54,10 @@ describe("EventSource Ticket Flow", () => {
       expect(ticket).toBe("stream-ticket-xyz-789");
 
       const eventSourceUrl = `/api/issues/events?ticket=${encodeURIComponent(ticket)}`;
-      expect(eventSourceUrl).toContain("ticket=stream-ticket-xyz-789");
-      expect(eventSourceUrl).not.toContain("valid-jwt-token-42");
+      expect(eventSourceUrl).toBe("/api/issues/events?ticket=stream-ticket-xyz-789");
     } finally {
       globalThis.fetch = originalFetch;
+      globalThis.document = originalDocument;
     }
   });
 
@@ -65,15 +69,16 @@ describe("EventSource Ticket Flow", () => {
         full_name: "Worker 42",
         role: UserRole.USER,
       },
-      accessToken: "valid-jwt-token-42",
-      getRefreshToken: async () => null,
+      isOfflineGrace: false,
+      isLoading: false,
     });
 
     const originalFetch = globalThis.fetch;
-    const originalEventSource = globalThis.EventSource;
+    const originalDocument = globalThis.document;
     const tickets = ["ticket-first-111", "ticket-second-222"];
     const sources: FakeEventSource[] = [];
     let ticketIndex = 0;
+    globalThis.document = { cookie: "6s_csrf=event-csrf-token" } as unknown as Document;
 
     class FakeEventSource {
       closed = false;
@@ -95,9 +100,13 @@ describe("EventSource Ticket Flow", () => {
       }
     }
 
-    globalThis.fetch = (async (input: string | URL | Request) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/api/auth/ticket")) {
+        const headers = new Headers(init?.headers);
+        expect(init?.credentials).toBe("include");
+        expect(headers.get("X-CSRF-Token")).toBe("event-csrf-token");
+        expect(headers.get("Authorization")).toBeNull();
         return new Response(JSON.stringify({ ticket: tickets[ticketIndex++] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -105,6 +114,7 @@ describe("EventSource Ticket Flow", () => {
       }
       return new Response("{}", { status: 200 });
     }) as typeof fetch;
+    const originalEventSource = globalThis.EventSource;
     globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
     const originalSetTimeout = globalThis.setTimeout;
     // Synchronous fake: fires the callback immediately, so no wall-clock wait is needed
@@ -129,6 +139,7 @@ describe("EventSource Ticket Flow", () => {
       unsubscribe();
     } finally {
       globalThis.fetch = originalFetch;
+      globalThis.document = originalDocument;
       globalThis.EventSource = originalEventSource;
       globalThis.setTimeout = originalSetTimeout;
     }

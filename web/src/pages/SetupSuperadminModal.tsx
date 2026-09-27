@@ -92,11 +92,7 @@ export function SetupSuperadminModal({ isOpen, onSuccess, onClose }: SetupSupera
     setErrorMsg("");
 
     try {
-      const res = await apiClient<{
-        access_token: string;
-        refresh_token: string;
-        user: UserProfile;
-      }>("/api/auth/setup", {
+      const res = await apiClient<{ user: UserProfile }>("/api/auth/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -107,9 +103,8 @@ export function SetupSuperadminModal({ isOpen, onSuccess, onClose }: SetupSupera
         }),
         skipAuth: true,
       });
-
       haptics.success();
-      await setAuth(res.user, res.access_token, res.refresh_token);
+      await setAuth(res.user);
       onSuccess();
     } catch (err: unknown) {
       haptics.errorOrConflict();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ApiError, apiClient } from "../src/api/client.ts";
+import { ApiError, apiClient, logout } from "../src/api/client.ts";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { UserRole } from "../src/types/index.ts";
 
@@ -110,7 +110,7 @@ describe("apiClient request contract", () => {
 });
 
 describe("apiClient authentication", () => {
-  it("proactively refreshes token before making request when user exists but accessToken is missing", async () => {
+  it("refreshes the cookie session after an unauthorized response before retrying", async () => {
     useAuthStore.setState({
       user: {
         id: 1,
@@ -118,34 +118,37 @@ describe("apiClient authentication", () => {
         full_name: "Super Admin",
         role: UserRole.USER,
       },
-      accessToken: null,
-      getRefreshToken: async () => "mock-refresh-token",
+      isOfflineGrace: false,
+      isLoading: false,
     });
 
     const originalFetch = globalThis.fetch;
-    const calls: { url: string; headers: Headers }[] = [];
+    const calls: {
+      url: string;
+      headers: Headers;
+      credentials: RequestCredentials | undefined;
+    }[] = [];
+    let locationAttempts = 0;
 
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
-      const headers = new Headers(init?.headers);
-      calls.push({ url, headers });
+      calls.push({ url, headers: new Headers(init?.headers), credentials: init?.credentials });
+
+      if (url === "/api/locations" && locationAttempts++ === 0) {
+        return new Response(
+          JSON.stringify({ error: { code: "UNAUTHORIZED", message: "expired" } }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
 
       if (url === "/api/auth/refresh") {
-        return new Response(
-          JSON.stringify({
-            data: {
-              access_token: "refreshed-jwt-token",
-              refresh_token: "new-refresh-token",
-              user: {
-                id: 1,
-                username: "admin",
-                full_name: "Super Admin",
-                role: UserRole.ADMIN,
-              },
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
+        return new Response(JSON.stringify({ data: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       if (url === "/api/locations") {
@@ -163,16 +166,21 @@ describe("apiClient authentication", () => {
     try {
       const res = await apiClient<{ code: string }[]>("/api/locations");
       expect(res).toEqual([{ code: "LOC1" }]);
-      expect(calls[0].url).toBe("/api/auth/refresh");
-      expect(calls[1].url).toBe("/api/locations");
-      expect(calls[1].headers.get("Authorization")).toBe("Bearer refreshed-jwt-token");
-      expect(useAuthStore.getState().user?.role).toBe(UserRole.ADMIN);
+      expect(calls.map(({ url }) => url)).toEqual([
+        "/api/locations",
+        "/api/auth/refresh",
+        "/api/locations",
+      ]);
+      for (const call of calls) {
+        expect(call.credentials).toBe("include");
+        expect(call.headers.get("Authorization")).toBeNull();
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("deduplicates refresh token calls when multiple concurrent requests lack accessToken", async () => {
+  it("deduplicates cookie refresh calls when concurrent requests receive unauthorized responses", async () => {
     useAuthStore.setState({
       user: {
         id: 1,
@@ -180,37 +188,46 @@ describe("apiClient authentication", () => {
         full_name: "Super Admin",
         role: UserRole.ADMIN,
       },
-      accessToken: null,
-      getRefreshToken: async () => "mock-refresh-token",
+      isOfflineGrace: false,
+      isLoading: false,
     });
 
     const originalFetch = globalThis.fetch;
     let refreshCalls = 0;
+    const attempts = new Map<string, number>();
+    let initialUnauthorized = 0;
+    const { promise: initialGate, resolve: releaseInitial } = Promise.withResolvers<void>();
     const { promise: refreshGate, resolve: releaseRefresh } = Promise.withResolvers<void>();
 
-    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    globalThis.fetch = (async (input: string | URL | Request, _init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      const attempt = (attempts.get(url) ?? 0) + 1;
+      attempts.set(url, attempt);
 
       if (url === "/api/auth/refresh") {
         refreshCalls++;
         await refreshGate;
+        return new Response(JSON.stringify({ data: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (attempt === 1) {
+        initialUnauthorized++;
+        await initialGate;
         return new Response(
-          JSON.stringify({
-            data: {
-              access_token: "single-refreshed-token",
-              refresh_token: "new-refresh-token",
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
+          JSON.stringify({ error: { code: "UNAUTHORIZED", message: "expired" } }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          },
         );
       }
 
       return new Response(
         JSON.stringify({
-          data: {
-            success: true,
-            token: init?.headers ? new Headers(init.headers).get("Authorization") : null,
-          },
+          data: { success: true },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
@@ -218,26 +235,29 @@ describe("apiClient authentication", () => {
 
     try {
       const fetchPromises = Promise.all([
-        apiClient<{ token: string }>("/api/locations"),
-        apiClient<{ token: string }>("/api/tags"),
-        apiClient<{ token: string }>("/api/issues"),
+        apiClient<{ success: boolean }>("/api/locations"),
+        apiClient<{ success: boolean }>("/api/tags"),
+        apiClient<{ success: boolean }>("/api/issues"),
       ]);
 
-      // Allow microtask ticks for all 3 calls to enter refresh queue
-      await queueMicrotask(() => {});
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releaseInitial();
+      await new Promise<void>((resolve) => setImmediate(resolve));
       releaseRefresh();
 
       const [res1, res2, res3] = await fetchPromises;
+      expect(initialUnauthorized).toBe(3);
       expect(refreshCalls).toBe(1);
-      expect(res1.token).toBe("Bearer single-refreshed-token");
-      expect(res2.token).toBe("Bearer single-refreshed-token");
-      expect(res3.token).toBe("Bearer single-refreshed-token");
+
+      expect(res1.success).toBe(true);
+      expect(res2.success).toBe(true);
+      expect(res3.success).toBe(true);
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("requests one-time ticket with Authorization Bearer header", async () => {
+  it("requests one-time ticket with cookie credentials and CSRF protection", async () => {
     useAuthStore.setState({
       user: {
         id: 1,
@@ -245,15 +265,18 @@ describe("apiClient authentication", () => {
         full_name: "Worker One",
         role: UserRole.USER,
       },
-      accessToken: "mock-valid-access-token",
-      getRefreshToken: async () => null,
+      isOfflineGrace: false,
+      isLoading: false,
     });
 
     const originalFetch = globalThis.fetch;
-    let capturedAuthHeader = "";
+    const originalDocument = globalThis.document;
+    let capturedHeaders = new Headers();
+    let capturedCredentials: RequestCredentials | undefined;
+    globalThis.document = { cookie: "6s_csrf=mock-csrf-token" } as unknown as Document;
     globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      capturedAuthHeader = headers.get("Authorization") ?? "";
+      capturedHeaders = new Headers(init?.headers);
+      capturedCredentials = init?.credentials;
       return new Response(JSON.stringify({ ticket: "mock-one-time-ticket-abc123" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -263,9 +286,73 @@ describe("apiClient authentication", () => {
     try {
       const data = await apiClient<{ ticket: string }>("/api/auth/ticket", { method: "POST" });
       expect(data.ticket).toBe("mock-one-time-ticket-abc123");
-      expect(capturedAuthHeader).toBe("Bearer mock-valid-access-token");
+      expect(capturedCredentials).toBe("include");
+      expect(capturedHeaders.get("X-CSRF-Token")).toBe("mock-csrf-token");
+      expect(capturedHeaders.get("Authorization")).toBeNull();
     } finally {
       globalThis.fetch = originalFetch;
+      globalThis.document = originalDocument;
+    }
+  });
+
+  it("retries a mutation after CSRF cookie becomes available", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalDocument = globalThis.document;
+    const calls: Headers[] = [];
+    (globalThis as unknown as { document: Document }).document = {
+      cookie: "",
+    } as unknown as Document;
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      calls.push(headers);
+      if (calls.length === 1) {
+        (globalThis.document as unknown as { cookie: string }).cookie = "6s_csrf=bootstrapped";
+        return new Response(JSON.stringify({ error: { code: "CSRF", message: "missing" } }), {
+          status: 403,
+        });
+      }
+      return new Response(JSON.stringify({ data: { ok: true } }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const result = await apiClient<{ ok: boolean }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: "worker1", password: "secret" }),
+        skipAuth: true,
+      });
+      expect(result.ok).toBe(true);
+      expect(calls).toHaveLength(2);
+      expect(calls[0].get("X-CSRF-Token")).toBeNull();
+      expect(calls[1].get("X-CSRF-Token")).toBe("bootstrapped");
+    } finally {
+      globalThis.fetch = originalFetch;
+      globalThis.document = originalDocument;
+    }
+  });
+
+  it("keeps local identity in offline grace when logout cannot reach server", async () => {
+    const originalFetch = globalThis.fetch;
+    useAuthStore.setState({
+      user: {
+        id: 7,
+        username: "offline-worker",
+        full_name: "Offline Worker",
+        role: UserRole.USER,
+      },
+      isOfflineGrace: false,
+      isLoading: false,
+    });
+    globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit) => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+
+    try {
+      await logout();
+      expect(useAuthStore.getState().user?.username).toBe("offline-worker");
+      expect(useAuthStore.getState().isOfflineGrace).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await useAuthStore.getState().clearAuth();
     }
   });
 

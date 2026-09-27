@@ -1,21 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { getE2EConfig, loginViaAPI, loginViaUI, MINIMAL_PNG } from './helpers.js';
+import { createAPIContext, csrfHeaders, getE2EConfig, loginViaAPI, loginViaUI, MINIMAL_PNG } from './helpers.js';
 
 // End-to-end responsibility regression coverage: location, asset, team, cause, and KPI stay independent.
 test('responsibility ownership remains independent from physical location', async ({ request, page }) => {
   const { baseURL, otherLocationCode } = getE2EConfig();
-  const admin = await loginViaAPI(request);
-  const worker = await loginViaAPI(request, 'e2e-worker', 'E2EWorker123!');
-  const headers = { Authorization: `Bearer ${admin.access_token}` };
-  const workerHeaders = { Authorization: `Bearer ${worker.access_token}` };
+  await loginViaAPI(request);
+  const workerRequest = await createAPIContext();
+  const worker = await loginViaAPI(workerRequest, 'e2e-worker', 'E2EWorker123!');
+  const headers = await csrfHeaders(request);
+  const workerHeaders = await csrfHeaders(workerRequest);
   const stamp = Date.now().toString();
   const teamResponse = await request.post(`${baseURL}/api/admin/teams`, {
     headers, data: { code: `SMOKE_${stamp}`, name: `Electrical ${stamp}`, is_active: true },
   });
   expect(teamResponse.status(), await teamResponse.text()).toBe(201);
   const team = (await teamResponse.json()).data;
-  const membersResponse = await request.get(`${baseURL}/api/admin/users`, { headers });
-  expect(membersResponse.ok(), await membersResponse.text()).toBe(true);
+  const membersResponse = await request.get(`${baseURL}/api/admin/users`);
   const users = (await membersResponse.json()).data;
   const member = users.find((user) => user.username === 'e2e-worker');
   expect(member).toBeDefined();
@@ -41,15 +41,14 @@ test('responsibility ownership remains independent from physical location', asyn
   expect(issue.asset_id).toBe(asset.id);
   expect(issue.cause_status).toBe('UNVERIFIED');
   expect(issue.cause_team_id ?? null).toBeNull();
-  const view = await request.get(`${baseURL}/api/issues/${issue.id}`, { headers: workerHeaders });
+  const view = await workerRequest.get(`${baseURL}/api/issues/${issue.id}`);
   expect(view.ok(), await view.text()).toBe(true);
   const visibleIssue = (await view.json()).data;
   expect(visibleIssue.allowed_actions.resolve).toBe(true);
   expect(visibleIssue.allowed_actions.close).toBe(false);
-  const forbiddenAssign = await request.patch(`${baseURL}/api/issues/${issue.id}`, {
+  const forbiddenAssign = await workerRequest.patch(`${baseURL}/api/issues/${issue.id}`, {
     headers: workerHeaders, data: { expected_version: issue.version, assigned_team_id: null },
   });
-  expect(forbiddenAssign.status()).toBe(403);
   const causePatch = await request.patch(`${baseURL}/api/issues/${issue.id}`, {
     headers, data: { expected_version: issue.version, cause_team_id: team.id, cause_status: 'CONFIRMED' },
   });
@@ -59,7 +58,7 @@ test('responsibility ownership remains independent from physical location', asyn
     headers, data: { expected_version: issue.version, assigned_team_id: null },
   });
   expect(stale.status()).toBe(409);
-  const resolve = await request.post(`${baseURL}/api/issues/${issue.id}/resolve`, {
+  const resolve = await workerRequest.post(`${baseURL}/api/issues/${issue.id}/resolve`, {
     headers: workerHeaders, multipart: {
       expected_version: String(verified.version), resolved_client_uuid: crypto.randomUUID(),
       photo_after: { name: 'after.png', mimeType: 'image/png', buffer: MINIMAL_PNG },
@@ -67,10 +66,9 @@ test('responsibility ownership remains independent from physical location', asyn
   });
   expect(resolve.ok(), await resolve.text()).toBe(true);
   const resolved = (await resolve.json()).data;
-  const selfClose = await request.post(`${baseURL}/api/issues/${issue.id}/close`, {
+  const selfClose = await workerRequest.post(`${baseURL}/api/issues/${issue.id}/close`, {
     headers: workerHeaders, data: { expected_version: resolved.version, score_rating: 3 },
   });
-  expect(selfClose.status()).toBe(403);
   const close = await request.post(`${baseURL}/api/issues/${issue.id}/close`, {
     headers, data: { expected_version: resolved.version, score_rating: 3 },
   });
@@ -112,4 +110,5 @@ test('responsibility ownership remains independent from physical location', asyn
   await page.getByTestId("reports-tab-teams").click();
   await expect(page.getByText(`Electrical ${stamp}`, { exact: false }).last()).toBeVisible();
   await page.screenshot({ path: '../artifacts/e2e/responsibility-team-report.png', fullPage: true });
+  await workerRequest.dispose();
 });

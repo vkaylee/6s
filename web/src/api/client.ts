@@ -1,11 +1,9 @@
 import { useI18nStore } from "../i18n/index.ts";
-import { useAuthStore } from "../store/authStore.ts";
+import { type UserProfile, useAuthStore } from "../store/authStore.ts";
 import { type Client, jsonBodySerializer } from "./generated/client/index.ts";
 import { client } from "./generated/client.gen.ts";
 import type { HttpMethod } from "./generated/core/types.gen.ts";
 import type { ErrorDetail, PaginationMeta } from "./generated/index.ts";
-import { refresh } from "./generated/index.ts";
-
 export interface ApiEnvelope<T> {
   data?: T;
   error?: ErrorDetail;
@@ -25,11 +23,32 @@ export class ApiError extends Error {
 }
 
 let isRefreshing = false;
-let refreshSubscribers: ((token: string | null) => void)[] = [];
+let refreshSubscribers: ((refreshed: boolean) => void)[] = [];
 
-function onRefreshed(token: string | null) {
-  for (const callback of refreshSubscribers) callback(token);
+function onRefreshed(refreshed: boolean) {
+  for (const callback of refreshSubscribers) callback(refreshed);
   refreshSubscribers = [];
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined" || typeof document.cookie !== "string") return null;
+  const prefix = `${encodeURIComponent(name)}=`;
+  const value = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix));
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value.slice(prefix.length));
+  } catch {
+    return null;
+  }
+}
+
+const UNSAFE_METHODS: Record<string, true> = { DELETE: true, PATCH: true, POST: true, PUT: true };
+
+export function getCsrfToken(): string | null {
+  return readCookie("6s_csrf");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,47 +118,62 @@ const authenticatedFetch = Object.assign(
       input instanceof Request
         ? input
         : new Request(new URL(input.toString(), baseUrl || "http://localhost"), init);
-    const { user, enableOfflineGrace } = useAuthStore.getState();
+    const { enableOfflineGrace } = useAuthStore.getState();
     const headers = new Headers(request.headers);
     const skipAuth = headers.get("X-Skip-Auth") === "true";
     headers.delete("X-Skip-Auth");
-    let accessToken = useAuthStore.getState().accessToken;
-    if (!skipAuth && user && !accessToken) accessToken = await refreshAccessToken();
-    if (!skipAuth && accessToken && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
-    }
+    headers.delete("Authorization");
     const locale = useI18nStore.getState().locale;
     if (locale && !headers.has("X-Locale")) headers.set("X-Locale", locale);
-    const send = async (token?: string) => {
-      const retryHeaders = new Headers(headers);
-      if (token) retryHeaders.set("Authorization", `Bearer ${token}`);
-      // Multipart payloads carry binary image bytes: .text() re-encodes them as
-      // UTF-8 and destroys JPEG/PNG magic bytes. Read those byte-exact.
-      const isMultipart = (request.headers.get("content-type") ?? "").startsWith(
-        "multipart/form-data",
-      );
+    const sameOrigin =
+      typeof window === "undefined" ||
+      !("location" in window) ||
+      new URL(request.url, window.location.origin).origin === window.location.origin;
+    const hadCsrfToken = Boolean(getCsrfToken());
+    if (sameOrigin && UNSAFE_METHODS[request.method]) {
+      const csrf = getCsrfToken();
+      if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
+    }
+    const send = async () => {
+      const sendHeaders = new Headers(headers);
+      if (sameOrigin && UNSAFE_METHODS[request.method]) {
+        const csrf = getCsrfToken();
+        if (csrf) sendHeaders.set("X-CSRF-Token", csrf);
+      }
       const body =
         request.method === "GET" || request.method === "HEAD"
           ? undefined
-          : isMultipart
+          : (request.headers.get("content-type") ?? "").startsWith("multipart/form-data")
             ? await request.clone().arrayBuffer()
             : await request.clone().text();
       const fetchInput =
         typeof window === "undefined" ? request.url.replace("http://localhost", "") : request.url;
-      return globalThis.fetch(fetchInput, { method: request.method, headers: retryHeaders, body });
+      return globalThis.fetch(fetchInput, {
+        method: request.method,
+        headers: sendHeaders,
+        body,
+        credentials: "include",
+      });
     };
     let response: Response;
     try {
-      response = await send(accessToken || undefined);
+      response = await send();
     } catch (error) {
       enableOfflineGrace();
       throw error;
     }
-    if (response.status === 401 && !skipAuth) {
-      const newToken = await refreshAccessToken();
-      if (!newToken)
+    if (response.status === 403 && sameOrigin && UNSAFE_METHODS[request.method] && !hadCsrfToken) {
+      response = await send();
+    }
+    if (
+      response.status === 401 &&
+      !skipAuth &&
+      (useAuthStore.getState().user || request.url.endsWith("/auth/me"))
+    ) {
+      if (!(await refreshAccessToken())) {
         throw new ApiError(401, "Phiên đăng nhập đã hết hạn hoặc đang ngoại tuyến", "UNAUTHORIZED");
-      response = await send(newToken);
+      }
+      response = await send();
     }
     return response;
   },
@@ -173,41 +207,40 @@ client.interceptors.error.use((error, response) => {
 
 export const sdkClient: Client = client;
 
-export async function refreshAccessToken(): Promise<string | null> {
-  const { getRefreshToken, setAuth, user, clearAuth } = useAuthStore.getState();
-  const refreshToken = await getRefreshToken();
-  if (!refreshToken || !user) return null;
-  if (isRefreshing) return new Promise((resolve) => refreshSubscribers.push(resolve));
+export async function refreshAccessToken(): Promise<boolean> {
+  if (isRefreshing) {
+    const { promise, resolve } = Promise.withResolvers<boolean>();
+    refreshSubscribers.push(resolve);
+    return promise;
+  }
   isRefreshing = true;
   try {
-    const result = await refresh({
-      client: sdkClient,
-      body: { refresh_token: refreshToken },
-      headers: { "X-Skip-Auth": "true" },
-      responseStyle: "fields",
-      throwOnError: true,
+    const refreshed = await apiClient<{ user?: UserProfile }>("/api/auth/refresh", {
+      method: "POST",
+      skipAuth: true,
     });
-    const envelope = parseEnvelope<{
-      access_token: string;
-      refresh_token: string;
-      user: typeof user;
-    }>(result.data);
-    const data = envelope.data;
-    const refreshedUser = data?.user ?? user;
-    if (!data?.access_token || !data.refresh_token || !refreshedUser) {
-      onRefreshed(null);
-      return null;
+    if (refreshed.user) await useAuthStore.getState().setAuth(refreshed.user);
+    onRefreshed(true);
+    return true;
+  } catch (error) {
+    if (error instanceof TypeError) {
+      useAuthStore.getState().enableOfflineGrace();
+    } else {
+      await useAuthStore.getState().clearAuth();
     }
-    await setAuth(refreshedUser, data.access_token, data.refresh_token);
-    onRefreshed(data.access_token);
-    return data.access_token;
-  } catch {
-    await clearAuth();
-    useAuthStore.getState().enableOfflineGrace();
-    onRefreshed(null);
-    return null;
+    onRefreshed(false);
+    return false;
   } finally {
     isRefreshing = false;
+  }
+}
+export async function logout(): Promise<void> {
+  try {
+    await apiClient("/api/auth/revoke", { method: "POST" });
+    await useAuthStore.getState().clearAuth();
+  } catch {
+    // Keep profile while offline; HttpOnly cookies cannot be cleared by JavaScript.
+    useAuthStore.getState().enableOfflineGrace();
   }
 }
 

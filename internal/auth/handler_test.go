@@ -299,6 +299,17 @@ func (m *mockFullStore) CreateLocalAdminAtomic(ctx context.Context, arg db.Creat
 	return m.CreateLocalAdmin(ctx, arg)
 }
 
+func responseCookie(t *testing.T, rr *httptest.ResponseRecorder, name string) *http.Cookie {
+	t.Helper()
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	t.Fatalf("response missing %s cookie", name)
+	return nil
+}
+
 func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 	store := newMockFullStore()
 	tm := NewTokenManager([]byte("super-secret-jwt-key-1234567890123"))
@@ -340,24 +351,21 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			AccessToken  string       `json:"access_token"`
-			RefreshToken string       `json:"refresh_token"`
-			User         UserResponse `json:"user"`
+			User UserResponse `json:"user"`
 		} `json:"data"`
+	}
+	if strings.Contains(rrValid.Body.String(), "access_token") || strings.Contains(rrValid.Body.String(), "refresh_token") {
+		t.Fatal("login response must not contain token fields")
 	}
 	if err := json.NewDecoder(rrValid.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode login response: %v", err)
 	}
-	if resp.Data.AccessToken == "" || resp.Data.RefreshToken == "" {
-		t.Fatal("expected non-empty tokens")
-	}
-	if resp.Data.User.Username != "worker1" {
-		t.Errorf("expected worker1, got %s", resp.Data.User.Username)
-	}
+	refreshCookie := responseCookie(t, rrValid, RefreshCookieName)
+	oldRefreshCookie := refreshCookie
 
 	// 3. Refresh Token
-	bodyRefresh, _ := json.Marshal(RefreshRequest{RefreshToken: resp.Data.RefreshToken})
-	reqRefresh := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(bodyRefresh))
+	reqRefresh := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	reqRefresh.AddCookie(refreshCookie)
 	rrRefresh := httptest.NewRecorder()
 	handler.Refresh(rrRefresh, reqRefresh)
 	if rrRefresh.Code != http.StatusOK {
@@ -366,18 +374,17 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 
 	var refreshResp struct {
 		Data struct {
-			AccessToken  string       `json:"access_token"`
-			RefreshToken string       `json:"refresh_token"`
-			User         UserResponse `json:"user"`
+			User UserResponse `json:"user"`
 		} `json:"data"`
 	}
-	_ = json.NewDecoder(rrRefresh.Body).Decode(&refreshResp)
-	if refreshResp.Data.AccessToken == "" || refreshResp.Data.RefreshToken == "" {
-		t.Fatal("expected new tokens after rotation")
+	if strings.Contains(rrRefresh.Body.String(), "access_token") || strings.Contains(rrRefresh.Body.String(), "refresh_token") {
+		t.Fatal("refresh response must not contain token fields")
 	}
+	_ = json.NewDecoder(rrRefresh.Body).Decode(&refreshResp)
 	if refreshResp.Data.User.Role != RoleUser.String() {
 		t.Errorf("expected refresh response to include current user role, got %s", refreshResp.Data.User.Role)
 	}
+	refreshCookie = responseCookie(t, rrRefresh, RefreshCookieName)
 
 	// Simulate operator promoting the user to admin while session is active.
 	storedUser := store.users[1]
@@ -385,8 +392,8 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 	store.users[1] = storedUser
 	store.usersByName[storedUser.Username] = storedUser
 
-	bodyRefresh2, _ := json.Marshal(RefreshRequest{RefreshToken: refreshResp.Data.RefreshToken})
-	reqRefresh2 := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(bodyRefresh2))
+	reqRefresh2 := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	reqRefresh2.AddCookie(refreshCookie)
 	rrRefresh2 := httptest.NewRecorder()
 	handler.Refresh(rrRefresh2, reqRefresh2)
 	if rrRefresh2.Code != http.StatusOK {
@@ -401,13 +408,10 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 	if refreshResp2.Data.User.Role != RoleAdmin.String() {
 		t.Errorf("expected refresh response to reflect promoted ADMIN role, got %s", refreshResp2.Data.User.Role)
 	}
-	_ = json.NewDecoder(rrRefresh.Body).Decode(&refreshResp)
-	if refreshResp.Data.AccessToken == "" || refreshResp.Data.RefreshToken == "" {
-		t.Fatal("expected new tokens after rotation")
-	}
 
-	// 4. Old refresh token cannot be reused
-	reqOldRefresh := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(bodyRefresh))
+	// 4. Old refresh cookie cannot be reused
+	reqOldRefresh := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	reqOldRefresh.AddCookie(oldRefreshCookie)
 	rrOldRefresh := httptest.NewRecorder()
 	handler.Refresh(rrOldRefresh, reqOldRefresh)
 	if rrOldRefresh.Code != http.StatusUnauthorized {
@@ -430,6 +434,24 @@ func TestHandler_LoginLocalAndTokenLifecycle(t *testing.T) {
 	handler.Revoke(rrRevoke, reqRevoke.WithContext(ctxUser))
 	if rrRevoke.Code != http.StatusOK {
 		t.Fatalf("expected 200 for revoke, got %d", rrRevoke.Code)
+	}
+}
+
+func TestHandler_Me(t *testing.T) {
+	store := newMockFullStore()
+	user := db.User{ID: 7, Username: "current", Role: RoleUser.String(), IsActive: true}
+	store.users[user.ID] = user
+	store.capabilities[user.ID] = []string{"issues:read"}
+	h := NewHandler(store, NewTokenManager([]byte("super-secret-jwt-key-1234567890123")), NewLoginLimiter(nil), nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, user))
+	rec := httptest.NewRecorder()
+	h.Me(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from me, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "access_token") || strings.Contains(rec.Body.String(), "refresh_token") {
+		t.Fatal("me response must not contain token fields")
 	}
 }
 
@@ -527,9 +549,11 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 
 	var setupResp struct {
 		Data struct {
-			RefreshToken string       `json:"refresh_token"`
-			User         UserResponse `json:"user"`
+			User UserResponse `json:"user"`
 		} `json:"data"`
+	}
+	if strings.Contains(rrSetup.Body.String(), "access_token") || strings.Contains(rrSetup.Body.String(), "refresh_token") {
+		t.Fatal("setup response must not contain token fields")
 	}
 	if err := json.NewDecoder(rrSetup.Body).Decode(&setupResp); err != nil {
 		t.Fatalf("decode setup response: %v", err)
@@ -539,12 +563,11 @@ func TestHandler_SetupSuperadmin(t *testing.T) {
 	}
 
 	// The bootstrap session must work without an existing login.
-	bodyRefresh, err := json.Marshal(RefreshRequest{RefreshToken: setupResp.Data.RefreshToken})
-	if err != nil {
-		t.Fatal(err)
-	}
+	bootstrapRefresh := responseCookie(t, rrSetup, RefreshCookieName)
+	reqRefresh := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	reqRefresh.AddCookie(bootstrapRefresh)
 	rrRefresh := httptest.NewRecorder()
-	handler.Refresh(rrRefresh, httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(bodyRefresh)))
+	handler.Refresh(rrRefresh, reqRefresh)
 	if rrRefresh.Code != http.StatusOK {
 		t.Fatalf("expected usable bootstrap refresh token, got %d: %s", rrRefresh.Code, rrRefresh.Body.String())
 	}
@@ -899,7 +922,8 @@ func TestHandler_RefreshAndRevokeAndSessions(t *testing.T) {
 	}
 
 	// 2. Refresh with invalid token
-	reqRefInv := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader([]byte(`{"refresh_token":"fake"}`)))
+	reqRefInv := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	reqRefInv.AddCookie(&http.Cookie{Name: RefreshCookieName, Value: "fake"})
 	rrRefInv := httptest.NewRecorder()
 	handler.Refresh(rrRefInv, reqRefInv)
 	if rrRefInv.Code != http.StatusUnauthorized {
@@ -909,12 +933,10 @@ func TestHandler_RefreshAndRevokeAndSessions(t *testing.T) {
 	// 3. Refresh with valid token
 	rawToken, hash, _ := GenerateRefreshToken()
 	_, _ = store.CreateRefreshToken(context.Background(), db.CreateRefreshTokenParams{
-		UserID:    user.ID,
-		TokenHash: hash,
-		ExpiresAt: time.Now().Add(time.Hour),
+		UserID: user.ID, TokenHash: hash, ExpiresAt: time.Now().Add(time.Hour),
 	})
-	refBody, _ := json.Marshal(RefreshRequest{RefreshToken: rawToken})
-	reqRefValid := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(refBody))
+	reqRefValid := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	reqRefValid.AddCookie(&http.Cookie{Name: RefreshCookieName, Value: rawToken})
 	rrRefValid := httptest.NewRecorder()
 	handler.Refresh(rrRefValid, reqRefValid)
 	if rrRefValid.Code != http.StatusOK {

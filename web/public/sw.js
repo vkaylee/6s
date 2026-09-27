@@ -1,5 +1,5 @@
 // 6S PWA Service Worker
-const CACHE_NAME = "6s-cache-v1";
+const CACHE_NAME = "6s-cache-v3";
 const STATIC_PRECACHE = [
   "/",
   "/index.html",

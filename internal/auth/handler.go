@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -82,6 +83,13 @@ type Handler struct {
 	limiter       *LoginLimiter
 	cipher        *crypto.Cipher
 	ldapClient    LDAPClient
+	secureCookies bool
+}
+
+// SetSecureCookies controls Secure on auth cookies. Production must enable it;
+// development may disable it when serving plain HTTP locally.
+func (h *Handler) SetSecureCookies(secure bool) {
+	h.secureCookies = secure
 }
 
 // NewHandler creates a new Handler.
@@ -91,12 +99,9 @@ func NewHandler(store Store, tokenManager *TokenManager, limiter *LoginLimiter, 
 		tm = ticketManager[0]
 	}
 	return &Handler{
-		store:         store,
-		tokenManager:  tokenManager,
-		ticketManager: tm,
-		limiter:       limiter,
-		cipher:        cipher,
-		ldapClient:    ldapClient,
+		store: store, tokenManager: tokenManager, ticketManager: tm,
+		limiter: limiter, cipher: cipher, ldapClient: ldapClient,
+		secureCookies: true,
 	}
 }
 
@@ -161,6 +166,7 @@ func (h *Handler) userCapabilities(ctx context.Context, userID int64) ([]string,
 
 // Login handles POST /api/auth/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
@@ -483,38 +489,31 @@ func (h *Handler) issueTokensAndRespond(w http.ResponseWriter, r *http.Request, 
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
-	accessToken, exp, err := h.tokenManager.GenerateAccessToken(user.ID)
+	accessToken, _, err := h.tokenManager.GenerateAccessToken(user.ID)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-
 	rawRefresh, refreshHash, err := GenerateRefreshToken()
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-
 	deviceInfo := r.UserAgent()
-	refreshExpiresAt := time.Now().Add(RefreshTokenDuration)
-
 	_, err = h.store.CreateRefreshToken(r.Context(), db.CreateRefreshTokenParams{
-		UserID:     user.ID,
-		TokenHash:  refreshHash,
+		UserID: user.ID, TokenHash: refreshHash,
 		DeviceInfo: sql.NullString{String: deviceInfo, Valid: deviceInfo != ""},
-		ExpiresAt:  refreshExpiresAt,
+		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
 	})
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
 		return
 	}
-	_ = response.JSON(w, http.StatusOK, map[string]any{
-		"access_token":       accessToken,
-		"expires_in":         exp,
-		"refresh_token":      rawRefresh,
-		"refresh_expires_in": int(RefreshTokenDuration.Seconds()),
-		"user":               toUserResponse(user, capabilities),
-	})
+	if err := setSessionCookies(w, accessToken, rawRefresh, h.secureCookies); err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	_ = response.JSON(w, http.StatusOK, map[string]any{"user": toUserResponse(user, capabilities)})
 }
 
 func (h *Handler) recordFailureAndLock(ctx context.Context, clientIP, accountKey, userAgent string) {
@@ -530,21 +529,24 @@ func (h *Handler) recordFailureAndLock(ctx context.Context, clientIP, accountKey
 	}
 }
 
-// RefreshRequest defines payload for token refresh.
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 // Refresh handles POST /api/auth/refresh with one-time atomic token rotation.
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.RefreshToken) == "" {
+	noStore(w)
+	if r.Body != nil {
+		var body any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != io.EOF {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
+			return
+		}
+	}
+	refreshToken := cookieValue(r, RefreshCookieName)
+	if refreshToken == "" {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrMissingRefreshToken))
 		return
 	}
-
 	ctx := r.Context()
-	tokenHash := HashRefreshToken(req.RefreshToken)
+	tokenHash := HashRefreshToken(refreshToken)
+
 	oldToken, err := h.store.GetRefreshTokenByHash(ctx, tokenHash)
 	if err != nil {
 		if reuseErr := h.handleRefreshReuse(ctx, r, tokenHash); reuseErr != nil {
@@ -554,8 +556,6 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 		return
 	}
-
-	// Refreshing an inactive or deleted account must not mint new credentials.
 	user, err := h.store.GetUserByID(ctx, oldToken.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -573,8 +573,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrInvalidRefreshToken))
 		return
 	}
-
-	newAccess, exp, err := h.tokenManager.GenerateAccessToken(oldToken.UserID)
+	newAccess, _, err := h.tokenManager.GenerateAccessToken(oldToken.UserID)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
@@ -584,24 +583,18 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
-
 	rotator, ok := h.store.(refreshRotator)
 	if !ok {
-		// A non-transactional revoke-then-insert fallback can leave a session
-		// permanently unusable. Refuse rotation unless the store is atomic.
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
 	rotationErr := rotator.RotateRefreshToken(ctx, oldToken.ID, db.CreateRefreshTokenParams{
-		UserID:     oldToken.UserID,
-		TokenHash:  newHash,
+		UserID: oldToken.UserID, TokenHash: newHash,
 		DeviceInfo: sql.NullString{String: r.UserAgent(), Valid: r.UserAgent() != ""},
 		ExpiresAt:  time.Now().Add(RefreshTokenDuration),
 	})
 	if rotationErr != nil {
 		if errors.Is(rotationErr, sql.ErrNoRows) {
-			// Another request won the compare-and-revoke race. Treat this as
-			// replay and revoke every session for the affected user.
 			if familyErr := h.revokeRefreshFamily(ctx, r, oldToken.UserID); familyErr != nil {
 				_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 				return
@@ -612,19 +605,16 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal))
 		return
 	}
-
 	capabilities, err := h.userCapabilities(ctx, user.ID)
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
 		return
 	}
-	_ = response.JSON(w, http.StatusOK, map[string]any{
-		"access_token":       newAccess,
-		"expires_in":         exp,
-		"refresh_token":      newRawRefresh,
-		"refresh_expires_in": int(RefreshTokenDuration.Seconds()),
-		"user":               toUserResponse(user, capabilities),
-	})
+	if err := setSessionCookies(w, newAccess, newRawRefresh, h.secureCookies); err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))
+		return
+	}
+	_ = response.JSON(w, http.StatusOK, map[string]any{"user": toUserResponse(user, capabilities)})
 }
 
 func (h *Handler) handleRefreshReuse(ctx context.Context, r *http.Request, tokenHash string) error {
@@ -666,8 +656,8 @@ type RevokeRequest struct {
 	UserID         *int64 `json:"user_id"`
 }
 
-// Revoke handles POST /api/auth/revoke.
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	currentUser, ok := GetUserFromContext(r.Context())
 	if !ok {
 		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
@@ -675,9 +665,12 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req RevokeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
-		return
+	if r.Body != nil {
+		decodeErr := json.NewDecoder(r.Body).Decode(&req)
+		if decodeErr != nil && !errors.Is(decodeErr, io.EOF) {
+			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(decodeErr))
+			return
+		}
 	}
 
 	if req.UserID != nil {
@@ -700,6 +693,9 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.RefreshTokenID == nil && (req.UserID == nil || *req.UserID == currentUser.ID) {
+		clearSessionCookies(w, h.secureCookies)
+	}
 
 	if aErr := h.store.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
 		UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
@@ -713,6 +709,22 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = response.JSON(w, http.StatusOK, map[string]any{"revoked": true})
+}
+
+// Me handles GET /api/auth/me and returns current authenticated user summary.
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	user, ok := GetUserFromContext(r.Context())
+	if !ok {
+		_ = response.AppError(w, r, apperror.Unauthorized(i18n.ErrUnauthorized))
+		return
+	}
+	capabilities, err := h.userCapabilities(r.Context(), user.ID)
+	if err != nil {
+		_ = response.AppError(w, r, apperror.Internal(i18n.ErrUserQuery).WithCause(err))
+		return
+	}
+	_ = response.JSON(w, http.StatusOK, toUserResponse(user, capabilities))
 }
 
 // Sessions handles GET /api/auth/sessions.
@@ -794,6 +806,7 @@ type SetupSuperadminRequest struct {
 
 // SetupSuperadmin handles POST /api/auth/setup.
 func (h *Handler) SetupSuperadmin(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	adminCount, err := h.store.CountAdmins(r.Context())
 	if err != nil {
 		_ = response.AppError(w, r, apperror.Internal(i18n.ErrInternal).WithCause(err))

@@ -15,12 +15,9 @@ test("real issue image opens, zooms and closes on React surface", async ({
   const { username, password, baseURL } = getE2EConfig();
 
   // API setup uses the real application contract, not synthetic HTML.
-  const session = await loginViaAPI(request, username, password);
-  const { targetLoc } = await ensureLocationsViaAPI(
-    request,
-    session.access_token,
-  );
-  const issue = await createDeterministicIssue(request, session.access_token, {
+  await loginViaAPI(request, username, password);
+  const { targetLoc } = await ensureLocationsViaAPI(request);
+  const issue = await createDeterministicIssue(request, {
     locationCode: targetLoc,
     description: `E2E image zoom issue ${Date.now()}`,
     category: "1S",

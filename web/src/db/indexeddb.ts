@@ -33,7 +33,6 @@ export interface DraftResolve {
 
 export interface AuthSession {
   id: string; // "current"
-  refresh_token: string;
   user: {
     id: number;
     username: string;
@@ -63,14 +62,14 @@ export interface SixSDatabase extends DBSchema {
 }
 
 const DB_NAME = "6s_local_db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<SixSDatabase>> | null = null;
 
 export function getLocalDB(): Promise<IDBPDatabase<SixSDatabase>> {
   if (!dbPromise) {
     dbPromise = openDB<SixSDatabase>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains("draft_issues")) {
           const issueStore = db.createObjectStore("draft_issues", {
             keyPath: "client_uuid",
@@ -85,6 +84,17 @@ export function getLocalDB(): Promise<IDBPDatabase<SixSDatabase>> {
         }
         if (!db.objectStoreNames.contains("auth_session")) {
           db.createObjectStore("auth_session", { keyPath: "id" });
+        } else if (oldVersion < 3) {
+          const authStore = transaction.objectStore("auth_session");
+          void authStore.openCursor().then((cursor) => {
+            if (!cursor) return;
+            const oldSession = cursor.value as AuthSession;
+            cursor.update({
+              id: oldSession.id,
+              user: oldSession.user,
+              updated_at: oldSession.updated_at,
+            });
+          });
         }
       },
     });

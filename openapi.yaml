@@ -10,10 +10,25 @@ servers:
 
 components:
   securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: 6s_access
+      description: HttpOnly access JWT cookie. Browser sends automatically for same-origin requests.
+    RefreshCookie:
+      type: apiKey
+      in: cookie
+      name: 6s_refresh
+      description: HttpOnly refresh JWT cookie, accepted only by refresh endpoint.
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Double-submit value matching the readable 6s_csrf cookie; required for unsafe same-origin requests.
+
 
   schemas:
     ErrorDetail:
@@ -627,13 +642,14 @@ components:
           format: date-time
 
 security:
-  - BearerAuth: []
+  - CookieAuth: []
 
 paths:
   /auth/login:
     post:
       operationId: login
       summary: Đăng nhập tài khoản Local hoặc Active Directory / LDAP
+      description: Sets HttpOnly 6s_access and 6s_refresh cookies plus readable 6s_csrf cookie. Tokens never appear in JSON.
       security: []
       requestBody:
         required: true
@@ -641,133 +657,96 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - username
-                - password
+              required: [username, password]
               properties:
-                username:
-                  type: string
-                  example: admin
-                password:
-                  type: string
-                  example: P@ssw0rd123
+                username: { type: string, example: admin }
+                password: { type: string, format: password, example: P@ssw0rd123 }
       responses:
         '200':
-          description: Đăng nhập thành công
+          description: Đăng nhập thành công; auth cookies set in response headers.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: Sets 6s_access, 6s_refresh, and 6s_csrf cookies.
+            Cache-Control:
+              schema: { type: string, example: no-store }
           content:
             application/json:
               schema:
                 type: object
-                required:
-                  - data
+                required: [data]
                 properties:
                   data:
                     type: object
-                    required:
-                      - access_token
-                      - expires_in
-                      - refresh_token
-                      - refresh_expires_in
-                      - user
+                    required: [user]
                     properties:
-                      access_token:
-                        type: string
-                      expires_in:
-                        type: integer
-                        example: 3600
-                      refresh_token:
-                        type: string
-                      refresh_expires_in:
-                        type: integer
-                        example: 2592000
-                      user:
-                        $ref: '#/components/schemas/UserSummary'
+                      user: { $ref: '#/components/schemas/UserSummary' }
         '401':
           description: Sai thông tin đăng nhập
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
         '429':
           description: Vượt quá giới hạn thử đăng nhập (Rate limit 5 lần / 1 phút)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
 
   /auth/refresh:
     post:
       operationId: refresh
-      summary: Cấp mới Access Token bằng Refresh Token (Token Rotation)
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - refresh_token
-              properties:
-                refresh_token:
-                  type: string
+      summary: Cấp mới phiên bằng HttpOnly refresh cookie (Token Rotation)
+      description: Reads 6s_refresh cookie and rotates auth cookies. No request body or token fields in JSON.
+      security:
+        - RefreshCookie: []
+      parameters: [{ $ref: '#/components/parameters/CsrfToken' }]
       responses:
         '200':
-          description: Token được làm mới thành công
+          description: Phiên được làm mới thành công; rotated cookies set in response headers.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, example: no-store } }
           content:
             application/json:
               schema:
                 type: object
-                required:
-                  - data
+                required: [data]
                 properties:
                   data:
                     type: object
-                    required:
-                      - access_token
-                      - expires_in
-                      - refresh_token
-                      - refresh_expires_in
-                      - user
+                    required: [user]
                     properties:
-                      access_token:
-                        type: string
-                      expires_in:
-                        type: integer
-                        example: 3600
-                      refresh_token:
-                        type: string
-                      refresh_expires_in:
-                        type: integer
-                        example: 2592000
-                      user:
-                        $ref: '#/components/schemas/UserSummary'
-
+                      user: { $ref: '#/components/schemas/UserSummary' }
         '401':
-          description: Refresh token đã hết hạn hoặc bị thu hồi
+          description: Refresh cookie hết hạn hoặc bị thu hồi
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Lấy user hiện tại từ access cookie
+      responses:
+        '200':
+          description: Current authenticated user
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/UserSummary' }
+        '401':
+          description: Access cookie thiếu, hết hạn hoặc không hợp lệ
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
 
   /auth/revoke:
     post:
       operationId: revokeSession
-      summary: Thu hồi phiên đăng nhập (Đăng xuất hoặc thu hồi khẩn cấp)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                refresh_token_id:
-                  type: integer
-                user_id:
-                  type: integer
+      summary: Thu hồi phiên hiện tại và xóa auth cookies
+      description: Without a body, revokes current user's session and clears 6s_access, 6s_refresh, and 6s_csrf cookies.
+      parameters: [{ $ref: '#/components/parameters/CsrfToken' }]
       responses:
         '200':
           description: Thu hồi thành công
+          headers:
+            Set-Cookie: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, example: no-store } }
           content:
             application/json:
               schema:
@@ -775,11 +754,10 @@ paths:
                 properties:
                   data:
                     type: object
-                    properties:
-                      revoked:
-                        type: boolean
-                        example: true
-
+                    properties: { revoked: { type: boolean, example: true } }
+        '401':
+          description: Chưa xác thực
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
   /auth/sessions:
     get:
       operationId: listAuthSessions
@@ -2824,14 +2802,37 @@ paths:
     post:
       operationId: setupSuperadmin
       summary: Thiết lập superadmin đầu tiên
+      description: Sets HttpOnly 6s_access and 6s_refresh cookies plus readable 6s_csrf cookie. Tokens never appear in JSON.
       security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, full_name]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+                full_name: { type: string }
+                email: { type: string, format: email }
       responses:
         '200':
-          description: Kết quả setup
+          description: Setup successful; auth cookies set in response headers.
+          headers:
+            Set-Cookie: { schema: { type: string }, description: Sets 6s_access, 6s_refresh, and 6s_csrf cookies. }
+            Cache-Control: { schema: { type: string, example: no-store } }
           content:
             application/json:
               schema:
                 type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [user]
+                    properties:
+                      user: { $ref: '#/components/schemas/UserSummary' }
 
   /auth/ticket:
     post:

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { ApiError, apiClient } from "../api/client.ts";
 import {
   type AuthSession,
   clearAuthSession,
@@ -48,27 +49,23 @@ export function clearRememberedUser(): void {
 
 export interface AuthState {
   user: UserProfile | null;
-  accessToken: string | null;
   isOfflineGrace: boolean;
   isLoading: boolean;
 
-  setAuth: (user: UserProfile, accessToken: string, refreshToken: string) => Promise<void>;
+  setAuth: (user: UserProfile) => Promise<void>;
   clearAuth: () => Promise<void>;
   enableOfflineGrace: () => void;
   restoreSession: () => Promise<boolean>;
-  getRefreshToken: () => Promise<string | null>;
 }
 
-export const useAuthStore = create<AuthState>((set, _get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  accessToken: null,
   isOfflineGrace: false,
   isLoading: true,
 
-  setAuth: async (user, accessToken, refreshToken) => {
+  setAuth: async (user) => {
     const session: AuthSession = {
       id: "current",
-      refresh_token: refreshToken,
       user: {
         id: user.id,
         username: user.username,
@@ -92,65 +89,46 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         // no-op
       }
     }
-    set({
-      user,
-      accessToken,
-      isOfflineGrace: false,
-      isLoading: false,
-    });
+    set({ user, isOfflineGrace: false, isLoading: false });
   },
 
   clearAuth: async () => {
     if (typeof indexedDB !== "undefined") {
       await clearAuthSession();
     }
-    set({
-      user: null,
-      accessToken: null,
-      isOfflineGrace: false,
-      isLoading: false,
-    });
+    set({ user: null, isOfflineGrace: false, isLoading: false });
   },
 
   enableOfflineGrace: () => {
-    set((state) => ({
-      ...state,
-      isOfflineGrace: true,
-    }));
+    set((state) => ({ ...state, isOfflineGrace: true }));
   },
 
   restoreSession: async () => {
+    let cachedUser: UserProfile | null = null;
     try {
-      if (typeof indexedDB === "undefined") {
-        set({ isLoading: false });
-        return false;
+      if (typeof indexedDB !== "undefined") {
+        const session = await getAuthSession();
+        if (session) {
+          cachedUser = session.user as UserProfile;
+          set({ user: cachedUser, isOfflineGrace: true, isLoading: false });
+        }
       }
-      const session = await getAuthSession();
-      if (!session) {
-        set({ isLoading: false });
-        return false;
-      }
-      set({
-        user: session.user as UserProfile,
-        isOfflineGrace: true, // Initially offline grace until network refreshes token
-        isLoading: false,
-      });
+
+      const currentUser = await apiClient<UserProfile>("/api/auth/me");
+      await useAuthStore.getState().setAuth(currentUser);
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await useAuthStore.getState().clearAuth();
+        return false;
+      }
+      if (cachedUser) {
+        useAuthStore.getState().enableOfflineGrace();
+        set({ isLoading: false });
+        return true;
+      }
       set({ isLoading: false });
       return false;
-    }
-  },
-
-  getRefreshToken: async () => {
-    try {
-      if (typeof indexedDB === "undefined") {
-        return null;
-      }
-      const session = await getAuthSession();
-      return session?.refresh_token ?? null;
-    } catch {
-      return null;
     }
   },
 }));

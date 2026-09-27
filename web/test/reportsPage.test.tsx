@@ -41,15 +41,12 @@ function WithMockState({ values, children }: { values: unknown[]; children: Reac
   };
   return <>{children}</>;
 }
-const defaultGetRefreshToken = useAuthStore.getState().getRefreshToken;
 
 beforeEach(() => {
   useAuthStore.setState({
     user: null,
-    accessToken: null,
     isOfflineGrace: false,
     isLoading: false,
-    getRefreshToken: defaultGetRefreshToken,
   });
 });
 
@@ -57,10 +54,8 @@ afterEach(async () => {
   await useAuthStore.getState().clearAuth();
   useAuthStore.setState({
     user: null,
-    accessToken: null,
     isOfflineGrace: false,
     isLoading: false,
-    getRefreshToken: defaultGetRefreshToken,
   });
 });
 
@@ -237,7 +232,6 @@ describe("ReportsPage & Export CSV UI", () => {
     try {
       useAuthStore.setState({
         user: { id: 1, username: "admin", full_name: "Super Admin", role: UserRole.ADMIN },
-        accessToken: "jwt",
       });
       globalThis.fetch = (async (input: RequestInfo | URL) => {
         const url = String(input instanceof Request ? input.url : input);
@@ -318,7 +312,6 @@ describe("ReportsPage & Export CSV UI", () => {
     try {
       useAuthStore.setState({
         user: { id: 1, username: "admin", full_name: "Super Admin", role: UserRole.ADMIN },
-        accessToken: "jwt",
       });
       globalThis.fetch = (async (input: RequestInfo | URL) => {
         const url = String(input instanceof Request ? input.url : input);
@@ -424,7 +417,7 @@ describe("ReportsPage & Export CSV UI", () => {
     expect(html).toContain("2S");
   });
 
-  it("refreshes expired access token and proceeds with XLSX download", async () => {
+  it("refreshes expired cookie session and proceeds with XLSX download", async () => {
     const originalFetch = globalThis.fetch;
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;
@@ -436,11 +429,13 @@ describe("ReportsPage & Export CSV UI", () => {
         full_name: "Super Admin",
         role: UserRole.ADMIN,
       },
-      accessToken: "expired-jwt-token",
-      getRefreshToken: async () => "valid-refresh-token",
     });
 
-    const calls: { url: string; authHeader: string }[] = [];
+    const calls: {
+      url: string;
+      credentials: RequestCredentials | undefined;
+      authHeader: string;
+    }[] = [];
     let clicked = false;
     let downloadedFilename = "";
 
@@ -472,37 +467,29 @@ describe("ReportsPage & Export CSV UI", () => {
       const parsedUrl = new URL(rawUrl, "http://localhost");
       const url = `${parsedUrl.pathname}${parsedUrl.search}`;
       const authHeader = new Headers(init?.headers).get("Authorization") ?? "";
-      calls.push({ url, authHeader });
+      calls.push({ url, credentials: init?.credentials, authHeader });
 
       if (url === "/api/auth/refresh") {
-        return new Response(
-          JSON.stringify({
-            data: {
-              access_token: "refreshed-jwt-token",
-              refresh_token: "new-refresh-token",
-              user: { id: 1, username: "admin", full_name: "Super Admin", role: UserRole.ADMIN },
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
+        return new Response(JSON.stringify({ data: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       if (url.startsWith("/api/issues/export")) {
-        if (authHeader === "Bearer expired-jwt-token") {
+        if (calls.filter((call) => call.url.startsWith("/api/issues/export")).length === 1) {
           return new Response(
-            JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Token expired" } }),
+            JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Session expired" } }),
             { status: 401, headers: { "Content-Type": "application/json" } },
           );
         }
-        if (authHeader === "Bearer refreshed-jwt-token") {
-          return new Response("PK\x03\x04mock xlsx content", {
-            status: 200,
-            headers: {
-              "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              "Content-Disposition": 'attachment; filename="6S_Issues_Export.xlsx"',
-            },
-          });
-        }
+        return new Response("PK\x03\x04mock xlsx content", {
+          status: 200,
+          headers: {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": 'attachment; filename="6S_Issues_Export.xlsx"',
+          },
+        });
       }
       return new Response("Not found", { status: 404 });
     }) as typeof fetch;
@@ -511,10 +498,14 @@ describe("ReportsPage & Export CSV UI", () => {
       await downloadReportsXlsx("LINE_A1");
       expect(calls.length).toBe(3);
       expect(calls[0].url).toBe("/api/issues/export?location_code=LINE_A1");
-      expect(calls[0].authHeader).toBe("Bearer expired-jwt-token");
+      expect(calls[0].credentials).toBe("include");
+      expect(calls[0].authHeader).toBe("");
       expect(calls[1].url).toBe("/api/auth/refresh");
+      expect(calls[1].credentials).toBe("include");
+      expect(calls[1].authHeader).toBe("");
       expect(calls[2].url).toBe("/api/issues/export?location_code=LINE_A1");
-      expect(calls[2].authHeader).toBe("Bearer refreshed-jwt-token");
+      expect(calls[2].credentials).toBe("include");
+      expect(calls[2].authHeader).toBe("");
       expect(clicked).toBe(true);
       expect(downloadedFilename).toMatch(/^6S_Report_\d{4}-\d{2}-\d{2}\.xlsx$/);
     } finally {
@@ -525,7 +516,7 @@ describe("ReportsPage & Export CSV UI", () => {
     }
   });
 
-  it("aborts download when token refresh fails on 401", async () => {
+  it("aborts download when session refresh fails on 401", async () => {
     const originalFetch = globalThis.fetch;
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;
@@ -537,8 +528,6 @@ describe("ReportsPage & Export CSV UI", () => {
         full_name: "Safety Officer",
         role: UserRole.SAFETY_OFFICER,
       },
-      accessToken: "expired-token",
-      getRefreshToken: async () => "invalid-refresh-token",
     });
 
     let clicked = false;
@@ -597,7 +586,6 @@ describe("ReportsPage & Export CSV UI", () => {
         full_name: "Regular Worker",
         role: UserRole.USER,
       },
-      accessToken: "worker-valid-token",
     });
 
     let clicked = false;

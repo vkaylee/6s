@@ -704,6 +704,9 @@ func TestHandler_Media(t *testing.T) {
 	reqSuccess := httptest.NewRequest(http.MethodGet, "/api/issues/42/media/before/photo.jpg", nil)
 	rrSuccess := httptest.NewRecorder()
 	r.ServeHTTP(rrSuccess, reqSuccess)
+	if got := rrSuccess.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Errorf("expected image/jpeg content type, got %q", got)
+	}
 	if rrSuccess.Code != http.StatusOK {
 		t.Errorf("expected 200 OK for authorized media, got %d", rrSuccess.Code)
 	}

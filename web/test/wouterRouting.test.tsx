@@ -43,7 +43,6 @@ describe("Wouter UX & Routing Verification", () => {
         role: UserRole.LINE_LEADER,
         capabilities: ["reports:view"],
       },
-      accessToken: "valid-token",
       isOfflineGrace: false,
     });
   });
@@ -83,7 +82,7 @@ describe("Wouter UX & Routing Verification", () => {
   });
 
   it("renders LoginPage with return_to target when provided via search param", () => {
-    useAuthStore.setState({ user: null, accessToken: null });
+    useAuthStore.setState({ user: null });
     const html = renderToString(
       <Router ssrPath="/login" ssrSearch="return_to=%2Freports">
         <App />
@@ -95,7 +94,7 @@ describe("Wouter UX & Routing Verification", () => {
     expect(html).toContain("6S Workplace Security");
   });
   it("renders initial superadmin setup before authentication", () => {
-    useAuthStore.setState({ user: null, accessToken: null, isLoading: false });
+    useAuthStore.setState({ user: null, isLoading: false });
     const html = renderToString(
       <WithMockState
         values={[
@@ -150,7 +149,6 @@ describe("Wouter UX & Routing Verification", () => {
         role: UserRole.ADMIN,
         capabilities: ["reports:view"],
       },
-      accessToken: "admin-token",
     });
     const html = renderToString(
       <Router ssrPath="/reports">
@@ -168,7 +166,6 @@ describe("Wouter UX & Routing Verification", () => {
         full_name: "Admin User",
         role: UserRole.ADMIN,
       },
-      accessToken: "admin-token",
     });
     const html = renderToString(
       <Router ssrPath="/admin/config">
@@ -211,7 +208,6 @@ describe("Wouter UX & Routing Verification", () => {
         role: UserRole.USER,
         capabilities: [],
       },
-      accessToken: "worker-token",
     });
 
     const dashboardHtml = renderToString(

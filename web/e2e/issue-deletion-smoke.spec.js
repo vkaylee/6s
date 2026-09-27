@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { getE2EConfig, loginViaAPI, loginViaUI, MINIMAL_PNG } from './helpers.js';
+import { createAPIContext, csrfHeaders, getE2EConfig, loginViaAPI, loginViaUI, MINIMAL_PNG } from './helpers.js';
 
 test('admin can soft-delete and restore a scored issue while worker remains denied', async ({ request, page }) => {
   const { baseURL, otherLocationCode, workerUsername, workerPassword } = getE2EConfig();
-  const admin = await loginViaAPI(request);
-  const worker = await loginViaAPI(request, workerUsername, workerPassword);
-  const adminHeaders = { Authorization: `Bearer ${admin.access_token}` };
-  const workerHeaders = { Authorization: `Bearer ${worker.access_token}` };
   const description = `Deletion smoke ${Date.now()}`;
-  const created = await request.post(`${baseURL}/api/issues/sync`, {
+  await loginViaAPI(request);
+  const workerRequest = await createAPIContext();
+  const worker = await loginViaAPI(workerRequest, workerUsername, workerPassword);
+  const adminHeaders = await csrfHeaders(request);
+  const workerHeaders = await csrfHeaders(workerRequest);
+  const created = await workerRequest.post(`${baseURL}/api/issues/sync`, {
     headers: workerHeaders,
     multipart: {
       client_uuid: crypto.randomUUID(),
@@ -20,7 +21,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   });
   expect(created.ok(), await created.text()).toBe(true);
   const issue = (await created.json()).data;
-  const resolvedResponse = await request.post(`${baseURL}/api/issues/${issue.id}/resolve`, {
+  const resolvedResponse = await workerRequest.post(`${baseURL}/api/issues/${issue.id}/resolve`, {
     headers: workerHeaders,
     multipart: {
       expected_version: String(issue.version),
@@ -47,7 +48,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
     headers: adminHeaders,
   });
   expect(reporterBeforeResponse.ok(), await reporterBeforeResponse.text()).toBe(true);
-  const reporterBefore = (await reporterBeforeResponse.json()).data.find((row) => row.user_id === worker.user.id);
+  const reporterBefore = (await reporterBeforeResponse.json()).data.find((row) => row.user_id === worker.id);
   expect(reporterBefore).toBeDefined();
   expect(Number(reporterBefore.valid_count)).toBeGreaterThan(0);
   const reportBeforeResponse = await request.get(`${baseURL}/api/reports/summary?days=14`, {
@@ -57,7 +58,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   const reportBefore = (await reportBeforeResponse.json()).data;
   expect(Number(reportBefore.kpi.totalIssues)).toBeGreaterThan(0);
 
-  const denied = await request.post(`${baseURL}/api/issues/${issue.id}/delete`, {
+  const denied = await workerRequest.post(`${baseURL}/api/issues/${issue.id}/delete`, {
     headers: workerHeaders,
     data: { reason: 'worker must not delete', expected_version: closed.version },
   });
@@ -89,7 +90,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   ]);
   await expect(detail.getByText(/deleted|đã xoá|đã xóa|已删除/i).first()).toBeVisible();
 
-  const hidden = await request.get(`${baseURL}/api/issues/${issue.id}`, { headers: workerHeaders });
+  const hidden = await workerRequest.get(`${baseURL}/api/issues/${issue.id}`);
   expect(hidden.status()).toBe(404);
   const deletedList = await request.get(`${baseURL}/api/issues?deletion=deleted&limit=100`, {
     headers: adminHeaders,
@@ -109,7 +110,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
     headers: adminHeaders,
   });
   expect(reporterDeletedResponse.ok(), await reporterDeletedResponse.text()).toBe(true);
-  const reporterDeleted = (await reporterDeletedResponse.json()).data.find((row) => row.user_id === worker.user.id);
+  const reporterDeleted = (await reporterDeletedResponse.json()).data.find((row) => row.user_id === worker.id);
   expect(Number(reporterDeleted?.valid_count ?? 0)).toBeLessThan(Number(reporterBefore.valid_count));
   const reportDeletedResponse = await request.get(`${baseURL}/api/reports/summary?days=14`, {
     headers: adminHeaders,
@@ -152,7 +153,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
     headers: adminHeaders,
   });
   expect(reporterRestoredResponse.ok(), await reporterRestoredResponse.text()).toBe(true);
-  const reporterRestored = (await reporterRestoredResponse.json()).data.find((row) => row.user_id === worker.user.id);
+  const reporterRestored = (await reporterRestoredResponse.json()).data.find((row) => row.user_id === worker.id);
   expect(Number(reporterRestored?.valid_count ?? 0)).toBe(Number(reporterBefore.valid_count));
   const reportRestoredResponse = await request.get(`${baseURL}/api/reports/summary?days=14`, {
     headers: adminHeaders,
@@ -174,4 +175,5 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   });
   expect(active.ok(), await active.text()).toBe(true);
   expect((await active.json()).data.map((row) => row.id)).toContain(issue.id);
+  await workerRequest.dispose();
 });

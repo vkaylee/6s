@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type ServerSentEventsResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddTeamLocationData, AddTeamLocationResponses, AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, BatchUpdateTagStatusData, BatchUpdateTagStatusResponses, CloseIssueData, CloseIssueErrors, CloseIssueResponses, CreateAdminAssetData, CreateAdminAssetErrors, CreateAdminAssetResponses, CreateAdminTeamData, CreateAdminTeamResponses, CreateAuthTicketData, CreateAuthTicketResponses, CreateLocationData, CreateLocationErrors, CreateLocationResponses, DeleteIssueData, DeleteIssueResponses, DeleteLocationMemberData, DeleteLocationMemberResponses, DeleteTeamLocationData, DeleteTeamLocationResponses, DeleteTeamMemberData, DeleteTeamMemberErrors, DeleteTeamMemberResponses, ExportIssuesXlsxData, ExportIssuesXlsxErrors, ExportIssuesXlsxResponses, FollowUpAiReviewData, FollowUpAiReviewResponses, GetAdConfigData, GetAdConfigErrors, GetAdConfigResponses, GetAiConfigData, GetAiConfigErrors, GetAiConfigResponses, GetAiStatusData, GetAiStatusResponses, GetCachedTranslationData, GetCachedTranslationResponses, GetHealthData, GetHealthResponses, GetIssueData, GetIssueErrors, GetIssueResponses, GetIssueScoreLogsData, GetIssueScoreLogsResponses, GetLocationLeaderboardData, GetLocationLeaderboardResponses, GetNotificationConfigData, GetNotificationConfigErrors, GetNotificationConfigResponses, GetReporterLeaderboardData, GetReporterLeaderboardResponses, GetReportSummaryData, GetReportSummaryResponses, GetScoringRulesData, GetScoringRulesResponses, GetSetupStatusData, GetSetupStatusResponses, GetTargetScoreLogsData, GetTargetScoreLogsResponses, GetTeamReportData, GetTeamReportErrors, GetTeamReportResponses, InvalidateIssueData, InvalidateIssueErrors, InvalidateIssueResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListAllLocationsData, ListAllLocationsResponses, ListAllTagsData, ListAllTagsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAssignableTeamMembersData, ListAssignableTeamMembersErrors, ListAssignableTeamMembersResponses, ListAuthSessionsData, ListAuthSessionsErrors, ListAuthSessionsResponses, ListIssuesData, ListIssuesResponses, ListLocationMembersData, ListLocationMembersResponses, ListLocationsData, ListLocationsResponses, ListPermissionsData, ListPermissionsResponses, ListTagsData, ListTagsResponses, ListTeamLocationsData, ListTeamLocationsResponses, ListTeamMembersData, ListTeamMembersErrors, ListTeamMembersResponses, ListTeamsData, ListTeamsErrors, ListTeamsResponses, LoginData, LoginErrors, LoginResponses, RefreshData, RefreshErrors, RefreshResponses, ReopenIssueData, ReopenIssueErrors, ReopenIssueResponses, ResolveIssueData, ResolveIssueErrors, ResolveIssueResponses, RestoreIssueData, RestoreIssueResponses, ReviewIssueWithAiData, ReviewIssueWithAiResponses, ReviewTagData, ReviewTagResponses, RevokeSessionData, RevokeSessionResponses, SetupSuperadminData, SetupSuperadminResponses, StreamIssueEventsData, StreamIssueEventsResponse, StreamIssueEventsResponses, SuggestTagsWithAiData, SuggestTagsWithAiErrors, SuggestTagsWithAiResponses, SyncIssuesData, SyncIssuesErrors, SyncIssuesResponses, TestAdConfigData, TestAdConfigErrors, TestAdConfigResponses, TestAiConnectionData, TestAiConnectionErrors, TestAiConnectionResponses, TestAiDnsData, TestAiDnsResponses, TestNotificationConfigData, TestNotificationConfigErrors, TestNotificationConfigResponses, TranslateTextData, TranslateTextErrors, TranslateTextResponses, UpdateAdConfigData, UpdateAdConfigResponses, UpdateAdminAssetData, UpdateAdminAssetErrors, UpdateAdminAssetResponses, UpdateAdminTeamData, UpdateAdminTeamErrors, UpdateAdminTeamResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses, UpdateAiConfigData, UpdateAiConfigResponses, UpdateIssueData, UpdateIssueErrors, UpdateIssueResponses, UpdateLocationData, UpdateLocationResponses, UpdateLocationStatusData, UpdateLocationStatusResponses, UpdateNotificationConfigData, UpdateNotificationConfigErrors, UpdateNotificationConfigResponses, UpdateRolePermissionsData, UpdateRolePermissionsResponses, UpdateScoringRulesData, UpdateScoringRulesResponses, UpdateTagStatusData, UpdateTagStatusResponses, UpsertLocationMemberData, UpsertLocationMemberResponses, UpsertTagData, UpsertTagResponses } from './types.gen';
+import type { AddTeamLocationData, AddTeamLocationResponses, AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, BatchUpdateTagStatusData, BatchUpdateTagStatusResponses, CloseIssueData, CloseIssueErrors, CloseIssueResponses, CreateAdminAssetData, CreateAdminAssetErrors, CreateAdminAssetResponses, CreateAdminTeamData, CreateAdminTeamResponses, CreateAuthTicketData, CreateAuthTicketResponses, CreateLocationData, CreateLocationErrors, CreateLocationResponses, DeleteIssueData, DeleteIssueResponses, DeleteLocationMemberData, DeleteLocationMemberResponses, DeleteTeamLocationData, DeleteTeamLocationResponses, DeleteTeamMemberData, DeleteTeamMemberErrors, DeleteTeamMemberResponses, ExportIssuesXlsxData, ExportIssuesXlsxErrors, ExportIssuesXlsxResponses, FollowUpAiReviewData, FollowUpAiReviewResponses, GetAdConfigData, GetAdConfigErrors, GetAdConfigResponses, GetAiConfigData, GetAiConfigErrors, GetAiConfigResponses, GetAiStatusData, GetAiStatusResponses, GetCachedTranslationData, GetCachedTranslationResponses, GetCurrentUserData, GetCurrentUserErrors, GetCurrentUserResponses, GetHealthData, GetHealthResponses, GetIssueData, GetIssueErrors, GetIssueResponses, GetIssueScoreLogsData, GetIssueScoreLogsResponses, GetLocationLeaderboardData, GetLocationLeaderboardResponses, GetNotificationConfigData, GetNotificationConfigErrors, GetNotificationConfigResponses, GetReporterLeaderboardData, GetReporterLeaderboardResponses, GetReportSummaryData, GetReportSummaryResponses, GetScoringRulesData, GetScoringRulesResponses, GetSetupStatusData, GetSetupStatusResponses, GetTargetScoreLogsData, GetTargetScoreLogsResponses, GetTeamReportData, GetTeamReportErrors, GetTeamReportResponses, InvalidateIssueData, InvalidateIssueErrors, InvalidateIssueResponses, ListAdminUsersData, ListAdminUsersErrors, ListAdminUsersResponses, ListAllLocationsData, ListAllLocationsResponses, ListAllTagsData, ListAllTagsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAssignableTeamMembersData, ListAssignableTeamMembersErrors, ListAssignableTeamMembersResponses, ListAuthSessionsData, ListAuthSessionsErrors, ListAuthSessionsResponses, ListIssuesData, ListIssuesResponses, ListLocationMembersData, ListLocationMembersResponses, ListLocationsData, ListLocationsResponses, ListPermissionsData, ListPermissionsResponses, ListTagsData, ListTagsResponses, ListTeamLocationsData, ListTeamLocationsResponses, ListTeamMembersData, ListTeamMembersErrors, ListTeamMembersResponses, ListTeamsData, ListTeamsErrors, ListTeamsResponses, LoginData, LoginErrors, LoginResponses, RefreshData, RefreshErrors, RefreshResponses, ReopenIssueData, ReopenIssueErrors, ReopenIssueResponses, ResolveIssueData, ResolveIssueErrors, ResolveIssueResponses, RestoreIssueData, RestoreIssueResponses, ReviewIssueWithAiData, ReviewIssueWithAiResponses, ReviewTagData, ReviewTagResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, SetupSuperadminData, SetupSuperadminResponses, StreamIssueEventsData, StreamIssueEventsResponse, StreamIssueEventsResponses, SuggestTagsWithAiData, SuggestTagsWithAiErrors, SuggestTagsWithAiResponses, SyncIssuesData, SyncIssuesErrors, SyncIssuesResponses, TestAdConfigData, TestAdConfigErrors, TestAdConfigResponses, TestAiConnectionData, TestAiConnectionErrors, TestAiConnectionResponses, TestAiDnsData, TestAiDnsResponses, TestNotificationConfigData, TestNotificationConfigErrors, TestNotificationConfigResponses, TranslateTextData, TranslateTextErrors, TranslateTextResponses, UpdateAdConfigData, UpdateAdConfigResponses, UpdateAdminAssetData, UpdateAdminAssetErrors, UpdateAdminAssetResponses, UpdateAdminTeamData, UpdateAdminTeamErrors, UpdateAdminTeamResponses, UpdateAdminUserData, UpdateAdminUserErrors, UpdateAdminUserResponses, UpdateAiConfigData, UpdateAiConfigResponses, UpdateIssueData, UpdateIssueErrors, UpdateIssueResponses, UpdateLocationData, UpdateLocationResponses, UpdateLocationStatusData, UpdateLocationStatusResponses, UpdateNotificationConfigData, UpdateNotificationConfigErrors, UpdateNotificationConfigResponses, UpdateRolePermissionsData, UpdateRolePermissionsResponses, UpdateScoringRulesData, UpdateScoringRulesResponses, UpdateTagStatusData, UpdateTagStatusResponses, UpsertLocationMemberData, UpsertLocationMemberResponses, UpsertTagData, UpsertTagResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -20,6 +20,8 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 
 /**
  * Đăng nhập tài khoản Local hoặc Active Directory / LDAP
+ *
+ * Sets HttpOnly 6s_access and 6s_refresh cookies plus readable 6s_csrf cookie. Tokens never appear in JSON.
  */
 export const login = <ThrowOnError extends boolean = false>(options: Options<LoginData, ThrowOnError>): RequestResult<LoginResponses, LoginErrors, ThrowOnError> => (options.client ?? client).post<LoginResponses, LoginErrors, ThrowOnError>({
     url: '/auth/login',
@@ -31,35 +33,57 @@ export const login = <ThrowOnError extends boolean = false>(options: Options<Log
 });
 
 /**
- * Cấp mới Access Token bằng Refresh Token (Token Rotation)
+ * Cấp mới phiên bằng HttpOnly refresh cookie (Token Rotation)
+ *
+ * Reads 6s_refresh cookie and rotates auth cookies. No request body or token fields in JSON.
  */
 export const refresh = <ThrowOnError extends boolean = false>(options: Options<RefreshData, ThrowOnError>): RequestResult<RefreshResponses, RefreshErrors, ThrowOnError> => (options.client ?? client).post<RefreshResponses, RefreshErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: '6s_refresh',
+            type: 'apiKey'
+        }],
     url: '/auth/refresh',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+    ...options
 });
 
 /**
- * Thu hồi phiên đăng nhập (Đăng xuất hoặc thu hồi khẩn cấp)
+ * Lấy user hiện tại từ access cookie
  */
-export const revokeSession = <ThrowOnError extends boolean = false>(options: Options<RevokeSessionData, ThrowOnError>): RequestResult<RevokeSessionResponses, unknown, ThrowOnError> => (options.client ?? client).post<RevokeSessionResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+export const getCurrentUser = <ThrowOnError extends boolean = false>(options?: Options<GetCurrentUserData, ThrowOnError>): RequestResult<GetCurrentUserResponses, GetCurrentUserErrors, ThrowOnError> => (options?.client ?? client).get<GetCurrentUserResponses, GetCurrentUserErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
+    url: '/auth/me',
+    ...options
+});
+
+/**
+ * Thu hồi phiên hiện tại và xóa auth cookies
+ *
+ * Without a body, revokes current user's session and clears 6s_access, 6s_refresh, and 6s_csrf cookies.
+ */
+export const revokeSession = <ThrowOnError extends boolean = false>(options: Options<RevokeSessionData, ThrowOnError>): RequestResult<RevokeSessionResponses, RevokeSessionErrors, ThrowOnError> => (options.client ?? client).post<RevokeSessionResponses, RevokeSessionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/auth/revoke',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+    ...options
 });
 
 /**
  * Liệt kê các phiên đăng nhập đang hoạt động
  */
 export const listAuthSessions = <ThrowOnError extends boolean = false>(options?: Options<ListAuthSessionsData, ThrowOnError>): RequestResult<ListAuthSessionsResponses, ListAuthSessionsErrors, ThrowOnError> => (options?.client ?? client).get<ListAuthSessionsResponses, ListAuthSessionsErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/auth/sessions',
     ...options
 });
@@ -68,7 +92,11 @@ export const listAuthSessions = <ThrowOnError extends boolean = false>(options?:
  * Lấy danh mục vị trí chuẩn hóa (Master Data)
  */
 export const listLocations = <ThrowOnError extends boolean = false>(options?: Options<ListLocationsData, ThrowOnError>): RequestResult<ListLocationsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListLocationsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/locations',
     ...options
 });
@@ -77,7 +105,11 @@ export const listLocations = <ThrowOnError extends boolean = false>(options?: Op
  * Thêm mới vị trí (Requires permission `masterdata:manage`)
  */
 export const createLocation = <ThrowOnError extends boolean = false>(options: Options<CreateLocationData, ThrowOnError>): RequestResult<CreateLocationResponses, CreateLocationErrors, ThrowOnError> => (options.client ?? client).post<CreateLocationResponses, CreateLocationErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/locations',
     ...options,
     headers: {
@@ -90,7 +122,11 @@ export const createLocation = <ThrowOnError extends boolean = false>(options: Op
  * Lấy danh mục tags đa ngôn ngữ theo tần suất sử dụng
  */
 export const listTags = <ThrowOnError extends boolean = false>(options?: Options<ListTagsData, ThrowOnError>): RequestResult<ListTagsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListTagsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/tags',
     ...options
 });
@@ -99,7 +135,11 @@ export const listTags = <ThrowOnError extends boolean = false>(options?: Options
  * Thêm hoặc cập nhật tag (Requires permission `masterdata:manage`)
  */
 export const upsertTag = <ThrowOnError extends boolean = false>(options: Options<UpsertTagData, ThrowOnError>): RequestResult<UpsertTagResponses, unknown, ThrowOnError> => (options.client ?? client).post<UpsertTagResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/tags',
     ...options,
     headers: {
@@ -112,7 +152,11 @@ export const upsertTag = <ThrowOnError extends boolean = false>(options: Options
  * Danh mục thiết bị/tài sản theo vị trí (yêu cầu đăng nhập)
  */
 export const listAssets = <ThrowOnError extends boolean = false>(options?: Options<ListAssetsData, ThrowOnError>): RequestResult<ListAssetsResponses, ListAssetsErrors, ThrowOnError> => (options?.client ?? client).get<ListAssetsResponses, ListAssetsErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/assets',
     ...options
 });
@@ -121,7 +165,11 @@ export const listAssets = <ThrowOnError extends boolean = false>(options?: Optio
  * Danh mục team của site (yêu cầu đăng nhập)
  */
 export const listTeams = <ThrowOnError extends boolean = false>(options?: Options<ListTeamsData, ThrowOnError>): RequestResult<ListTeamsResponses, ListTeamsErrors, ThrowOnError> => (options?.client ?? client).get<ListTeamsResponses, ListTeamsErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/teams',
     ...options
 });
@@ -130,7 +178,11 @@ export const listTeams = <ThrowOnError extends boolean = false>(options?: Option
  * Thành viên team phục vụ chọn người xử lý (Requires `issue:assign`)
  */
 export const listAssignableTeamMembers = <ThrowOnError extends boolean = false>(options: Options<ListAssignableTeamMembersData, ThrowOnError>): RequestResult<ListAssignableTeamMembersResponses, ListAssignableTeamMembersErrors, ThrowOnError> => (options.client ?? client).get<ListAssignableTeamMembersResponses, ListAssignableTeamMembersErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/teams/{id}/members',
     ...options
 });
@@ -139,7 +191,11 @@ export const listAssignableTeamMembers = <ThrowOnError extends boolean = false>(
  * Lấy danh sách issues có phân trang và bộ lọc
  */
 export const listIssues = <ThrowOnError extends boolean = false>(options?: Options<ListIssuesData, ThrowOnError>): RequestResult<ListIssuesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListIssuesResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues',
     ...options
 });
@@ -148,7 +204,11 @@ export const listIssues = <ThrowOnError extends boolean = false>(options?: Optio
  * Xem chi tiết một issue
  */
 export const getIssue = <ThrowOnError extends boolean = false>(options: Options<GetIssueData, ThrowOnError>): RequestResult<GetIssueResponses, GetIssueErrors, ThrowOnError> => (options.client ?? client).get<GetIssueResponses, GetIssueErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}',
     ...options
 });
@@ -157,7 +217,11 @@ export const getIssue = <ThrowOnError extends boolean = false>(options: Options<
  * Sửa nhanh phân loại S, tags hoặc trách nhiệm; multipart chỉ nhận các trường phân loại/ảnh, trường trách nhiệm và expected_version chỉ qua JSON
  */
 export const updateIssue = <ThrowOnError extends boolean = false>(options: Options<UpdateIssueData, ThrowOnError>): RequestResult<UpdateIssueResponses, UpdateIssueErrors, ThrowOnError> => (options.client ?? client).patch<UpdateIssueResponses, UpdateIssueErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}',
     ...options,
     headers: {
@@ -171,7 +235,11 @@ export const updateIssue = <ThrowOnError extends boolean = false>(options: Optio
  */
 export const syncIssues = <ThrowOnError extends boolean = false>(options: Options<SyncIssuesData, ThrowOnError>): RequestResult<SyncIssuesResponses, SyncIssuesErrors, ThrowOnError> => (options.client ?? client).post<SyncIssuesResponses, SyncIssuesErrors, ThrowOnError>({
     ...formDataBodySerializer,
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/sync',
     ...options,
     headers: {
@@ -185,7 +253,11 @@ export const syncIssues = <ThrowOnError extends boolean = false>(options: Option
  */
 export const resolveIssue = <ThrowOnError extends boolean = false>(options: Options<ResolveIssueData, ThrowOnError>): RequestResult<ResolveIssueResponses, ResolveIssueErrors, ThrowOnError> => (options.client ?? client).post<ResolveIssueResponses, ResolveIssueErrors, ThrowOnError>({
     ...formDataBodySerializer,
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/resolve',
     ...options,
     headers: {
@@ -198,7 +270,11 @@ export const resolveIssue = <ThrowOnError extends boolean = false>(options: Opti
  * Duyệt hoàn thành issue và chấm điểm Kaizen
  */
 export const closeIssue = <ThrowOnError extends boolean = false>(options: Options<CloseIssueData, ThrowOnError>): RequestResult<CloseIssueResponses, CloseIssueErrors, ThrowOnError> => (options.client ?? client).post<CloseIssueResponses, CloseIssueErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/close',
     ...options,
     headers: {
@@ -211,7 +287,11 @@ export const closeIssue = <ThrowOnError extends boolean = false>(options: Option
  * Từ chối duyệt khắc phục, yêu cầu làm lại (Reopen)
  */
 export const reopenIssue = <ThrowOnError extends boolean = false>(options: Options<ReopenIssueData, ThrowOnError>): RequestResult<ReopenIssueResponses, ReopenIssueErrors, ThrowOnError> => (options.client ?? client).post<ReopenIssueResponses, ReopenIssueErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/reopen',
     ...options,
     headers: {
@@ -224,7 +304,11 @@ export const reopenIssue = <ThrowOnError extends boolean = false>(options: Optio
  * Bác bỏ issue do báo sai hoặc spam (Requires permission `issue:invalidate`)
  */
 export const invalidateIssue = <ThrowOnError extends boolean = false>(options: Options<InvalidateIssueData, ThrowOnError>): RequestResult<InvalidateIssueResponses, InvalidateIssueErrors, ThrowOnError> => (options.client ?? client).post<InvalidateIssueResponses, InvalidateIssueErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/invalid',
     ...options,
     headers: {
@@ -237,7 +321,11 @@ export const invalidateIssue = <ThrowOnError extends boolean = false>(options: O
  * Soft-delete an issue
  */
 export const deleteIssue = <ThrowOnError extends boolean = false>(options: Options<DeleteIssueData, ThrowOnError>): RequestResult<DeleteIssueResponses, unknown, ThrowOnError> => (options.client ?? client).post<DeleteIssueResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/delete',
     ...options,
     headers: {
@@ -250,7 +338,11 @@ export const deleteIssue = <ThrowOnError extends boolean = false>(options: Optio
  * Restore a soft-deleted issue
  */
 export const restoreIssue = <ThrowOnError extends boolean = false>(options: Options<RestoreIssueData, ThrowOnError>): RequestResult<RestoreIssueResponses, unknown, ThrowOnError> => (options.client ?? client).post<RestoreIssueResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/restore',
     ...options,
     headers: {
@@ -263,7 +355,11 @@ export const restoreIssue = <ThrowOnError extends boolean = false>(options: Opti
  * Lấy bảng xếp hạng sức khỏe các khu vực/chuyền sản xuất
  */
 export const getLocationLeaderboard = <ThrowOnError extends boolean = false>(options?: Options<GetLocationLeaderboardData, ThrowOnError>): RequestResult<GetLocationLeaderboardResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetLocationLeaderboardResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/leaderboard/locations',
     ...options
 });
@@ -272,7 +368,11 @@ export const getLocationLeaderboard = <ThrowOnError extends boolean = false>(opt
  * Bảng vinh danh cá nhân (Top Thợ săn 6S)
  */
 export const getReporterLeaderboard = <ThrowOnError extends boolean = false>(options?: Options<GetReporterLeaderboardData, ThrowOnError>): RequestResult<GetReporterLeaderboardResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetReporterLeaderboardResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/leaderboard/reporters',
     ...options
 });
@@ -281,7 +381,11 @@ export const getReporterLeaderboard = <ThrowOnError extends boolean = false>(opt
  * Lấy danh sách quy tắc chấm điểm
  */
 export const getScoringRules = <ThrowOnError extends boolean = false>(options?: Options<GetScoringRulesData, ThrowOnError>): RequestResult<GetScoringRulesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetScoringRulesResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/scoring',
     ...options
 });
@@ -290,7 +394,11 @@ export const getScoringRules = <ThrowOnError extends boolean = false>(options?: 
  * Cập nhật quy tắc chấm điểm & hồi tố điểm (Requires `scoring:manage`)
  */
 export const updateScoringRules = <ThrowOnError extends boolean = false>(options: Options<UpdateScoringRulesData, ThrowOnError>): RequestResult<UpdateScoringRulesResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateScoringRulesResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/scoring',
     ...options,
     headers: {
@@ -303,7 +411,11 @@ export const updateScoringRules = <ThrowOnError extends boolean = false>(options
  * Lấy cấu hình Active Directory / LDAP (Requires `ad:manage`)
  */
 export const getAdConfig = <ThrowOnError extends boolean = false>(options?: Options<GetAdConfigData, ThrowOnError>): RequestResult<GetAdConfigResponses, GetAdConfigErrors, ThrowOnError> => (options?.client ?? client).get<GetAdConfigResponses, GetAdConfigErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ad',
     ...options
 });
@@ -312,7 +424,11 @@ export const getAdConfig = <ThrowOnError extends boolean = false>(options?: Opti
  * Cập nhật cấu hình Active Directory / LDAP vào DB (Requires `ad:manage`)
  */
 export const updateAdConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateAdConfigData, ThrowOnError>): RequestResult<UpdateAdConfigResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateAdConfigResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ad',
     ...options,
     headers: {
@@ -325,7 +441,11 @@ export const updateAdConfig = <ThrowOnError extends boolean = false>(options: Op
  * Kiểm tra kết nối và thử bind với Active Directory
  */
 export const testAdConfig = <ThrowOnError extends boolean = false>(options?: Options<TestAdConfigData, ThrowOnError>): RequestResult<TestAdConfigResponses, TestAdConfigErrors, ThrowOnError> => (options?.client ?? client).post<TestAdConfigResponses, TestAdConfigErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ad/test',
     ...options,
     headers: {
@@ -338,7 +458,11 @@ export const testAdConfig = <ThrowOnError extends boolean = false>(options?: Opt
  * Danh mục nhân sự phục vụ màn Admin (Requires `user:manage`)
  */
 export const listAdminUsers = <ThrowOnError extends boolean = false>(options?: Options<ListAdminUsersData, ThrowOnError>): RequestResult<ListAdminUsersResponses, ListAdminUsersErrors, ThrowOnError> => (options?.client ?? client).get<ListAdminUsersResponses, ListAdminUsersErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/users',
     ...options
 });
@@ -347,7 +471,11 @@ export const listAdminUsers = <ThrowOnError extends boolean = false>(options?: O
  * Cập nhật thông tin/quyền nhân sự (Requires `user:manage`)
  */
 export const updateAdminUser = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminUserData, ThrowOnError>): RequestResult<UpdateAdminUserResponses, UpdateAdminUserErrors, ThrowOnError> => (options.client ?? client).patch<UpdateAdminUserResponses, UpdateAdminUserErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/users/{id}',
     ...options,
     headers: {
@@ -360,7 +488,11 @@ export const updateAdminUser = <ThrowOnError extends boolean = false>(options: O
  * Tạo tài sản/thiết bị (Requires `masterdata:manage`)
  */
 export const createAdminAsset = <ThrowOnError extends boolean = false>(options: Options<CreateAdminAssetData, ThrowOnError>): RequestResult<CreateAdminAssetResponses, CreateAdminAssetErrors, ThrowOnError> => (options.client ?? client).post<CreateAdminAssetResponses, CreateAdminAssetErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/assets',
     ...options,
     headers: {
@@ -373,7 +505,11 @@ export const createAdminAsset = <ThrowOnError extends boolean = false>(options: 
  * Cập nhật tài sản/thiết bị (Requires `masterdata:manage`)
  */
 export const updateAdminAsset = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminAssetData, ThrowOnError>): RequestResult<UpdateAdminAssetResponses, UpdateAdminAssetErrors, ThrowOnError> => (options.client ?? client).put<UpdateAdminAssetResponses, UpdateAdminAssetErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/assets/{id}',
     ...options,
     headers: {
@@ -386,7 +522,11 @@ export const updateAdminAsset = <ThrowOnError extends boolean = false>(options: 
  * Tạo team (Requires `user:manage`)
  */
 export const createAdminTeam = <ThrowOnError extends boolean = false>(options: Options<CreateAdminTeamData, ThrowOnError>): RequestResult<CreateAdminTeamResponses, unknown, ThrowOnError> => (options.client ?? client).post<CreateAdminTeamResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams',
     ...options,
     headers: {
@@ -399,7 +539,11 @@ export const createAdminTeam = <ThrowOnError extends boolean = false>(options: O
  * Cập nhật team (Requires `user:manage`)
  */
 export const updateAdminTeam = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminTeamData, ThrowOnError>): RequestResult<UpdateAdminTeamResponses, UpdateAdminTeamErrors, ThrowOnError> => (options.client ?? client).put<UpdateAdminTeamResponses, UpdateAdminTeamErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}',
     ...options,
     headers: {
@@ -412,7 +556,11 @@ export const updateAdminTeam = <ThrowOnError extends boolean = false>(options: O
  * Danh sách thành viên team (Requires `user:manage`)
  */
 export const listTeamMembers = <ThrowOnError extends boolean = false>(options: Options<ListTeamMembersData, ThrowOnError>): RequestResult<ListTeamMembersResponses, ListTeamMembersErrors, ThrowOnError> => (options.client ?? client).get<ListTeamMembersResponses, ListTeamMembersErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}/members',
     ...options
 });
@@ -421,7 +569,11 @@ export const listTeamMembers = <ThrowOnError extends boolean = false>(options: O
  * Xóa người dùng khỏi team (Requires `user:manage`)
  */
 export const deleteTeamMember = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamMemberData, ThrowOnError>): RequestResult<DeleteTeamMemberResponses, DeleteTeamMemberErrors, ThrowOnError> => (options.client ?? client).delete<DeleteTeamMemberResponses, DeleteTeamMemberErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}/members/{userID}',
     ...options
 });
@@ -430,7 +582,11 @@ export const deleteTeamMember = <ThrowOnError extends boolean = false>(options: 
  * Thêm người dùng vào team (Requires `user:manage`)
  */
 export const addTeamMember = <ThrowOnError extends boolean = false>(options: Options<AddTeamMemberData, ThrowOnError>): RequestResult<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError> => (options.client ?? client).put<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}/members/{userID}',
     ...options,
     headers: {
@@ -443,7 +599,11 @@ export const addTeamMember = <ThrowOnError extends boolean = false>(options: Opt
  * Danh sách người phụ trách khu vực (Requires `user:manage`)
  */
 export const listLocationMembers = <ThrowOnError extends boolean = false>(options: Options<ListLocationMembersData, ThrowOnError>): RequestResult<ListLocationMembersResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListLocationMembersResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/locations/{code}/members',
     ...options
 });
@@ -452,7 +612,11 @@ export const listLocationMembers = <ThrowOnError extends boolean = false>(option
  * Xóa người phụ trách khỏi khu vực (Requires `user:manage`)
  */
 export const deleteLocationMember = <ThrowOnError extends boolean = false>(options: Options<DeleteLocationMemberData, ThrowOnError>): RequestResult<DeleteLocationMemberResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteLocationMemberResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/locations/{code}/members/{userID}',
     ...options
 });
@@ -461,7 +625,11 @@ export const deleteLocationMember = <ThrowOnError extends boolean = false>(optio
  * Gán người phụ trách khu vực (Requires `user:manage`)
  */
 export const upsertLocationMember = <ThrowOnError extends boolean = false>(options: Options<UpsertLocationMemberData, ThrowOnError>): RequestResult<UpsertLocationMemberResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpsertLocationMemberResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/locations/{code}/members/{userID}',
     ...options,
     headers: {
@@ -474,7 +642,11 @@ export const upsertLocationMember = <ThrowOnError extends boolean = false>(optio
  * Danh sách khu vực của team (Requires `user:manage`)
  */
 export const listTeamLocations = <ThrowOnError extends boolean = false>(options: Options<ListTeamLocationsData, ThrowOnError>): RequestResult<ListTeamLocationsResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListTeamLocationsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}/locations',
     ...options
 });
@@ -483,7 +655,11 @@ export const listTeamLocations = <ThrowOnError extends boolean = false>(options:
  * Xóa khu vực khỏi team (Requires `user:manage`)
  */
 export const deleteTeamLocation = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamLocationData, ThrowOnError>): RequestResult<DeleteTeamLocationResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteTeamLocationResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}/locations/{code}',
     ...options
 });
@@ -492,7 +668,11 @@ export const deleteTeamLocation = <ThrowOnError extends boolean = false>(options
  * Gán khu vực cho team (Requires `user:manage`)
  */
 export const addTeamLocation = <ThrowOnError extends boolean = false>(options: Options<AddTeamLocationData, ThrowOnError>): RequestResult<AddTeamLocationResponses, unknown, ThrowOnError> => (options.client ?? client).put<AddTeamLocationResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/teams/{id}/locations/{code}',
     ...options
 });
@@ -501,7 +681,11 @@ export const addTeamLocation = <ThrowOnError extends boolean = false>(options: O
  * Lấy cấu hình AI (Requires `ad:manage`)
  */
 export const getAiConfig = <ThrowOnError extends boolean = false>(options?: Options<GetAiConfigData, ThrowOnError>): RequestResult<GetAiConfigResponses, GetAiConfigErrors, ThrowOnError> => (options?.client ?? client).get<GetAiConfigResponses, GetAiConfigErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ai',
     ...options
 });
@@ -510,7 +694,11 @@ export const getAiConfig = <ThrowOnError extends boolean = false>(options?: Opti
  * Cập nhật cấu hình AI (Requires `ad:manage`)
  */
 export const updateAiConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateAiConfigData, ThrowOnError>): RequestResult<UpdateAiConfigResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateAiConfigResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ai',
     ...options,
     headers: {
@@ -523,7 +711,11 @@ export const updateAiConfig = <ThrowOnError extends boolean = false>(options: Op
  * Kiểm tra kết nối và chức năng model AI (Requires `ad:manage`)
  */
 export const testAiConnection = <ThrowOnError extends boolean = false>(options?: Options<TestAiConnectionData, ThrowOnError>): RequestResult<TestAiConnectionResponses, TestAiConnectionErrors, ThrowOnError> => (options?.client ?? client).post<TestAiConnectionResponses, TestAiConnectionErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ai/test',
     ...options,
     headers: {
@@ -536,7 +728,11 @@ export const testAiConnection = <ThrowOnError extends boolean = false>(options?:
  * Kiểm tra phân giải DNS cho AI gateway (Requires `ad:manage`)
  */
 export const testAiDns = <ThrowOnError extends boolean = false>(options: Options<TestAiDnsData, ThrowOnError>): RequestResult<TestAiDnsResponses, unknown, ThrowOnError> => (options.client ?? client).post<TestAiDnsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/ai/test-dns',
     ...options,
     headers: {
@@ -549,7 +745,11 @@ export const testAiDns = <ThrowOnError extends boolean = false>(options: Options
  * Trạng thái bật/tắt AI (không lộ secret)
  */
 export const getAiStatus = <ThrowOnError extends boolean = false>(options?: Options<GetAiStatusData, ThrowOnError>): RequestResult<GetAiStatusResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetAiStatusResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/ai/status',
     ...options
 });
@@ -558,7 +758,11 @@ export const getAiStatus = <ThrowOnError extends boolean = false>(options?: Opti
  * Dịch văn bản qua AI
  */
 export const translateText = <ThrowOnError extends boolean = false>(options: Options<TranslateTextData, ThrowOnError>): RequestResult<TranslateTextResponses, TranslateTextErrors, ThrowOnError> => (options.client ?? client).post<TranslateTextResponses, TranslateTextErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/ai/translate',
     ...options,
     headers: {
@@ -571,7 +775,11 @@ export const translateText = <ThrowOnError extends boolean = false>(options: Opt
  * Tra cache dịch trước khi gọi provider
  */
 export const getCachedTranslation = <ThrowOnError extends boolean = false>(options: Options<GetCachedTranslationData, ThrowOnError>): RequestResult<GetCachedTranslationResponses, unknown, ThrowOnError> => (options.client ?? client).post<GetCachedTranslationResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/ai/cached',
     ...options,
     headers: {
@@ -584,7 +792,11 @@ export const getCachedTranslation = <ThrowOnError extends boolean = false>(optio
  * AI review issue theo bằng chứng
  */
 export const reviewIssueWithAi = <ThrowOnError extends boolean = false>(options: Options<ReviewIssueWithAiData, ThrowOnError>): RequestResult<ReviewIssueWithAiResponses, unknown, ThrowOnError> => (options.client ?? client).post<ReviewIssueWithAiResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/ai/review',
     ...options,
     headers: {
@@ -597,7 +809,11 @@ export const reviewIssueWithAi = <ThrowOnError extends boolean = false>(options:
  * Hỏi tiếp theo ngữ cảnh review
  */
 export const followUpAiReview = <ThrowOnError extends boolean = false>(options: Options<FollowUpAiReviewData, ThrowOnError>): RequestResult<FollowUpAiReviewResponses, unknown, ThrowOnError> => (options.client ?? client).post<FollowUpAiReviewResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/ai/review-follow-up',
     ...options,
     headers: {
@@ -610,7 +826,11 @@ export const followUpAiReview = <ThrowOnError extends boolean = false>(options: 
  * AI gợi ý tag chuẩn và tag đề xuất cho issue mới
  */
 export const suggestTagsWithAi = <ThrowOnError extends boolean = false>(options: Options<SuggestTagsWithAiData, ThrowOnError>): RequestResult<SuggestTagsWithAiResponses, SuggestTagsWithAiErrors, ThrowOnError> => (options.client ?? client).post<SuggestTagsWithAiResponses, SuggestTagsWithAiErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/ai/suggest-tags',
     ...options,
     headers: {
@@ -623,7 +843,11 @@ export const suggestTagsWithAi = <ThrowOnError extends boolean = false>(options:
  * SSE stream sự kiện issue
  */
 export const streamIssueEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamIssueEventsData, ThrowOnError, StreamIssueEventsResponse>): Promise<ServerSentEventsResult<StreamIssueEventsResponses>> => (options?.client ?? client).sse.get<StreamIssueEventsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/events',
     ...options
 });
@@ -632,7 +856,11 @@ export const streamIssueEvents = <ThrowOnError extends boolean = false>(options?
  * Xuất XLSX danh sách issue trong phạm vi site và visibility của người dùng. Yêu cầu permission `reports:export`.
  */
 export const exportIssuesXlsx = <ThrowOnError extends boolean = false>(options?: Options<ExportIssuesXlsxData, ThrowOnError>): RequestResult<ExportIssuesXlsxResponses, ExportIssuesXlsxErrors, ThrowOnError> => (options?.client ?? client).get<ExportIssuesXlsxResponses, ExportIssuesXlsxErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/export',
     ...options
 });
@@ -641,7 +869,11 @@ export const exportIssuesXlsx = <ThrowOnError extends boolean = false>(options?:
  * Sổ cái điểm của một issue
  */
 export const getIssueScoreLogs = <ThrowOnError extends boolean = false>(options: Options<GetIssueScoreLogsData, ThrowOnError>): RequestResult<GetIssueScoreLogsResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetIssueScoreLogsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/issues/{id}/score-logs',
     ...options
 });
@@ -650,7 +882,11 @@ export const getIssueScoreLogs = <ThrowOnError extends boolean = false>(options:
  * Sổ cái điểm theo target (location/user)
  */
 export const getTargetScoreLogs = <ThrowOnError extends boolean = false>(options?: Options<GetTargetScoreLogsData, ThrowOnError>): RequestResult<GetTargetScoreLogsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetTargetScoreLogsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/leaderboard/score-logs',
     ...options
 });
@@ -662,14 +898,27 @@ export const getSetupStatus = <ThrowOnError extends boolean = false>(options?: O
 
 /**
  * Thiết lập superadmin đầu tiên
+ *
+ * Sets HttpOnly 6s_access and 6s_refresh cookies plus readable 6s_csrf cookie. Tokens never appear in JSON.
  */
-export const setupSuperadmin = <ThrowOnError extends boolean = false>(options?: Options<SetupSuperadminData, ThrowOnError>): RequestResult<SetupSuperadminResponses, unknown, ThrowOnError> => (options?.client ?? client).post<SetupSuperadminResponses, unknown, ThrowOnError>({ url: '/auth/setup', ...options });
+export const setupSuperadmin = <ThrowOnError extends boolean = false>(options: Options<SetupSuperadminData, ThrowOnError>): RequestResult<SetupSuperadminResponses, unknown, ThrowOnError> => (options.client ?? client).post<SetupSuperadminResponses, unknown, ThrowOnError>({
+    url: '/auth/setup',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Tạo ticket auth ngắn hạn (QR login / thiết bị mới)
  */
 export const createAuthTicket = <ThrowOnError extends boolean = false>(options?: Options<CreateAuthTicketData, ThrowOnError>): RequestResult<CreateAuthTicketResponses, unknown, ThrowOnError> => (options?.client ?? client).post<CreateAuthTicketResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/auth/ticket',
     ...options
 });
@@ -678,7 +927,11 @@ export const createAuthTicket = <ThrowOnError extends boolean = false>(options?:
  * Báo cáo tổng hợp KPI issue
  */
 export const getReportSummary = <ThrowOnError extends boolean = false>(options?: Options<GetReportSummaryData, ThrowOnError>): RequestResult<GetReportSummaryResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetReportSummaryResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/reports/summary',
     ...options
 });
@@ -687,7 +940,11 @@ export const getReportSummary = <ThrowOnError extends boolean = false>(options?:
  * KPI xử lý theo team (Requires `reports:view`)
  */
 export const getTeamReport = <ThrowOnError extends boolean = false>(options?: Options<GetTeamReportData, ThrowOnError>): RequestResult<GetTeamReportResponses, GetTeamReportErrors, ThrowOnError> => (options?.client ?? client).get<GetTeamReportResponses, GetTeamReportErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/reports/teams',
     ...options
 });
@@ -696,7 +953,11 @@ export const getTeamReport = <ThrowOnError extends boolean = false>(options?: Op
  * Danh sách permission matrix (permission:manage)
  */
 export const listPermissions = <ThrowOnError extends boolean = false>(options?: Options<ListPermissionsData, ThrowOnError>): RequestResult<ListPermissionsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListPermissionsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/permissions',
     ...options
 });
@@ -705,7 +966,11 @@ export const listPermissions = <ThrowOnError extends boolean = false>(options?: 
  * Cập nhật permission cho một role (permission:manage)
  */
 export const updateRolePermissions = <ThrowOnError extends boolean = false>(options: Options<UpdateRolePermissionsData, ThrowOnError>): RequestResult<UpdateRolePermissionsResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateRolePermissionsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/admin/roles/{role}/permissions',
     ...options,
     headers: {
@@ -718,7 +983,11 @@ export const updateRolePermissions = <ThrowOnError extends boolean = false>(opti
  * Danh sách locations (kể cả inactive) cho Admin
  */
 export const listAllLocations = <ThrowOnError extends boolean = false>(options?: Options<ListAllLocationsData, ThrowOnError>): RequestResult<ListAllLocationsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListAllLocationsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/locations/all',
     ...options
 });
@@ -727,7 +996,11 @@ export const listAllLocations = <ThrowOnError extends boolean = false>(options?:
  * Bật/tắt location (Requires permission `masterdata:manage`)
  */
 export const updateLocationStatus = <ThrowOnError extends boolean = false>(options: Options<UpdateLocationStatusData, ThrowOnError>): RequestResult<UpdateLocationStatusResponses, unknown, ThrowOnError> => (options.client ?? client).patch<UpdateLocationStatusResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/locations/{code}/status',
     ...options
 });
@@ -736,7 +1009,11 @@ export const updateLocationStatus = <ThrowOnError extends boolean = false>(optio
  * Cập nhật location (Requires permission `masterdata:manage`)
  */
 export const updateLocation = <ThrowOnError extends boolean = false>(options: Options<UpdateLocationData, ThrowOnError>): RequestResult<UpdateLocationResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateLocationResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/locations/{code}',
     ...options
 });
@@ -745,7 +1022,11 @@ export const updateLocation = <ThrowOnError extends boolean = false>(options: Op
  * Danh sách tags (kể cả inactive) cho Admin
  */
 export const listAllTags = <ThrowOnError extends boolean = false>(options?: Options<ListAllTagsData, ThrowOnError>): RequestResult<ListAllTagsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListAllTagsResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/tags/all',
     ...options
 });
@@ -754,7 +1035,11 @@ export const listAllTags = <ThrowOnError extends boolean = false>(options?: Opti
  * Bật/tắt tag (Requires permission `masterdata:manage`)
  */
 export const updateTagStatus = <ThrowOnError extends boolean = false>(options: Options<UpdateTagStatusData, ThrowOnError>): RequestResult<UpdateTagStatusResponses, unknown, ThrowOnError> => (options.client ?? client).patch<UpdateTagStatusResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/tags/{code}/status',
     ...options
 });
@@ -763,7 +1048,11 @@ export const updateTagStatus = <ThrowOnError extends boolean = false>(options: O
  * Duyệt, từ chối hoặc gộp tag chờ duyệt (Requires permission `masterdata:manage`)
  */
 export const reviewTag = <ThrowOnError extends boolean = false>(options: Options<ReviewTagData, ThrowOnError>): RequestResult<ReviewTagResponses, unknown, ThrowOnError> => (options.client ?? client).patch<ReviewTagResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/tags/{code}/review',
     ...options,
     headers: {
@@ -776,7 +1065,11 @@ export const reviewTag = <ThrowOnError extends boolean = false>(options: Options
  * Bật/tắt nhiều tag (Requires permission `masterdata:manage`)
  */
 export const batchUpdateTagStatus = <ThrowOnError extends boolean = false>(options?: Options<BatchUpdateTagStatusData, ThrowOnError>): RequestResult<BatchUpdateTagStatusResponses, unknown, ThrowOnError> => (options?.client ?? client).post<BatchUpdateTagStatusResponses, unknown, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/tags/batch-status',
     ...options
 });
@@ -785,7 +1078,11 @@ export const batchUpdateTagStatus = <ThrowOnError extends boolean = false>(optio
  * Lấy cấu hình kênh thông báo (Admin only)
  */
 export const getNotificationConfig = <ThrowOnError extends boolean = false>(options?: Options<GetNotificationConfigData, ThrowOnError>): RequestResult<GetNotificationConfigResponses, GetNotificationConfigErrors, ThrowOnError> => (options?.client ?? client).get<GetNotificationConfigResponses, GetNotificationConfigErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/notifications',
     ...options
 });
@@ -794,7 +1091,11 @@ export const getNotificationConfig = <ThrowOnError extends boolean = false>(opti
  * Cập nhật cấu hình kênh thông báo (Admin only)
  */
 export const updateNotificationConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateNotificationConfigData, ThrowOnError>): RequestResult<UpdateNotificationConfigResponses, UpdateNotificationConfigErrors, ThrowOnError> => (options.client ?? client).put<UpdateNotificationConfigResponses, UpdateNotificationConfigErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/notifications',
     ...options,
     headers: {
@@ -807,7 +1108,11 @@ export const updateNotificationConfig = <ThrowOnError extends boolean = false>(o
  * Gửi tin nhắn test qua các kênh thông báo đang kích hoạt (Admin only)
  */
 export const testNotificationConfig = <ThrowOnError extends boolean = false>(options?: Options<TestNotificationConfigData, ThrowOnError>): RequestResult<TestNotificationConfigResponses, TestNotificationConfigErrors, ThrowOnError> => (options?.client ?? client).post<TestNotificationConfigResponses, TestNotificationConfigErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            in: 'cookie',
+            name: '6s_access',
+            type: 'apiKey'
+        }],
     url: '/config/notifications/test',
     ...options
 });

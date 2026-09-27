@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, fetchAuthenticatedBlob } from "../api/client.ts";
+import { ApiError } from "../api/client.ts";
 
 export type AuthenticatedImageError =
   | "FORBIDDEN"
@@ -19,48 +19,20 @@ export function classifyAuthenticatedImageError(error: unknown): AuthenticatedIm
 }
 
 export function useAuthenticatedImageUrl(src?: string | null) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(() => {
-    if (!src) return null;
-    if (src.startsWith("data:") || src.startsWith("blob:")) return src;
-    return null;
-  });
+  const [imageUrl, setImageUrl] = useState<string | null>(() => src || null);
   const [error, setError] = useState<AuthenticatedImageError | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!src) {
-      setBlobUrl(null);
-      setError(null);
-      return;
-    }
-
-    if (src.startsWith("data:") || src.startsWith("blob:")) {
-      setBlobUrl(src);
-      setError(null);
-      return;
-    }
-
-    let active = true;
-    let currentObjectUrl: string | null = null;
-    setBlobUrl(null);
+    setImageUrl(src || null);
     setError(null);
-
-    fetchAuthenticatedBlob(src)
-      .then((blob) => {
-        if (!active) return;
-        currentObjectUrl = URL.createObjectURL(blob);
-        setBlobUrl(currentObjectUrl);
-      })
-      .catch((requestError: unknown) => {
-        if (!active) return;
-        setError(classifyAuthenticatedImageError(requestError));
-      });
-
-    return () => {
-      active = false;
-      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-    };
   }, [src, attempt]);
 
-  return { blobUrl, error, retry: () => setAttempt((value) => value + 1) };
+  return {
+    blobUrl: imageUrl,
+    error,
+    setError,
+    reloadKey: attempt,
+    retry: () => setAttempt((value) => value + 1),
+  };
 }
