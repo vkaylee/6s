@@ -65,7 +65,7 @@ export function LoginPage() {
   return (
     <div className="h-dvh bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 flex flex-col overflow-hidden overscroll-none">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
             {user ? (

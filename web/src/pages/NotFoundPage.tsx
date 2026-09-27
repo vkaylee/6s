@@ -7,7 +7,7 @@ export function NotFoundPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 flex flex-col justify-between">
-      <header className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+      <header className="p-4 pt-[max(1rem,env(safe-area-inset-top))] border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <PageContainer className="flex items-center justify-between">
           <span className="text-sm font-black text-zinc-800 dark:text-zinc-200">
             {t("nav.title")}

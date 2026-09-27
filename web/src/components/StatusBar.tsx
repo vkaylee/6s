@@ -97,7 +97,7 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
 
   return (
     <header
-      className={`sticky top-0 z-40 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none shadow-sm transition-transform duration-300 ${
+      className={`sticky top-0 z-40 pt-[env(safe-area-inset-top)] bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none shadow-sm transition-transform duration-300 ${
         isVisible ? "translate-y-0" : "-translate-y-full"
       }`}
     >

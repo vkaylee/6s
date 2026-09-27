@@ -133,4 +133,16 @@ describe("Page-level headers", () => {
     expect(html.match(/data-testid="lang-toggle"/g)).toHaveLength(1);
     expect(html.match(/data-testid="theme-toggle"/g)).toHaveLength(1);
   });
+
+  it("includes iOS notch safe area padding in status bar and login header", () => {
+    const statusHtml = renderToString(<StatusBar onOpenDrawer={() => {}} />);
+    expect(statusHtml).toContain("pt-[env(safe-area-inset-top)]");
+
+    const loginHtml = renderToString(
+      <Router ssrPath="/login">
+        <LoginPage />
+      </Router>,
+    );
+    expect(loginHtml).toContain("pt-[max(0.75rem,env(safe-area-inset-top))]");
+  });
 });
