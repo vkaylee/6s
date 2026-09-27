@@ -69,3 +69,13 @@ services:
     environment:
       DB_DSN: "${RUNTIME_DB_DSN:-postgres://runtime:runtime@db:5432/6s_db?sslmode=disable}"
       APP_ENCRYPTION_KEY: "01234567890123456789012345678901"
+
+  tunnel:
+    container_name: leedevkit-dev-tunnel
+    image: docker.io/cloudflare/cloudflared:latest
+    restart: "no"
+    profiles: ["tunnel"]
+    command: ["tunnel", "--no-autoupdate", "--url", "https://caddy:443", "--no-tls-verify"]
+    depends_on:
+      - caddy
+    networks: [6s-network]

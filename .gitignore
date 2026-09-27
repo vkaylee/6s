@@ -9,6 +9,7 @@ data/
 uploads/
 certs/
 tmp/
+.tunnel-url
 build-errors.log
 .air-web-trigger
 .cache/
