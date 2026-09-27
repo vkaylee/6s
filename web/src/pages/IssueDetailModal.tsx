@@ -12,6 +12,7 @@ import {
   Loader2,
   LockKeyhole,
   Minus,
+  MoreHorizontal,
   Package,
   Pencil,
   Plus,
@@ -317,6 +318,7 @@ export function IssueDetailModal({
   const [recoveryPending, setRecoveryPending] = useState(false);
   const [showConfirmAction, setShowConfirmAction] = useState<ConfirmAction | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [beforePhotoError, setBeforePhotoError] = useState<AuthenticatedImageError | null>(null);
   const [detailPhotoError, setDetailPhotoError] = useState<AuthenticatedImageError | null>(null);
   const anyPhotoError = beforePhotoError || detailPhotoError;
@@ -327,6 +329,7 @@ export function IssueDetailModal({
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const lastTapRef = useRef<number>(0);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
   const photoDialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const photoTriggerRef = useRef<HTMLElement | null>(null);
@@ -347,6 +350,21 @@ export function IssueDetailModal({
     setBeforePhotoError(null);
     setDetailPhotoError(null);
   }, [currentIssue.id, currentIssue.photo_before, currentIssue.photo_detail]);
+  useEffect(() => {
+    if (!isActionMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!actionMenuRef.current?.contains(event.target as Node)) setIsActionMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsActionMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isActionMenuOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1104,29 +1122,60 @@ export function IssueDetailModal({
                   {t("issue_detail.deleted_badge")}
                 </span>
               )}
-              {canDeleteIssue && (
-                <button
-                  type="button"
-                  disabled={!mutationsOnline || isSubmitting || recoveryPending}
-                  onClick={() => setShowConfirmAction("DELETE")}
-                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/40"
-                  title={t("issue_detail.delete_action")}
-                >
-                  <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{t("issue_detail.delete_action")}</span>
-                </button>
-              )}
-              {canRestoreIssue && (
-                <button
-                  type="button"
-                  disabled={!mutationsOnline || isSubmitting || recoveryPending}
-                  onClick={() => setShowConfirmAction("RESTORE")}
-                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
-                  title={t("issue_detail.restore_action")}
-                >
-                  <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{t("issue_detail.restore_action")}</span>
-                </button>
+              {(canDeleteIssue || canRestoreIssue) && (
+                <div ref={actionMenuRef} className="relative">
+                  <button
+                    type="button"
+                    aria-label={t("common.actions")}
+                    aria-haspopup="true"
+                    aria-expanded={isActionMenuOpen}
+                    aria-controls="issue-actions-menu"
+                    title={t("common.actions")}
+                    onClick={() => setIsActionMenuOpen((open) => !open)}
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  >
+                    <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  {isActionMenuOpen && (
+                    <div
+                      id="issue-actions-menu"
+                      role="menu"
+                      aria-label={t("common.actions")}
+                      className="absolute right-0 top-full z-40 mt-1.5 min-w-44 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl animate-fade-in dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      {canDeleteIssue && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!mutationsOnline || isSubmitting || recoveryPending}
+                          onClick={() => {
+                            setIsActionMenuOpen(false);
+                            setShowConfirmAction("DELETE");
+                          }}
+                          className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-xs font-bold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                        >
+                          <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{t("issue_detail.delete_action")}</span>
+                        </button>
+                      )}
+                      {canRestoreIssue && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!mutationsOnline || isSubmitting || recoveryPending}
+                          onClick={() => {
+                            setIsActionMenuOpen(false);
+                            setShowConfirmAction("RESTORE");
+                          }}
+                          className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                        >
+                          <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{t("issue_detail.restore_action")}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
               {canEdit && (
                 <button
@@ -1583,35 +1632,35 @@ export function IssueDetailModal({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid gap-2.5 sm:grid-cols-3">
-                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-700">
+                    <div className="space-y-1.5 py-3 first:pt-0 last:pb-0">
                       <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                         {t("issue.asset_optional")}
                       </span>
                       <span
-                        className="mt-1 block truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200"
+                        className="block break-words text-sm font-semibold text-zinc-800 dark:text-zinc-200"
                         title={asset ? `${asset.asset_code} — ${asset.name}` : undefined}
                       >
                         {asset ? `${asset.asset_code} — ${asset.name}` : t("issue.no_asset")}
                       </span>
                     </div>
-                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                    <div className="space-y-1.5 py-3 first:pt-0 last:pb-0">
                       <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                         {t("issue.assigned_team")}
                       </span>
                       <span
-                        className="mt-1 block truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200"
+                        className="block break-words text-sm font-semibold text-zinc-800 dark:text-zinc-200"
                         title={team ? `${team.name} (${team.code})` : undefined}
                       >
                         {team ? `${team.name} (${team.code})` : t("issue.no_assigned_team")}
                       </span>
                     </div>
-                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                    <div className="space-y-1.5 py-3 first:pt-0 last:pb-0">
                       <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                         {t("issue.assignee_optional")}
                       </span>
-                      <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                        <span aria-live="polite" className="truncate">
+                      <div className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                        <span aria-live="polite" className="break-words">
                           {assigneeLabel}
                         </span>
                         {mayAssign && membersStatus === "loading" && (
@@ -1634,23 +1683,23 @@ export function IssueDetailModal({
                         )}
                       </div>
                     </div>
-                    {currentIssue.cause_status === "CONFIRMED" && causeTeam && (
-                      <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200/90 bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-900 sm:col-span-3 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle
-                            className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
-                            aria-hidden="true"
-                          />
-                          <span>
-                            <strong className="font-bold">{t("issue.cause_team")}:</strong>{" "}
-                            {causeTeam.name} ({causeTeam.code})
-                          </span>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-amber-200/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/70 dark:text-amber-200">
-                          {t("issue.cause_status_CONFIRMED")}
-                        </span>
-                      </div>
-                    )}
+                  </div>
+                )}
+                {currentIssue.cause_status === "CONFIRMED" && causeTeam && (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200/90 bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle
+                        className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        <strong className="font-bold">{t("issue.cause_team")}:</strong>{" "}
+                        {causeTeam.name} ({causeTeam.code})
+                      </span>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-200/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/70 dark:text-amber-200">
+                      {t("issue.cause_status_CONFIRMED")}
+                    </span>
                   </div>
                 )}
                 {isCauseVerificationOpen && canVerifyCause && (

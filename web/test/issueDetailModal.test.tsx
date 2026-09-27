@@ -1149,4 +1149,222 @@ describe("IssueDetailModal Component", () => {
     await act(async () => {});
     expect(catEditBtn?.getAttribute("aria-expanded")).toBe("true");
   });
+
+  it("opens action menu, triggers soft-delete confirmation dialog, and closes on Escape", async () => {
+    const issue = baseIssue({
+      version: 1,
+      allowed_actions: {
+        assign: false,
+        verify_cause: false,
+        resolve: false,
+        close: false,
+        delete: true,
+      } as never,
+    });
+    installFetch({ issue });
+    const container = await mount(
+      <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+
+    const actionsBtn = container.querySelector(
+      'button[aria-label="Hành động"]',
+    ) as HTMLButtonElement | null;
+    expect(actionsBtn).not.toBeNull();
+    expect(actionsBtn?.getAttribute("aria-expanded")).toBe("false");
+
+    await act(async () => {
+      actionsBtn?.click();
+    });
+    await act(async () => {});
+    expect(actionsBtn?.getAttribute("aria-expanded")).toBe("true");
+
+    const deleteMenuItem = Array.from(container.querySelectorAll('button[role="menuitem"]')).find(
+      (el) => el.textContent?.includes("Xoá mềm"),
+    ) as HTMLButtonElement | undefined;
+    expect(deleteMenuItem).toBeDefined();
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await act(async () => {});
+    expect(container.querySelector('button[role="menuitem"]')).toBeNull();
+    // Test click outside to close menu
+    await act(async () => {
+      actionsBtn?.click();
+    });
+    await act(async () => {});
+    expect(container.querySelector('button[role="menuitem"]')).not.toBeNull();
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    });
+    await act(async () => {});
+    expect(container.querySelector('button[role="menuitem"]')).toBeNull();
+
+    await act(async () => {
+      actionsBtn?.click();
+    });
+    await act(async () => {});
+    const reDeleteMenuItem = Array.from(container.querySelectorAll('button[role="menuitem"]')).find(
+      (el) => el.textContent?.includes("Xoá mềm"),
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      reDeleteMenuItem?.click();
+    });
+    await act(async () => {});
+
+    expect(container.textContent).toContain("Xoá mềm sự cố này?");
+    expect(container.querySelector("textarea")).not.toBeNull();
+  });
+
+  it("shows restore action in menu for soft-deleted issue and triggers restore confirmation", async () => {
+    const issue = baseIssue({
+      version: 2,
+      deleted_at: "2026-03-02T10:00:00Z",
+      allowed_actions: {
+        assign: false,
+        verify_cause: false,
+        resolve: false,
+        close: false,
+        restore: true,
+      } as never,
+    });
+    installFetch({ issue });
+    const container = await mount(
+      <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+
+    expect(container.textContent).toContain("Đã xoá — chỉ đọc");
+    const actionsBtn = container.querySelector(
+      'button[aria-label="Hành động"]',
+    ) as HTMLButtonElement | null;
+    expect(actionsBtn).not.toBeNull();
+    await act(async () => {
+      actionsBtn?.click();
+    });
+    await act(async () => {});
+
+    const restoreMenuItem = Array.from(container.querySelectorAll('button[role="menuitem"]')).find(
+      (el) => el.textContent?.includes("Khôi phục"),
+    ) as HTMLButtonElement | undefined;
+    expect(restoreMenuItem).toBeDefined();
+    await act(async () => {
+      restoreMenuItem?.click();
+    });
+    await act(async () => {});
+    expect(container.textContent).toContain("Khôi phục sự cố này?");
+  });
+
+  it("hides action menu when neither delete nor restore is allowed", async () => {
+    const issue = baseIssue({
+      version: 1,
+      allowed_actions: {
+        assign: false,
+        verify_cause: false,
+        resolve: false,
+        close: false,
+        delete: false,
+        restore: false,
+      } as never,
+    });
+    installFetch({ issue });
+    const container = await mount(
+      <IssueDetailModal
+        issue={issue}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+        locations={locations as never}
+      />,
+    );
+    expect(container.querySelector('button[aria-label="Hành động"]')).toBeNull();
+  });
+
+  it("renders responsibility metadata as vertically stacked rows without text truncation ellipsis", async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "admin",
+        full_name: "Admin User",
+        role: "ADMIN" as never,
+        capabilities: ["issue:assign"],
+      },
+    });
+    const longAssetName = "Hệ thống băng chuyền phân loại tự động khu vực dập khuôn A";
+    const longTeamName = "Đội ngũ chuyên trách bảo trì thiết bị và cơ điện nhà xưởng 2";
+    useMasterdataStore.setState({
+      assets: [
+        {
+          id: 42,
+          asset_code: "EQ-CONV-A1-EXTRA-LONG-CODE",
+          name: longAssetName,
+          location_code: "LINE_A1",
+          is_active: true,
+        } as never,
+      ],
+      teams: [
+        {
+          id: 77,
+          code: "MAINT-HVAC-MECH-TEAM",
+          name: longTeamName,
+          is_active: true,
+        } as never,
+      ],
+      membersByTeam: {
+        77: [
+          {
+            id: 99,
+            username: "nguyenvana_long_username",
+            full_name: "Kỹ sư trưởng Nguyễn Văn Hoàng Nam Long",
+            role: "MAINTENANCE",
+            is_active: true,
+          } as never,
+        ],
+      },
+      membersStatusByTeam: { 77: "ready" },
+      status: "ready",
+    });
+
+    installFetch({
+      issue: baseIssue({
+        asset_id: 42,
+        assigned_team_id: 77,
+        assignee_id: 99,
+        allowed_actions: { assign: true, verify_cause: false, resolve: false, close: false },
+      }),
+    });
+
+    const container = await mount(
+      <IssueDetailModal
+        issue={baseIssue({
+          asset_id: 42,
+          assigned_team_id: 77,
+          assignee_id: 99,
+          allowed_actions: { assign: true, verify_cause: false, resolve: false, close: false },
+        })}
+        isOpen={true}
+        onClose={() => {}}
+        onRefresh={() => {}}
+        locations={locations as never}
+      />,
+    );
+
+    const responsibilitySection = container.querySelector(
+      'section[aria-labelledby="assignment-title"]',
+    );
+    expect(responsibilitySection).not.toBeNull();
+
+    // Assert stacked divide-y container instead of 3-column grid
+    expect(responsibilitySection?.querySelector(".sm\\:grid-cols-3")).toBeNull();
+    expect(responsibilitySection?.querySelector(".divide-y")).not.toBeNull();
+
+    // Assert long names are rendered in DOM with break-words and no truncate ellipsis class
+    const text = responsibilitySection?.textContent ?? "";
+    expect(text).toContain(`EQ-CONV-A1-EXTRA-LONG-CODE — ${longAssetName}`);
+    expect(text).toContain(`${longTeamName} (MAINT-HVAC-MECH-TEAM)`);
+    expect(text).toContain("Kỹ sư trưởng Nguyễn Văn Hoàng Nam Long");
+
+    const values = responsibilitySection?.querySelectorAll(".break-words");
+    expect(values?.length).toBeGreaterThanOrEqual(3);
+    expect(responsibilitySection?.querySelectorAll(".truncate").length).toBe(0);
+  });
 });

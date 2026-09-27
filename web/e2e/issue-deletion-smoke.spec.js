@@ -69,6 +69,7 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   const detail = page.getByRole('dialog');
   await expect(detail).toBeVisible();
 
+  const actionsLabel = /actions|hành động|操作/i;
   const deleteLabel = /delete|xoá|xóa|删除/i;
   const restoreLabel = /restore|khôi phục|恢复/i;
   const confirmLabel = /confirm|xác nhận|确定/i;
@@ -76,6 +77,10 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   const deletedLabel = /deleted|đã xoá|đã xóa|已删除/i;
   const activeLabel = /active|đang hoạt động|正常/i;
 
+  const actionsTrigger = detail.getByRole('button', { name: actionsLabel });
+  if (await actionsTrigger.isVisible()) {
+    await actionsTrigger.click();
+  }
   await detail.getByRole('button', { name: deleteLabel }).click();
   const reasonInput = detail.locator('textarea').first();
   await expect(reasonInput).toBeVisible();
@@ -119,9 +124,9 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   const reportDeleted = (await reportDeletedResponse.json()).data;
   expect(Number(reportDeleted.kpi.totalIssues)).toBeLessThan(Number(reportBefore.kpi.totalIssues));
 
-  await expect(detail.getByRole('button', { name: restoreLabel })).toBeVisible();
-  await expect(detail.getByRole('button', { name: deleteLabel })).toHaveCount(0);
-  await expect(detail.getByRole('button', { name: /edit|sửa|编辑/i })).toHaveCount(0);
+  await detail.getByRole('button', { name: actionsLabel }).click();
+  await expect(detail.getByRole('menuitem', { name: restoreLabel })).toBeVisible();
+  await expect(detail.getByRole('menuitem', { name: deleteLabel })).toHaveCount(0);
   await detail.getByRole('button', { name: /close|đóng|关闭/i }).first().click();
 
   await page.getByRole('button', { name: filterLabel }).click();
@@ -130,11 +135,12 @@ test('admin can soft-delete and restore a scored issue while worker remains deni
   await expect(page.getByText(description, { exact: true })).toBeVisible();
   await page.getByText(description, { exact: true }).click();
   const deletedDetail = page.getByRole('dialog');
-  await expect(deletedDetail.getByRole('button', { name: restoreLabel })).toBeVisible();
-  await expect(deletedDetail.getByRole('button', { name: deleteLabel })).toHaveCount(0);
-  await expect(deletedDetail.getByRole('button', { name: /resolve|khắc phục|整改/i })).toHaveCount(0);
+  await deletedDetail.getByRole('button', { name: actionsLabel }).click();
+  await expect(deletedDetail.getByRole('menuitem', { name: restoreLabel })).toBeVisible();
+  await expect(deletedDetail.getByRole('menuitem', { name: deleteLabel })).toHaveCount(0);
+  await expect(deletedDetail.getByRole('button', { name: /edit|sửa|编辑/i })).toHaveCount(0);
 
-  await deletedDetail.getByRole('button', { name: restoreLabel }).click();
+  await deletedDetail.getByRole('menuitem', { name: restoreLabel }).click();
   await Promise.all([
     page.waitForResponse((response) =>
       response.url().includes(`/api/issues/${issue.id}/restore`) &&
