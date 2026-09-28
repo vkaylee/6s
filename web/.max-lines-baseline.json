@@ -1,22 +1,5 @@
 {
   "description": "Baseline allowlist for files exceeding 500 lines before rule adoption. Files are ratcheted down over time.",
   "max_lines_limit": 500,
-  "baseline": {
-    "src/pages/ReportsPage.tsx": 1505,
-    "test/issueDetailModal.test.tsx": 1370,
-    "src/pages/AdminConfigPage.tsx": 1221,
-    "src/pages/CreateIssuePage.tsx": 1190,
-    "src/App.tsx": 894,
-    "src/pages/IssueTagsPage.tsx": 838,
-    "test/wouterRouting.test.tsx": 792,
-    "src/components/ImageAnnotatorModal.tsx": 662,
-    "src/pages/TeamManagementPage.tsx": 658,
-    "test/reportsPage.test.tsx": 630,
-    "src/pages/CreateIssueModal.tsx": 610,
-    "test/createIssueModal.test.tsx": 585,
-    "src/components/TaxonomySelectorModal.tsx": 572,
-    "test/i18n.test.tsx": 521,
-    "src/pages/UserAccessPage.tsx": 507,
-    "src/components/AIReviewPanel.tsx": 505
-  }
+  "baseline": {}
 }

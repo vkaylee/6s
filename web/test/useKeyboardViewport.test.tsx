@@ -10,12 +10,17 @@ function delay(ms: number): Promise<void> {
   return promise;
 }
 
+let registeredHere = false;
+
 beforeAll(() => {
-  GlobalRegistrator.register({ url: "https://6s.test/" });
+  if (!GlobalRegistrator.isRegistered) {
+    GlobalRegistrator.register({ url: "https://6s.test/" });
+    registeredHere = true;
+  }
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  if (registeredHere) await GlobalRegistrator.unregister();
 });
 
 function Probe() {

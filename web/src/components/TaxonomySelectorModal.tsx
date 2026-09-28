@@ -1,18 +1,10 @@
 import { Check, Search, Sparkles, Tag, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { suggestTags } from "../api/operations.ts";
-import { useAiStatus } from "../hooks/useAiStatus.ts";
+import { useEffect, useRef } from "react";
 import { useI18nStore } from "../i18n/index.ts";
-import {
-  IssueCategory,
-  isBehaviorTag,
-  type ProposedTagItem,
-  resolveTagLabel,
-  S_CATEGORIES,
-  type TagItem,
-} from "../types/index.ts";
-import { haptics } from "../utils/haptics.ts";
-import { highlightSegments, normalizeSearchText, searchTags } from "../utils/tagSearch.ts";
+import { type IssueCategory, resolveTagLabel, S_CATEGORIES, type TagItem } from "../types/index.ts";
+import { TaxonomyAiSuggestions } from "./taxonomy/TaxonomyAiSuggestions.tsx";
+import { TaxonomyTagList } from "./taxonomy/TaxonomyTagList.tsx";
+import { useTaxonomySelection } from "./taxonomy/useTaxonomySelection.ts";
 
 interface TaxonomySelectorModalProps {
   isOpen: boolean;
@@ -25,21 +17,6 @@ interface TaxonomySelectorModalProps {
   onAddCustomTag?: (tag: TagItem) => void;
 }
 
-const categoryBadgeColors: Record<string, string> = {
-  [IssueCategory.S1]:
-    "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300",
-  [IssueCategory.S2]:
-    "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300",
-  [IssueCategory.S3]:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300",
-  [IssueCategory.S4]:
-    "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300",
-  [IssueCategory.S5]:
-    "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300",
-  [IssueCategory.S6]:
-    "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300",
-};
-
 export function TaxonomySelectorModal({
   isOpen,
   onClose,
@@ -51,78 +28,34 @@ export function TaxonomySelectorModal({
   onAddCustomTag,
 }: TaxonomySelectorModalProps) {
   const { t, locale } = useI18nStore();
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    if (currentCategory && tags.some((t) => t.category === currentCategory)) {
-      return currentCategory;
-    }
-    return "ALL";
+  const {
+    activeTab,
+    setActiveTab,
+    autoFeedback,
+    tagQuery,
+    setTagQuery,
+    isSearchFocused,
+    setIsSearchFocused,
+    aiLoading,
+    aiError,
+    aiRequested,
+    aiSuggestions,
+    aiEnabled,
+    handleAiSuggest,
+    visibleTags,
+    isSearching,
+    handleTagClick,
+    handleCreateCustom,
+  } = useTaxonomySelection({
+    isOpen,
+    tags,
+    selectedTags,
+    currentCategory,
+    onToggleTag,
+    onSelectCategory,
+    onAddCustomTag,
   });
-  const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
-  const [tagQuery, setTagQuery] = useState("");
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiRequested, setAiRequested] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<{
-    existing_tags: string[];
-    proposed_tags: ProposedTagItem[];
-  }>({ existing_tags: [], proposed_tags: [] });
-  const aiEnabled = useAiStatus();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const suggestionCategory =
-    currentCategory ?? (activeTab !== "ALL" ? (activeTab as IssueCategory) : null);
-  const handleAiSuggest = async () => {
-    if (aiEnabled !== true || aiLoading || !tagQuery.trim()) return;
-    setAiLoading(true);
-    setAiRequested(true);
-    setAiError(null);
-    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
-    try {
-      setAiSuggestions(
-        await suggestTags({
-          query: tagQuery.trim(),
-          category: suggestionCategory ?? undefined,
-          description: "",
-        }),
-      );
-    } catch {
-      setAiError(t("issue.ai_suggest_failed"));
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  // Reset/sync tab with currentCategory whenever modal opens
-  useEffect(() => {
-    if (isOpen) {
-      // If category is selected and has matching tags, switch to it, otherwise default to ALL
-      if (currentCategory && tags.some((t) => t.category === currentCategory)) {
-        setActiveTab(currentCategory);
-      } else {
-        setActiveTab("ALL");
-      }
-      setTagQuery("");
-      setAiSuggestions({ existing_tags: [], proposed_tags: [] });
-      setAiError(null);
-      setAiRequested(false);
-    }
-  }, [isOpen, currentCategory, tags]);
-
-  // Suggestions answer one exact query; editing the text or scope invalidates them.
-  useEffect(() => {
-    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
-    setAiError(null);
-    setAiRequested(false);
-  }, [tagQuery, suggestionCategory]);
-  const queryNorm = useMemo(() => normalizeSearchText(tagQuery), [tagQuery]);
-  const isSearching = queryNorm.length > 0;
-
-  const visibleTags = useMemo(() => {
-    const scoped =
-      isSearching || activeTab === "ALL" ? tags : tags.filter((tg) => tg.category === activeTab);
-    return searchTags(scoped, tagQuery);
-  }, [tags, isSearching, activeTab, tagQuery]);
-
   // Escape closes; Tab cycles inside the dialog and focus returns to the opener.
   useEffect(() => {
     if (!isOpen) return;
@@ -164,48 +97,6 @@ export function TaxonomySelectorModal({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-
-  const handleTagClick = (tag: TagItem) => {
-    const code = tag.code || tag.tag_code || "";
-    if (!code) return;
-    onToggleTag(code);
-    if (tag.category) {
-      const cat = tag.category as IssueCategory;
-      if (Object.values(IssueCategory).includes(cat)) {
-        onSelectCategory(cat);
-        setAutoFeedback(cat);
-        setTimeout(() => setAutoFeedback(null), 2000);
-      }
-    }
-  };
-
-  const handleCreateCustom = () => {
-    const trimmed = tagQuery.trim();
-    if (!trimmed) return;
-
-    const codeSlug = `c_${normalizeSearchText(trimmed).replace(/[^a-z0-9]+/g, "_")}`.slice(0, 48);
-    const assignedCat =
-      (activeTab !== "ALL" ? (activeTab as IssueCategory) : currentCategory) || IssueCategory.S3;
-
-    const newTag: TagItem = {
-      code: codeSlug,
-      category: assignedCat,
-      name_vi: trimmed,
-      name_zh: trimmed,
-      name_en: trimmed,
-      use_count: 0,
-    };
-
-    if (onAddCustomTag) {
-      onAddCustomTag(newTag);
-    }
-    onToggleTag(codeSlug);
-    onSelectCategory(assignedCat);
-    setAutoFeedback(assignedCat);
-    setTimeout(() => setAutoFeedback(null), 2000);
-    setTagQuery("");
-    haptics.success();
-  };
 
   return (
     <div
@@ -340,101 +231,18 @@ export function TaxonomySelectorModal({
         </div>
 
         {/* AI Suggestions Box */}
-        {aiError && (
-          <div className="mx-4 mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-            {aiError}
-          </div>
-        )}
-        {!aiLoading &&
-          !aiError &&
-          aiRequested &&
-          aiSuggestions.existing_tags.length === 0 &&
-          aiSuggestions.proposed_tags.length === 0 && (
-            <div className="mx-4 mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
-              {t("issue.ai_no_suggestions")}
-            </div>
-          )}
-        {(aiSuggestions.existing_tags.length > 0 || aiSuggestions.proposed_tags.length > 0) && (
-          <div className="mx-4 mt-3 max-h-[30dvh] overflow-y-auto space-y-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/20">
-            {aiSuggestions.existing_tags.length > 0 && (
-              <div>
-                <p className="mb-1 text-[11px] font-bold text-violet-800 dark:text-violet-300">
-                  {t("issue.ai_suggest_existing_title")}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {aiSuggestions.existing_tags.map((code) => {
-                    const tag = tags.find((item) => (item.code || item.tag_code) === code);
-                    if (!tag) return null;
-                    const checked = selectedTags.includes(code);
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => handleTagClick(tag)}
-                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold min-h-[36px] ${
-                          checked
-                            ? "border-blue-600 bg-blue-600 text-white"
-                            : "border-violet-200 bg-white text-violet-900 dark:border-violet-800 dark:bg-zinc-900 dark:text-violet-200"
-                        }`}
-                      >
-                        {checked ? "✓ " : "+ "}#{resolveTagLabel(tag, locale)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {aiSuggestions.proposed_tags.length > 0 && (
-              <div>
-                <p className="mb-1 text-[11px] font-bold text-violet-800 dark:text-violet-300">
-                  {t("issue.ai_suggest_proposed_title")}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {aiSuggestions.proposed_tags.map((proposal) => {
-                    const code =
-                      `c_${normalizeSearchText(proposal.name_vi).replace(/[^a-z0-9]+/g, "_")}`.slice(
-                        0,
-                        48,
-                      );
-                    const checked = selectedTags.includes(code);
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => {
-                          if (!checked)
-                            onAddCustomTag?.({
-                              ...proposal,
-                              code,
-                              use_count: 0,
-                              status: "PENDING",
-                            });
-                          onToggleTag(code);
-                          if (
-                            proposal.category &&
-                            Object.values(IssueCategory).includes(
-                              proposal.category as IssueCategory,
-                            )
-                          ) {
-                            onSelectCategory(proposal.category as IssueCategory);
-                          }
-                        }}
-                        className={`rounded-lg border border-dashed px-2.5 py-1.5 text-xs font-bold min-h-[36px] ${
-                          checked
-                            ? "border-amber-500 bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
-                            : "border-amber-300 bg-white text-amber-900 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-200"
-                        }`}
-                      >
-                        {checked ? "✓ " : "+ "}⏳ {resolveTagLabel(proposal, locale)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
+        <TaxonomyAiSuggestions
+          aiError={aiError}
+          aiLoading={aiLoading}
+          aiRequested={aiRequested}
+          aiSuggestions={aiSuggestions}
+          tags={tags}
+          selectedTags={selectedTags}
+          onTagClick={handleTagClick}
+          onAddCustomTag={onAddCustomTag}
+          onToggleTag={onToggleTag}
+          onSelectCategory={onSelectCategory}
+        />
         {/* Pending tags section */}
         {tags.some((t) => t.status === "PENDING") && (
           <div className="mx-4 mt-3 p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20">
@@ -477,80 +285,14 @@ export function TaxonomySelectorModal({
 
         {/* Tag List Body */}
         <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
-          {visibleTags.length === 0 ? (
-            <div className="py-8 text-center space-y-3">
-              <p className="text-xs text-zinc-400 font-medium">{t("issue.no_tags_found")}</p>
-              {tagQuery.trim() && (
-                <button
-                  type="button"
-                  onClick={handleCreateCustom}
-                  className="px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold text-xs hover:bg-blue-100 min-h-[40px]"
-                >
-                  {t("issue.add_custom_tag", { query: tagQuery.trim() })}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {visibleTags.map((tag) => {
-                const code = tag.code || tag.tag_code || "";
-                const isChecked = selectedTags.includes(code);
-                const isBehavior = isBehaviorTag(code, tag.category);
-                const badgeColor =
-                  (tag.category && categoryBadgeColors[tag.category]) ||
-                  "bg-zinc-100 text-zinc-700 border-zinc-200";
-
-                return (
-                  <button
-                    key={code || tag.label_vi || tag.label_en || "tag"}
-                    type="button"
-                    onClick={() => handleTagClick(tag)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all min-h-[40px] border flex items-center gap-1.5 ${
-                      isChecked
-                        ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20 ring-2 ring-blue-400"
-                        : "bg-white dark:bg-zinc-800/90 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:border-blue-400 active:scale-95"
-                    }`}
-                  >
-                    <span
-                      className="text-xs shrink-0"
-                      title={isBehavior ? t("issue.badge_behavior") : t("issue.badge_condition")}
-                    >
-                      {isBehavior ? "👤" : "📦"}
-                    </span>
-                    <span>
-                      {isSearching
-                        ? highlightSegments(resolveTagLabel(tag, locale), tagQuery).map((seg) =>
-                            seg.match ? (
-                              <mark
-                                key={seg.start}
-                                className={
-                                  isChecked
-                                    ? "bg-white/30 text-white font-black rounded-xs px-0.5"
-                                    : "bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-100 font-black rounded-xs px-0.5"
-                                }
-                              >
-                                {seg.text}
-                              </mark>
-                            ) : (
-                              <span key={seg.start}>{seg.text}</span>
-                            ),
-                          )
-                        : resolveTagLabel(tag, locale)}
-                    </span>
-                    {tag.category && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded border font-mono font-black ${
-                          isChecked ? "bg-white/20 text-white border-white/30" : badgeColor
-                        }`}
-                      >
-                        {tag.category}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <TaxonomyTagList
+            visibleTags={visibleTags}
+            selectedTags={selectedTags}
+            isSearching={isSearching}
+            tagQuery={tagQuery}
+            onTagClick={handleTagClick}
+            onCreateCustom={handleCreateCustom}
+          />
         </div>
 
         {/* Footer */}

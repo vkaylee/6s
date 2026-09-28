@@ -4,13 +4,18 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { AuthenticatedImage } from "../src/components/AuthenticatedImage.tsx";
 
+let registeredHere = false;
+
 beforeAll(() => {
-  GlobalRegistrator.register({ url: "https://6s.test/" });
+  if (!GlobalRegistrator.isRegistered) {
+    GlobalRegistrator.register({ url: "https://6s.test/" });
+    registeredHere = true;
+  }
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  if (registeredHere) await GlobalRegistrator.unregister();
 });
 
 const mounted: { root: Root; container: HTMLElement }[] = [];

@@ -8,12 +8,17 @@ import { invalidateAiStatus, loadAiStatus } from "../src/hooks/useAiStatus.ts";
 import { useI18nStore } from "../src/i18n/index.ts";
 import { IssueCategory, type TagItem } from "../src/types/index.ts";
 
+let registeredHere = false;
+
 beforeAll(() => {
-  GlobalRegistrator.register({ url: "https://6s.test/" });
+  if (!GlobalRegistrator.isRegistered) {
+    GlobalRegistrator.register({ url: "https://6s.test/" });
+    registeredHere = true;
+  }
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 });
 afterAll(async () => {
-  await GlobalRegistrator.unregister();
+  if (registeredHere) await GlobalRegistrator.unregister();
 });
 
 type Call = { method: string; url: string; body: string };

@@ -9,14 +9,18 @@ describe("themeStore", () => {
     const storage = new Map<string, string>();
     const classList = new Set<string>();
 
-    globalThis.localStorage = {
-      getItem: (k: string) => storage.get(k) ?? null,
-      setItem: (k: string, v: string) => storage.set(k, String(v)),
-      removeItem: (k: string) => storage.delete(k),
-      clear: () => storage.clear(),
-      key: () => null,
-      length: 0,
-    } as unknown as Storage;
+    Object.defineProperty(globalThis, "localStorage", {
+      value: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => storage.set(k, String(v)),
+        removeItem: (k: string) => storage.delete(k),
+        clear: () => storage.clear(),
+        key: () => null,
+        length: 0,
+      } as unknown as Storage,
+      configurable: true,
+      writable: true,
+    });
 
     globalThis.document = {
       documentElement: {
@@ -43,7 +47,11 @@ describe("themeStore", () => {
       expect(useThemeStore.getState().isDark).toBe(false);
       expect(classList.has("dark")).toBe(false);
     } finally {
-      globalThis.localStorage = originalLocalStorage;
+      Object.defineProperty(globalThis, "localStorage", {
+        value: originalLocalStorage,
+        configurable: true,
+        writable: true,
+      });
       globalThis.document = originalDocument;
       globalThis.window = originalWindow;
     }
@@ -56,14 +64,18 @@ describe("themeStore", () => {
     const storage = new Map<string, string>();
     const classList = new Set<string>();
 
-    globalThis.localStorage = {
-      getItem: (k: string) => storage.get(k) ?? null,
-      setItem: (k: string, v: string) => storage.set(k, String(v)),
-      removeItem: (k: string) => storage.delete(k),
-      clear: () => storage.clear(),
-      key: () => null,
-      length: 0,
-    } as unknown as Storage;
+    Object.defineProperty(globalThis, "localStorage", {
+      value: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => storage.set(k, String(v)),
+        removeItem: (k: string) => storage.delete(k),
+        clear: () => storage.clear(),
+        key: () => null,
+        length: 0,
+      } as unknown as Storage,
+      configurable: true,
+      writable: true,
+    });
 
     globalThis.document = {
       documentElement: {
@@ -92,7 +104,11 @@ describe("themeStore", () => {
       expect(storage.get("app_theme")).toBe("light");
       expect(classList.has("dark")).toBe(false);
     } finally {
-      globalThis.localStorage = originalLocalStorage;
+      Object.defineProperty(globalThis, "localStorage", {
+        value: originalLocalStorage,
+        configurable: true,
+        writable: true,
+      });
       globalThis.document = originalDocument;
       globalThis.window = originalWindow;
     }

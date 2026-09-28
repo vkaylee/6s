@@ -1,34 +1,18 @@
-import { Plus, Trash2, Users, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { useMasterdataStore } from "../store/masterdataStore.ts";
-import {
-  type LocationItem,
-  resolveLocationName,
-  type TeamItem,
-  type TeamMemberItem,
-} from "../types/index.ts";
+import type { LocationItem, TeamItem, TeamMemberItem } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
+import { TeamCard } from "./team-management/TeamCard.tsx";
+import { type TeamLocationItem, TeamScopeModal } from "./team-management/TeamScopeModal.tsx";
 import type { AdminUserItem } from "./UserAccessPage.tsx";
-
-interface TeamLocationItem {
-  team_id: number;
-  location_code: string;
-  created_at: string;
-  name_vi: string;
-  name_zh: string;
-  name_en: string;
-  period_id?: number;
-  valid_from?: string;
-  valid_to?: string | null;
-}
-
 export function TeamManagementPage() {
-  const { t, locale } = useI18nStore();
+  const { t } = useI18nStore();
   const loadReference = useMasterdataStore((state) => state.loadReference);
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
@@ -369,287 +353,51 @@ export function TeamManagementPage() {
 
         <ul className="space-y-3">
           {teams.map((team) => (
-            <li
+            <TeamCard
               key={team.id}
-              className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+              team={team}
+              isEditing={editingTeamId === team.id}
+              editCode={editCode}
+              editName={editName}
+              isSaving={isSaving}
+              isExpanded={expandedTeamId === team.id}
+              isLoadingMembers={isLoadingMembers}
+              onEditCodeChange={setEditCode}
+              onEditNameChange={setEditName}
+              onSaveTeam={handleSaveTeam}
+              onCancelEdit={() => setEditingTeamId(null)}
+              onStartEdit={() => {
+                setEditingTeamId(team.id);
+                setEditCode(team.code);
+                setEditName(team.name);
+              }}
+              onToggleExpand={() => handleToggleExpand(team.id)}
+              onToggleActive={() => handleToggleActive(team)}
             >
-              {editingTeamId === team.id ? (
-                <form onSubmit={handleSaveTeam} className="space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <input
-                      value={editCode}
-                      onChange={(event) => setEditCode(event.target.value)}
-                      aria-label={t("admin.team_code_label")}
-                      className="min-h-[44px] rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800"
-                    />
-                    <input
-                      value={editName}
-                      onChange={(event) => setEditName(event.target.value)}
-                      aria-label={t("admin.team_name_label")}
-                      className="min-h-[44px] rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white disabled:opacity-50"
-                    >
-                      {t("admin.save_team_btn")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingTeamId(null)}
-                      className="min-h-[44px] rounded-xl bg-zinc-100 px-4 text-xs font-bold dark:bg-zinc-800"
-                    >
-                      {t("common.cancel")}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold">
-                        {team.name}{" "}
-                        <span className="text-xs font-normal text-zinc-500">({team.code})</span>
-                      </p>
-                      <p className="text-[11px] font-bold text-zinc-500">
-                        {team.is_active ? t("admin.active_status") : t("admin.inactive_status")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleExpand(team.id)}
-                        aria-expanded={expandedTeamId === team.id}
-                        className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-zinc-200 px-3 text-xs font-bold dark:border-zinc-700"
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        {t("admin.team_members_title")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleActive(team)}
-                        className="min-h-[40px] rounded-xl border border-zinc-200 px-3 text-xs font-bold dark:border-zinc-700"
-                      >
-                        {t("admin.toggle_status")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingTeamId(team.id);
-                          setEditCode(team.code);
-                          setEditName(team.name);
-                        }}
-                        className="min-h-[40px] rounded-xl border border-zinc-200 px-3 text-xs font-bold dark:border-zinc-700"
-                      >
-                        {t("admin.edit_location_btn")}
-                      </button>
-                    </div>
-                  </div>
-
-                  {expandedTeamId === team.id && (
-                    <div
-                      className="mt-3 space-y-4 border-t border-zinc-200 pt-3 dark:border-zinc-800"
-                      aria-busy={isLoadingMembers}
-                    >
-                      {isLoadingMembers ? (
-                        <p className="text-xs text-zinc-500" role="status">
-                          {t("common.loading")}
-                        </p>
-                      ) : teamDetailsError ? (
-                        <div
-                          role="alert"
-                          className="flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
-                        >
-                          <span>{t("admin.team_details_load_error")}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (expandedTeamId !== null) void loadMembers(expandedTeamId);
-                            }}
-                            className="min-h-[40px] rounded-lg bg-rose-600 px-3 font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900"
-                          >
-                            {t("common.retry")}
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="space-y-2">
-                            <h3 className="text-[11px] font-black uppercase tracking-wider text-zinc-500">
-                              {t("admin.team_members_title")}
-                            </h3>
-                            {members.length === 0 ? (
-                              <p className="text-xs text-zinc-500">
-                                {t("admin.team_members_empty")}
-                              </p>
-                            ) : (
-                              <ul className="space-y-1.5">
-                                {members.map((member) => (
-                                  <li
-                                    key={member.id}
-                                    className="flex items-center justify-between gap-2 rounded-xl bg-zinc-50 px-3 py-2 text-xs dark:bg-zinc-800/60"
-                                  >
-                                    <span className="truncate font-semibold">
-                                      {member.full_name}
-                                      {member.username ? ` (@${member.username})` : ""}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleRemoveMember(
-                                          member.id,
-                                          member.full_name || member.username || String(member.id),
-                                        )
-                                      }
-                                      disabled={
-                                        removingMemberId !== null ||
-                                        isAddingMember ||
-                                        removingMemberId === member.id
-                                      }
-                                      aria-label={`${t("common.delete")} ${member.full_name}`}
-                                      className="flex min-h-[44px] items-center gap-1 rounded-lg px-2 font-bold text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                      {removingMemberId === member.id
-                                        ? t("admin.member_removing_btn")
-                                        : t("common.delete")}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap items-end gap-2">
-                            <label className="min-w-[200px] flex-1 space-y-1 text-xs font-bold">
-                              <span>{t("admin.member_add_label")}</span>
-                              <select
-                                value={memberToAdd}
-                                onChange={(event) => setMemberToAdd(event.target.value)}
-                                disabled={isAddingMember || removingMemberId !== null}
-                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <option value="">{t("common.search")}</option>
-                                {users
-                                  .filter(
-                                    (user) =>
-                                      user.is_active &&
-                                      !members.some((member) => member.id === user.id),
-                                  )
-                                  .map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                      {user.full_name} (@{user.username})
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              onClick={handleAddMember}
-                              disabled={!memberToAdd || isAddingMember || removingMemberId !== null}
-                              className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
-                            >
-                              {isAddingMember
-                                ? t("admin.member_adding_btn")
-                                : t("admin.member_add_btn")}
-                            </button>
-                          </div>
-                        </>
-                      )}
-
-                      {!isLoadingMembers && !teamDetailsError && (
-                        <div className="space-y-2">
-                          <h3 className="text-[11px] font-black uppercase tracking-wider text-zinc-500">
-                            {t("admin.locations_page_title")}
-                          </h3>
-                          {teamLocations.length === 0 ? (
-                            <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-700">
-                              {t("admin.team_locations_empty")}
-                            </p>
-                          ) : (
-                            <ul className="flex flex-wrap gap-1.5">
-                              {teamLocations.map((item) => (
-                                <li
-                                  key={item.location_code}
-                                  className="flex items-center gap-1 rounded-lg bg-zinc-100 px-2 py-1 text-[11px] font-bold dark:bg-zinc-800"
-                                >
-                                  <span className="flex min-w-0 flex-col">
-                                    {item.valid_from && (
-                                      <span className="text-[10px] font-normal text-zinc-500">
-                                        {item.valid_to
-                                          ? t("admin.team_location_period_closed")
-                                          : t("admin.team_location_period_current")}
-                                      </span>
-                                    )}
-                                    <span className="truncate">
-                                      {resolveLocationName(item, locale)}
-                                    </span>
-                                    <span className="font-mono text-[10px] font-normal text-zinc-500">
-                                      {t("admin.location_code_label_short")}: {item.location_code}
-                                    </span>
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveTeamLocation(item.location_code)}
-                                    disabled={
-                                      removingLocationCode !== null ||
-                                      isAddingLocation ||
-                                      removingLocationCode === item.location_code
-                                    }
-                                    aria-label={`${t("common.delete")} ${item.location_code}`}
-                                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <div className="flex flex-wrap items-end gap-2">
-                            <label className="min-w-[200px] flex-1 space-y-1 text-xs font-bold">
-                              <span>{t("common.location")}</span>
-                              <select
-                                value={locationToAdd}
-                                onChange={(event) => setLocationToAdd(event.target.value)}
-                                disabled={isAddingLocation || removingLocationCode !== null}
-                                className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <option value="">{t("issue.location_select")}</option>
-                                {locations
-                                  .filter(
-                                    (location) =>
-                                      !teamLocations.some(
-                                        (item) => item.location_code === location.code,
-                                      ),
-                                  )
-                                  .map((location) => (
-                                    <option key={location.code} value={location.code}>
-                                      [{location.code}] {resolveLocationName(location, locale)}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              onClick={handleAddTeamLocation}
-                              disabled={
-                                !locationToAdd || isAddingLocation || removingLocationCode !== null
-                              }
-                              className="min-h-[44px] rounded-xl bg-blue-600 px-4 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-900"
-                            >
-                              {isAddingLocation
-                                ? t("admin.team_location_adding_btn")
-                                : t("admin.add_location_btn")}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </li>
+              <TeamScopeModal
+                loading={isLoadingMembers}
+                error={teamDetailsError}
+                members={members}
+                locations={teamLocations}
+                users={users}
+                availableLocations={locations}
+                memberToAdd={memberToAdd}
+                locationToAdd={locationToAdd}
+                addingMember={isAddingMember}
+                removingMemberId={removingMemberId}
+                addingLocation={isAddingLocation}
+                removingLocationCode={removingLocationCode}
+                onRetry={() => {
+                  if (expandedTeamId !== null) void loadMembers(expandedTeamId);
+                }}
+                onMemberChange={setMemberToAdd}
+                onAddMember={handleAddMember}
+                onRemoveMember={handleRemoveMember}
+                onLocationChange={setLocationToAdd}
+                onAddLocation={handleAddTeamLocation}
+                onRemoveLocation={handleRemoveTeamLocation}
+              />
+            </TeamCard>
           ))}
         </ul>
       </PageContainer>
