@@ -7,6 +7,7 @@ import type {
   ReporterLeaderboard,
   TagItem,
 } from "../types/index.ts";
+import { TagReviewAction, type TagReviewAction as TagReviewActionType } from "../types/index.ts";
 import { apiClient, sdkClient } from "./client.ts";
 import type {
   CloseIssueData,
@@ -213,18 +214,18 @@ export async function suggestTags(input: SuggestTagsInput): Promise<TagSuggestio
   };
 }
 
-export type TagReviewAction = "APPROVE" | "REJECT" | "MERGE";
+export type { TagReviewAction } from "../types/index.ts";
 
 export async function reviewTag(
   code: string,
-  action: TagReviewAction,
+  action: TagReviewActionType,
   mergedTagCode?: string,
 ): Promise<TagItem> {
   return apiClient<TagItem>(`/api/tags/${encodeURIComponent(code)}/review`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(
-      action === "MERGE" ? { action, merged_tag_code: mergedTagCode } : { action },
+      action === TagReviewAction.MERGE ? { action, merged_tag_code: mergedTagCode } : { action },
     ),
   });
 }

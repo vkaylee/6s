@@ -1,11 +1,16 @@
 import { useI18nStore } from "../i18n/index.ts";
-import { resolveTagLabel, type TagItem, type TagStatus } from "../types/index.ts";
+import {
+  resolveTagLabel,
+  type TagItem,
+  TagStatus,
+  type TagStatus as TagStatusType,
+} from "../types/index.ts";
 
 interface TagLabelProps {
   code: string;
   tags?: TagItem[];
   className?: string;
-  status?: TagStatus;
+  status?: TagStatusType;
 }
 
 export function TagLabel({ code, tags = [], className, status }: TagLabelProps) {
@@ -13,8 +18,8 @@ export function TagLabel({ code, tags = [], className, status }: TagLabelProps) 
   const tag = tags.find((item) => (item.code || item.tag_code) === code);
   const resolvedStatus = status || tag?.status;
   const label = tag ? resolveTagLabel(tag, locale) : code;
-  const pending = resolvedStatus === "PENDING";
-  const rejected = resolvedStatus === "REJECTED";
+  const pending = resolvedStatus === TagStatus.PENDING;
+  const rejected = resolvedStatus === TagStatus.REJECTED;
 
   return (
     <span

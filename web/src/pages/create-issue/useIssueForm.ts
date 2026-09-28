@@ -5,14 +5,18 @@ import { useI18nStore } from "../../i18n/index.ts";
 import { modalDialog } from "../../store/dialogStore.ts";
 import { syncEngine } from "../../sync/syncEngine.ts";
 import {
-  type CauseType,
+  CauseType,
+  type CauseType as CauseTypeValue,
   detectCauseType,
   IssueCategory,
   type IssueItem,
   isBehaviorTag,
   type LocationItem,
+  LocationSnapshotSource,
   type ProposedTagItem,
+  SyncStatus,
   type TagItem,
+  TagStatus,
 } from "../../types/index.ts";
 import { compressImage } from "../../utils/compress.ts";
 import { haptics } from "../../utils/haptics.ts";
@@ -31,7 +35,7 @@ export type IssueFormValidationError = "category" | "location" | "photo";
 export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOptions) {
   const { t } = useI18nStore();
   const [category, setCategory] = useState<IssueCategory | null>(initialIssue?.category || null);
-  const [causeType, setCauseType] = useState<CauseType>(() =>
+  const [causeType, setCauseType] = useState<CauseTypeValue>(() =>
     detectCauseType(initialIssue?.category, initialIssue?.tags),
   );
   const [locationCode, setLocationCode] = useState(
@@ -90,8 +94,8 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
 
   const selectCategory = useCallback((nextCategory: IssueCategory) => {
     setCategory(nextCategory);
-    if (nextCategory === IssueCategory.S5) setCauseType("BEHAVIOR");
-    else if (nextCategory !== IssueCategory.S6) setCauseType("CONDITION");
+    if (nextCategory === IssueCategory.S5) setCauseType(CauseType.BEHAVIOR);
+    else if (nextCategory !== IssueCategory.S6) setCauseType(CauseType.CONDITION);
     if (nextCategory === IssueCategory.S6) haptics.safetyAlert();
     else haptics.success();
   }, []);
@@ -100,7 +104,7 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
     (tagCode: string) => {
       haptics.success();
       const tag = availableTags.find((item) => (item.code || item.tag_code) === tagCode);
-      if (tag && isBehaviorTag(tagCode, tag.category)) setCauseType("BEHAVIOR");
+      if (tag && isBehaviorTag(tagCode, tag.category)) setCauseType(CauseType.BEHAVIOR);
       setSelectedTags((previous) => {
         if (previous.includes(tagCode)) return previous.filter((code) => code !== tagCode);
         return [...previous, tagCode];
@@ -119,7 +123,7 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
     (newTag: TagItem) => {
       const code = newTag.code || newTag.tag_code;
       if (!code) return;
-      setAvailableTags((previous) => [{ ...newTag, status: "PENDING" }, ...previous]);
+      setAvailableTags((previous) => [{ ...newTag, status: TagStatus.PENDING }, ...previous]);
       setProposedTags((previous) => {
         if (previous.some((tag) => tag.name_vi === newTag.name_vi)) return previous;
         return [
@@ -241,7 +245,9 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
             location_name_vi_snapshot: capturedLocation?.name_vi,
             location_name_zh_snapshot: capturedLocation?.name_zh,
             location_name_en_snapshot: capturedLocation?.name_en,
-            location_snapshot_source: capturedLocation ? "CLIENT_CAPTURE" : undefined,
+            location_snapshot_source: capturedLocation
+              ? LocationSnapshotSource.CLIENT_CAPTURE
+              : undefined,
             asset_id: assetId,
             assigned_team_id: assignedTeamId,
             assignee_id: assigneeId,
@@ -251,7 +257,7 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
             photo_before_blob: photoBefore as Blob,
             photo_detail_blob: photoDetail || undefined,
             created_at: Date.now(),
-            sync_status: "PENDING",
+            sync_status: SyncStatus.PENDING,
           };
           await saveDraftIssue(newDraft);
           haptics.success();

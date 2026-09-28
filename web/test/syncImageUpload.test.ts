@@ -149,9 +149,11 @@ describe("issue sync upload format", () => {
     const original = {
       createImageBitmap: (globalThis as Record<string, unknown>).createImageBitmap,
       OffscreenCanvas: (globalThis as Record<string, unknown>).OffscreenCanvas,
+      document: (globalThis as Record<string, unknown>).document,
     };
     (globalThis as Record<string, unknown>).createImageBitmap = undefined;
     (globalThis as Record<string, unknown>).OffscreenCanvas = undefined;
+    (globalThis as Record<string, unknown>).document = undefined;
 
     try {
       const pending = buildIssueSyncFormData(

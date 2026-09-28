@@ -1,6 +1,6 @@
 import { Ban, Camera, Check, LockKeyhole } from "lucide-react";
 import { hasCapability, type UserProfile } from "../../store/authStore.ts";
-import { type CauseType, IssueStatus } from "../../types/index.ts";
+import { CauseType, type CauseType as CauseTypeValue, IssueStatus } from "../../types/index.ts";
 import type { ConfirmAction } from "./types.ts";
 
 export interface IssueDetailActionBarView {
@@ -9,7 +9,7 @@ export interface IssueDetailActionBarView {
   canResolveIssue: boolean;
   canCloseIssue: boolean;
   closeDisabledReason: string | null;
-  causeType: CauseType;
+  causeType: CauseTypeValue;
   user: UserProfile | null;
   isSubmitting: boolean;
   handleResolveOfflineOrOnline: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
@@ -40,7 +40,7 @@ export function IssueDetailActionBar({
             {canResolveIssue && (
               <label
                 title={
-                  causeType === "BEHAVIOR"
+                  causeType === CauseType.BEHAVIOR
                     ? t("issue.photo_after_hint_behavior")
                     : t("issue.photo_after_hint_condition")
                 }

@@ -30,7 +30,7 @@ func TestHTTPSender_Send(t *testing.T) {
 		PublicBaseURL: "http://localhost:8080",
 	}
 	payload := `{"issue_id":1,"category":"1S","location_code":"LINE_A1"}`
-	err := sender.Send(context.Background(), ChannelLANWebhook, payload, cfgLAN)
+	err := sender.Send(context.Background(), ChannelLANWebhook.String(), payload, cfgLAN)
 	if err != nil {
 		t.Fatalf("send LAN webhook failed: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestHTTPSender_Send(t *testing.T) {
 	}
 
 	// Test missing LAN webhook URL
-	err = sender.Send(context.Background(), ChannelLANWebhook, payload, DecryptedConfig{})
+	err = sender.Send(context.Background(), ChannelLANWebhook.String(), payload, DecryptedConfig{})
 	if err == nil {
 		t.Fatal("expected error for missing webhook url")
 	}
@@ -57,13 +57,13 @@ func TestHTTPSender_Send(t *testing.T) {
 		WxPusherAppToken: "AT_mock_token",
 		PublicBaseURL:    "http://localhost:8080",
 	}
-	err = sender.Send(context.Background(), ChannelWxPusher, payload, cfgWx)
+	err = sender.Send(context.Background(), ChannelWxPusher.String(), payload, cfgWx)
 	if err != nil {
 		t.Fatalf("send WxPusher failed: %v", err)
 	}
 
 	// Test WxPusher disabled or missing token
-	err = sender.Send(context.Background(), ChannelWxPusher, payload, DecryptedConfig{})
+	err = sender.Send(context.Background(), ChannelWxPusher.String(), payload, DecryptedConfig{})
 	if err == nil {
 		t.Fatal("expected error when wxpusher disabled")
 	}

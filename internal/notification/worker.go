@@ -99,10 +99,10 @@ func (w *Worker) ProcessBatch(ctx context.Context) {
 }
 
 func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cfg DecryptedConfig) {
-	if task.Status != "SENDING" || w.issueDeleted(ctx, task.IssueID) {
+	if OutboxStatus(task.Status) != OutboxSending || w.issueDeleted(ctx, task.IssueID) {
 		return
 	}
-	sendErr := w.sender.Send(ctx, task.Channel, string(task.Payload), cfg)
+	sendErr := w.sender.Send(ctx, Channel(task.Channel).String(), string(task.Payload), cfg)
 	if sendErr == nil {
 		if err := w.store.MarkOutboxSent(ctx, task.ID); err != nil {
 			observability.Log("error", "notification task completion failed", map[string]any{"error": err.Error()})
@@ -114,8 +114,8 @@ func (w *Worker) processTask(ctx context.Context, task db.NotificationOutbox, cf
 		if err := w.store.MarkOutboxFailed(ctx, db.MarkOutboxFailedParams{ID: task.ID, LastError: sql.NullString{String: "notification delivery failed", Valid: true}}); err != nil {
 			observability.Log("error", "notification task failure update failed", map[string]any{"error": err.Error()})
 		}
-		if task.Channel == ChannelWxPusher && !w.issueDeleted(ctx, task.IssueID) {
-			if _, err := w.store.CreateOutboxEntry(ctx, db.CreateOutboxEntryParams{IssueID: task.IssueID, EventType: task.EventType, Channel: ChannelLANWebhook, Payload: task.Payload}); err != nil {
+		if Channel(task.Channel) == ChannelWxPusher && !w.issueDeleted(ctx, task.IssueID) {
+			if _, err := w.store.CreateOutboxEntry(ctx, db.CreateOutboxEntryParams{IssueID: task.IssueID, EventType: task.EventType, Channel: ChannelLANWebhook.String(), Payload: task.Payload}); err != nil {
 				observability.Log("error", "notification fallback creation failed", map[string]any{"error": err.Error()})
 			}
 		}

@@ -11,6 +11,17 @@ import (
 	"6s/internal/issue"
 )
 
+func TestTargetTypeIsValid(t *testing.T) {
+	for _, target := range []TargetType{TargetTypeLocation, TargetTypeUser} {
+		if !target.IsValid() || target.String() != string(target) {
+			t.Errorf("expected target type %q to be valid", target)
+		}
+	}
+	if TargetType("ROLE_USER").IsValid() || TargetType("").IsValid() {
+		t.Error("expected invalid target type to be rejected")
+	}
+}
+
 type mockScoringStore struct {
 	locations              []db.Location
 	sums                   map[string]int64

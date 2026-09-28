@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client.ts";
-import { fetchTags, reviewTag, type TagReviewAction } from "../api/operations.ts";
+import { fetchTags, reviewTag } from "../api/operations.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { type SupportedLocale, useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
-import type { TagItem } from "../types/index.ts";
+import { type TagItem, TagReviewAction, TagStatus } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
 import { searchTags } from "../utils/tagSearch.ts";
@@ -25,7 +25,7 @@ export function IssueTagsPage() {
   const [suggestedCode, setSuggestedCode] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<TagItemData | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | TagStatus>("ALL");
   const loadTags = async () => {
     setLoading(true);
     try {
@@ -86,7 +86,11 @@ export function IssueTagsPage() {
         prev.map((item) => (item.code === tag.code ? { ...item, ...updated } : item)),
       );
       await modalDialog.success(
-        t(action === "APPROVE" ? "admin.tag_approved_success" : "admin.tag_rejected_success"),
+        t(
+          action === TagReviewAction.APPROVE
+            ? "admin.tag_approved_success"
+            : "admin.tag_rejected_success",
+        ),
       );
     } catch {
       haptics.errorOrConflict();
@@ -94,12 +98,15 @@ export function IssueTagsPage() {
     }
   };
 
-  const pendingCount = useMemo(() => tags.filter((tag) => tag.status === "PENDING").length, [tags]);
+  const pendingCount = useMemo(
+    () => tags.filter((tag) => tag.status === TagStatus.PENDING).length,
+    [tags],
+  );
   const visibleTags = useMemo(
     () =>
       statusFilter === "ALL"
         ? tags
-        : tags.filter((tag) => (tag.status || "APPROVED") === statusFilter),
+        : tags.filter((tag) => (tag.status || TagStatus.APPROVED) === statusFilter),
     [tags, statusFilter],
   );
   const applyPack = async (pack: PackKey) => {
@@ -257,9 +264,9 @@ export function IssueTagsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter("PENDING")}
+              onClick={() => setStatusFilter(TagStatus.PENDING)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all min-h-[34px] flex items-center gap-1 ${
-                statusFilter === "PENDING"
+                statusFilter === TagStatus.PENDING
                   ? "bg-amber-500 text-white shadow-sm"
                   : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
               }`}
@@ -269,9 +276,9 @@ export function IssueTagsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter("APPROVED")}
+              onClick={() => setStatusFilter(TagStatus.APPROVED)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all min-h-[34px] ${
-                statusFilter === "APPROVED"
+                statusFilter === TagStatus.APPROVED
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm"
                   : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
               }`}

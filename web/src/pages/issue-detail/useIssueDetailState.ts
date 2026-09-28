@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CauseStatus, IssueItem, ProposedTagItem } from "../../types/index.ts";
+import { CauseStatus, type IssueItem, type ProposedTagItem } from "../../types/index.ts";
 import type { ConfirmAction, ModalTab } from "./types.ts";
 
 export interface UseIssueDetailStateProps {
@@ -21,11 +21,13 @@ export function useIssueDetailState({ issue, locale }: UseIssueDetailStateProps)
 
   const [causeTeamId, setCauseTeamId] = useState<number | null>(issue.cause_team_id ?? null);
   const [closeCauseTeamId, setCloseCauseTeamId] = useState<number | null>(
-    issue.cause_status === "UNVERIFIED"
+    issue.cause_status === CauseStatus.UNVERIFIED
       ? (issue.cause_team_id ?? issue.assigned_team_id ?? null)
       : (issue.cause_team_id ?? null),
   );
-  const [causeStatus, setCauseStatus] = useState<CauseStatus>(issue.cause_status ?? "UNVERIFIED");
+  const [causeStatus, setCauseStatus] = useState<CauseStatus>(
+    issue.cause_status ?? CauseStatus.UNVERIFIED,
+  );
 
   const [isResponsibilityEditing, setIsResponsibilityEditing] = useState(false);
   const [isCauseVerificationOpen, setIsCauseVerificationOpen] = useState(false);
@@ -55,9 +57,9 @@ export function useIssueDetailState({ issue, locale }: UseIssueDetailStateProps)
     setAssignmentTeamId(issue.assigned_team_id ?? null);
     setAssignmentAssigneeId(issue.assignee_id ?? null);
     setCauseTeamId(issue.cause_team_id ?? null);
-    setCauseStatus(issue.cause_status ?? "UNVERIFIED");
+    setCauseStatus(issue.cause_status ?? CauseStatus.UNVERIFIED);
     setCloseCauseTeamId(
-      issue.cause_status === "UNVERIFIED"
+      issue.cause_status === CauseStatus.UNVERIFIED
         ? (issue.cause_team_id ?? issue.assigned_team_id ?? null)
         : (issue.cause_team_id ?? null),
     );

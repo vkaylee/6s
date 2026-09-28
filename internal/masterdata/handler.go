@@ -61,18 +61,54 @@ type LocationResponse struct {
 	IsActive bool   `json:"is_active"`
 }
 
+// TagStatus tracks moderation lifecycle.
+type TagStatus string
+
+const (
+	TagStatusPending  TagStatus = "PENDING"
+	TagStatusApproved TagStatus = "APPROVED"
+	TagStatusRejected TagStatus = "REJECTED"
+	TagStatusMerged   TagStatus = "MERGED"
+)
+
+func (s TagStatus) String() string { return string(s) }
+
+func (s TagStatus) IsValid() bool {
+	switch s {
+	case TagStatusPending, TagStatusApproved, TagStatusRejected, TagStatusMerged:
+		return true
+	default:
+		return false
+	}
+}
+
+// TagReviewAction selects moderation operation.
+type TagReviewAction string
+
+const (
+	TagReviewApprove TagReviewAction = "APPROVE"
+	TagReviewReject  TagReviewAction = "REJECT"
+	TagReviewMerge   TagReviewAction = "MERGE"
+)
+
+func (a TagReviewAction) String() string { return string(a) }
+
+func (a TagReviewAction) IsValid() bool {
+	return a == TagReviewApprove || a == TagReviewReject || a == TagReviewMerge
+}
+
 // TagResponse formats tag details for API responses.
 type TagResponse struct {
-	Code      string `json:"code"`
-	NameVi    string `json:"name_vi"`
-	NameZh    string `json:"name_zh"`
-	NameEn    string `json:"name_en"`
-	Category  string `json:"category"`
-	UseCount  int32  `json:"use_count"`
-	IsPreset  bool   `json:"is_preset"`
-	IsActive  bool   `json:"is_active"`
-	Status    string `json:"status"`
-	CreatedBy *int64 `json:"created_by"`
+	Code      string    `json:"code"`
+	NameVi    string    `json:"name_vi"`
+	NameZh    string    `json:"name_zh"`
+	NameEn    string    `json:"name_en"`
+	Category  string    `json:"category"`
+	UseCount  int32     `json:"use_count"`
+	IsPreset  bool      `json:"is_preset"`
+	IsActive  bool      `json:"is_active"`
+	Status    TagStatus `json:"status"`
+	CreatedBy *int64    `json:"created_by"`
 }
 
 // tagResponse projects a tag row onto the API contract.
@@ -83,7 +119,7 @@ func tagResponse(t db.Tag) TagResponse {
 	}
 	return TagResponse{
 		Code: t.Code, NameVi: t.NameVi, NameZh: t.NameZh, NameEn: t.NameEn, Category: t.Category,
-		UseCount: t.UseCount, IsPreset: t.IsPreset, IsActive: t.IsActive, Status: t.Status, CreatedBy: createdBy,
+		UseCount: t.UseCount, IsPreset: t.IsPreset, IsActive: t.IsActive, Status: TagStatus(t.Status), CreatedBy: createdBy,
 	}
 }
 
@@ -347,21 +383,23 @@ func (h *Handler) ReviewTag(w http.ResponseWriter, r *http.Request) {
 		tag db.Tag
 		err error
 	)
-	switch strings.ToUpper(strings.TrimSpace(req.Action)) {
-	case "APPROVE":
+	action := TagReviewAction(strings.ToUpper(strings.TrimSpace(req.Action)))
+	if !action.IsValid() {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest, "action must be APPROVE, REJECT, or MERGE"))
+		return
+	}
+	switch action {
+	case TagReviewApprove:
 		tag, err = reviewStore.ApproveTag(r.Context(), db.ApproveTagParams{Code: code, ReviewedBy: reviewer})
-	case "REJECT":
+	case TagReviewReject:
 		tag, err = reviewStore.RejectTag(r.Context(), db.RejectTagParams{Code: code, ReviewedBy: reviewer})
-	case "MERGE":
+	case TagReviewMerge:
 		target := strings.TrimSpace(req.MergedTagCode)
 		if target == "" {
 			_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagMissingFields))
 			return
 		}
 		tag, err = reviewStore.MergeTagAtomic(r.Context(), code, target, currentUser.ID)
-	default:
-		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest, "action must be APPROVE, REJECT, or MERGE"))
-		return
 	}
 	if err != nil {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrTagUpdateFailed).WithCause(err))
@@ -373,7 +411,7 @@ func (h *Handler) ReviewTag(w http.ResponseWriter, r *http.Request) {
 	if aStore, ok := h.store.(auditStore); ok {
 		_ = aStore.InsertAuditLog(r.Context(), db.InsertAuditLogParams{
 			UserID:      reviewer,
-			Action:      "TAG_" + strings.ToUpper(strings.TrimSpace(req.Action)),
+			Action:      "TAG_" + action.String(),
 			TargetTable: "tags",
 			TargetID:    code,
 		})

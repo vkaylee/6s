@@ -9,12 +9,16 @@ import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
-  type CauseType,
+  CauseType,
+  type CauseType as CauseTypeValue,
   IssueCategory,
   isBehaviorTag,
   type LocationItem,
+  LocationSnapshotSource,
   type ProposedTagItem,
+  SyncStatus,
   type TagItem,
+  TagStatus,
 } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
@@ -42,7 +46,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [, setLocation] = useLocation();
 
   const [category, setCategory] = useState<IssueCategory | null>(null);
-  const [causeType, setCauseType] = useState<CauseType>("CONDITION");
+  const [causeType, setCauseType] = useState<CauseTypeValue>(CauseType.CONDITION);
   const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
   const [localTags, setLocalTags] = useState<TagItem[]>(tags);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -109,8 +113,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const handleSelectCategory = useCallback((cat: IssueCategory) => {
     setCategory(cat);
     setCategoryError(false);
-    if (cat === IssueCategory.S5) setCauseType("BEHAVIOR");
-    else if (cat !== IssueCategory.S6) setCauseType("CONDITION");
+    if (cat === IssueCategory.S5) setCauseType(CauseType.BEHAVIOR);
+    else if (cat !== IssueCategory.S6) setCauseType(CauseType.CONDITION);
     if (cat === IssueCategory.S6) haptics.safetyAlert();
     else haptics.success();
   }, []);
@@ -119,7 +123,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     (tagCode: string) => {
       haptics.success();
       const tagObj = localTags.find((item) => (item.code || item.tag_code) === tagCode);
-      if (tagObj && isBehaviorTag(tagCode, tagObj.category)) setCauseType("BEHAVIOR");
+      if (tagObj && isBehaviorTag(tagCode, tagObj.category)) setCauseType(CauseType.BEHAVIOR);
       setSelectedTags((prev) =>
         prev.includes(tagCode) ? prev.filter((item) => item !== tagCode) : [...prev, tagCode],
       );
@@ -141,7 +145,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     (newTag: TagItem) => {
       const code = newTag.code || newTag.tag_code;
       if (!code) return;
-      setLocalTags((prev) => [{ ...newTag, status: "PENDING" }, ...prev]);
+      setLocalTags((prev) => [{ ...newTag, status: TagStatus.PENDING }, ...prev]);
       setProposedTags((prev) => {
         if (prev.some((item) => item.name_vi === newTag.name_vi)) return prev;
         return [
@@ -258,7 +262,9 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         location_name_vi_snapshot: capturedLocation?.name_vi,
         location_name_zh_snapshot: capturedLocation?.name_zh,
         location_name_en_snapshot: capturedLocation?.name_en,
-        location_snapshot_source: capturedLocation ? "CLIENT_CAPTURE" : undefined,
+        location_snapshot_source: capturedLocation
+          ? LocationSnapshotSource.CLIENT_CAPTURE
+          : undefined,
         asset_id: null,
         assigned_team_id: null,
         assignee_id: null,
@@ -268,7 +274,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
         photo_before_blob: photoBefore,
         photo_detail_blob: photoDetail || undefined,
         created_at: Date.now(),
-        sync_status: "PENDING",
+        sync_status: SyncStatus.PENDING,
       };
       await saveDraftIssue(newDraft);
       updateRecentLocations(effectiveLocationCode);

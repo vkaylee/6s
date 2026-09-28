@@ -387,7 +387,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 	}
 	if len(existingByDNS) == 1 {
 		existingByDN := existingByDNS[0]
-		if existingByDN.AuthSource != "AD" || !sameADIdentity(existingByDN.AdDn, adDN) {
+		if AuthSource(existingByDN.AuthSource) != AuthSourceAD || !sameADIdentity(existingByDN.AdDn, adDN) {
 			return db.User{}, errIdentityCollision
 		}
 		return h.updateADUser(ctx, existingByDN, ldapUser)
@@ -395,7 +395,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 
 	existingByName, findErr := h.store.GetUserByUsername(ctx, jitUsername)
 	if findErr == nil {
-		if existingByName.AuthSource != "AD" || !sameADIdentity(existingByName.AdDn, adDN) {
+		if AuthSource(existingByName.AuthSource) != AuthSourceAD || !sameADIdentity(existingByName.AdDn, adDN) {
 			return db.User{}, errIdentityCollision
 		}
 		return h.updateADUser(ctx, existingByName, ldapUser)
@@ -425,7 +425,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 	if len(concurrent) != 1 {
 		return db.User{}, errIdentityCollision
 	}
-	if concurrent[0].AuthSource != "AD" || !sameADIdentity(concurrent[0].AdDn, adDN) {
+	if AuthSource(concurrent[0].AuthSource) != AuthSourceAD || !sameADIdentity(concurrent[0].AdDn, adDN) {
 		return db.User{}, errIdentityCollision
 	}
 	return h.updateADUser(ctx, concurrent[0], ldapUser)
@@ -457,7 +457,7 @@ func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.U
 		if err != nil {
 			return db.User{}, false, fmt.Errorf("find local user: %w", err)
 		}
-		if u.AuthSource != "LOCAL" || !u.PasswordHash.Valid {
+		if AuthSource(u.AuthSource) != AuthSourceLocal || !u.PasswordHash.Valid {
 			return db.User{}, false, nil
 		}
 

@@ -6,7 +6,7 @@ import { ImageAnnotatorModal } from "../src/components/ImageAnnotatorModal.tsx";
 import { LocationCombobox } from "../src/components/LocationCombobox.tsx";
 import { TaxonomySelectorModal } from "../src/components/TaxonomySelectorModal.tsx";
 import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
-import { IssueCategory, type LocationItem, type TagItem } from "../src/types/index.ts";
+import { IssueCategory, type LocationItem, type TagItem, TagStatus } from "../src/types/index.ts";
 
 describe("Enterprise CreateIssuePage UIUX", () => {
   const mockLocations: LocationItem[] = [
@@ -182,7 +182,7 @@ describe("Enterprise CreateIssuePage UIUX", () => {
         tag_code: "pending_custom",
         category: IssueCategory.S3,
         label_vi: "Dầu hộp số",
-        status: "PENDING",
+        status: TagStatus.PENDING,
       },
     ];
     const html = renderToString(

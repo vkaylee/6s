@@ -19,6 +19,18 @@ var (
 	ErrInvalidRules  = errors.New("invalid scoring rules")
 )
 
+// TargetType identifies score recipient scope.
+type TargetType string
+
+const (
+	TargetTypeLocation TargetType = "LOCATION"
+	TargetTypeUser     TargetType = "USER"
+)
+
+func (t TargetType) String() string { return string(t) }
+
+func (t TargetType) IsValid() bool { return t == TargetTypeLocation || t == TargetTypeUser }
+
 // Store defines database operations required by the scoring service.
 type Store interface {
 	ListLocations(ctx context.Context) ([]db.Location, error)

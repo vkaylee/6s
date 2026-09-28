@@ -10,7 +10,7 @@ import {
   saveDraftResolve,
 } from "../db/indexeddb.ts";
 import { useAuthStore } from "../store/authStore.ts";
-import type { ProposedTagItem } from "../types/index.ts";
+import { type ProposedTagItem, SyncStatus } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
 
 async function hasSupportedImageSignature(blob: Blob): Promise<boolean> {
@@ -88,10 +88,10 @@ export interface SyncProgress {
  * resolve retry either succeeds or surfaces the conflict for user resolution.
  * Excluding SYNCING would strand those drafts forever.
  */
-export function isRecoverableSyncStatus(
-  status: DraftIssue["sync_status"] | DraftResolve["sync_status"],
-): boolean {
-  return status === "PENDING" || status === "FAILED" || status === "SYNCING";
+export function isRecoverableSyncStatus(status: SyncStatus): boolean {
+  return (
+    status === SyncStatus.PENDING || status === SyncStatus.FAILED || status === SyncStatus.SYNCING
+  );
 }
 type ProgressListener = (progress: SyncProgress) => void;
 
@@ -188,7 +188,7 @@ class SyncEngine {
       // by client_uuid; resolve retries preserve the draft and surface any resulting conflict.
       const pendingIssues = draftIssues.filter((i) => isRecoverableSyncStatus(i.sync_status));
       const pendingResolves = draftResolves.filter((r) => isRecoverableSyncStatus(r.sync_status));
-      const conflictResolves = draftResolves.filter((r) => r.sync_status === "CONFLICT");
+      const conflictResolves = draftResolves.filter((r) => r.sync_status === SyncStatus.CONFLICT);
       const totalTasks = pendingIssues.length + pendingResolves.length;
       if (totalTasks === 0) {
         this.progress = {
@@ -219,14 +219,14 @@ class SyncEngine {
         this.progress.currentName = `Tải lên báo cáo: ${issue.category} - ${issue.location_code}`;
         this.notify();
 
-        issue.sync_status = "SYNCING";
+        issue.sync_status = SyncStatus.SYNCING;
         await saveDraftIssue(issue);
 
         const success = await this.syncOneIssue(issue);
         if (success) {
           await deleteDraftIssue(issue.client_uuid);
         } else {
-          issue.sync_status = "FAILED";
+          issue.sync_status = SyncStatus.FAILED;
           await saveDraftIssue(issue);
         }
 
@@ -241,18 +241,18 @@ class SyncEngine {
         this.progress.currentName = `Đồng bộ khắc phục issue #${resolveItem.issue_id}`;
         this.notify();
 
-        resolveItem.sync_status = "SYNCING";
+        resolveItem.sync_status = SyncStatus.SYNCING;
         await saveDraftResolve(resolveItem);
 
         const result = await this.syncOneResolve(resolveItem);
         if (result === "SUCCESS") {
           await deleteDraftResolve(resolveItem.resolved_client_uuid);
         } else if (result === "CONFLICT") {
-          resolveItem.sync_status = "CONFLICT";
+          resolveItem.sync_status = SyncStatus.CONFLICT;
           await saveDraftResolve(resolveItem);
           this.progress.conflictCount++;
         } else {
-          resolveItem.sync_status = "FAILED";
+          resolveItem.sync_status = SyncStatus.FAILED;
           await saveDraftResolve(resolveItem);
         }
 

@@ -1,7 +1,8 @@
 import { Info, ShieldAlert } from "lucide-react";
 import type { SupportedLocale } from "../../i18n/index.ts";
-import type { CauseType } from "../../types/index.ts";
 import {
+  CauseType,
+  type CauseType as CauseTypeValue,
   type IssueCategory,
   resolveI18n,
   resolveTagLabel,
@@ -11,13 +12,13 @@ import {
 
 interface IssueCategorySectionProps {
   category: IssueCategory | null;
-  causeType: CauseType;
+  causeType: CauseTypeValue;
   tags: TagItem[];
   selectedTags: string[];
   locale: SupportedLocale;
   onSelectCategory: (category: IssueCategory) => void;
   onToggleTag: (tagCode: string) => void;
-  onCauseTypeChange: (causeType: CauseType) => void;
+  onCauseTypeChange: (causeType: CauseTypeValue) => void;
   translate: (key: string, params?: Record<string, string>) => string;
   compact?: boolean;
   categoryError?: boolean;
@@ -103,8 +104,8 @@ export function IssueCategorySection({
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {(["CONDITION", "BEHAVIOR"] as const).map((kind) => {
-            const behavior = kind === "BEHAVIOR";
+          {Object.values(CauseType).map((kind) => {
+            const behavior = kind === CauseType.BEHAVIOR;
             return (
               <button
                 key={kind}

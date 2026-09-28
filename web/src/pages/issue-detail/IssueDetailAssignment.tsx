@@ -1,6 +1,12 @@
 import { AlertTriangle, Loader2, ShieldCheck, UserCog } from "lucide-react";
 import { ResponsibilityPicker } from "../../components/ResponsibilityPicker.tsx";
-import type { AssetItem, CauseStatus, IssueItem, TeamItem } from "../../types/index.ts";
+import {
+  type AssetItem,
+  CauseStatus,
+  type CauseStatus as CauseStatusType,
+  type IssueItem,
+  type TeamItem,
+} from "../../types/index.ts";
 import type { ModalTab } from "./types.ts";
 
 export interface IssueDetailAssignmentView {
@@ -30,8 +36,8 @@ export interface IssueDetailAssignmentView {
   assigneeLookupError: boolean;
   loadMembers: (teamId: number, force?: boolean) => Promise<void>;
   causeTeam: TeamItem | undefined;
-  causeStatus: CauseStatus;
-  setCauseStatus: React.Dispatch<React.SetStateAction<CauseStatus>>;
+  causeStatus: CauseStatusType;
+  setCauseStatus: React.Dispatch<React.SetStateAction<CauseStatusType>>;
   causeTeamId: number | null;
   setCauseTeamId: React.Dispatch<React.SetStateAction<number | null>>;
   teams: TeamItem[];
@@ -136,7 +142,7 @@ export function IssueDetailAssignment({
             onAssigneeChange={setAssignmentAssigneeId}
           />
           {canVerifyCause &&
-            currentIssue.cause_status === "UNVERIFIED" &&
+            currentIssue.cause_status === CauseStatus.UNVERIFIED &&
             assignmentTeamId != null && (
               <label className="flex min-h-[44px] items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
                 <input
@@ -229,7 +235,7 @@ export function IssueDetailAssignment({
           </div>
         </div>
       )}
-      {currentIssue.cause_status === "CONFIRMED" && causeTeam && (
+      {currentIssue.cause_status === CauseStatus.CONFIRMED && causeTeam && (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200/90 bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
           <div className="flex items-center gap-2">
             <AlertTriangle
@@ -261,7 +267,7 @@ export function IssueDetailAssignment({
               </p>
             </div>
             <span className="shrink-0 rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-300">
-              {t(`issue.cause_status_${currentIssue.cause_status || "UNVERIFIED"}`)}
+              {t(`issue.cause_status_${currentIssue.cause_status || CauseStatus.UNVERIFIED}`)}
             </span>
           </div>
           <div className="space-y-3">
@@ -270,16 +276,20 @@ export function IssueDetailAssignment({
                 <span>{t("common.status")}</span>
                 <select
                   value={causeStatus}
-                  onChange={(event) => setCauseStatus(event.target.value as CauseStatus)}
+                  onChange={(event) => setCauseStatus(event.target.value as CauseStatusType)}
                   aria-label={t("common.status")}
                   className="min-h-[42px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-800 shadow-2xs dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 >
-                  <option value="UNVERIFIED">{t("issue.cause_status_UNVERIFIED")}</option>
-                  <option value="CONFIRMED">{t("issue.cause_status_CONFIRMED")}</option>
-                  <option value="NOT_APPLICABLE">{t("issue.cause_status_NOT_APPLICABLE")}</option>
+                  <option value={CauseStatus.UNVERIFIED}>
+                    {t("issue.cause_status_UNVERIFIED")}
+                  </option>
+                  <option value={CauseStatus.CONFIRMED}>{t("issue.cause_status_CONFIRMED")}</option>
+                  <option value={CauseStatus.NOT_APPLICABLE}>
+                    {t("issue.cause_status_NOT_APPLICABLE")}
+                  </option>
                 </select>
               </label>
-              {causeStatus === "CONFIRMED" && (
+              {causeStatus === CauseStatus.CONFIRMED && (
                 <label className="space-y-1 text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
                   <span>{t("issue.cause_team")}</span>
                   <select

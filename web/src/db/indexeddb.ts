@@ -1,15 +1,22 @@
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
-import type { ProposedTagItem } from "../types/index.ts";
+import type {
+  CauseType,
+  IssueCategory,
+  LocationSnapshotSource,
+  ProposedTagItem,
+  SyncStatus,
+  UserRole,
+} from "../types/index.ts";
 
 export interface DraftIssue {
   client_uuid: string;
-  category: string;
-  cause_type?: string;
+  category: IssueCategory;
+  cause_type?: CauseType;
   location_code: string;
   location_name_vi_snapshot?: string;
   location_name_zh_snapshot?: string;
   location_name_en_snapshot?: string;
-  location_snapshot_source?: "CLIENT_CAPTURE";
+  location_snapshot_source?: LocationSnapshotSource;
   asset_id?: number | null;
   assigned_team_id?: number | null;
   assignee_id?: number | null;
@@ -19,7 +26,7 @@ export interface DraftIssue {
   photo_before_blob: Blob;
   photo_detail_blob?: Blob;
   created_at: number;
-  sync_status: "PENDING" | "SYNCING" | "FAILED";
+  sync_status: SyncStatus;
 }
 
 export interface DraftResolve {
@@ -28,7 +35,7 @@ export interface DraftResolve {
   expected_version: number;
   photo_after_blob: Blob;
   resolved_at: number;
-  sync_status: "PENDING" | "SYNCING" | "FAILED" | "CONFLICT";
+  sync_status: SyncStatus;
 }
 
 export interface AuthSession {
@@ -37,7 +44,7 @@ export interface AuthSession {
     id: number;
     username: string;
     full_name: string;
-    role: string;
+    role: UserRole;
     capabilities?: string[];
     assigned_location_code?: string;
   };
@@ -48,12 +55,12 @@ export interface SixSDatabase extends DBSchema {
   draft_issues: {
     key: string;
     value: DraftIssue;
-    indexes: { "by-status": string };
+    indexes: { "by-status": SyncStatus };
   };
   draft_resolves: {
     key: string;
     value: DraftResolve;
-    indexes: { "by-status": string };
+    indexes: { "by-status": SyncStatus };
   };
   auth_session: {
     key: string;

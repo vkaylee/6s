@@ -1,5 +1,5 @@
 import { hasCapability, type UserProfile } from "../../store/authStore.ts";
-import { type LocationItem, UserRole } from "../../types/index.ts";
+import { type LocationItem, USER_ROLES, UserRole } from "../../types/index.ts";
 import { formatTime } from "../../utils/time.ts";
 import type { AdminUserItem } from "../UserAccessPage.tsx";
 
@@ -11,7 +11,7 @@ interface UserRoleTableProps {
   locations: LocationItem[];
   currentUser: UserProfile | null;
   editingId: number | null;
-  editRole: string;
+  editRole: UserRole;
   editLocation: string;
   editTimezone: string;
   editLocale: string;
@@ -21,21 +21,15 @@ interface UserRoleTableProps {
   onToggleActive: (user: AdminUserItem) => void;
   onStartEdit: (user: AdminUserItem) => void;
   onCancelEdit: () => void;
-  onEditRoleChange: (value: string) => void;
+  onEditRoleChange: (value: UserRole) => void;
   onEditLocationChange: (value: string) => void;
   onEditTimezoneChange: (value: string) => void;
   onEditLocaleChange: (value: string) => void;
 }
 
-const ALL_ROLES: string[] = [
-  UserRole.USER,
-  UserRole.LINE_LEADER,
-  UserRole.SAFETY_OFFICER,
-  UserRole.ADMIN,
-  UserRole.SUPERADMIN,
-];
+const ALL_ROLES = USER_ROLES;
 
-function roleBadgeClass(role: string) {
+function roleBadgeClass(role: UserRole) {
   switch (role) {
     case UserRole.SUPERADMIN:
       return "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300";
@@ -151,7 +145,7 @@ export function UserRoleTable({
                     <select
                       id={`role-${u.id}`}
                       value={editRole}
-                      onChange={(e) => onEditRoleChange(e.target.value)}
+                      onChange={(e) => onEditRoleChange(e.target.value as UserRole)}
                       className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-600"
                     >
                       {ALL_ROLES.map((r) => (

@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { TaxonomySelectorModal } from "../src/components/TaxonomySelectorModal.tsx";
 import { invalidateAiStatus, loadAiStatus } from "../src/hooks/useAiStatus.ts";
 import { useI18nStore } from "../src/i18n/index.ts";
-import { IssueCategory, type TagItem } from "../src/types/index.ts";
+import { IssueCategory, type TagItem, TagStatus } from "../src/types/index.ts";
 
 let registeredHere = false;
 
@@ -33,7 +33,7 @@ const mockTags: TagItem[] = [
     name_vi: "Rò rỉ dầu",
     category: IssueCategory.S3,
     is_active: true,
-    status: "APPROVED",
+    status: TagStatus.APPROVED,
   },
   {
     code: "DIRT",
@@ -41,7 +41,7 @@ const mockTags: TagItem[] = [
     name_vi: "Bụi bẩn",
     category: IssueCategory.S3,
     is_active: true,
-    status: "APPROVED",
+    status: TagStatus.APPROVED,
   },
 ];
 

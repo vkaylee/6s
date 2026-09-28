@@ -1,5 +1,16 @@
+import {
+  type CauseStatus,
+  type CauseType,
+  IssueCategory,
+  IssueVisibilityClass,
+  type LocationSnapshotSource,
+  type TagStatus,
+  type TargetType,
+  UserRole,
+} from "./enums.ts";
 import type { I18nObject } from "./i18n.ts";
 
+export * from "./enums.ts";
 export {
   resolveI18n,
   resolveIssueLocationName,
@@ -8,72 +19,6 @@ export {
   resolveTagLabel,
 } from "./i18n.ts";
 export type { I18nObject };
-
-export const IssueCategory = {
-  S1: "1S",
-  S2: "2S",
-  S3: "3S",
-  S4: "4S",
-  S5: "5S",
-  S6: "6S",
-} as const;
-export type IssueCategory = (typeof IssueCategory)[keyof typeof IssueCategory];
-
-export const IssueStatus = {
-  OPEN: "OPEN",
-  PENDING_REVIEW: "PENDING_REVIEW",
-  CLOSED: "CLOSED",
-  INVALID: "INVALID",
-} as const;
-export type IssueStatus = (typeof IssueStatus)[keyof typeof IssueStatus];
-
-export type CauseType = "CONDITION" | "BEHAVIOR";
-
-export const BEHAVIOR_TAG_MAP: Record<string, true> = {
-  ppe_violation: true,
-  improper_storage: true,
-  sop_noncompliance: true,
-  eating_at_workstation: true,
-  sleeping_on_shift: true,
-  phone_use_operating: true,
-  running_in_workshop: true,
-  safety_gear: true,
-  forklift_speeding: true,
-};
-
-export function isBehaviorTag(tagCode: string, category?: string): boolean {
-  return category === "5S" || Boolean(BEHAVIOR_TAG_MAP[tagCode]);
-}
-
-export function detectCauseType(category?: string | null, tags?: string[] | null): CauseType {
-  if (category === "5S") return "BEHAVIOR";
-  if ((tags ?? []).some((tag) => isBehaviorTag(tag, category || undefined))) {
-    return "BEHAVIOR";
-  }
-  return "CONDITION";
-}
-
-export const UserRole = {
-  USER: "USER",
-  LINE_LEADER: "LINE_LEADER",
-  SAFETY_OFFICER: "SAFETY_OFFICER",
-  ADMIN: "ADMIN",
-  SUPERADMIN: "SUPERADMIN",
-} as const;
-export type UserRole = (typeof UserRole)[keyof typeof UserRole];
-
-export const IssueVisibilityClass = {
-  SITE_PUBLIC: "SITE_PUBLIC",
-  SAFETY_RESTRICTED: "SAFETY_RESTRICTED",
-} as const;
-export type IssueVisibilityClass = (typeof IssueVisibilityClass)[keyof typeof IssueVisibilityClass];
-
-export const IssueWorkspace = {
-  MY_WORK: "MY_WORK",
-  SITE_FEED: "SITE_FEED",
-  RESTRICTED: "RESTRICTED",
-} as const;
-export type IssueWorkspace = (typeof IssueWorkspace)[keyof typeof IssueWorkspace];
 
 import type {
   AiConfig as OpenApiAiConfig,
@@ -91,8 +36,6 @@ export type {
   TeamKpi as TeamKpiReport,
   TeamMember as TeamMemberItem,
 } from "../api/generated/index.ts";
-/** Verification outcome of an issue's root cause; independent of `cause_type`. */
-export type CauseStatus = NonNullable<OpenApiIssue["cause_status"]>;
 
 /**
  * Responsibility columns are nullable in the API but optional here so cached/legacy
@@ -103,6 +46,8 @@ export type IssueItem = Omit<
   | "asset_id"
   | "assigned_team_id"
   | "assignee_id"
+  | "cause_type"
+  | "visibility_class"
   | "cause_team_id"
   | "cause_status"
   | "deleted_at"
@@ -120,7 +65,7 @@ export type IssueItem = Omit<
   location_name_vi_snapshot?: string | null;
   location_name_zh_snapshot?: string | null;
   location_name_en_snapshot?: string | null;
-  location_snapshot_source?: "CLIENT_CAPTURE" | "SERVER_CAPTURE" | null;
+  location_snapshot_source?: LocationSnapshotSource | null;
   location_snapshot_recorded_at?: string | null;
   creator_name: string;
   resolver_name?: string | null;
@@ -166,8 +111,6 @@ export type LocationItem = Omit<OpenApiLocation, "qr_code"> & {
   is_active: boolean;
 };
 
-export type TagStatus = "PENDING" | "APPROVED" | "REJECTED" | "MERGED";
-
 export interface ProposedTagItem {
   name_vi: string;
   name_zh?: string;
@@ -201,7 +144,7 @@ export type ReporterLeaderboard = OpenApiReporterScore;
 export interface ScoreLogItem {
   id: number;
   issue_id: number;
-  target_type: "LOCATION" | "USER";
+  target_type: TargetType;
   target_id: string;
   rule_key: string;
   rule_description: string;

@@ -167,9 +167,9 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 // TestConfigResult provides status per notification channel.
 type TestConfigResult struct {
-	Channel string `json:"channel"`
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	Channel Channel `json:"channel"`
+	Success bool    `json:"success"`
+	Error   string  `json:"error,omitempty"`
 }
 
 // TestConfig handles POST /api/config/notifications/test (Admin).
@@ -206,7 +206,7 @@ func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Test WxPusher if configured
 	if decryptedCfg.WxPusherAppToken != "" {
-		wErr := h.sender.Send(r.Context(), ChannelWxPusher, testPayload, decryptedCfg)
+		wErr := h.sender.Send(r.Context(), ChannelWxPusher.String(), testPayload, decryptedCfg)
 		res := TestConfigResult{Channel: ChannelWxPusher, Success: (wErr == nil)}
 		if wErr != nil {
 			res.Error = "notification delivery failed"
@@ -216,7 +216,7 @@ func (h *ConfigHandler) TestConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Test LAN Webhook if configured
 	if decryptedCfg.LANWebhookURL != "" {
-		lErr := h.sender.Send(r.Context(), ChannelLANWebhook, testPayload, decryptedCfg)
+		lErr := h.sender.Send(r.Context(), ChannelLANWebhook.String(), testPayload, decryptedCfg)
 		res := TestConfigResult{Channel: ChannelLANWebhook, Success: (lErr == nil)}
 		if lErr != nil {
 			res.Error = "notification delivery failed"

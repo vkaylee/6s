@@ -10,6 +10,7 @@ import {
   IssueStatus,
   resolveTagLabel,
   type TagItem,
+  TagStatus,
 } from "../src/types/index.ts";
 
 describe("IssueCard Component", () => {
@@ -120,13 +121,13 @@ describe("IssueCard Component", () => {
       const pending = renderToString(
         <TagLabel
           code="pending_tag"
-          tags={[{ code: "pending_tag", name_en: "Pending", status: "PENDING" }]}
+          tags={[{ code: "pending_tag", name_en: "Pending", status: TagStatus.PENDING }]}
         />,
       );
       const rejected = renderToString(
         <TagLabel
           code="rejected_tag"
-          tags={[{ code: "rejected_tag", name_en: "Rejected", status: "REJECTED" }]}
+          tags={[{ code: "rejected_tag", name_en: "Rejected", status: TagStatus.REJECTED }]}
         />,
       );
       expect(pending).toContain("⏳");

@@ -1,10 +1,10 @@
 import { Camera, Pen, RotateCcw, Trash2, Upload } from "lucide-react";
 import type { RefObject } from "react";
 import { AuthenticatedImage } from "../../components/AuthenticatedImage.tsx";
-import type { CauseType } from "../../types/index.ts";
+import { CauseType, type CauseType as CauseTypeValue } from "../../types/index.ts";
 
 interface IssueMediaAttachmentsProps {
-  causeType: CauseType;
+  causeType: CauseTypeValue;
   previewBefore: string | null;
   previewDetail: string | null;
   translate: (key: string) => string;
@@ -79,7 +79,7 @@ function PhotoCard({
             <span className="text-[10px] text-zinc-400 mt-1">
               {isWide
                 ? translate(
-                    causeType === "BEHAVIOR"
+                    causeType === CauseType.BEHAVIOR
                       ? "issue.photo_before_hint_behavior"
                       : "issue.photo_before_hint_condition",
                   )
@@ -181,7 +181,7 @@ function PhotoCard({
               ? translate("issue.drop_photo_active")
               : isWide
                 ? translate(
-                    causeType === "BEHAVIOR"
+                    causeType === CauseType.BEHAVIOR
                       ? "issue.photo_before_hint_behavior"
                       : "issue.photo_before_hint_condition",
                   )

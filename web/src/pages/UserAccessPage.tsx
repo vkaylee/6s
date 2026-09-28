@@ -5,7 +5,13 @@ import { useHeaderVisibility } from "../hooks/useHeaderVisibility.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { useAuthStore } from "../store/authStore.ts";
 import { modalDialog } from "../store/dialogStore.ts";
-import { type LocationItem, UserRole } from "../types/index.ts";
+import {
+  type AuthSource as AuthSourceType,
+  type LocationItem,
+  type ResponsibilityType,
+  USER_ROLES,
+  UserRole,
+} from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
 import { UserRoleTable } from "./user-access/UserRoleTable.tsx";
@@ -13,10 +19,10 @@ import { UserRoleTable } from "./user-access/UserRoleTable.tsx";
 export interface AdminUserItem {
   id: number;
   username: string;
-  auth_source: string;
+  auth_source: AuthSourceType;
   full_name: string;
   email: string | null;
-  role: string;
+  role: UserRole;
   assigned_location_code: string | null;
   timezone?: string | null;
   locale?: string;
@@ -25,15 +31,9 @@ export interface AdminUserItem {
   last_login_at: string | null;
 }
 
-export const ALL_ROLES: string[] = [
-  UserRole.USER,
-  UserRole.LINE_LEADER,
-  UserRole.SAFETY_OFFICER,
-  UserRole.ADMIN,
-  UserRole.SUPERADMIN,
-];
+export const ALL_ROLES: UserRole[] = USER_ROLES;
 
-type RoleFilter = "ALL" | string;
+type RoleFilter = "ALL" | UserRole;
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
 export interface LocationMembershipItem {
@@ -41,7 +41,7 @@ export interface LocationMembershipItem {
   user_id: number;
   username: string;
   full_name: string;
-  responsibility_type: string;
+  responsibility_type: ResponsibilityType;
   valid_from: string;
   valid_to: string | null;
   is_active: boolean;
@@ -59,7 +59,7 @@ export function UserAccessPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [savingId, setSavingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editRole, setEditRole] = useState<string>(UserRole.USER);
+  const [editRole, setEditRole] = useState<UserRole>(UserRole.USER);
   const [editLocation, setEditLocation] = useState<string>("");
   const [editTimezone, setEditTimezone] = useState<string>("");
   const [editLocale, setEditLocale] = useState<string>("vi-VN");
@@ -192,7 +192,7 @@ export function UserAccessPage() {
               <select
                 id="role-filter"
                 value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
+                onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
                 className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm font-bold min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 <option value="ALL">{t("common.all")}</option>

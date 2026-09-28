@@ -10,7 +10,7 @@ import type { DraftResolve } from "../../db/indexeddb.ts";
 import { saveDraftResolve } from "../../db/indexeddb.ts";
 import { modalDialog } from "../../store/dialogStore.ts";
 import { syncEngine } from "../../sync/syncEngine.ts";
-import type { CauseStatus, IssueCategory, IssueItem } from "../../types/index.ts";
+import { CauseStatus, type IssueCategory, type IssueItem, SyncStatus } from "../../types/index.ts";
 import { compressImage } from "../../utils/compress.ts";
 import { haptics } from "../../utils/haptics.ts";
 import { generateUuid } from "../../utils/uuid.ts";
@@ -221,7 +221,7 @@ export function useIssueDetailMutations({
           assigned_team_id: assignmentTeamId,
           assignee_id: assignmentAssigneeId,
           ...(syncCauseWithAssignment && assignmentTeamId != null
-            ? { cause_status: "CONFIRMED", cause_team_id: assignmentTeamId }
+            ? { cause_status: CauseStatus.CONFIRMED, cause_team_id: assignmentTeamId }
             : {}),
         }),
       });
@@ -244,7 +244,7 @@ export function useIssueDetailMutations({
 
   const handleVerifyCause = async () => {
     if (!canVerifyCause || isSavingCause) return;
-    if (causeStatus === "CONFIRMED" && causeTeamId == null) return;
+    if (causeStatus === CauseStatus.CONFIRMED && causeTeamId == null) return;
     setIsSavingCause(true);
     try {
       const updated = await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
@@ -252,7 +252,7 @@ export function useIssueDetailMutations({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           expected_version: currentIssue.version,
-          cause_team_id: causeStatus === "CONFIRMED" ? causeTeamId : null,
+          cause_team_id: causeStatus === CauseStatus.CONFIRMED ? causeTeamId : null,
           cause_status: causeStatus,
         }),
       });
@@ -288,7 +288,7 @@ export function useIssueDetailMutations({
         expected_version: currentIssue.version,
         photo_after_blob: compressed,
         resolved_at: Date.now(),
-        sync_status: "PENDING",
+        sync_status: SyncStatus.PENDING,
       };
 
       await saveDraftResolve(draft);
@@ -308,14 +308,18 @@ export function useIssueDetailMutations({
   const handleConfirmClose = async () => {
     setIsSubmitting(true);
     try {
-      if (canVerifyCause && closeCauseTeamId != null && currentIssue.cause_status !== "CONFIRMED") {
+      if (
+        canVerifyCause &&
+        closeCauseTeamId != null &&
+        currentIssue.cause_status !== CauseStatus.CONFIRMED
+      ) {
         await apiClient<IssueItem>(`/api/issues/${currentIssue.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             expected_version: currentIssue.version,
             cause_team_id: closeCauseTeamId,
-            cause_status: "CONFIRMED",
+            cause_status: CauseStatus.CONFIRMED,
           }),
         });
       }

@@ -207,7 +207,7 @@ func issueValues(issue Issue) []driver.Value {
 func TestPatchIssueWithTagsAtomic_RollsBackAndCommits(t *testing.T) {
 	baseIssue := Issue{
 		ID: 1, ClientUuid: "client-1", Version: 3, SiteID: 1, CreatorID: 10,
-		Category: "1S", CauseType: "MANUAL", VisibilityClass: "SITE_PUBLIC",
+		Category: "1S", CauseType: "CONDITION", VisibilityClass: "SITE_PUBLIC",
 		LocationCode: "LINE_A1", PhotoBefore: "before.jpg", Status: "OPEN",
 		CreatedAt: time.Now(),
 	}

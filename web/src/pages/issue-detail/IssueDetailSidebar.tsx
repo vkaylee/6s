@@ -1,5 +1,6 @@
 import { Package, User } from "lucide-react";
 import { AIReviewPanel } from "../../components/AIReviewPanel.tsx";
+import { CauseType } from "../../types/index.ts";
 import { IssueDetailActionBar } from "./IssueDetailActionBar.tsx";
 import { IssueDetailAssignment } from "./IssueDetailAssignment.tsx";
 import { IssueDetailDescription } from "./IssueDetailDescription.tsx";
@@ -162,18 +163,20 @@ export function IssueDetailSidebar({ view }: Props) {
           {statusBadge}
           <span
             className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${
-              causeType === "BEHAVIOR"
+              causeType === CauseType.BEHAVIOR
                 ? "bg-amber-500/10 text-amber-800 dark:text-amber-300"
                 : "bg-blue-500/10 text-blue-800 dark:text-blue-300"
             }`}
           >
-            {causeType === "BEHAVIOR" ? (
+            {causeType === CauseType.BEHAVIOR ? (
               <User className="h-3 w-3 shrink-0" aria-hidden="true" />
             ) : (
               <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
             )}
             <span>
-              {causeType === "BEHAVIOR" ? t("issue.badge_behavior") : t("issue.badge_condition")}
+              {causeType === CauseType.BEHAVIOR
+                ? t("issue.badge_behavior")
+                : t("issue.badge_condition")}
             </span>
           </span>
           <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">

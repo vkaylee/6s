@@ -29,6 +29,25 @@ import (
 	"6s/internal/i18n"
 )
 
+// issue imports ai for translation projections, so AI keeps typed mirrors here to avoid an import cycle.
+type reviewCategory string
+
+const (
+	reviewCategory1S reviewCategory = "1S"
+	reviewCategory2S reviewCategory = "2S"
+	reviewCategory3S reviewCategory = "3S"
+	reviewCategory4S reviewCategory = "4S"
+	reviewCategory5S reviewCategory = "5S"
+	reviewCategory6S reviewCategory = "6S"
+)
+
+type reviewCauseType string
+
+const (
+	reviewCauseCondition reviewCauseType = "CONDITION"
+	reviewCauseBehavior  reviewCauseType = "BEHAVIOR"
+)
+
 const (
 	timeFormatRFC3339         = "2006-01-02T15:04:05Z07:00"
 	defaultHTTPTimeout        = 30 * time.Second
@@ -1017,8 +1036,17 @@ func (s *Service) SuggestTags(ctx context.Context, req SuggestTagsRequest) (Sugg
 }
 
 func validSuggestCategory(category string) bool {
-	switch category {
-	case "1S", "2S", "3S", "4S", "5S", "6S":
+	switch reviewCategory(category) {
+	case reviewCategory1S, reviewCategory2S, reviewCategory3S, reviewCategory4S, reviewCategory5S, reviewCategory6S:
+		return true
+	default:
+		return false
+	}
+}
+
+func validReviewCauseType(causeType string) bool {
+	switch reviewCauseType(causeType) {
+	case reviewCauseCondition, reviewCauseBehavior:
 		return true
 	default:
 		return false
@@ -1309,7 +1337,7 @@ func parseReviewResult(raw, model string, issue db.Issue, selected []db.ListTags
 	if cat := strings.ToUpper(strings.TrimSpace(out.SuggestedCategory)); cat != issue.Category && validReviewCategory(cat) {
 		resp.Suggestion.Category = cat
 	}
-	if ct := strings.ToUpper(strings.TrimSpace(out.SuggestedCause)); ct != issue.CauseType && (ct == "CONDITION" || ct == "BEHAVIOR") {
+	if ct := strings.ToUpper(strings.TrimSpace(out.SuggestedCause)); ct != issue.CauseType && validReviewCauseType(ct) {
 		resp.Suggestion.CauseType = ct
 	}
 	resp.Suggestion.Tags = filterReviewTags(out.SuggestedTags, selected, catalog)
@@ -1399,12 +1427,7 @@ func reviewStoreError(err error) *apperror.AppError {
 }
 
 func validReviewCategory(category string) bool {
-	switch category {
-	case "1S", "2S", "3S", "4S", "5S", "6S":
-		return true
-	default:
-		return false
-	}
+	return validSuggestCategory(category)
 }
 
 // extractJSONObject returns the outermost {...} slice of a model reply, tolerating markdown fences.

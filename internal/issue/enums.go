@@ -20,6 +20,16 @@ func (s Status) String() string {
 	return string(s)
 }
 
+// IsValid checks if status is a recognized issue lifecycle value.
+func (s Status) IsValid() bool {
+	switch s {
+	case StatusOpen, StatusPendingReview, StatusClosed, StatusInvalid:
+		return true
+	default:
+		return false
+	}
+}
+
 // Category represents a 6S category code.
 type Category string
 
@@ -85,19 +95,19 @@ func NormalizeCauseType(causeType string, category string) string {
 	return string(CauseTypeCondition)
 }
 
-// CauseStatus values match the issues.cause_status check constraint.
+// CauseStatus represents cause verification state.
+type CauseStatus string
+
 const (
-	// CauseStatusUnverified means no cause team has been confirmed yet.
-	CauseStatusUnverified = "UNVERIFIED"
-	// CauseStatusConfirmed means a cause team has been verified as responsible.
-	CauseStatusConfirmed = "CONFIRMED"
-	// CauseStatusNotApplicable means the issue carries no cause responsibility.
-	CauseStatusNotApplicable = "NOT_APPLICABLE"
+	CauseStatusUnverified    CauseStatus = "UNVERIFIED"
+	CauseStatusConfirmed     CauseStatus = "CONFIRMED"
+	CauseStatusNotApplicable CauseStatus = "NOT_APPLICABLE"
 )
 
-// isValidCauseStatus reports whether the value satisfies the database constraint.
-func isValidCauseStatus(status string) bool {
-	switch status {
+func (s CauseStatus) String() string { return string(s) }
+
+func (s CauseStatus) IsValid() bool {
+	switch s {
 	case CauseStatusUnverified, CauseStatusConfirmed, CauseStatusNotApplicable:
 		return true
 	default:
@@ -105,20 +115,77 @@ func isValidCauseStatus(status string) bool {
 	}
 }
 
-// Audit actions recorded in system_audit_logs for responsibility changes.
+func isValidCauseStatus(status string) bool { return CauseStatus(status).IsValid() }
+
+// VisibilityClass controls issue visibility within a site.
+type VisibilityClass string
+
 const (
-	auditActionAssignResponsibility = "ASSIGN_RESPONSIBILITY"
-	auditActionVerifyCause          = "VERIFY_CAUSE"
+	VisibilitySitePublic       VisibilityClass = "SITE_PUBLIC"
+	VisibilitySafetyRestricted VisibilityClass = "SAFETY_RESTRICTED"
 )
 
-// Responsibility actions exposed by the API; these are stable client-facing values.
+func (v VisibilityClass) String() string { return string(v) }
+
+func (v VisibilityClass) IsValid() bool {
+	return v == VisibilitySitePublic || v == VisibilitySafetyRestricted
+}
+
+// LocationSnapshotSource records where a location name snapshot came from.
+type LocationSnapshotSource string
+
 const (
-	// HistoryActionAssign means the issue received its first team/assignee.
-	HistoryActionAssign = "ASSIGN"
-	// HistoryActionTransfer means handling moved to another team or assignee.
-	HistoryActionTransfer = "TRANSFER"
-	// HistoryActionCauseVerify means cause responsibility was verified.
-	HistoryActionCauseVerify = "CAUSE_VERIFY"
-	// HistoryActionOther covers audit rows that carry no known responsibility action.
-	HistoryActionOther = "OTHER"
+	LocationSnapshotClient LocationSnapshotSource = "CLIENT_CAPTURE"
+	LocationSnapshotServer LocationSnapshotSource = "SERVER_CAPTURE"
 )
+
+func (s LocationSnapshotSource) String() string { return string(s) }
+
+func (s LocationSnapshotSource) IsValid() bool {
+	return s == LocationSnapshotClient || s == LocationSnapshotServer
+}
+
+// ResponsibilityType identifies a user's location responsibility.
+type ResponsibilityType string
+
+const (
+	ResponsibilityOwner    ResponsibilityType = "OWNER"
+	ResponsibilityBackup   ResponsibilityType = "BACKUP"
+	ResponsibilityReviewer ResponsibilityType = "REVIEWER"
+)
+
+func (r ResponsibilityType) String() string { return string(r) }
+
+func (r ResponsibilityType) IsValid() bool {
+	return r == ResponsibilityOwner || r == ResponsibilityBackup || r == ResponsibilityReviewer
+}
+
+// HistoryAction is the stable API action for responsibility history.
+type HistoryAction string
+
+const (
+	HistoryActionAssign      HistoryAction = "ASSIGN"
+	HistoryActionTransfer    HistoryAction = "TRANSFER"
+	HistoryActionCauseVerify HistoryAction = "CAUSE_VERIFY"
+	HistoryActionOther       HistoryAction = "OTHER"
+)
+
+func (a HistoryAction) String() string { return string(a) }
+
+func (a HistoryAction) IsValid() bool {
+	switch a {
+	case HistoryActionAssign, HistoryActionTransfer, HistoryActionCauseVerify, HistoryActionOther:
+		return true
+	default:
+		return false
+	}
+}
+
+type auditAction string
+
+const (
+	auditActionAssignResponsibility auditAction = "ASSIGN_RESPONSIBILITY"
+	auditActionVerifyCause          auditAction = "VERIFY_CAUSE"
+)
+
+func (a auditAction) String() string { return string(a) }

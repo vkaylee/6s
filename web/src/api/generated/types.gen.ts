@@ -17,8 +17,8 @@ export type ErrorEnvelope = {
 };
 
 export type TranslationContext = {
-    category?: string;
-    cause_type?: string;
+    category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+    cause_type?: 'CONDITION' | 'BEHAVIOR';
     location_code?: string;
     location_name?: string;
     tags?: Array<string>;
@@ -101,6 +101,14 @@ export type Issue = {
      * Trạng thái xác minh nguyên nhân; luôn có mặt, độc lập với cause_type
      */
     cause_status: 'UNVERIFIED' | 'CONFIRMED' | 'NOT_APPLICABLE';
+    /**
+     * Phân loại nguyên nhân; luôn có mặt.
+     */
+    cause_type: 'CONDITION' | 'BEHAVIOR';
+    /**
+     * Phạm vi hiển thị issue; luôn có mặt.
+     */
+    visibility_class: 'SITE_PUBLIC' | 'SAFETY_RESTRICTED';
     /**
      * Chỉ có ở GET /api/issues/{id}
      */
@@ -753,6 +761,7 @@ export type UpdateIssueData = {
          */
         expected_version?: number;
         category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+        cause_type?: 'CONDITION' | 'BEHAVIOR';
         location_code?: string;
         tags?: Array<string>;
         /**
@@ -1926,7 +1935,7 @@ export type ReviewIssueWithAiResponses = {
         feedback?: string;
         suggestion?: {
             category?: string;
-            cause_type?: string;
+            cause_type?: 'CONDITION' | 'BEHAVIOR';
             tags?: Array<string>;
             proposed_tags?: Array<{
                 name_vi: string;

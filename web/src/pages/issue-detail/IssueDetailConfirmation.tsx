@@ -1,6 +1,12 @@
 import { AlertTriangle, ClipboardList, X } from "lucide-react";
 import type React from "react";
-import { type IssueItem, IssueStatus, type TeamItem } from "../../types/index.ts";
+import {
+  CauseStatus,
+  CauseType,
+  type IssueItem,
+  IssueStatus,
+  type TeamItem,
+} from "../../types/index.ts";
 import type { ConfirmAction } from "./types.ts";
 
 export interface IssueDetailConfirmationView {
@@ -12,7 +18,7 @@ export interface IssueDetailConfirmationView {
   rejectReason: string;
   setRejectReason: React.Dispatch<React.SetStateAction<string>>;
   mutationsOnline: boolean;
-  causeType: "BEHAVIOR" | "CONDITION";
+  causeType: CauseType;
   scoreRating: number;
   setScoreRating: React.Dispatch<React.SetStateAction<number>>;
   canVerifyCause: boolean;
@@ -124,7 +130,7 @@ export function IssueDetailConfirmation({ view }: { view: IssueDetailConfirmatio
                 className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 w-4 h-4 dark:border-zinc-600 dark:bg-zinc-900 dark:checked:bg-blue-600 dark:focus:ring-offset-zinc-900"
               />
               <span>
-                {causeType === "BEHAVIOR"
+                {causeType === CauseType.BEHAVIOR
                   ? t("issue_detail.check_behavior_corrected")
                   : t("issue_detail.check_condition_resolved")}
               </span>
@@ -169,7 +175,7 @@ export function IssueDetailConfirmation({ view }: { view: IssueDetailConfirmatio
             </div>
           </div>
 
-          {canVerifyCause && currentIssue.cause_status === "UNVERIFIED" && (
+          {canVerifyCause && currentIssue.cause_status === CauseStatus.UNVERIFIED && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/70 space-y-2">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="block text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">

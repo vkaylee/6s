@@ -8,8 +8,7 @@ import { LoginPage } from "../pages/LoginPage.tsx";
 import { NotFoundPage } from "../pages/NotFoundPage.tsx";
 import { ScoreLedgerPage } from "../pages/ScoreLedgerPage.tsx";
 import type { UserProfile } from "../store/authStore.ts";
-import type { TeamItem } from "../types/index.ts";
-import { UserRole } from "../types/index.ts";
+import { TargetType, type TeamItem, UserRole } from "../types/index.ts";
 import { AppDashboard } from "./AppDashboard.tsx";
 import type { DashboardData } from "./types.ts";
 
@@ -136,7 +135,7 @@ export function AppRoutes({
         {(params) => (
           <ProtectedRoute allowedCapability="reports:view">
             <ScoreLedgerPage
-              targetType="LOCATION"
+              targetType={TargetType.LOCATION}
               id={params.code}
               onSelectIssue={(issueId) => {
                 openIssueById(issueId);
@@ -150,7 +149,7 @@ export function AppRoutes({
         {(params) => (
           <ProtectedRoute allowedCapability="reports:view">
             <ScoreLedgerPage
-              targetType="USER"
+              targetType={TargetType.USER}
               id={params.id}
               onSelectIssue={(issueId) => {
                 openIssueById(issueId);

@@ -14,6 +14,7 @@ import type { FacetKey } from "../components/QuickFacets.tsx";
 import { hasCapability, type UserProfile } from "../store/authStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
+  EventType,
   IssueCategory,
   type IssueItem,
   IssueStatus,
@@ -312,10 +313,10 @@ export function useDashboardData({ locale, searchString, user }: UseDashboardDat
       unsubscribeEvents = subscribeIssueEvents((event) => {
         loadIssues(true);
         loadLeaderboards();
-        if (event?.type === "ISSUE_DELETED" || event?.type === "ISSUE_RESTORED") {
+        if (event?.type === EventType.ISSUE_DELETED || event?.type === EventType.ISSUE_RESTORED) {
           const current = selectedIssueRef.current;
           if (current && current.id === event.issue_id && event.type) {
-            const deletion = event.type === "ISSUE_DELETED" ? "deleted" : "active";
+            const deletion = event.type === EventType.ISSUE_DELETED ? "deleted" : "active";
             fetchIssueWithDeletion(event.issue_id, deletion)
               .then((updated) => setSelectedIssue(updated))
               .catch(() => setSelectedIssue(null));

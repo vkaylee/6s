@@ -145,8 +145,8 @@ func normalizeLocationSnapshot(req SyncIssueRequest) (sql.NullString, sql.NullSt
 	vi := trim(req.LocationNameViSnapshot)
 	zh := trim(req.LocationNameZhSnapshot)
 	en := trim(req.LocationNameEnSnapshot)
-	source := strings.TrimSpace(req.LocationSnapshotSource)
-	if source != "CLIENT_CAPTURE" && source != "SERVER_CAPTURE" {
+	source := LocationSnapshotSource(strings.TrimSpace(req.LocationSnapshotSource))
+	if !source.IsValid() {
 		source = ""
 	}
 	var recordedAt sql.NullTime
@@ -156,7 +156,7 @@ func normalizeLocationSnapshot(req SyncIssueRequest) (sql.NullString, sql.NullSt
 	if !recordedAt.Valid || source == "" {
 		source = ""
 	}
-	return vi, zh, en, sql.NullString{String: source, Valid: source != ""}, recordedAt
+	return vi, zh, en, sql.NullString{String: source.String(), Valid: source != ""}, recordedAt
 }
 
 const maxProposedTags = 5
@@ -838,7 +838,7 @@ func (s *ServiceImpl) buildResponsibilityPatch(ctx context.Context, req PatchIss
 	}
 	audit := []db.InsertAuditLogParams{{
 		UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
-		Action:      auditActionAssignResponsibility,
+		Action:      auditActionAssignResponsibility.String(),
 		TargetTable: "issues",
 		TargetID:    strconv.FormatInt(issue.ID, 10),
 		OldValue:    mustJSON(before),
@@ -847,7 +847,7 @@ func (s *ServiceImpl) buildResponsibilityPatch(ctx context.Context, req PatchIss
 	if patch.SetCauseStatus || (patch.SetCauseTeamID && next.CauseStatus != "") {
 		audit = append(audit, db.InsertAuditLogParams{
 			UserID:      sql.NullInt64{Int64: currentUser.ID, Valid: true},
-			Action:      auditActionVerifyCause,
+			Action:      auditActionVerifyCause.String(),
 			TargetTable: "issues",
 			TargetID:    strconv.FormatInt(issue.ID, 10),
 			OldValue:    mustJSON(map[string]any{"cause_status": issue.CauseStatus}),
@@ -943,15 +943,15 @@ func (s *ServiceImpl) applyCausePatch(ctx context.Context, req PatchIssueRequest
 	if !auth.HasPermission(ctx, auth.PermissionIssueVerifyCause) {
 		return ErrPermissionDenied
 	}
-	status := issue.CauseStatus
+	status := CauseStatus(issue.CauseStatus)
 	if req.CauseStatus != nil {
 		if *req.CauseStatus == nil {
 			status = CauseStatusUnverified
 		} else {
-			status = **req.CauseStatus
+			status = CauseStatus(**req.CauseStatus)
 		}
 	}
-	if !isValidCauseStatus(status) {
+	if !status.IsValid() {
 		return fmt.Errorf("%w: invalid cause status", ErrInvalidResponsibility)
 	}
 	team := issue.CauseTeamID
@@ -976,7 +976,7 @@ func (s *ServiceImpl) applyCausePatch(ctx context.Context, req PatchIssueRequest
 		}
 	}
 	patch.SetCauseStatus = true
-	patch.CauseStatus = sql.NullString{String: status, Valid: true}
+	patch.CauseStatus = sql.NullString{String: status.String(), Valid: true}
 	patch.SetCauseTeamID = true
 	patch.CauseTeamID = team
 	return nil

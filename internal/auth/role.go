@@ -31,3 +31,30 @@ func (r Role) IsValid() bool {
 		return false
 	}
 }
+
+// AuthSource identifies the identity provider for a user.
+type AuthSource string
+
+const (
+	AuthSourceLocal AuthSource = "LOCAL"
+	AuthSourceAD    AuthSource = "AD"
+)
+
+func (s AuthSource) String() string { return string(s) }
+
+func (s AuthSource) IsValid() bool { return s == AuthSourceLocal || s == AuthSourceAD }
+
+// ResponsibilityType identifies a user's location responsibility.
+type ResponsibilityType string
+
+const (
+	ResponsibilityOwner    ResponsibilityType = "OWNER"
+	ResponsibilityBackup   ResponsibilityType = "BACKUP"
+	ResponsibilityReviewer ResponsibilityType = "REVIEWER"
+)
+
+func (r ResponsibilityType) String() string { return string(r) }
+
+func (r ResponsibilityType) IsValid() bool {
+	return r == ResponsibilityOwner || r == ResponsibilityBackup || r == ResponsibilityReviewer
+}

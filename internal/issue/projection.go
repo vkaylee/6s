@@ -49,7 +49,7 @@ func (s *ServiceImpl) canViewIssue(ctx context.Context, issue db.Issue) bool {
 	if issue.SiteID != 0 && user.SiteID != 0 && issue.SiteID != user.SiteID {
 		return false
 	}
-	if issue.VisibilityClass == "SITE_PUBLIC" {
+	if VisibilityClass(issue.VisibilityClass) == VisibilitySitePublic {
 		return true
 	}
 	if issue.AssignedTeamID.Valid && user.IsActive {
@@ -228,7 +228,7 @@ func (s *ServiceImpl) responsibilityHistory(ctx context.Context, issueID int64) 
 	entries := make([]ResponsibilityHistoryEntry, 0, len(rows))
 	for _, r := range rows {
 		entry := ResponsibilityHistoryEntry{
-			ID: r.ID, Action: historyAction(r), OldValue: r.OldValue, NewValue: r.NewValue,
+			ID: r.ID, Action: historyAction(r).String(), OldValue: r.OldValue, NewValue: r.NewValue,
 			CreatedAt: r.CreatedAt.Format(time.RFC3339),
 		}
 		if r.UserID.Valid {
@@ -247,11 +247,11 @@ func (s *ServiceImpl) responsibilityHistory(ctx context.Context, issueID int64) 
 // historyAction maps an audited responsibility row to the stable API action enum.
 // Rows written before this mapping existed, or by a store using other actions,
 // degrade to HistoryActionOther instead of leaking raw audit names.
-func historyAction(row db.ListIssueResponsibilityHistoryRow) string {
+func historyAction(row db.ListIssueResponsibilityHistoryRow) HistoryAction {
 	switch row.Action {
-	case auditActionAssignResponsibility:
+	case string(auditActionAssignResponsibility):
 		return ownerChangeAction(row.OldValue, row.NewValue)
-	case auditActionVerifyCause:
+	case string(auditActionVerifyCause):
 		return HistoryActionCauseVerify
 	default:
 		return HistoryActionOther
@@ -261,7 +261,7 @@ func historyAction(row db.ListIssueResponsibilityHistoryRow) string {
 // ownerChangeAction classifies an assignment audit by what happened to the handling owner.
 // Only a new owner (ASSIGN) or a replaced owner (TRANSFER) is named; an asset-only edit or a
 // cleared owner that leaves handling unchanged stays generic.
-func ownerChangeAction(oldValue, newValue json.RawMessage) string {
+func ownerChangeAction(oldValue, newValue json.RawMessage) HistoryAction {
 	oldOwner, oldOK := decodeOwnerSnapshot(oldValue)
 	newOwner, newOK := decodeOwnerSnapshot(newValue)
 	if !oldOK || !newOK || newOwner.empty() {
@@ -316,8 +316,8 @@ func (s *ServiceImpl) allowedActionsFor(ctx context.Context, issue db.Issue) *Al
 	if issue.DeletedAt.Valid {
 		return &AllowedActions{Restore: auth.HasPermission(ctx, auth.PermissionIssueRestore)}
 	}
-	open := issue.Status == StatusOpen.String()
-	review := issue.Status == StatusPendingReview.String()
+	open := Status(issue.Status) == StatusOpen
+	review := Status(issue.Status) == StatusPendingReview
 	return &AllowedActions{Assign: (open || review) && auth.HasPermission(ctx, auth.PermissionIssueAssign), VerifyCause: (open || review) && auth.HasPermission(ctx, auth.PermissionIssueVerifyCause), Resolve: open && s.canResolveIssue(ctx, user, issue), Close: review && s.canCloseIssue(ctx, user, issue) && !(issue.ResolverID.Valid && issue.ResolverID.Int64 == user.ID), Delete: auth.HasPermission(ctx, auth.PermissionIssueDelete)}
 }
 
@@ -439,7 +439,7 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, tagDetails [
 	resp := &Response{
 		ID: issue.ID, ClientUUID: issue.ClientUuid, Version: issue.Version, SiteID: issue.SiteID,
 		Category: issue.Category, CauseType: issue.CauseType, LocationCode: issue.LocationCode,
-		LocationName: locName, Tags: tags, TagDetails: tagDetails, Status: issue.Status, VisibilityClass: issue.VisibilityClass,
+		LocationName: locName, Tags: tags, TagDetails: tagDetails, Status: Status(issue.Status).String(), VisibilityClass: VisibilityClass(issue.VisibilityClass).String(),
 		Creator: UserItem{ID: creator.ID, Username: creator.Username, FullName: creator.FullName}, Resolver: resolver, CreatedAt: issue.CreatedAt.Format(time.RFC3339),
 	}
 	if issue.DeletedAt.Valid {
@@ -459,7 +459,7 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, tagDetails [
 		resp.LocationNameEnSnapshot = &value
 	}
 	if issue.LocationSnapshotSource.Valid {
-		value := issue.LocationSnapshotSource.String
+		value := LocationSnapshotSource(issue.LocationSnapshotSource.String).String()
 		resp.LocationSnapshotSource = &value
 	}
 	if issue.LocationSnapshotRecordedAt.Valid {
@@ -483,9 +483,9 @@ func toIssueResponse(issue db.Issue, locName string, tags []string, tagDetails [
 		resp.CauseTeamID = &v
 	}
 	if issue.CauseStatus == "" {
-		resp.CauseStatus = CauseStatusUnverified
+		resp.CauseStatus = CauseStatusUnverified.String()
 	} else {
-		resp.CauseStatus = issue.CauseStatus
+		resp.CauseStatus = CauseStatus(issue.CauseStatus).String()
 	}
 
 	if issue.Description.Valid {

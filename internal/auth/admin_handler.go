@@ -178,7 +178,7 @@ func (h *AdminHandler) ensureSuperadminCount(ctx context.Context) *apperror.AppE
 	}
 	count := 0
 	for _, user := range users {
-		if user.Role == RoleSuperadmin.String() && user.IsActive {
+		if Role(user.Role) == RoleSuperadmin && user.IsActive {
 			count++
 		}
 	}
@@ -189,12 +189,12 @@ func (h *AdminHandler) ensureSuperadminCount(ctx context.Context) *apperror.AppE
 }
 
 func (h *AdminHandler) ensureAdminCanChange(ctx context.Context, target db.User, req UpdateUserRequest, params db.UpdateUserAdminParams) *apperror.AppError {
-	if target.Role == RoleSuperadmin.String() && target.IsActive &&
-		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && params.Role != RoleSuperadmin.String())) {
+	if Role(target.Role) == RoleSuperadmin && target.IsActive &&
+		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && Role(params.Role) != RoleSuperadmin)) {
 		return h.ensureSuperadminCount(ctx)
 	}
-	if target.Role == RoleAdmin.String() && target.IsActive &&
-		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && params.Role != RoleAdmin.String())) {
+	if Role(target.Role) == RoleAdmin && target.IsActive &&
+		((req.IsActive != nil && !*req.IsActive) || (req.Role != nil && Role(params.Role) != RoleAdmin)) {
 		return h.ensureAdminCount(ctx)
 	}
 	return nil
@@ -207,14 +207,14 @@ func (h *AdminHandler) authorizeUserChange(actor db.User, target db.User, req Up
 	if actor.ID == target.ID {
 		return apperror.Forbidden(i18n.ErrForbidden)
 	}
-	if actor.Role != RoleSuperadmin.String() &&
-		(target.Role == RoleAdmin.String() || target.Role == RoleSuperadmin.String()) {
+	if Role(actor.Role) != RoleSuperadmin &&
+		(Role(target.Role) == RoleAdmin || Role(target.Role) == RoleSuperadmin) {
 		return apperror.Forbidden(i18n.ErrForbidden)
 	}
-	if actor.Role != RoleSuperadmin.String() && params.Role == RoleSuperadmin.String() {
+	if Role(actor.Role) != RoleSuperadmin && Role(params.Role) == RoleSuperadmin {
 		return apperror.Forbidden(i18n.ErrForbidden)
 	}
-	if actor.Role != RoleSuperadmin.String() && req.Role != nil && params.Role == RoleAdmin.String() {
+	if Role(actor.Role) != RoleSuperadmin && req.Role != nil && Role(*req.Role) == RoleAdmin {
 		return apperror.Forbidden(i18n.ErrForbidden)
 	}
 	return nil

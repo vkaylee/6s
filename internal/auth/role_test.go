@@ -19,3 +19,22 @@ func TestRoleIsValid(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthSourceAndResponsibilityIsValid(t *testing.T) {
+	for _, source := range []AuthSource{AuthSourceLocal, AuthSourceAD} {
+		if !source.IsValid() || source.String() == "" {
+			t.Errorf("expected auth source %q to be valid", source)
+		}
+	}
+	if AuthSource("LDAP").IsValid() {
+		t.Error("expected unknown auth source to be invalid")
+	}
+	for _, responsibility := range []ResponsibilityType{ResponsibilityOwner, ResponsibilityBackup, ResponsibilityReviewer} {
+		if !responsibility.IsValid() || responsibility.String() == "" {
+			t.Errorf("expected responsibility %q to be valid", responsibility)
+		}
+	}
+	if ResponsibilityType("LEAD").IsValid() {
+		t.Error("expected unknown responsibility to be invalid")
+	}
+}

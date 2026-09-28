@@ -206,3 +206,28 @@ func TestScoringHandler_ErrorBranches(t *testing.T) {
 		t.Errorf("expected 400 for invalid rules, got %d", rrInvRules.Code)
 	}
 }
+
+func TestScoringHandler_TargetTypeValidation(t *testing.T) {
+	mockSvc := &mockHandlerService{scoreLogs: []ScoreLogItem{{TargetID: "1"}}}
+	handler := NewHandler(mockSvc)
+
+	// Invalid target_type values must be rejected with 400
+	for _, invalid := range []string{"INVALID", "ROLE_USER", "TEAM", ""} {
+		req := httptest.NewRequest("GET", "/api/leaderboard/score-logs?target_type="+invalid+"&target_id=1", nil)
+		rr := httptest.NewRecorder()
+		handler.GetTargetScoreLogs(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("target_type=%q: expected 400, got %d", invalid, rr.Code)
+		}
+	}
+
+	// Valid target_type values LOCATION and USER must succeed
+	for _, valid := range []string{"LOCATION", "USER"} {
+		req := httptest.NewRequest("GET", "/api/leaderboard/score-logs?target_type="+valid+"&target_id=1", nil)
+		rr := httptest.NewRecorder()
+		handler.GetTargetScoreLogs(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("target_type=%q: expected 200, got %d", valid, rr.Code)
+		}
+	}
+}

@@ -10,6 +10,7 @@ import {
 import { useI18nStore } from "../i18n/index.ts";
 import { modalDialog } from "../store/dialogStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
+import { SyncStatus } from "../types/index.ts";
 import { haptics } from "../utils/haptics.ts";
 
 interface OfflineOutboxDrawerProps {
@@ -192,9 +193,9 @@ export function OfflineOutboxDrawer({
                         </div>
                         <span
                           className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
-                            item.sync_status === "SYNCING"
+                            item.sync_status === SyncStatus.SYNCING
                               ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                              : item.sync_status === "FAILED"
+                              : item.sync_status === SyncStatus.FAILED
                                 ? "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200"
                                 : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
                           }`}
@@ -237,11 +238,11 @@ export function OfflineOutboxDrawer({
                       </div>
                       <span
                         className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
-                          item.sync_status === "CONFLICT"
+                          item.sync_status === SyncStatus.CONFLICT
                             ? "bg-amber-500 text-white animate-pulse"
-                            : item.sync_status === "SYNCING"
+                            : item.sync_status === SyncStatus.SYNCING
                               ? "bg-blue-100 text-blue-800"
-                              : item.sync_status === "FAILED"
+                              : item.sync_status === SyncStatus.FAILED
                                 ? "bg-rose-100 text-rose-800"
                                 : "bg-zinc-100 text-zinc-800"
                         }`}
@@ -250,7 +251,7 @@ export function OfflineOutboxDrawer({
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      {item.sync_status === "CONFLICT" && onResolveConflict && (
+                      {item.sync_status === SyncStatus.CONFLICT && onResolveConflict && (
                         <button
                           type="button"
                           onClick={() => {

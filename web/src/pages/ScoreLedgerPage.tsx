@@ -3,7 +3,11 @@ import { useLocation } from "wouter";
 import { apiClient } from "../api/client.ts";
 import { PageContainer } from "../components/PageContainer.tsx";
 import { useI18nStore } from "../i18n/index.ts";
-import type { ScoreLogItem } from "../types/index.ts";
+import {
+  type ScoreLogItem,
+  TargetType,
+  type TargetType as TargetTypeValue,
+} from "../types/index.ts";
 import { goBack } from "../utils/navigation.ts";
 
 const SCORE_RULE_KEYS = [
@@ -28,7 +32,7 @@ function getScoreRuleLabel(
 }
 
 interface ScoreLedgerPageProps {
-  targetType: "LOCATION" | "USER";
+  targetType: TargetTypeValue;
   id: string;
   onSelectIssue?: (issueId: number) => void;
 }
@@ -76,7 +80,7 @@ export function ScoreLedgerPage({ targetType, id, onSelectIssue }: ScoreLedgerPa
   }, [targetType, id, t]);
 
   const totalPoints = logs.reduce((sum, item) => sum + item.points, 0);
-  const isLocation = targetType === "LOCATION";
+  const isLocation = targetType === TargetType.LOCATION;
   const displayedScore = isLocation ? Math.min(120, Math.max(0, 100 + totalPoints)) : totalPoints;
 
   const handleIssueClick = (issueId: number) => {

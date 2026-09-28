@@ -1,4 +1,14 @@
+import { EventType } from "../types/index.ts";
 import { createAuthTicket } from "./generated/index.ts";
+
+export interface IssueEventPayload {
+  type: EventType;
+  issue_id?: number;
+}
+
+export function isEventType(value: unknown): value is EventType {
+  return typeof value === "string" && Object.values(EventType).includes(value as EventType);
+}
 
 /** Delay before retrying a dropped issue event stream. */
 export const ISSUE_EVENT_RECONNECT_DELAY_MS = 1000;
@@ -11,7 +21,7 @@ export const ISSUE_EVENT_RECONNECT_DELAY_MS = 1000;
  * updates for the rest of the session.
  */
 export function subscribeIssueEvents(
-  onIssue: (event?: { type?: string; issue_id?: number }) => void,
+  onIssue: (event?: IssueEventPayload) => void,
   reconnectDelayMs = ISSUE_EVENT_RECONNECT_DELAY_MS,
 ): () => void {
   let source: EventSource | null = null;
@@ -40,13 +50,16 @@ export function subscribeIssueEvents(
       source = next;
       next.addEventListener("issue", (event) => {
         try {
-          const payload = JSON.parse((event as MessageEvent).data) as {
-            type?: string;
-            issue_id?: number;
-          };
-          onIssue(payload);
+          const raw = JSON.parse((event as MessageEvent).data) as {
+            type?: unknown;
+            issue_id?: unknown;
+          } | null;
+          if (!raw || typeof raw !== "object") return;
+          if (!isEventType(raw.type)) return;
+          const issue_id = typeof raw.issue_id === "number" ? raw.issue_id : undefined;
+          onIssue({ type: raw.type, issue_id });
         } catch {
-          onIssue();
+          // Safe ignore on malformed JSON; do not invent fallback semantics
         }
       });
       next.onerror = () => {

@@ -1,6 +1,5 @@
-import type { TagReviewAction } from "../../api/operations.ts";
 import { useI18nStore } from "../../i18n/index.ts";
-import { IssueCategory, type TagItem } from "../../types/index.ts";
+import { IssueCategory, type TagItem, TagReviewAction, TagStatus } from "../../types/index.ts";
 
 type TagItemData = TagItem;
 
@@ -21,8 +20,8 @@ export function TagCard({
 }) {
   const { t } = useI18nStore();
   const active = tag.is_active ?? true;
-  const pending = tag.status === "PENDING";
-  const rejected = tag.status === "REJECTED";
+  const pending = tag.status === TagStatus.PENDING;
+  const rejected = tag.status === TagStatus.REJECTED;
   return (
     <div
       className={`p-3.5 rounded-2xl border flex items-start justify-between gap-3 ${
@@ -94,14 +93,14 @@ export function TagCard({
           <>
             <button
               type="button"
-              onClick={() => onReview(tag, "APPROVE")}
+              onClick={() => onReview(tag, TagReviewAction.APPROVE)}
               className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border border-emerald-300 text-emerald-700 dark:text-emerald-300"
             >
               {t("admin.tag_approve_btn")}
             </button>
             <button
               type="button"
-              onClick={() => onReview(tag, "REJECT")}
+              onClick={() => onReview(tag, TagReviewAction.REJECT)}
               className="text-xs font-bold px-3 py-1.5 rounded-xl min-h-[44px] border border-rose-300 text-rose-700 dark:text-rose-300"
             >
               {t("admin.tag_reject_btn")}

@@ -14,11 +14,39 @@ import (
 	"6s/internal/crypto"
 )
 
-// Channel constants.
+// Channel identifies notification delivery destination.
+type Channel string
+
 const (
-	ChannelWxPusher   = "WXPUSHER"
-	ChannelLANWebhook = "LAN_WEBHOOK"
+	ChannelWxPusher   Channel = "WXPUSHER"
+	ChannelLANWebhook Channel = "LAN_WEBHOOK"
 )
+
+func (c Channel) String() string { return string(c) }
+
+func (c Channel) IsValid() bool { return c == ChannelWxPusher || c == ChannelLANWebhook }
+
+// OutboxStatus identifies notification delivery state.
+type OutboxStatus string
+
+const (
+	OutboxPending   OutboxStatus = "PENDING"
+	OutboxSending   OutboxStatus = "SENDING"
+	OutboxSent      OutboxStatus = "SENT"
+	OutboxFailed    OutboxStatus = "FAILED"
+	OutboxCancelled OutboxStatus = "CANCELLED"
+)
+
+func (s OutboxStatus) String() string { return string(s) }
+
+func (s OutboxStatus) IsValid() bool {
+	switch s {
+	case OutboxPending, OutboxSending, OutboxSent, OutboxFailed, OutboxCancelled:
+		return true
+	default:
+		return false
+	}
+}
 
 // Sender abstracts HTTP dispatch for notifications.
 type Sender interface {
@@ -53,7 +81,7 @@ func NewHTTPSender(cipher *crypto.Cipher) *HTTPSender {
 
 // Send dispatches payload to the corresponding destination based on channel.
 func (s *HTTPSender) Send(ctx context.Context, channel, payloadStr string, cfg DecryptedConfig) error {
-	switch channel {
+	switch Channel(channel) {
 	case ChannelWxPusher:
 		return s.sendWxPusher(ctx, payloadStr, cfg)
 	case ChannelLANWebhook:

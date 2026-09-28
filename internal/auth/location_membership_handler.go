@@ -93,8 +93,6 @@ type UpsertLocationMemberRequest struct {
 	IsActive           *bool   `json:"is_active,omitempty"`
 }
 
-var validResponsibility = map[string]struct{}{"OWNER": {}, "BACKUP": {}, "REVIEWER": {}}
-
 func parseTimePtr(t *string) (sql.NullTime, error) {
 	if t == nil || *t == "" {
 		return sql.NullTime{}, nil
@@ -119,7 +117,7 @@ func (h *LocationMembershipHandler) UpsertLocationMember(w http.ResponseWriter, 
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(err))
 		return
 	}
-	if _, ok := validResponsibility[req.ResponsibilityType]; !ok {
+	if !ResponsibilityType(req.ResponsibilityType).IsValid() {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrInvalidInput, "responsibility_type must be OWNER, BACKUP, or REVIEWER"))
 		return
 	}

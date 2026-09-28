@@ -60,8 +60,10 @@ components:
       properties:
         category:
           type: string
+          enum: [1S, 2S, 3S, 4S, 5S, 6S]
         cause_type:
           type: string
+          enum: [CONDITION, BEHAVIOR]
         location_code:
           type: string
         location_name:
@@ -243,6 +245,8 @@ components:
         - assignee_id
         - cause_team_id
         - cause_status
+        - cause_type
+        - visibility_class
         - category
         - location_code
         - tags
@@ -282,6 +286,14 @@ components:
           type: string
           enum: [UNVERIFIED, CONFIRMED, NOT_APPLICABLE]
           description: Trạng thái xác minh nguyên nhân; luôn có mặt, độc lập với cause_type
+        cause_type:
+          type: string
+          enum: [CONDITION, BEHAVIOR]
+          description: Phân loại nguyên nhân; luôn có mặt.
+        visibility_class:
+          type: string
+          enum: [SITE_PUBLIC, SAFETY_RESTRICTED]
+          description: Phạm vi hiển thị issue; luôn có mặt.
         responsibility_history:
           type: array
           description: Chỉ có ở GET /api/issues/{id}
@@ -1206,6 +1218,9 @@ paths:
                 category:
                   type: string
                   enum: [1S, 2S, 3S, 4S, 5S, 6S]
+                cause_type:
+                  type: string
+                  enum: [CONDITION, BEHAVIOR]
                 location_code:
                   type: string
                 tags:
@@ -2566,7 +2581,7 @@ paths:
                     type: object
                     properties:
                       category: {type: string}
-                      cause_type: {type: string}
+                      cause_type: {type: string, enum: [CONDITION, BEHAVIOR]}
                       tags: {type: array, items: {type: string}}
                       proposed_tags:
                         type: array

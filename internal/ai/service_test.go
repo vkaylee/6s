@@ -32,6 +32,19 @@ const (
 	testCategory6S = "6S"
 )
 
+func TestValidReviewCauseType(t *testing.T) {
+	for _, causeType := range []string{"CONDITION", "BEHAVIOR"} {
+		if !validReviewCauseType(causeType) {
+			t.Errorf("validReviewCauseType(%q) = false", causeType)
+		}
+	}
+	for _, causeType := range []string{"MANUAL", "", "condition"} {
+		if validReviewCauseType(causeType) {
+			t.Errorf("validReviewCauseType(%q) = true", causeType)
+		}
+	}
+}
+
 func TestVisionProbeImageIsValidPNG(t *testing.T) {
 	encoded := strings.TrimPrefix(testImageRedPNG, "data:image/png;base64,")
 	data, err := base64.StdEncoding.DecodeString(encoded)

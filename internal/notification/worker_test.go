@@ -12,6 +12,25 @@ import (
 	"6s/internal/db"
 )
 
+func TestNotificationEnumsValid(t *testing.T) {
+	for _, channel := range []Channel{ChannelWxPusher, ChannelLANWebhook} {
+		if !channel.IsValid() || channel.String() == "" {
+			t.Errorf("expected channel %q to be valid", channel)
+		}
+	}
+	if Channel("UNKNOWN").IsValid() {
+		t.Error("expected unknown channel to be invalid")
+	}
+	for _, status := range []OutboxStatus{OutboxPending, OutboxSending, OutboxSent, OutboxFailed, OutboxCancelled} {
+		if !status.IsValid() || status.String() == "" {
+			t.Errorf("expected outbox status %q to be valid", status)
+		}
+	}
+	if OutboxStatus("UNKNOWN").IsValid() {
+		t.Error("expected unknown outbox status to be invalid")
+	}
+}
+
 type mockNotificationStore struct {
 	tasks     []db.NotificationOutbox
 	sentIDs   []int64
@@ -87,7 +106,7 @@ func TestOutboxWorker_HappyPath(t *testing.T) {
 				IssueID:    10,
 				Status:     "SENDING",
 				EventType:  "NEW_ISSUE",
-				Channel:    ChannelWxPusher,
+				Channel:    ChannelWxPusher.String(),
 				Payload:    json.RawMessage(`{"issue_id":10,"category":"3S"}`),
 				MaxRetries: 5,
 			},
@@ -116,7 +135,7 @@ func TestOutboxWorker_RetryAndFallback(t *testing.T) {
 				Status:     "SENDING",
 				IssueID:    20,
 				EventType:  "NEW_ISSUE",
-				Channel:    ChannelWxPusher,
+				Channel:    ChannelWxPusher.String(),
 				Payload:    json.RawMessage(`{"issue_id":20,"category":"6S"}`),
 				RetryCount: 4,
 				MaxRetries: 5, // Next failure will exhaust retries (4 + 1 >= 5)
@@ -129,7 +148,7 @@ func TestOutboxWorker_RetryAndFallback(t *testing.T) {
 			PublicBaseUrl:    "https://6s.factory.lan",
 		},
 	}
-	sender := &mockSender{failChannel: ChannelWxPusher}
+	sender := &mockSender{failChannel: ChannelWxPusher.String()}
 	worker := NewWorker(store, sender, nil, nil)
 
 	worker.ProcessBatch(context.Background())
@@ -139,7 +158,7 @@ func TestOutboxWorker_RetryAndFallback(t *testing.T) {
 	}
 
 	// Verify fallback created for LAN_WEBHOOK
-	if len(store.created) != 1 || store.created[0].Channel != ChannelLANWebhook {
+	if len(store.created) != 1 || store.created[0].Channel != ChannelLANWebhook.String() {
 		t.Errorf("expected LAN_WEBHOOK fallback created, got %+v", store.created)
 	}
 }
@@ -176,7 +195,7 @@ func TestOutboxWorker_ConfigAndErrorBranches(t *testing.T) {
 			PublicBaseUrl:    "http://6s.lan",
 		},
 		tasks: []db.NotificationOutbox{
-			{ID: 1, IssueID: 10, Status: "SENDING", Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
+			{ID: 1, IssueID: 10, Status: OutboxSending.String(), Channel: ChannelWxPusher.String(), Payload: []byte(`{}`), MaxRetries: 3},
 		},
 	}
 	sender := &mockSender{}
@@ -192,7 +211,7 @@ func TestOutboxWorker_ConfigAndErrorBranches(t *testing.T) {
 	// 2. sql.ErrNoRows returns default config
 	store.cfgErr = sql.ErrNoRows
 	store.tasks = []db.NotificationOutbox{
-		{ID: 2, IssueID: 10, Status: "SENDING", Channel: ChannelWxPusher, Payload: []byte(`{}`), MaxRetries: 3},
+		{ID: 2, IssueID: 10, Status: OutboxSending.String(), Channel: ChannelWxPusher.String(), Payload: []byte(`{}`), MaxRetries: 3},
 	}
 	worker.ProcessBatch(ctx)
 	if len(store.sentIDs) != 2 {

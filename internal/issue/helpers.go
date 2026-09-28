@@ -48,7 +48,7 @@ func userFromContext(ctx context.Context) db.User {
 
 func visibilityForCategory(category string) string {
 	if category == Category6S.String() {
-		return "SAFETY_RESTRICTED"
+		return VisibilitySafetyRestricted.String()
 	}
-	return "SITE_PUBLIC"
+	return VisibilitySitePublic.String()
 }

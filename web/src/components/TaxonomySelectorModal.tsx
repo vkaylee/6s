@@ -1,7 +1,13 @@
 import { Check, Search, Sparkles, Tag, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useI18nStore } from "../i18n/index.ts";
-import { type IssueCategory, resolveTagLabel, S_CATEGORIES, type TagItem } from "../types/index.ts";
+import {
+  type IssueCategory,
+  resolveTagLabel,
+  S_CATEGORIES,
+  type TagItem,
+  TagStatus,
+} from "../types/index.ts";
 import { TaxonomyAiSuggestions } from "./taxonomy/TaxonomyAiSuggestions.tsx";
 import { TaxonomyTagList } from "./taxonomy/TaxonomyTagList.tsx";
 import { useTaxonomySelection } from "./taxonomy/useTaxonomySelection.ts";
@@ -244,14 +250,14 @@ export function TaxonomySelectorModal({
           onSelectCategory={onSelectCategory}
         />
         {/* Pending tags section */}
-        {tags.some((t) => t.status === "PENDING") && (
+        {tags.some((tag) => tag.status === TagStatus.PENDING) && (
           <div className="mx-4 mt-3 p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20">
             <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300 mb-1.5">
               {t("issue.tag_pending_section")}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {tags
-                .filter((t) => t.status === "PENDING")
+                .filter((tag) => tag.status === TagStatus.PENDING)
                 .map((tag) => {
                   const code = tag.code || tag.tag_code || "";
                   const isChecked = selectedTags.includes(code);

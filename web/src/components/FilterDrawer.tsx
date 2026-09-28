@@ -12,8 +12,8 @@ import {
 export type IssueDeletionFilter = "active" | "deleted";
 
 export interface FilterState {
-  statuses: string[];
-  categories: string[];
+  statuses: IssueStatus[];
+  categories: IssueCategory[];
   locationCodes: string[];
   assignedTeamId?: number | null;
   mineTeam?: boolean;
@@ -105,14 +105,14 @@ export function FilterDrawer({
     IssueStatus.INVALID,
   ];
 
-  const toggleCategory = (cat: string) => {
+  const toggleCategory = (cat: IssueCategory) => {
     const next = filters.categories.includes(cat)
       ? filters.categories.filter((c) => c !== cat)
       : [...filters.categories, cat];
     onApply({ ...filters, categories: next });
   };
 
-  const toggleStatus = (st: string) => {
+  const toggleStatus = (st: IssueStatus) => {
     const next = filters.statuses.includes(st)
       ? filters.statuses.filter((s) => s !== st)
       : [...filters.statuses, st];

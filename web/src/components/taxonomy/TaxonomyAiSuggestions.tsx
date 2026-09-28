@@ -4,6 +4,7 @@ import {
   type ProposedTagItem,
   resolveTagLabel,
   type TagItem,
+  TagStatus,
 } from "../../types/index.ts";
 import { normalizeSearchText } from "../../utils/tagSearch.ts";
 
@@ -115,7 +116,7 @@ export function TaxonomyAiSuggestions({
                         ...proposal,
                         code,
                         use_count: 0,
-                        status: "PENDING",
+                        status: TagStatus.PENDING,
                       });
                     onToggleTag(code);
                     if (

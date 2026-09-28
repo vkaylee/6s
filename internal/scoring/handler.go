@@ -86,7 +86,7 @@ func (h *Handler) GetIssueScoreLogs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTargetScoreLogs(w http.ResponseWriter, r *http.Request) {
 	targetType := r.URL.Query().Get("target_type")
 	targetID := r.URL.Query().Get("target_id")
-	if targetType != "LOCATION" && targetType != auth.RoleUser.String() {
+	if !TargetType(targetType).IsValid() {
 		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest))
 		return
 	}

@@ -5,6 +5,7 @@ import {
   type ProposedTagItem,
   resolveTagLabel,
   type TagItem,
+  TagStatus,
 } from "../../types/index.ts";
 
 export const CATEGORY_BADGE_COLORS: Record<string, string> = {
@@ -56,7 +57,7 @@ export function IssueTaxonomySection({
           {tags.map((tag) => {
             const code = tag.code || tag.tag_code || "";
             const isChecked = selectedTags.includes(code);
-            const isPending = tag.status === "PENDING";
+            const isPending = tag.status === TagStatus.PENDING;
             return (
               <button
                 key={code}
@@ -116,7 +117,7 @@ export function IssueTaxonomySection({
               : "bg-zinc-100 text-zinc-700 border-zinc-200";
 
             const isPending =
-              tagObj?.status === "PENDING" ||
+              tagObj?.status === TagStatus.PENDING ||
               proposedTags.some((pt) => pt.name_vi === (tagObj?.name_vi || tagCode));
             return (
               <span

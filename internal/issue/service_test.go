@@ -225,8 +225,8 @@ func (c *countingIssueStore) ListVisibleIssueEventRecipients(_ context.Context, 
 
 func TestIssueService_ListIssuesFiltered_BatchesTagQueries(t *testing.T) {
 	store := &countingIssueStore{mockIssueStore: newMockIssueStore()}
-	store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 1, Category: "1S", CauseType: "MANUAL", LocationCode: "LINE_A1", PhotoBefore: "a.jpg", Status: "OPEN", CreatedAt: time.Now()}
-	store.issues[2] = db.Issue{ID: 2, ClientUuid: "u2", Version: 1, CreatorID: 1, Category: "2S", CauseType: "MANUAL", LocationCode: "LINE_A1", PhotoBefore: "b.jpg", Status: "OPEN", CreatedAt: time.Now()}
+	store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 1, Category: "1S", CauseType: "CONDITION", LocationCode: "LINE_A1", PhotoBefore: "a.jpg", Status: "OPEN", CreatedAt: time.Now()}
+	store.issues[2] = db.Issue{ID: 2, ClientUuid: "u2", Version: 1, CreatorID: 1, Category: "2S", CauseType: "CONDITION", LocationCode: "LINE_A1", PhotoBefore: "b.jpg", Status: "OPEN", CreatedAt: time.Now()}
 	store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Chuyền A1"}
 	store.users[1] = db.User{ID: 1, Username: "tin", FullName: "Tin"}
 	store.tags[1] = []string{"DIRT", "SCRAP"}
@@ -315,7 +315,7 @@ func TestIssueService_PatchIssue_TagFailureRollsBackIssueAndTags(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newMockIssueStore()
-			store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 10, Category: "1S", CauseType: "MANUAL", LocationCode: "LINE_A1", Status: "OPEN", CreatedAt: time.Now()}
+			store.issues[1] = db.Issue{ID: 1, ClientUuid: "u1", Version: 1, CreatorID: 10, Category: "1S", CauseType: "CONDITION", LocationCode: "LINE_A1", Status: "OPEN", CreatedAt: time.Now()}
 			store.locations["LINE_A1"] = db.Location{Code: "LINE_A1", NameVi: "Line A1"}
 			store.users[10] = db.User{ID: 10, Username: "worker", FullName: "Worker"}
 			store.tags[1] = []string{"old"}
@@ -1515,13 +1515,13 @@ func TestIssueService_ResponsibilityHistoryActions(t *testing.T) {
 	store.issues[1] = db.Issue{
 		ID: 1, ClientUuid: "c0a80101-0000-4000-8000-0000000000a1", Version: 2, SiteID: 1,
 		CreatorID: admin.ID, LocationCode: "LINE_A1", Category: "3S", VisibilityClass: "SITE_PUBLIC",
-		Status: StatusOpen.String(), CauseStatus: CauseStatusConfirmed, CreatedAt: time.Now(),
+		Status: StatusOpen.String(), CauseStatus: CauseStatusConfirmed.String(), CreatedAt: time.Now(),
 	}
 	store.history[1] = []db.ListIssueResponsibilityHistoryRow{
-		{ID: 1, Action: auditActionAssignResponsibility, OldValue: []byte(`{"assigned_team_id":null,"assignee_id":null}`), NewValue: []byte(`{"assigned_team_id":5,"assignee_id":10}`), CreatedAt: time.Now()},
-		{ID: 2, Action: auditActionAssignResponsibility, OldValue: []byte(`{"assigned_team_id":5,"assignee_id":10}`), NewValue: []byte(`{"assigned_team_id":6,"assignee_id":null}`), CreatedAt: time.Now()},
-		{ID: 3, Action: auditActionAssignResponsibility, OldValue: []byte(`{"asset_id":7,"assigned_team_id":6,"assignee_id":null}`), NewValue: []byte(`{"asset_id":8,"assigned_team_id":6,"assignee_id":null}`), CreatedAt: time.Now()},
-		{ID: 4, Action: auditActionVerifyCause, OldValue: []byte(`{"cause_status":"UNVERIFIED"}`), NewValue: []byte(`{"cause_status":"CONFIRMED"}`), CreatedAt: time.Now()},
+		{ID: 1, Action: auditActionAssignResponsibility.String(), OldValue: []byte(`{"assigned_team_id":null,"assignee_id":null}`), NewValue: []byte(`{"assigned_team_id":5,"assignee_id":10}`), CreatedAt: time.Now()},
+		{ID: 2, Action: auditActionAssignResponsibility.String(), OldValue: []byte(`{"assigned_team_id":5,"assignee_id":10}`), NewValue: []byte(`{"assigned_team_id":6,"assignee_id":null}`), CreatedAt: time.Now()},
+		{ID: 3, Action: auditActionAssignResponsibility.String(), OldValue: []byte(`{"asset_id":7,"assigned_team_id":6,"assignee_id":null}`), NewValue: []byte(`{"asset_id":8,"assigned_team_id":6,"assignee_id":null}`), CreatedAt: time.Now()},
+		{ID: 4, Action: auditActionVerifyCause.String(), OldValue: []byte(`{"cause_status":"UNVERIFIED"}`), NewValue: []byte(`{"cause_status":"CONFIRMED"}`), CreatedAt: time.Now()},
 	}
 
 	tempDir := t.TempDir()
@@ -1536,7 +1536,7 @@ func TestIssueService_ResponsibilityHistoryActions(t *testing.T) {
 	for _, entry := range resp.ResponsibilityHistory {
 		actions = append(actions, entry.Action)
 	}
-	want := []string{HistoryActionAssign, HistoryActionTransfer, HistoryActionOther, HistoryActionCauseVerify}
+	want := []string{HistoryActionAssign.String(), HistoryActionTransfer.String(), HistoryActionOther.String(), HistoryActionCauseVerify.String()}
 	if fmt.Sprint(actions) != fmt.Sprint(want) {
 		t.Fatalf("history actions = %v, want %v", actions, want)
 	}
