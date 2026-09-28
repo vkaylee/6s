@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.build.json && vite build",
-    "lint": "biome check . && tsc --noEmit",
-    "lint:fix": "biome check --write . && tsc --noEmit",
+    "check-file-length": "node scripts/check-file-length.mjs",
+    "lint": "node scripts/check-file-length.mjs && biome check . && tsc --noEmit",
+    "lint:fix": "node scripts/check-file-length.mjs && biome check --write . && tsc --noEmit",
     "type-check": "tsc --noEmit",
     "check-i18n": "bun test test/i18n.test.tsx",
     "openapi:check": "node scripts/openapi-operations.mjs",
