@@ -41,8 +41,8 @@ interface CreateIssuePageProps {
 
 export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageProps) {
   useHeaderVisibility();
-  const { t, locale: storeLocale } = useI18nStore();
-  const locale = typeof window === "undefined" ? useI18nStore.getState().locale : storeLocale;
+  const { t } = useI18nStore();
+  const locale = useI18nStore.getState().locale;
   const [, setLocation] = useLocation();
 
   const [category, setCategory] = useState<IssueCategory | null>(null);

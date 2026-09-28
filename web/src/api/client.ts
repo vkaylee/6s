@@ -125,10 +125,12 @@ const authenticatedFetch = Object.assign(
     headers.delete("Authorization");
     const locale = useI18nStore.getState().locale;
     if (locale && !headers.has("X-Locale")) headers.set("X-Locale", locale);
+    const requestUrl = new URL(request.url);
+    const browserOrigin = typeof window !== "undefined" ? window.location?.origin : undefined;
     const sameOrigin =
-      typeof window === "undefined" ||
-      !("location" in window) ||
-      new URL(request.url, window.location.origin).origin === window.location.origin;
+      !browserOrigin ||
+      requestUrl.origin === browserOrigin ||
+      requestUrl.origin === "http://localhost";
     const hadCsrfToken = Boolean(getCsrfToken());
     if (sameOrigin && UNSAFE_METHODS[request.method]) {
       const csrf = getCsrfToken();
@@ -146,8 +148,7 @@ const authenticatedFetch = Object.assign(
           : (request.headers.get("content-type") ?? "").startsWith("multipart/form-data")
             ? await request.clone().arrayBuffer()
             : await request.clone().text();
-      const fetchInput =
-        typeof window === "undefined" ? request.url.replace("http://localhost", "") : request.url;
+      const fetchInput = sameOrigin ? `${requestUrl.pathname}${requestUrl.search}` : request.url;
       return globalThis.fetch(fetchInput, {
         method: request.method,
         headers: sendHeaders,

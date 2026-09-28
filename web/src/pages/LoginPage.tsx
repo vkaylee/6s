@@ -17,7 +17,9 @@ export function LoginPage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const returnTo = new URLSearchParams(searchString).get("return_to") || "/";
-  const { user, setAuth } = useAuthStore();
+  const { setAuth } = useAuthStore();
+  const storeUser = useAuthStore((s) => s.user);
+  const user = storeUser ?? useAuthStore.getState().user;
   const [rememberedUser, setRememberedUser] = useState(getRememberedUser);
   const [username, setUsername] = useState(() => getRememberedUser()?.username ?? "");
   const [password, setPassword] = useState("");

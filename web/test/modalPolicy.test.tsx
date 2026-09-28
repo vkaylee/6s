@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { renderToString } from "react-dom/server";
@@ -23,6 +23,9 @@ function getAllSourceFiles(dir: string): string[] {
 }
 
 describe("Frontend Modal Policy Enforcement", () => {
+  beforeEach(() => {
+    useDialogStore.setState({ isOpen: false, options: { message: "" }, resolvePromise: null });
+  });
   it("forbids native window.alert, window.confirm, and window.prompt across all web/src source files", () => {
     const srcDir = join(import.meta.dir, "../src");
     const files = getAllSourceFiles(srcDir);

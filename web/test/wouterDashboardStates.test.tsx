@@ -74,8 +74,9 @@ describe("Wouter App Feed States & Pagination Verification", () => {
           { statuses: ["OPEN"], categories: ["1S"], locationCodes: ["L1"] }, // 16. advancedFilters (renders chips)
           false, // 17. isDrawerOpen
           null, // 18. selectedIssue
-          null, // 19. conflictItem
-          false, // 20. isSetupOpen
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          null, // 20. conflictItem
+          false, // 21. isSetupOpen
         ]}
       >
         <Router ssrPath="/">
@@ -132,8 +133,9 @@ describe("Wouter App Feed States & Pagination Verification", () => {
           { statuses: [], categories: [], locationCodes: [] }, // 16. advancedFilters
           false, // 17. isDrawerOpen
           null, // 18. selectedIssue
-          null, // 19. conflictItem
-          false, // 20. isSetupOpen
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          null, // 20. conflictItem
+          false, // 21. isSetupOpen
         ]}
       >
         <Router ssrPath="/">
@@ -168,8 +170,9 @@ describe("Wouter App Feed States & Pagination Verification", () => {
           { statuses: [], categories: [], locationCodes: [] }, // 16. advancedFilters
           false, // 17. isDrawerOpen
           null, // 18. selectedIssue
-          null, // 19. conflictItem
-          false, // 20. isSetupOpen
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          null, // 20. conflictItem
+          false, // 21. isSetupOpen
         ]}
       >
         <Router ssrPath="/">
@@ -218,8 +221,9 @@ describe("Wouter App Feed States & Pagination Verification", () => {
           { statuses: [], categories: [], locationCodes: [] }, // 16. advancedFilters
           false, // 17. isDrawerOpen
           null, // 18. selectedIssue
-          null, // 19. conflictItem
-          false, // 20. isSetupOpen
+          { issues: false, masterData: false, leaderboards: false }, // 19. dashboardErrors
+          null, // 20. conflictItem
+          false, // 21. isSetupOpen
         ]}
       >
         <Router ssrPath="/">

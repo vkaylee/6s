@@ -11,11 +11,11 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedCapability, allowedRole }: ProtectedRouteProps) {
-  const storeState = useAuthStore();
+  useAuthStore();
   const { t } = useI18nStore();
-  const user = storeState.user ?? useAuthStore.getState().user;
-  const isLoading =
-    typeof window === "undefined" ? useAuthStore.getState().isLoading : storeState.isLoading;
+  const authState = useAuthStore.getState();
+  const user = authState.user;
+  const isLoading = authState.isLoading;
   const [location, setLocation] = useLocation();
 
   useEffect(() => {

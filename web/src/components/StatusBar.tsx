@@ -18,11 +18,9 @@ interface StatusBarProps {
 
 export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusBarProps) {
   const { t } = useI18nStore();
-  const storeUser = useAuthStore((s) => s.user);
-  const user = typeof window === "undefined" ? useAuthStore.getState().user : storeUser;
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true,
-  );
+  useAuthStore((s) => s.user);
+  const user = useAuthStore.getState().user;
+  const [isOnline, setIsOnline] = useState(false);
   const [progress, setProgress] = useState<SyncProgress>({
     total: 0,
     completed: 0,

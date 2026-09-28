@@ -13,7 +13,6 @@ function WithMockState({ values, children }: { values: unknown[]; children: Reac
         ReactCurrentDispatcher: {
           current: {
             useState: (init: unknown) => [unknown, () => void];
-            useSyncExternalStore: (sub: unknown, snap: () => unknown) => unknown;
           };
         };
       };
@@ -29,7 +28,6 @@ function WithMockState({ values, children }: { values: unknown[]; children: Reac
           : init;
     return [val, () => {}];
   };
-  internals.current.useSyncExternalStore = (_sub: unknown, snap: () => unknown) => snap();
   return <>{children}</>;
 }
 
