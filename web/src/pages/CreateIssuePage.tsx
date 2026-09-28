@@ -75,6 +75,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [proposedTags, setProposedTags] = useState<ProposedTagItem[]>([]);
   const [isTaxonomyOpen, setIsTaxonomyOpen] = useState(false);
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
+  const handleCloseTaxonomy = useCallback(() => setIsTaxonomyOpen(false), []);
 
   const wideInputRef = useRef<HTMLInputElement>(null);
   const detailInputRef = useRef<HTMLInputElement>(null);
@@ -470,7 +471,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       />
       <TaxonomySelectorModal
         isOpen={isTaxonomyOpen}
-        onClose={() => setIsTaxonomyOpen(false)}
+        onClose={handleCloseTaxonomy}
         tags={localTags}
         selectedTags={selectedTags}
         currentCategory={category}

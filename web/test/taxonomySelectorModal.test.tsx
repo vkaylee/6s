@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type * as React from "react";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { TaxonomySelectorModal } from "../src/components/TaxonomySelectorModal.tsx";
 import { invalidateAiStatus, loadAiStatus } from "../src/hooks/useAiStatus.ts";
@@ -138,7 +137,7 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
         onSelectCategory={() => {}}
       />,
     );
-    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
     await setInputValue(input, "vết dầu loang");
     const aiBtn = button(container, "AI gợi ý");
     await act(async () => {
@@ -195,7 +194,7 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
     );
     await act(async () => {});
 
-    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
     await setInputValue(input, "dau nhot");
 
     const aiBtn = button(container, "AI gợi ý");
@@ -263,7 +262,7 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
     );
     await act(async () => {});
 
-    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
     await setInputValue(input, "su co");
 
     const aiBtn = button(container, "AI gợi ý");
@@ -278,7 +277,7 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
     expect(container.textContent).not.toContain("AI chưa tìm thấy thẻ phù hợp cho nội dung này.");
   });
 
-  it("expands the mobile sheet and frees list space while searching", async () => {
+  it("keeps mobile sheet geometry stable when search input receives focus", async () => {
     installFetch((url) => {
       if (url.includes("/api/ai/status")) {
         return new Response(JSON.stringify({ data: { enabled: false } }), { status: 200 });
@@ -297,8 +296,8 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
         onSelectCategory={() => {}}
       />,
     );
-    const sheet = container.querySelector(".h-\\[85dvh\\]") as HTMLElement;
-    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    const sheet = container.querySelector(".h-\\[90dvh\\]") as HTMLElement;
+    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
     expect(sheet).toBeTruthy();
     expect(sheet.querySelector(".min-h-0.flex-1.overflow-y-auto")).toBeTruthy();
     expect(input.placeholder).toContain("Tìm nhanh thẻ");
@@ -306,12 +305,96 @@ describe("TaxonomySelectorModal AI suggestion flow", () => {
     await act(async () => {
       input.focus();
     });
-    expect(container.querySelector(".h-\\[94dvh\\]")).toBeTruthy();
-    expect(container.textContent).not.toContain(
+    expect(document.activeElement).toBe(input);
+    expect(container.querySelector(".h-\\[90dvh\\]")).toBeTruthy();
+    expect(container.textContent).toContain(
       "Tìm kiếm và chọn thẻ sự cố để chuẩn hóa dữ liệu và tự động phân loại S",
     );
 
     await setInputValue(input, "dau");
+    expect(document.activeElement).toBe(input);
     expect(container.querySelector(".hidden.sm\\:flex")).toBeTruthy();
+  });
+
+  it("keeps search input focused across parent re-renders and ignores backdrop in focus trap", async () => {
+    installFetch((url) => {
+      if (url.includes("/api/ai/status")) {
+        return new Response(JSON.stringify({ data: { enabled: false } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+
+    let rerenderFn: (() => void) | undefined;
+    function Wrapper() {
+      const [closeHandler, setCloseHandler] = useState<() => void>(() => () => {});
+      rerenderFn = () => setCloseHandler(() => () => {});
+      return (
+        <TaxonomySelectorModal
+          isOpen={true}
+          onClose={closeHandler}
+          tags={mockTags}
+          selectedTags={[]}
+          currentCategory={IssueCategory.S3}
+          onToggleTag={() => {}}
+          onSelectCategory={() => {}}
+        />
+      );
+    }
+
+    const container = await mount(<Wrapper />);
+    const backdrop = container.querySelector('button[aria-hidden="true"]') as HTMLButtonElement;
+    expect(backdrop).toBeTruthy();
+    expect(backdrop.getAttribute("tabindex")).toBe("-1");
+
+    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
+    expect(input.getAttribute("autocomplete")).toBe("off");
+    expect(input.getAttribute("spellcheck")).toBe("false");
+
+    await act(async () => {
+      input.focus();
+    });
+    expect(document.activeElement).toBe(input);
+
+    // Simulate parent re-render with a new onClose identity
+    await act(async () => {
+      rerenderFn?.();
+    });
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("dismisses on backdrop click and closes on Escape key without focus leak", async () => {
+    installFetch((url) => {
+      if (url.includes("/api/ai/status")) {
+        return new Response(JSON.stringify({ data: { enabled: false } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+
+    let closedCount = 0;
+    const container = await mount(
+      <TaxonomySelectorModal
+        isOpen={true}
+        onClose={() => {
+          closedCount += 1;
+        }}
+        tags={mockTags}
+        selectedTags={[]}
+        currentCategory={IssueCategory.S3}
+        onToggleTag={() => {}}
+        onSelectCategory={() => {}}
+      />,
+    );
+
+    const backdrop = container.querySelector('button[aria-hidden="true"]') as HTMLButtonElement;
+    expect(backdrop).toBeTruthy();
+    await act(async () => {
+      backdrop.click();
+    });
+    expect(closedCount).toBe(1);
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(closedCount).toBe(2);
   });
 });

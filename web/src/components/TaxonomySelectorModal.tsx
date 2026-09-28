@@ -40,8 +40,6 @@ export function TaxonomySelectorModal({
     autoFeedback,
     tagQuery,
     setTagQuery,
-    isSearchFocused,
-    setIsSearchFocused,
     aiLoading,
     aiError,
     aiRequested,
@@ -62,6 +60,8 @@ export function TaxonomySelectorModal({
     onAddCustomTag,
   });
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   // Escape closes; Tab cycles inside the dialog and focus returns to the opener.
   useEffect(() => {
     if (!isOpen) return;
@@ -73,12 +73,12 @@ export function TaxonomySelectorModal({
         dialog.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
         ),
-      );
+      ).filter((element) => !element.hasAttribute("aria-hidden"));
     focusables()[0]?.focus();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -100,7 +100,7 @@ export function TaxonomySelectorModal({
       document.removeEventListener("keydown", handleKeyDown);
       previouslyFocused?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -115,20 +115,15 @@ export function TaxonomySelectorModal({
       {/* Clickable Backdrop overlay button for a11y & instant dismiss */}
       <button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        onClick={() => onCloseRef.current()}
         aria-label={t("common.close")}
         className="fixed inset-0 w-full h-full cursor-default bg-transparent -z-10 focus:outline-none"
       />
-      <div
-        className={`w-full sm:max-w-2xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col transition-all duration-200 ${
-          isSearchFocused || tagQuery.trim() ? "h-[94dvh]" : "h-[85dvh]"
-        } sm:h-auto sm:max-h-[82vh]`}
-      >
-        {/* Header - collapses subtitle when searching on mobile */}
-        <div
-          className={`border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between transition-all ${
-            isSearchFocused || tagQuery.trim() ? "p-3 sm:p-5" : "p-4 sm:p-5"
-          }`}
-        >
+      <div className="w-full sm:max-w-2xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col h-[90dvh] sm:h-auto sm:max-h-[82vh]">
+        {/* Header */}
+        <div className="p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
             <h2
               id="taxonomy-modal-title"
@@ -137,11 +132,9 @@ export function TaxonomySelectorModal({
               <Tag className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>{t("issue.tags_modal_title")}</span>
             </h2>
-            {!(isSearchFocused || tagQuery.trim()) && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                {t("issue.tags_modal_desc")}
-              </p>
-            )}
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              {t("issue.tags_modal_desc")}
+            </p>
           </div>
           <button
             type="button"
@@ -159,10 +152,11 @@ export function TaxonomySelectorModal({
             <div className="relative flex-1 flex items-center">
               <Search className="w-3.5 h-3.5 absolute left-3 text-zinc-400 pointer-events-none" />
               <input
-                type="text"
+                type="search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={tagQuery}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
                 onChange={(e) => setTagQuery(e.target.value)}
                 placeholder={t("issue.tag_search_placeholder")}
                 className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-8 py-2.5 text-base text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[42px]"

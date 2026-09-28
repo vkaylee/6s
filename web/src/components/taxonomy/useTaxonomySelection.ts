@@ -34,7 +34,6 @@ export function useTaxonomySelection({
   });
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiRequested, setAiRequested] = useState(false);
@@ -136,8 +135,6 @@ export function useTaxonomySelection({
     autoFeedback,
     tagQuery,
     setTagQuery,
-    isSearchFocused,
-    setIsSearchFocused,
     aiLoading,
     aiError,
     aiRequested,
