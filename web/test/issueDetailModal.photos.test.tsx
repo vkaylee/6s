@@ -74,7 +74,7 @@ describe("IssueDetailModal - Photos", () => {
       'button[aria-label="Chạm ảnh để xem toàn màn hình"]',
     ) as HTMLButtonElement | null;
     expect(photoButton).toBeNull();
-    expect(container.textContent).toContain("Không thể tải ảnh");
+    expect(container.textContent).toContain("Bạn không có quyền xem ảnh này");
     expect(container.textContent).not.toContain("Chạm ảnh để xem toàn màn hình");
 
     await act(async () => {

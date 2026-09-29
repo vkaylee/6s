@@ -119,7 +119,8 @@ export function AuthenticatedImage({
   ...props
 }: AuthenticatedImageProps) {
   const { t } = useI18nStore();
-  const { blobUrl, error, setError, reloadKey, retry } = useAuthenticatedImageUrl(imageUrl);
+  const { blobUrl, error, setError, reloadKey, loadFallback, retry } =
+    useAuthenticatedImageUrl(imageUrl);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [showSkeleton, setShowSkeleton] = useState(false);
 
@@ -142,9 +143,15 @@ export function AuthenticatedImage({
   };
 
   const handleError: ReactEventHandler<HTMLImageElement> = (event) => {
-    setStatus("error");
-    setError("UNKNOWN");
     onError?.(event);
+    setStatus("error");
+    void loadFallback().then((loaded) => {
+      if (loaded) {
+        setStatus("loading");
+      } else {
+        setError((prev) => prev ?? "UNKNOWN");
+      }
+    });
   };
 
   const mediaError = errorCopy(error ?? (status === "error" ? "UNKNOWN" : null), t);
