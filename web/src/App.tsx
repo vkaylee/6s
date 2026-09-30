@@ -16,6 +16,14 @@ import { useMasterdataStore } from "./store/masterdataStore.ts";
 import { useRouteHistoryStore } from "./store/routeHistoryStore.ts";
 import { useThemeStore } from "./store/themeStore.ts";
 
+export function isBackGestureBlocked(
+  isDrawerOpen: boolean,
+  isFilterDrawerOpen: boolean,
+  conflictItem: unknown,
+) {
+  return isDrawerOpen || isFilterDrawerOpen || conflictItem != null;
+}
+
 export function App() {
   const { t, locale } = useI18nStore();
   const { user, restoreSession } = useAuthStore();
@@ -65,18 +73,33 @@ export function App() {
     }
   }, [currentPath, pushRoute]);
 
+  const closeIssue = useCallback(() => {
+    setSelectedIssue(null);
+    const currentParams = new URLSearchParams(searchString);
+    if (currentParams.has("issue_id")) {
+      currentParams.delete("issue_id");
+      const newSearch = currentParams.toString();
+      setLocation(newSearch ? `${currentPath}?${newSearch}` : currentPath, {
+        replace: true,
+      });
+    }
+  }, [currentPath, searchString, setLocation, setSelectedIssue]);
+
   const handleBack = useCallback(() => {
+    if (selectedIssue) {
+      closeIssue();
+      return;
+    }
     const previous = useRouteHistoryStore.getState().pop();
     if (previous) {
       setLocation(previous.split("?")[0]);
     }
-  }, [setLocation]);
+  }, [closeIssue, selectedIssue, setLocation]);
 
   useEdgeSwipeBack({
     onBack: handleBack,
     enabled: Boolean(user) && !isSetupOpen,
-    blocked: () =>
-      isDrawerOpen || isFilterDrawerOpen || selectedIssue != null || conflictItem != null,
+    blocked: () => isBackGestureBlocked(isDrawerOpen, isFilterDrawerOpen, conflictItem),
   });
 
   return (
@@ -105,17 +128,7 @@ export function App() {
           <IssueDetailModal
             issue={selectedIssue}
             isOpen={true}
-            onClose={() => {
-              setSelectedIssue(null);
-              const currentParams = new URLSearchParams(searchString);
-              if (currentParams.has("issue_id")) {
-                currentParams.delete("issue_id");
-                const newSearch = currentParams.toString();
-                setLocation(newSearch ? `${currentPath}?${newSearch}` : currentPath, {
-                  replace: true,
-                });
-              }
-            }}
+            onClose={closeIssue}
             onRefresh={() => {
               loadIssues(true);
               loadLeaderboards();

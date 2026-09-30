@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { isBackGestureBlocked } from "../src/App.tsx";
 
 describe("useEdgeSwipeBack - core logic unit tests", () => {
   // Test the gesture detection logic independently
@@ -65,33 +66,84 @@ describe("useEdgeSwipeBack - core logic unit tests", () => {
   });
 });
 
-describe("useEdgeSwipeBack - blocked callback integration", () => {
-  function checkBlocked(
-    isDrawerOpen: boolean,
-    isFilterDrawerOpen: boolean,
-    selectedIssue: unknown,
-    conflictItem: unknown,
-  ): boolean {
-    return isDrawerOpen || isFilterDrawerOpen || selectedIssue != null || conflictItem != null;
-  }
-
+describe("useEdgeSwipeBack - blocked callback and modal close priority", () => {
   it("blocks swipe when drawer is open", () => {
-    expect(checkBlocked(true, false, null, null)).toBe(true);
+    expect(isBackGestureBlocked(true, false, null)).toBe(true);
   });
 
   it("blocks swipe when filter drawer is open", () => {
-    expect(checkBlocked(false, true, null, null)).toBe(true);
+    expect(isBackGestureBlocked(false, true, null)).toBe(true);
   });
 
-  it("blocks swipe when issue modal is open", () => {
-    expect(checkBlocked(false, false, "issue-123", null)).toBe(true);
+  it("allows swipe when issue modal is open so back gesture can close it", () => {
+    expect(isBackGestureBlocked(false, false, null)).toBe(false);
   });
 
   it("blocks swipe when conflict modal is open", () => {
-    expect(checkBlocked(false, false, null, "conflict-456")).toBe(true);
+    expect(isBackGestureBlocked(false, false, "conflict-456")).toBe(true);
   });
 
   it("allows swipe when nothing is blocking", () => {
-    expect(checkBlocked(false, false, null, null)).toBe(false);
+    expect(isBackGestureBlocked(false, false, null)).toBe(false);
+  });
+
+  it("closes open issue modal on back instead of popping route history", () => {
+    let modalClosed = false;
+    let poppedRoute = false;
+    const selectedIssue = { id: 101 };
+
+    const closeIssue = () => {
+      modalClosed = true;
+    };
+    const popHistory = () => {
+      poppedRoute = true;
+      return "/reports";
+    };
+
+    const handleBack = () => {
+      if (selectedIssue) {
+        closeIssue();
+        return;
+      }
+      const previous = popHistory();
+      if (previous) {
+        // navigate
+      }
+    };
+
+    handleBack();
+
+    expect(modalClosed).toBe(true);
+    expect(poppedRoute).toBe(false);
+  });
+
+  it("pops route history on back when no issue modal is open", () => {
+    let modalClosed = false;
+    let poppedRoute = false;
+    const selectedIssue = null;
+
+    const closeIssue = () => {
+      modalClosed = true;
+    };
+    const popHistory = () => {
+      poppedRoute = true;
+      return "/reports";
+    };
+
+    const handleBack = () => {
+      if (selectedIssue) {
+        closeIssue();
+        return;
+      }
+      const previous = popHistory();
+      if (previous) {
+        // navigate
+      }
+    };
+
+    handleBack();
+
+    expect(modalClosed).toBe(false);
+    expect(poppedRoute).toBe(true);
   });
 });
