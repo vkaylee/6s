@@ -313,7 +313,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const translate = (key: string, params?: Record<string, string>) => t(key, params);
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-32">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-36 lg:pb-12">
       <input
         ref={wideInputRef}
         type="file"
@@ -443,7 +443,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
           </div>
         </PageContainer>
       </main>
-      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 p-4 z-30">
+      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] z-30">
         <PageContainer>
           <IssueSubmitButton
             category={category}

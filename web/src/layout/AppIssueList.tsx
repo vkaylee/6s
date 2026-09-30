@@ -47,9 +47,11 @@ export function AppIssueList({
 }: AppIssueListProps) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 text-xs font-bold text-zinc-500 uppercase px-1">
-        <span>{t("app.issues_list", { count: sortedIssues.length })}</span>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-zinc-500 uppercase px-1">
+        <span className="whitespace-nowrap">
+          {t("app.issues_list", { count: sortedIssues.length })}
+        </span>
+        <div className="flex items-center gap-2 shrink-0">
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg px-2 py-1 normal-case font-medium">
             <ArrowUpDown className="w-3 h-3 text-zinc-400" />
             <select

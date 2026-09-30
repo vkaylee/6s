@@ -125,7 +125,7 @@ export function IssueCategorySection({
                     {translate(behavior ? "issue.cause_behavior" : "issue.cause_condition")}
                   </span>
                 </div>
-                <span className="text-[10px] text-zinc-400 leading-tight mt-1 truncate">
+                <span className="text-[10px] text-zinc-400 leading-tight mt-1 line-clamp-2">
                   {translate(behavior ? "issue.cause_behavior_desc" : "issue.cause_condition_desc")}
                 </span>
               </button>

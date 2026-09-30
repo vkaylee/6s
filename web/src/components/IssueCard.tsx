@@ -106,7 +106,7 @@ export function IssueCard({
       }`}
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span
             className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-bold text-sm flex items-center justify-center shrink-0 shadow-xs ${
               isSafety
@@ -116,7 +116,7 @@ export function IssueCard({
           >
             {issue.category}
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm sm:text-base text-zinc-900 dark:text-zinc-100 leading-tight truncate">
               {resolveLocationNameByCode(
                 locations,
@@ -125,24 +125,24 @@ export function IssueCard({
                 locale,
               )}
             </div>
-            <div className="flex min-w-0 items-center gap-1.5 text-[11px] sm:text-xs text-zinc-400 truncate">
+            <div className="flex min-w-0 items-center gap-1.5 text-[11px] sm:text-xs text-zinc-400">
               {issue.creator_name && (
-                <span className="flex items-center gap-0.5">
+                <span className="inline-flex min-w-0 items-center gap-0.5 max-w-[130px] sm:max-w-none">
                   <User className="w-3 h-3 text-zinc-400 shrink-0 inline" />
-                  <span>{issue.creator_name}</span>
+                  <span className="truncate">{issue.creator_name}</span>
                 </span>
               )}
               {issue.resolver_name && (
-                <span className="flex items-center gap-0.5">
-                  {issue.creator_name && <span>•</span>}
+                <span className="inline-flex min-w-0 items-center gap-0.5 max-w-[130px] sm:max-w-none">
+                  {issue.creator_name && <span className="shrink-0">•</span>}
                   <Wrench className="w-3 h-3 text-zinc-400 shrink-0 inline" />
-                  <span>{issue.resolver_name}</span>
+                  <span className="truncate">{issue.resolver_name}</span>
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
+        <div className="flex w-full flex-wrap items-center justify-start sm:justify-end gap-1.5 sm:w-auto">
           {(assignedTeam || issue.assigned_team_name) && (
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
               <Wrench className="h-3 w-3 shrink-0" />

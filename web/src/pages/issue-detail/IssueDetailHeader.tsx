@@ -131,7 +131,7 @@ export function IssueDetailHeader({ view }: { view: IssueDetailHeaderView }) {
               }}
               disabled={!canEdit || !locations || locations.length === 0}
               aria-expanded={isEditingLocation}
-              title={canEdit ? t("issue_detail.quick_edit_location") : undefined}
+              title={resolvedLocationName}
               className={`w-full text-left truncate text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-sm ${
                 canEdit ? "hover:underline cursor-pointer" : ""
               }`}

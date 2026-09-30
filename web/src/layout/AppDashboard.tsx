@@ -97,7 +97,7 @@ export function AppDashboard({
       : { issues: false, masterData: false, leaderboards: false };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-28">
+    <div className="min-h-screen bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 pb-36 sm:pb-28">
       <main className="pt-4">
         <PageContainer className="space-y-4">
           <AppSyncErrors

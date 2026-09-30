@@ -22,23 +22,23 @@ export function HealthGauge({ score, openCount, overdueCount, onClick }: HealthG
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex items-center justify-between min-h-[72px]"
+      className="w-full text-left bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex items-center justify-between gap-3 min-h-[72px]"
     >
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
         <div
-          className={`w-14 h-14 rounded-full border-4 flex flex-col items-center justify-center font-black ${colorClass}`}
+          className={`w-14 h-14 rounded-full border-4 flex flex-col items-center justify-center font-black shrink-0 ${colorClass}`}
         >
           <span className="text-lg leading-none">{score}</span>
           <span className="text-[9px] font-bold opacity-75">{t("health_gauge.score_unit")}</span>
         </div>
-        <div>
-          <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center space-x-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
             <span>{t("health_gauge.workshop_health")}</span>
             <span className="text-xs text-zinc-400 font-normal">
               {t("health_gauge.workshop_health_sub")}
             </span>
           </div>
-          <div className="flex items-center space-x-3 text-xs mt-1 text-zinc-500 dark:text-zinc-400">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mt-1 text-zinc-500 dark:text-zinc-400">
             <span>{t("health_gauge.open_count", { count: openCount })}</span>
             {overdueCount > 0 && (
               <span className="text-rose-600 dark:text-rose-400 font-bold">
@@ -48,7 +48,7 @@ export function HealthGauge({ score, openCount, overdueCount, onClick }: HealthG
           </div>
         </div>
       </div>
-      <div className="text-zinc-400 font-bold text-sm">➔</div>
+      <div className="text-zinc-400 font-bold text-sm shrink-0">➔</div>
     </button>
   );
 }

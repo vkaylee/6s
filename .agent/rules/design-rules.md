@@ -26,9 +26,12 @@ To guarantee the application is fully accessible, all code and UI changes MUST s
 - **Multi-channel Cues:** Never convey states, errors, or alerts solely through color (e.g. turning a border red on validation error). Always supply text warnings, semantic aria-invalid attributes, or iconography alongside color changes.
 
 ## 3. Responsive & Motion
-- **Layout:** Mobile-first approach. Ensure layouts scale cleanly from mobile screens up to desktop monitors.
+- **Layout:** Mobile-first approach. Ensure layouts scale cleanly from 360px mobile screens up to desktop monitors.
+- **Two-tier Stacking Pattern:** Primary textual content (location name, report title) MUST occupy tier 1 full width; auxiliary tags, badges, and status counters belong on tier 2 (`min-w-0 flex-1 space-y-1 sm:space-y-0 sm:flex sm:items-center sm:gap-2`). NEVER squeeze dynamic titles into a single flex row alongside multiple `shrink-0` badges.
+- **Anti-Clipping Truncate Rule:** NEVER combine `flex` and `truncate` directly on the same element. Apply `truncate` to the inner `<span>` text container with `min-w-0` on its parent.
+- **Segmented Controls & Tab Buttons:** Always specify `whitespace-nowrap` on tab labels, category pills, and buttons to prevent words from breaking onto awkward multiple lines.
+- **Bottom Safe Area Inset:** Fixed or sticky bottom navigation bars MUST include `pb-[max(1rem,env(safe-area-inset-bottom))]`, and page wrappers must provide sufficient bottom padding (e.g. `pb-36 sm:pb-28`) so bottom controls never obscure card content.
 - **Animations:** Use subtle transitions (`duration-200`); avoid jarring or over-the-top animations. Implement smooth micro-interactions on hover and focus states.
-
 ## 4. Edge Cases & States
 - **Data Loading:** Always implement Skeleton loaders while fetching data to prevent layout shift.
 - **No Data:** Always implement clear, beautiful Empty States when there is no data.
