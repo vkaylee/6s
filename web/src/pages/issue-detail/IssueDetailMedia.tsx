@@ -3,7 +3,7 @@ import { AuthenticatedImage } from "../../components/AuthenticatedImage.tsx";
 import { SplitSlider } from "../../components/SplitSlider.tsx";
 import type { AuthenticatedImageError } from "../../hooks/useAuthenticatedImageUrl.ts";
 import type { IssueItem } from "../../types/index.ts";
-import { resolvePhotoUrl } from "../../utils/photo.ts";
+import { hasDistinctPhoto, resolvePhotoUrl } from "../../utils/photo.ts";
 import type { IssueDetailPhotoItem } from "./types.ts";
 
 export interface IssueDetailMediaView {
@@ -111,7 +111,7 @@ export function IssueDetailMedia({ view }: { view: IssueDetailMediaView }) {
       )}
 
       {/* Detail photo (Before) if available */}
-      {currentIssue.photo_detail && (
+      {hasDistinctPhoto(currentIssue.photo_detail, currentIssue.photo_before) && (
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">

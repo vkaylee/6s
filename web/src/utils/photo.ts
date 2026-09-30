@@ -15,3 +15,9 @@ export function resolvePhotoUrl(
   }
   return "";
 }
+
+export function hasDistinctPhoto(photo?: string | null, otherPhoto?: string | null): boolean {
+  if (!photo) return false;
+  if (!otherPhoto) return true;
+  return photo.split("?")[0] !== otherPhoto.split("?")[0];
+}

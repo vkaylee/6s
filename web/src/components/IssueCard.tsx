@@ -9,7 +9,7 @@ import {
   type TagItem,
   type TeamItem,
 } from "../types/index.ts";
-import { resolvePhotoUrl } from "../utils/photo.ts";
+import { hasDistinctPhoto, resolvePhotoUrl } from "../utils/photo.ts";
 import { AuthenticatedImage } from "./AuthenticatedImage.tsx";
 import { TagLabel } from "./TagLabel.tsx";
 
@@ -175,7 +175,7 @@ export function IssueCard({
                 <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white tracking-wide uppercase">
                   {t("slider.before")}
                 </span>
-                {issue.photo_detail && !issue.photo_after && (
+                {hasDistinctPhoto(issue.photo_detail, issue.photo_before) && !issue.photo_after && (
                   <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white flex items-center gap-1">
                     <Camera className="w-3 h-3 text-white" />
                     <span>+1</span>

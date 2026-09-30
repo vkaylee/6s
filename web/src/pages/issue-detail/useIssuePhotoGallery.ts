@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AuthenticatedImageError } from "../../hooks/useAuthenticatedImageUrl.ts";
 import type { IssueItem } from "../../types/index.ts";
-import { resolvePhotoUrl } from "../../utils/photo.ts";
+import { hasDistinctPhoto, resolvePhotoUrl } from "../../utils/photo.ts";
 import type { IssueDetailPhotoItem } from "./types.ts";
 
 export interface UseIssuePhotoGalleryProps {
@@ -33,7 +33,7 @@ export function useIssuePhotoGallery({ currentIssue, t }: UseIssuePhotoGalleryPr
           badgeClass: "bg-amber-500 text-zinc-950 font-black shadow-amber-500/20",
         }
       : null,
-    currentIssue.photo_detail
+    hasDistinctPhoto(currentIssue.photo_detail, currentIssue.photo_before)
       ? {
           url: resolvePhotoUrl(
             currentIssue.photo_detail,

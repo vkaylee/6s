@@ -54,6 +54,28 @@ describe("IssueDetailModal - Photos", () => {
       container.querySelector("#issue-photo-preview-title")?.closest('[role="dialog"]'),
     ).toBeFalsy();
   });
+  it("does not render a detail photo when the issue has no detail image", async () => {
+    const issue = baseIssue({ photo_detail: undefined });
+    installFetch({ issue });
+    const container = await mount(
+      <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+
+    expect(container.textContent).not.toContain("Ảnh bằng chứng cận cảnh (Trước)");
+    expect(container.querySelectorAll('img[src*="/media/detail/"]')).toHaveLength(0);
+    expect(container.textContent).toContain("Ảnh bằng chứng toàn cảnh (Trước)");
+  });
+
+  it("does not render overview photo as detail when detail points to the same image", async () => {
+    const issue = baseIssue({ photo_detail: "/api/issues/101/media/before/before.jpg" });
+    installFetch({ issue });
+    const container = await mount(
+      <IssueDetailModal issue={issue} isOpen={true} onClose={() => {}} onRefresh={() => {}} />,
+    );
+
+    expect(container.textContent).not.toContain("Ảnh bằng chứng cận cảnh (Trước)");
+    expect(container.querySelectorAll('img[src*="/media/detail/"]')).toHaveLength(0);
+  });
 
   it("disables photo zoom and shows image error when native media loading fails", async () => {
     installFetch({ issue: baseIssue(), mediaStatus: 403 });
