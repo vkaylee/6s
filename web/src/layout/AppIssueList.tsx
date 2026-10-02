@@ -74,7 +74,7 @@ export function AppIssueList({
           </button>
         </div>
       </div>
-      {isLoadingIssues ? (
+      {isLoadingIssues && sortedIssues.length === 0 ? (
         <div className="space-y-3">
           <IssueCardSkeleton />
           <IssueCardSkeleton />
