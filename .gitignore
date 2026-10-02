@@ -1,6 +1,9 @@
 # DevKit (per-project install)
 .leedevkit/
-leedevkit
+.leedevkit.bootstrap.lock
+.leedevkit-bootstrap-*/
+.leedevkit.new-*
+.leedevkit.previous-*
 .leedevkit.bak/
 .test_logs/
 web/node_modules/
@@ -20,3 +23,5 @@ web/test-results/
 !.env.example
 !.env.prod.example
 artifacts/e2e/
+__pycache__/
+*.pyc
