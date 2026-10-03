@@ -23,31 +23,34 @@ import {
 import { compressImage } from "../utils/compress.ts";
 import { haptics } from "../utils/haptics.ts";
 import { goBack } from "../utils/navigation.ts";
+import { normalizeSearchText } from "../utils/tagSearch.ts";
 import { generateUuid } from "../utils/uuid.ts";
+import { IssueAiAssistantBanner } from "./create-issue/IssueAiAssistantBanner.tsx";
 import { IssueAnnotatorModal } from "./create-issue/IssueAnnotatorModal.tsx";
 import { IssueCategorySection } from "./create-issue/IssueCategorySection.tsx";
 import { IssueDescriptionSection } from "./create-issue/IssueDescriptionSection.tsx";
 import { IssueLocationSection } from "./create-issue/IssueLocationSection.tsx";
-import { IssueMediaAttachments } from "./create-issue/IssueMediaAttachments.tsx";
+import { IssueMobileSubmitBar } from "./create-issue/IssueMobileSubmitBar.tsx";
 import { IssuePageHeader } from "./create-issue/IssuePageHeader.tsx";
+import { IssuePhotoSection } from "./create-issue/IssuePhotoSection.tsx";
 import { IssueSubmitButton } from "./create-issue/IssueSubmitButton.tsx";
 import { IssueTaxonomySection } from "./create-issue/IssueTaxonomySection.tsx";
+import { useDescriptionAiSuggestions } from "./create-issue/useDescriptionAiSuggestions.ts";
+import { useIssueLocationState } from "./create-issue/useIssueLocationState.ts";
 
 interface CreateIssuePageProps {
   locations: LocationItem[];
   tags: TagItem[];
   onSuccess: () => void;
 }
-
 export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageProps) {
   useHeaderVisibility();
   const { t } = useI18nStore();
   const locale = useI18nStore.getState().locale;
   const [, setLocation] = useLocation();
-
   const [category, setCategory] = useState<IssueCategory | null>(null);
   const [causeType, setCauseType] = useState<CauseTypeValue>(CauseType.CONDITION);
-  const [locationCode, setLocationCode] = useState(locations[0]?.code || "");
+  const causeTypeManualRef = useRef(false);
   const [localTags, setLocalTags] = useState<TagItem[]>(tags);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
@@ -57,17 +60,15 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [previewDetail, setPreviewDetail] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastDraftTime, setLastDraftTime] = useState<string | null>(null);
+  const {
+    locationCode,
+    setLocationCode,
+    recentLocations,
+    effectiveLocationCode,
+    updateRecentLocations,
+  } = useIssueLocationState(locations);
   const [dragOverWide, setDragOverWide] = useState(false);
   const [dragOverDetail, setDragOverDetail] = useState(false);
-  const [recentLocations, setRecentLocations] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem("6s_recent_locations");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
   const [touched, setTouched] = useState(false);
   const [categoryError, setCategoryError] = useState(false);
   const [photoError, setPhotoError] = useState(false);
@@ -76,11 +77,8 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   const [isTaxonomyOpen, setIsTaxonomyOpen] = useState(false);
   const [autoFeedback, setAutoFeedback] = useState<string | null>(null);
   const handleCloseTaxonomy = useCallback(() => setIsTaxonomyOpen(false), []);
-
   const wideInputRef = useRef<HTMLInputElement>(null);
   const detailInputRef = useRef<HTMLInputElement>(null);
-  const effectiveLocationCode = locationCode || locations[0]?.code || "";
-
   useEffect(() => {
     if (tags.length === 0) return;
     setLocalTags((prev) => {
@@ -89,28 +87,14 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       return newItems.length > 0 ? [...prev, ...newItems] : prev.length === 0 ? tags : prev;
     });
   }, [tags]);
-
   useEffect(() => {
     if (!locationCode && locations[0]?.code) setLocationCode(locations[0].code);
   }, [locations, locationCode]);
-
   useEffect(() => {
     if (category || photoBefore || description.trim() || selectedTags.length > 0) {
       setLastDraftTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     }
   }, [category, photoBefore, description, selectedTags]);
-
-  const updateRecentLocations = (code: string) => {
-    if (!code) return;
-    const next = [code, ...recentLocations.filter((item) => item !== code)].slice(0, 3);
-    setRecentLocations(next);
-    try {
-      localStorage.setItem("6s_recent_locations", JSON.stringify(next));
-    } catch {
-      // Storage is optional
-    }
-  };
-
   const handleSelectCategory = useCallback((cat: IssueCategory) => {
     setCategory(cat);
     setCategoryError(false);
@@ -120,6 +104,11 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     else haptics.success();
   }, []);
 
+  const handleSelectCauseType = useCallback((nextCauseType: CauseTypeValue) => {
+    setCauseType(nextCauseType);
+    causeTypeManualRef.current = true;
+    haptics.selection();
+  }, []);
   const handleToggleTag = useCallback(
     (tagCode: string) => {
       haptics.success();
@@ -162,6 +151,49 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     },
     [category],
   );
+  const handleAddAiTags = useCallback(
+    (existingCodes: string[], proposals: ProposedTagItem[]) => {
+      const seen = new Set<string>();
+      const pending = proposals
+        .map((p) => ({
+          ...p,
+          code: `c_${normalizeSearchText(p.name_vi).replace(/[^a-z0-9]+/g, "_")}`.slice(0, 48),
+          use_count: 0,
+          status: TagStatus.PENDING,
+        }))
+        .filter((t) => !seen.has(t.code) && Boolean(seen.add(t.code)));
+      for (const t of pending) {
+        if (!localTags.some((tag) => (tag.code || tag.tag_code) === t.code)) handleAddCustomTag(t);
+      }
+      setSelectedTags((prev) =>
+        Array.from(new Set([...prev, ...existingCodes, ...pending.map((t) => t.code)])),
+      );
+    },
+    [handleAddCustomTag, localTags],
+  );
+
+  const {
+    aiEnabled,
+    aiLoading,
+    aiError,
+    aiRequested,
+    aiSuggestions,
+    suggestFromDescription,
+    applyAllSuggestions,
+  } = useDescriptionAiSuggestions({
+    description,
+    locationSelected: Boolean(effectiveLocationCode),
+    photoBlob: photoBefore,
+    category,
+    causeType,
+    isCauseTypeManual: causeTypeManualRef.current,
+    selectedTags,
+    tags: localTags,
+    onSelectCategory: handleSelectCategory,
+    onSuggestCauseType: setCauseType,
+    onAddTags: handleAddAiTags,
+    translate: t,
+  });
 
   const processImageFile = useCallback(
     async (file: File | Blob, isWide: boolean) => {
@@ -209,15 +241,10 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
   }, [photoBefore, photoDetail, processImageFile]);
 
   const handleRemovePhoto = (isWide: boolean) => {
-    if (isWide) {
-      setPhotoBefore(null);
-      setPreviewBefore(null);
-      if (wideInputRef.current) wideInputRef.current.value = "";
-    } else {
-      setPhotoDetail(null);
-      setPreviewDetail(null);
-      if (detailInputRef.current) detailInputRef.current.value = "";
-    }
+    (isWide ? setPhotoBefore : setPhotoDetail)(null);
+    (isWide ? setPreviewBefore : setPreviewDetail)(null);
+    const input = isWide ? wideInputRef.current : detailInputRef.current;
+    if (input) input.value = "";
     haptics.selection();
   };
 
@@ -234,25 +261,16 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
 
   const handleSubmit = async () => {
     setTouched(true);
-    let hasError = false;
-    if (!category) {
-      setCategoryError(true);
-      hasError = true;
-    }
-    if (!photoBefore) {
-      setPhotoError(true);
-      hasError = true;
-    }
-    if (!effectiveLocationCode) {
-      modalDialog.alert(t("issue.missing_location"));
-      return;
-    }
+    const hasError = !category || !photoBefore;
+    if (!category) setCategoryError(true);
+    if (!photoBefore) setPhotoError(true);
+    if (!effectiveLocationCode) return void modalDialog.alert(t("issue.missing_location"));
     if (hasError || !category || !photoBefore) {
       haptics.errorOrConflict();
-      modalDialog.alert(t(!category ? "issue.missing_category" : "issue.missing_photo"));
-      return;
+      return void modalDialog.alert(
+        t(!category ? "issue.missing_category" : "issue.missing_photo"),
+      );
     }
-    setIsSubmitting(true);
     try {
       const capturedLocation = locations.find((item) => item.code === effectiveLocationCode);
       const newDraft: DraftIssue = {
@@ -309,7 +327,6 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
-
   const translate = (key: string, params?: Record<string, string>) => t(key, params);
 
   return (
@@ -343,41 +360,29 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
       />
       <main className="py-4 sm:py-6">
         <PageContainer>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
-            <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-20">
-              <section
-                className={`bg-white dark:bg-zinc-900 rounded-3xl p-5 border shadow-sm space-y-3 ${touched && photoError ? "border-rose-500 ring-2 ring-rose-500/20" : "border-zinc-200 dark:border-zinc-800"}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    {t("issue.step_photos")}
-                  </span>
-                  {touched && photoError && (
-                    <span className="text-xs font-bold text-rose-600 animate-pulse">
-                      * {t("issue.missing_photo")}
-                    </span>
-                  )}
-                </div>
-                <IssueMediaAttachments
-                  causeType={causeType}
-                  previewBefore={previewBefore}
-                  previewDetail={previewDetail}
-                  translate={translate}
-                  onCapture={(e, isWide) => {
-                    const f = e.target.files?.[0];
-                    if (f) void processImageFile(f, isWide);
-                  }}
-                  onDrop={handleDrop}
-                  onRemove={handleRemovePhoto}
-                  onAnnotate={setAnnotatorTarget}
-                  wideInputRef={wideInputRef}
-                  detailInputRef={detailInputRef}
-                  dragOverWide={dragOverWide}
-                  dragOverDetail={dragOverDetail}
-                  onDragOver={(wide) => (wide ? setDragOverWide(true) : setDragOverDetail(true))}
-                  onDragLeave={(wide) => (wide ? setDragOverWide(false) : setDragOverDetail(false))}
-                />
-              </section>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-8 items-start">
+            <div className="space-y-5">
+              <IssuePhotoSection
+                causeType={causeType}
+                previewBefore={previewBefore}
+                previewDetail={previewDetail}
+                translate={translate}
+                onCapture={(e, isWide) => {
+                  const f = e.target.files?.[0];
+                  if (f) void processImageFile(f, isWide);
+                }}
+                onDrop={handleDrop}
+                onRemove={handleRemovePhoto}
+                onAnnotate={setAnnotatorTarget}
+                wideInputRef={wideInputRef}
+                detailInputRef={detailInputRef}
+                dragOverWide={dragOverWide}
+                dragOverDetail={dragOverDetail}
+                onDragOver={(wide) => (wide ? setDragOverWide(true) : setDragOverDetail(true))}
+                onDragLeave={(wide) => (wide ? setDragOverWide(false) : setDragOverDetail(false))}
+                touched={touched}
+                photoError={photoError}
+              />
               <IssueLocationSection
                 locations={locations}
                 value={effectiveLocationCode}
@@ -386,22 +391,37 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                 locale={locale}
                 translate={translate}
               />
-              <div className="hidden lg:block pt-2">
-                <IssueSubmitButton
-                  category={category}
-                  isSubmitting={isSubmitting}
-                  onClick={() => void handleSubmit()}
-                  translate={translate}
-                />
-                <p className="text-[11px] text-center text-zinc-400 font-medium pt-1.5">
-                  {t("issue.shortcuts_hint")}
-                </p>
-              </div>
             </div>
-            <div className="lg:col-span-7 space-y-5">
+            <div className="space-y-5">
+              <IssueDescriptionSection
+                value={description}
+                onChange={setDescription}
+                translate={translate}
+              />
               <section
                 className={`bg-white dark:bg-zinc-900 rounded-3xl p-5 border shadow-sm space-y-4 ${touched && categoryError ? "border-rose-500 ring-2 ring-rose-500/20" : "border-zinc-200 dark:border-zinc-800"}`}
               >
+                <IssueAiAssistantBanner
+                  hasPhoto={Boolean(photoBefore)}
+                  hasLocation={Boolean(effectiveLocationCode)}
+                  hasDescription={Boolean(description?.trim && description.trim().length > 0)}
+                  aiEnabled={aiEnabled}
+                  aiLoading={aiLoading}
+                  aiError={aiError}
+                  aiRequested={aiRequested}
+                  aiSuggestions={aiSuggestions}
+                  tags={localTags}
+                  selectedTags={selectedTags}
+                  category={category}
+                  causeType={causeType}
+                  onSuggest={() => void suggestFromDescription()}
+                  onApplyAll={applyAllSuggestions}
+                  onToggleTag={handleToggleTag}
+                  onAddCustomTag={handleAddCustomTag}
+                  onSelectCategory={handleSelectCategory}
+                  onSelectCauseType={handleSelectCauseType}
+                  translate={translate}
+                />
                 <IssueCategorySection
                   category={category}
                   causeType={causeType}
@@ -410,10 +430,7 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   locale={locale}
                   onSelectCategory={handleSelectCategory}
                   onToggleTag={handleToggleTag}
-                  onCauseTypeChange={(cause) => {
-                    setCauseType(cause);
-                    haptics.selection();
-                  }}
+                  onCauseTypeChange={handleSelectCauseType}
                   translate={translate}
                   categoryError={touched && categoryError}
                 />
@@ -434,37 +451,35 @@ export function CreateIssuePage({ locations, tags, onSuccess }: CreateIssuePageP
                   proposedTags={proposedTags}
                 />
               </section>
-              <IssueDescriptionSection
-                value={description}
-                onChange={setDescription}
-                translate={translate}
-              />
+              <div className="hidden lg:block pt-2">
+                <IssueSubmitButton
+                  category={category}
+                  isSubmitting={isSubmitting}
+                  onClick={() => void handleSubmit()}
+                  translate={translate}
+                />
+                <p className="text-[11px] text-center text-zinc-400 font-medium pt-1.5">
+                  {t("issue.shortcuts_hint")}
+                </p>
+              </div>
             </div>
           </div>
         </PageContainer>
       </main>
-      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] z-30">
-        <PageContainer>
-          <IssueSubmitButton
-            category={category}
-            isSubmitting={isSubmitting}
-            onClick={() => void handleSubmit()}
-            translate={translate}
-          />
-        </PageContainer>
-      </div>
+      <IssueMobileSubmitBar
+        category={category}
+        isSubmitting={isSubmitting}
+        onSubmit={() => void handleSubmit()}
+        translate={translate}
+      />
       <IssueAnnotatorModal
         target={annotatorTarget}
         previewBefore={previewBefore}
         previewDetail={previewDetail}
         onSave={(blob, preview, target) => {
-          if (target === "wide") {
-            setPhotoBefore(blob);
-            setPreviewBefore(preview);
-          } else {
-            setPhotoDetail(blob);
-            setPreviewDetail(preview);
-          }
+          const isWide = target === "wide";
+          (isWide ? setPhotoBefore : setPhotoDetail)(blob);
+          (isWide ? setPreviewBefore : setPreviewDetail)(preview);
         }}
         onClose={() => setAnnotatorTarget(null)}
         translate={translate}

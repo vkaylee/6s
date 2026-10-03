@@ -963,9 +963,10 @@ type ReviewSuggestion struct {
 
 // SuggestTagsRequest defines input for POST /api/ai/suggest-tags.
 type SuggestTagsRequest struct {
-	Query       string `json:"query"`
-	Category    string `json:"category"`
-	Description string `json:"description"`
+	Query        string `json:"query"`
+	Category     string `json:"category"`
+	Description  string `json:"description"`
+	ImageDataURL string `json:"image_data_url"`
 }
 
 // SuggestedProposedTag is a new tag label the model proposes when no approved tag fits.
@@ -978,6 +979,8 @@ type SuggestedProposedTag struct {
 
 // SuggestTagsResponse separates approved catalog matches from labels needing moderation.
 type SuggestTagsResponse struct {
+	Category     string                 `json:"category,omitempty"`
+	CauseType    string                 `json:"cause_type,omitempty"`
 	ExistingTags []string               `json:"existing_tags"`
 	ProposedTags []SuggestedProposedTag `json:"proposed_tags"`
 }
@@ -986,7 +989,30 @@ const (
 	suggestQueryMaxRunes       = 2000
 	suggestDescriptionMaxRunes = 4000
 	suggestMaxProposedTags     = 5
+	suggestImageMaxBytes       = 2*1024*1024 + 1024
 )
+
+func validateSuggestImageDataURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	prefixes := []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:image/gif;base64,"}
+	var payload string
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(raw, prefix) {
+			payload = raw[len(prefix):]
+			break
+		}
+	}
+	if payload == "" || len(payload) > base64.StdEncoding.EncodedLen(suggestImageMaxBytes) {
+		return errors.New("image_data_url must be a valid bounded base64 image data URL")
+	}
+	decoded, err := base64.StdEncoding.Strict().DecodeString(payload)
+	if err != nil || len(decoded) == 0 || len(decoded) > suggestImageMaxBytes {
+		return errors.New("image_data_url must be a valid bounded base64 image data URL")
+	}
+	return nil
+}
 
 // SuggestTags asks enabled AI to select approved catalog codes and suggest new labels otherwise.
 // It never writes tags; callers decide whether to submit proposed labels for moderation.
@@ -1003,12 +1029,19 @@ func (s *Service) SuggestTags(ctx context.Context, req SuggestTagsRequest) (Sugg
 	if len([]rune(description)) > suggestDescriptionMaxRunes {
 		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "description is too long")
 	}
+	if err := validateSuggestImageDataURL(req.ImageDataURL); err != nil {
+		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrInvalidInput, "image_data_url is invalid")
+	}
 	cfg, err := s.store.GetAIConfig(ctx)
 	if err != nil || !cfg.IsEnabled {
 		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrAINotEnabled)
 	}
 	baseURL := strings.TrimSpace(cfg.BaseUrl)
-	model := strings.TrimSpace(resolvePurposeModel("summary", cfg))
+	purpose := "summary"
+	if req.ImageDataURL != "" {
+		purpose = "vision"
+	}
+	model := strings.TrimSpace(resolvePurposeModel(purpose, cfg))
 	if baseURL == "" {
 		return SuggestTagsResponse{}, apperror.BadRequest(i18n.ErrAIBaseURLMissing)
 	}
@@ -1024,8 +1057,22 @@ func (s *Service) SuggestTags(ctx context.Context, req SuggestTagsRequest) (Sugg
 	if err := s.waitRateLimit(ctx); err != nil {
 		return SuggestTagsResponse{}, apperror.New(http.StatusBadGateway, "AI_GATEWAY_ERROR", i18n.ErrAIReviewFailed, err.Error()).WithCause(err)
 	}
+	userMessage := openai.UserMessage(query)
+	if req.ImageDataURL != "" {
+		text := query
+		if description != "" {
+			text += "\nDescription: " + description
+		}
+		userMessage = openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+			openai.TextContentPart(text),
+			openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+				URL:    req.ImageDataURL,
+				Detail: "low",
+			}),
+		})
+	}
 	completion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{openai.SystemMessage(prompt), openai.UserMessage(query)},
+		Messages: []openai.ChatCompletionMessageParamUnion{openai.SystemMessage(prompt), userMessage},
 		Model:    model, Temperature: openai.Float(0.2),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &openai.ResponseFormatJSONObjectParam{}},
 	})
@@ -1059,7 +1106,7 @@ func buildSuggestTagsPrompt(query, category, description string, catalog []db.Ta
 		categoryInstruction = "Use at most 5 proposed tags, each category " + category + "."
 	}
 	parts := []string{
-		"Return only JSON object with existing_tags (array of approved tag codes) and proposed_tags (array of objects with name_vi,name_zh,name_en,category). Never invent existing_tags codes. " + categoryInstruction,
+		"Return only JSON object with category (1S, 2S, 3S, 4S, 5S, or 6S), cause_type (CONDITION or BEHAVIOR), existing_tags (array of approved tag codes), and proposed_tags (array of objects with name_vi,name_zh,name_en,category). Leave category and cause_type empty when unreliable. Never invent existing_tags codes. " + categoryInstruction,
 		"Query: " + query,
 	}
 	if category != "" {
@@ -1079,6 +1126,8 @@ func buildSuggestTagsPrompt(query, category, description string, catalog []db.Ta
 
 func parseSuggestTagsResult(raw, category string, catalog []db.Tag) (SuggestTagsResponse, error) {
 	var out struct {
+		Category     string                 `json:"category"`
+		CauseType    string                 `json:"cause_type"`
 		ExistingTags []string               `json:"existing_tags"`
 		ProposedTags []SuggestedProposedTag `json:"proposed_tags"`
 	}
@@ -1092,6 +1141,14 @@ func parseSuggestTagsResult(raw, category string, catalog []db.Tag) (SuggestTags
 		}
 	}
 	result := SuggestTagsResponse{ExistingTags: make([]string, 0, len(out.ExistingTags)), ProposedTags: make([]SuggestedProposedTag, 0, suggestMaxProposedTags)}
+	result.Category = strings.TrimSpace(strings.ToUpper(out.Category))
+	if !validSuggestCategory(result.Category) {
+		result.Category = ""
+	}
+	result.CauseType = strings.TrimSpace(strings.ToUpper(out.CauseType))
+	if !validReviewCauseType(result.CauseType) {
+		result.CauseType = ""
+	}
 	seen := make(map[string]struct{}, len(out.ExistingTags))
 	for _, code := range out.ExistingTags {
 		code = strings.TrimSpace(code)

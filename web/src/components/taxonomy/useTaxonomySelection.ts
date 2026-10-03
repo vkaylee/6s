@@ -40,7 +40,9 @@ export function useTaxonomySelection({
   const [aiSuggestions, setAiSuggestions] = useState<{
     existing_tags: string[];
     proposed_tags: ProposedTagItem[];
-  }>({ existing_tags: [], proposed_tags: [] });
+    category?: string | null;
+    cause_type?: string | null;
+  }>({ existing_tags: [], proposed_tags: [], category: null, cause_type: null });
   const aiEnabled = useAiStatus();
   const suggestionCategory =
     currentCategory ?? (activeTab !== "ALL" ? (activeTab as IssueCategory) : null);
@@ -57,7 +59,7 @@ export function useTaxonomySelection({
     setAiLoading(true);
     setAiRequested(true);
     setAiError(null);
-    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
+    setAiSuggestions({ existing_tags: [], proposed_tags: [], category: null, cause_type: null });
     try {
       setAiSuggestions(
         await suggestTags({
@@ -81,15 +83,11 @@ export function useTaxonomySelection({
       setActiveTab("ALL");
     }
     setTagQuery("");
-    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
-    setAiError(null);
-    setAiRequested(false);
+    setAiSuggestions({ existing_tags: [], proposed_tags: [], category: null, cause_type: null });
   }, [isOpen, currentCategory, tags]);
 
   useEffect(() => {
-    setAiSuggestions({ existing_tags: [], proposed_tags: [] });
-    setAiError(null);
-    setAiRequested(false);
+    setAiSuggestions({ existing_tags: [], proposed_tags: [], category: null, cause_type: null });
   }, [tagQuery, suggestionCategory]);
 
   const handleTagClick = (tag: TagItem) => {

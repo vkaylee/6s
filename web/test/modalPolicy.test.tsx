@@ -166,8 +166,9 @@ describe("Frontend Modal Policy Enforcement", () => {
         <CreateIssuePage locations={[]} tags={[]} onSuccess={() => {}} />
       </Router>,
     );
-    expect(html).toContain("1. Chọn phân loại S");
+    expect(html).toContain("1. Chụp ảnh bằng chứng");
     expect(html).toContain("2. Vị trí nhà xưởng");
-    expect(html).toContain("3. Chụp ảnh bằng chứng");
+    expect(html).toContain("3. Mô tả ngắn");
+    expect(html).toContain("4. Xác nhận phân loại S");
   });
 });

@@ -41,15 +41,28 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     },
   ];
 
-  it("renders dual-column grid and dual-shot photo zones on desktop", () => {
+  it("renders evidence-first layout and dual-shot photo zones on desktop", () => {
     const html = renderToString(
       <Router ssrPath="/issues/new">
         <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
       </Router>,
     );
-    expect(html).toContain("lg:col-span-5");
-    expect(html).toContain("lg:col-span-7");
+    expect(html).toContain("lg:grid-cols-2");
     expect(html).toContain("LINE_A1");
+  });
+  it("renders evidence, location, description, taxonomy, and submit in approved order", () => {
+    const html = renderToString(
+      <Router ssrPath="/issues/new">
+        <CreateIssuePage locations={mockLocations} tags={mockTags} onSuccess={() => {}} />
+      </Router>,
+    );
+    expect(html.indexOf("1. Chụp ảnh bằng chứng")).toBeLessThan(
+      html.indexOf("2. Vị trí nhà xưởng"),
+    );
+    expect(html.indexOf("2. Vị trí nhà xưởng")).toBeLessThan(html.indexOf("3. Mô tả ngắn"));
+    expect(html.indexOf("3. Mô tả ngắn")).toBeLessThan(html.indexOf("4. Xác nhận phân loại S"));
+    expect(html).toContain("AI gợi ý phân loại &amp; thẻ");
+    expect(html).toContain("GỬI BÁO CÁO 6S");
   });
 
   it("renders TaxonomySelectorModal with tags correctly when opened", () => {
@@ -405,7 +418,6 @@ describe("CreateIssuePage with uploaded photos and states", () => {
           true, // isHeaderVisible
           IssueCategory.S6, // category
           "CONDITION", // causeType
-          "LINE_A1", // locationCode
           mockTags, // localTags
           ["s6_fire"], // selectedTags
           "Mô tả chi tiết sự cố rò rỉ", // description
@@ -415,13 +427,17 @@ describe("CreateIssuePage with uploaded photos and states", () => {
           "blob:mock-detail-photo", // previewDetail
           false, // isSubmitting
           null, // lastDraftTime
+          "LINE_A1", // locationCode (from useIssueLocationState)
+          ["LINE_A1"], // recentLocations (from useIssueLocationState)
           false, // dragOverWide
           false, // dragOverDetail
-          ["LINE_A1"], // recentLocations
           true, // touched
           false, // categoryError
           false, // photoError
           null, // annotatorTarget
+          [], // proposedTags
+          false, // isTaxonomyOpen
+          null, // autoFeedback
         ]}
       >
         <Router ssrPath="/issues/new">
@@ -441,10 +457,9 @@ describe("CreateIssuePage with uploaded photos and states", () => {
     const pageHtml = renderToString(
       <WithMockState
         values={[
-          true,
+          true, // isHeaderVisible
           null, // category missing
           "CONDITION",
-          "LINE_A1",
           mockTags,
           [],
           "",
@@ -454,13 +469,16 @@ describe("CreateIssuePage with uploaded photos and states", () => {
           null,
           false,
           null,
+          "LINE_A1", // locationCode (from useIssueLocationState)
+          [], // recentLocations (from useIssueLocationState)
           false,
           false,
-          [],
           true, // touched
           true, // categoryError
           true, // photoError
           null,
+          [],
+          false,
         ]}
       >
         <Router ssrPath="/issues/new">

@@ -109,12 +109,17 @@ describe("Tag lifecycle operations", () => {
   it("posts the AI suggestion query and normalizes missing arrays", async () => {
     const capture = captureFetch(() => jsonEnvelope({ existing_tags: ["oil_leak"] }));
     try {
-      const result = await suggestTags({ query: "rò rỉ dầu", category: "3S" });
+      const result = await suggestTags({
+        query: "rò rỉ dầu",
+        category: "3S",
+        description: "Dầu chảy gần tủ điện",
+      });
       expect(capture.calls[0].url).toBe("/api/ai/suggest-tags");
       expect(capture.calls[0].init.method).toBe("POST");
       expect(JSON.parse(String(capture.calls[0].init.body))).toEqual({
         query: "rò rỉ dầu",
         category: "3S",
+        description: "Dầu chảy gần tủ điện",
       });
       expect(result.existing_tags).toEqual(["oil_leak"]);
       expect(result.proposed_tags).toEqual([]);

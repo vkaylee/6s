@@ -1,4 +1,5 @@
 import type {
+  CauseType,
   IssueItem,
   LocationHealthScore,
   LocationItem,
@@ -193,12 +194,16 @@ export async function fetchReporterLeaderboard(
 export interface TagSuggestionResult {
   existing_tags: string[];
   proposed_tags: ProposedTagItem[];
+  category?: string | null;
+  cause_type?: CauseType | "CONDITION" | "BEHAVIOR" | string | null;
 }
 
 export interface SuggestTagsInput {
   query: string;
   category?: string | null;
+  cause_type?: string | null;
   description?: string;
+  image_data_url?: string;
 }
 
 /** AI tag suggestion; callers must gate on AI status before invoking. */
@@ -211,6 +216,8 @@ export async function suggestTags(input: SuggestTagsInput): Promise<TagSuggestio
   return {
     existing_tags: result?.existing_tags ?? [],
     proposed_tags: result?.proposed_tags ?? [],
+    category: result?.category ?? null,
+    cause_type: result?.cause_type ?? null,
   };
 }
 

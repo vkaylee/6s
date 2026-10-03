@@ -2636,7 +2636,10 @@ paths:
                 category:
                   type: string
                   enum: [1S, 2S, 3S, 4S, 5S, 6S]
-      responses:
+                description:
+                  type: string
+                image_data_url:
+                  type: string
         '200':
           description: Tag gợi ý từ catalog đã duyệt và đề xuất mới
           content:
@@ -2649,6 +2652,12 @@ paths:
                     type: object
                     required: [existing_tags, proposed_tags]
                     properties:
+                      category:
+                        type: string
+                        enum: [1S, 2S, 3S, 4S, 5S, 6S]
+                      cause_type:
+                        type: string
+                        enum: [CONDITION, BEHAVIOR]
                       existing_tags:
                         type: array
                         items:

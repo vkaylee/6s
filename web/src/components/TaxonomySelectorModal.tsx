@@ -238,6 +238,7 @@ export function TaxonomySelectorModal({
           aiSuggestions={aiSuggestions}
           tags={tags}
           selectedTags={selectedTags}
+          currentCategory={currentCategory}
           onTagClick={handleTagClick}
           onAddCustomTag={onAddCustomTag}
           onToggleTag={onToggleTag}

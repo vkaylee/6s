@@ -1,7 +1,7 @@
 interface IssueDescriptionSectionProps {
   value: string;
   onChange: (value: string) => void;
-  translate: (key: string) => string;
+  translate: (key: string, params?: Record<string, string>) => string;
 }
 
 export function IssueDescriptionSection({
@@ -20,6 +20,7 @@ export function IssueDescriptionSection({
         onChange={(e) => onChange(e.target.value)}
         placeholder={translate("issue.description_placeholder")}
         className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3.5 text-base"
+        aria-label={translate("issue.description_placeholder")}
       />
     </section>
   );

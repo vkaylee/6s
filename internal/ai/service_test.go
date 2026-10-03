@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,6 +30,7 @@ import (
 // the issue package here would create an import cycle in tests.
 const (
 	testCategory1S = "1S"
+	testCategory3S = "3S"
 	testCategory6S = "6S"
 )
 
@@ -1287,7 +1289,7 @@ func TestSuggestTags_FiltersModelOutput(t *testing.T) {
 		}
 		resp := map[string]any{
 			"choices": []map[string]any{
-				{"message": map[string]string{"content": `{"existing_tags":["OIL_LEAK","PENDING_DIRT","SCRAP","OIL_LEAK","GHOST"],"proposed_tags":[{"name_vi":"Vết dầu mới","name_zh":"新油迹","name_en":"New oil stain","category":"3S"},{"name_vi":"Sai loại","name_zh":"错类","name_en":"Wrong cat","category":"1S"},{"name_vi":"","name_zh":"空","name_en":"Empty","category":"3S"}]}`}},
+				{"message": map[string]string{"content": `{"category":"3S","cause_type":"CONDITION","existing_tags":["OIL_LEAK","PENDING_DIRT","SCRAP","OIL_LEAK","GHOST"],"proposed_tags":[{"name_vi":"Vết dầu mới","name_zh":"新油迹","name_en":"New oil stain","category":"3S"},{"name_vi":"Sai loại","name_zh":"错类","name_en":"Wrong cat","category":"1S"},{"name_vi":"","name_zh":"空","name_en":"Empty","category":"3S"}]}`}},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1304,14 +1306,30 @@ func TestSuggestTags_FiltersModelOutput(t *testing.T) {
 		t.Fatalf("SuggestTags: %v", err)
 	}
 	// Approved 3S codes only, deduplicated; pending and cross-category codes are dropped.
+	if res.Category != testCategory3S || res.CauseType != "CONDITION" {
+		t.Fatalf("suggestion metadata = %q/%q, want 3S/CONDITION", res.Category, res.CauseType)
+	}
 	if len(res.ExistingTags) != 1 || res.ExistingTags[0] != "OIL_LEAK" {
 		t.Fatalf("existing_tags = %v, want [OIL_LEAK]", res.ExistingTags)
 	}
 	if len(res.ProposedTags) != 1 || res.ProposedTags[0].NameVi != "Vết dầu mới" {
 		t.Fatalf("proposed_tags = %+v, want the single valid 3S proposal", res.ProposedTags)
 	}
+	if !strings.Contains(systemPrompt, "category") || !strings.Contains(systemPrompt, "cause_type") || !strings.Contains(systemPrompt, "existing_tags") || !strings.Contains(systemPrompt, "proposed_tags") {
+		t.Fatalf("prompt missing suggestion contract: %q", systemPrompt)
+	}
 	if !strings.Contains(systemPrompt, "OIL_LEAK") || strings.Contains(systemPrompt, "PENDING_DIRT") {
 		t.Fatalf("prompt must expose approved catalog only, got %q", systemPrompt)
+	}
+}
+
+func TestParseSuggestTagsResult_FiltersInvalidMetadata(t *testing.T) {
+	result, err := parseSuggestTagsResult(`{"category":"9S","cause_type":"ROOT_CAUSE","existing_tags":[],"proposed_tags":[]}`, "", nil)
+	if err != nil {
+		t.Fatalf("parseSuggestTagsResult: %v", err)
+	}
+	if result.Category != "" || result.CauseType != "" {
+		t.Fatalf("invalid metadata = %q/%q, want empty values", result.Category, result.CauseType)
 	}
 }
 
@@ -1404,6 +1422,68 @@ func TestSuggestTags_AllCategoriesWhenCategoryOmitted(t *testing.T) {
 	}
 	if !strings.Contains(gotPrompt, "SCRAP | 1S") || !strings.Contains(gotPrompt, "OIL_LEAK | 3S") {
 		t.Fatalf("categoryless prompt omitted approved cross-category catalog: %q", gotPrompt)
+	}
+}
+
+func TestSuggestTags_UsesVisionModelAndImage(t *testing.T) {
+	const imageDataURL = "data:image/png;base64,aW1hZ2U="
+	var model string
+	var requestBody []byte
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestBody, _ = io.ReadAll(r.Body)
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = json.Unmarshal(requestBody, &body)
+		model = body.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"existing_tags\":[\"DIRT\"],\"proposed_tags\":[]}"}}]}`))
+	}))
+	defer mockServer.Close()
+	store := suggestTagsFixture(mockServer.URL)
+	store.cfg.ModelVision = "vision-model"
+	svc := NewService(store, nil, mockServer.Client(), "")
+	svc.SetMinInterval(0)
+	_, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{
+		Query:        "bụi",
+		Category:     "3S",
+		Description:  "bụi dưới máy",
+		ImageDataURL: imageDataURL,
+	})
+	if err != nil {
+		t.Fatalf("SuggestTags: %v", err)
+	}
+	if model != "vision-model" {
+		t.Fatalf("model = %q, want vision-model", model)
+	}
+	if !strings.Contains(string(requestBody), imageDataURL) || !strings.Contains(string(requestBody), "bụi dưới máy") {
+		t.Fatalf("multimodal request missing image or description")
+	}
+}
+
+func TestSuggestTags_RejectsInvalidImageDataURL(t *testing.T) {
+	svc := NewService(suggestTagsFixture("http://unused"), nil, nil, "")
+	for _, imageDataURL := range []string{"https://example.com/image.png", "data:image/svg+xml;base64,PHN2Zz4=", "data:image/png;base64,not-base64"} {
+		_, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "bụi", ImageDataURL: imageDataURL})
+		if err == nil {
+			t.Fatalf("expected invalid image error for %q", imageDataURL)
+		}
+		if appErr, ok := err.(*apperror.AppError); !ok || appErr.HTTPStatus != http.StatusBadRequest {
+			t.Fatalf("expected 400 AppError for %q, got %v", imageDataURL, err)
+		}
+	}
+}
+
+func TestSuggestTags_RejectsOversizedImage(t *testing.T) {
+	imageData := make([]byte, suggestImageMaxBytes+1)
+	imageDataURL := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(imageData)
+	svc := NewService(suggestTagsFixture("http://unused"), nil, nil, "")
+	_, err := svc.SuggestTags(context.Background(), SuggestTagsRequest{Query: "bụi", ImageDataURL: imageDataURL})
+	if err == nil {
+		t.Fatal("expected oversized image error")
+	}
+	if appErr, ok := err.(*apperror.AppError); !ok || appErr.HTTPStatus != http.StatusBadRequest {
+		t.Fatalf("expected 400 AppError, got %v", err)
 	}
 }
 
