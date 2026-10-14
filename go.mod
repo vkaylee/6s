@@ -10,7 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/lib/pq v1.12.3
 	github.com/openai/openai-go v1.12.0
-	github.com/tidwall/gjson v1.19.0
+	github.com/tidwall/gjson v1.20.0
 	golang.org/x/crypto v0.32.0
 )
 
