@@ -28,6 +28,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  // Cache API only accepts http(s) requests; browser extensions can emit other schemes.
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return;
+  }
 
   // Bypass API, uploads, and cert routes - handled by app sync / network
   if (

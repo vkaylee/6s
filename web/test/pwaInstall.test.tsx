@@ -54,6 +54,44 @@ describe("PWA Install Component & Manifest", () => {
     expect(exists).toBe(true);
   });
 
+  it("does not intercept browser-extension requests", async () => {
+    const source = await Bun.file("public/sw.js").text();
+    let fetchHandler:
+      | ((event: {
+          request: { url: string; method: string; mode: string };
+          respondWith: () => void;
+        }) => void)
+      | undefined;
+    const worker = {
+      addEventListener(type: string, handler: typeof fetchHandler) {
+        if (type === "fetch") fetchHandler = handler;
+      },
+    };
+    new Function("self", source)(worker);
+
+    const originalFetch = globalThis.fetch;
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("extension response");
+    }) as unknown as typeof fetch;
+
+    try {
+      let responseHandled = false;
+      fetchHandler?.({
+        request: { url: "chrome-extension://example/resource.js", method: "GET", mode: "no-cors" },
+        respondWith: () => {
+          responseHandled = true;
+        },
+      });
+
+      expect(responseHandled).toBe(false);
+      expect(fetchCalled).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("usePWAInstall initializes properly and promptInstall returns false without deferredPrompt", async () => {
     let hookResult: ReturnType<typeof usePWAInstall> | null = null;
     function HookHarness() {
