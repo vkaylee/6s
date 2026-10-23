@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6S Issue Management System - Giới Thiệu & Hướng Dẫn Sử Dụng</title>
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --bg-card-hover: rgba(51, 65, 85, 0.8);
+      --border-color: rgba(148, 163, 184, 0.15);
+      --primary: #06b6d4;
+      --primary-light: #67e8f9;
+      --accent: #3b82f6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top progress bar */
+    .progress-bar-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      z-index: 100;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 11.11%;
+      background: linear-gradient(90deg, var(--accent), var(--primary));
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* 16:9 Slide Stage */
+    .stage {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 64px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 20px 40px;
+    }
+
+    .slide {
+      position: absolute;
+      width: min(92vw, 1300px);
+      height: min(84vh, 760px);
+      background: radial-gradient(circle at 10% 20%, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.95) 90%);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      padding: 40px 48px;
+      opacity: 0;
+      transform: scale(0.96) translateY(12px);
+      pointer-events: none;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      pointer-events: auto;
+    }
+
+    /* Typography */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      width: fit-content;
+    }
+
+    .badge-primary {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--primary-light);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fde68a;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    h1.hero-title {
+      font-size: clamp(34px, 4.5vw, 56px);
+      font-weight: 800;
+      line-height: 1.15;
+      background: linear-gradient(135deg, #ffffff 40%, var(--primary-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+    }
+
+    h2.slide-header {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    p.subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    /* Grids & Cards */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      flex: 1;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      flex: 1;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      flex: 1;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      backdrop-filter: blur(10px);
+    }
+
+    .card-accent {
+      border-left: 4px solid var(--primary);
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    ul.bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    ul.bullet-list li {
+      position: relative;
+      padding-left: 24px;
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+
+    ul.bullet-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    /* Workflow Stepper */
+    .step-chain {
+      display: flex;
+      align-items: stretch;
+      gap: 12px;
+      flex: 1;
+      margin: 16px 0;
+    }
+
+    .step-box {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #0b1120;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+
+    .step-arrow {
+      align-self: center;
+      color: var(--primary-light);
+      font-size: 20px;
+      opacity: 0.6;
+    }
+
+    /* Key-Value highlight */
+    .stat-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-top: 8px;
+    }
+
+    .stat-val {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--primary-light);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    /* Tag pill */
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Bottom Controller */
+    .nav-bar {
+      height: 64px;
+      background: rgba(15, 23, 42, 0.85);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      backdrop-filter: blur(12px);
+      z-index: 50;
+    }
+
+    .brand-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .brand-title {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: var(--primary);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #0b1120;
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-light);
+    }
+
+    .slide-counter {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .kbd {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #94a3b8;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2, .grid-3, .grid-4, .step-chain {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+      }
+      .slide {
+        padding: 24px;
+        height: 90vh;
+      }
+      .stage {
+        padding: 10px;
+      }
+      .nav-bar {
+        padding: 0 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- Slide Stage -->
+  <main class="stage">
+
+    <!-- SLIDE 1: Cover -->
+    <section class="slide active" id="slide-1">
+      <div style="margin: auto 0;">
+        <span class="badge badge-primary">Sản Xuất & Quản Trị Nhà Xưởng</span>
+        <h1 class="hero-title">6S Issue Management & Visual Reporting</h1>
+        <p class="subtitle" style="max-width: 800px; font-size: 19px;">
+          Nền tảng số hóa quản lý vi phạm 6S hiện trường: Ghi nhận trực quan, chú thích hình ảnh trên Canvas, đồng bộ Offline và tự động chấm điểm hiệu suất.
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 32px; max-width: 1000px;">
+          <div class="card" style="padding: 16px;">
+            <div style="font-size: 24px; margin-bottom: 6px;">📱</div>
+            <strong style="color: #f8fafc;">Mobile-First & PWA</strong>
+            <span style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Tối ưu cho công nhân và thanh tra viên cầm điện thoại/tablet dưới xưởng.</span>
+          </div>
+          <div class="card" style="padding: 16px;">
+            <div style="font-size: 24px; margin-bottom: 6px;">⚡</div>
+            <strong style="color: #f8fafc;">Offline Outbox</strong>
+            <span style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Mất Wi-Fi vẫn chụp và tạo issue, tự đồng bộ khi có mạng lại.</span>
+          </div>
+          <div class="card" style="padding: 16px;">
+            <div style="font-size: 24px; margin-bottom: 6px;">🎨</div>
+            <strong style="color: #f8fafc;">Canvas Annotator</strong>
+            <span style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Khoanh vùng lỗi trực tiếp trên ảnh chụp thực tế bằng ngón tay.</span>
+          </div>
+          <div class="card" style="padding: 16px;">
+            <div style="font-size: 24px; margin-bottom: 6px;">🤖</div>
+            <strong style="color: #f8fafc;">AI Review Panel</strong>
+            <span style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Trợ lý AI tự nhận diện nhóm 6S, gợi ý mức độ nghiêm trọng và giải pháp.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Problem & Solution -->
+    <section class="slide" id="slide-2">
+      <span class="badge badge-warning">Bối Cảnh Vận Hành</span>
+      <h2 class="slide-header">Thực Trạng Nhà Xưởng & Giải Pháp 6S Số Hóa</h2>
+      <p class="subtitle">Chuyển đổi từ ghi chép giấy tờ truyền thống sang quy trình số khép kín, minh bạch thời gian thực.</p>
+
+      <div class="grid-2">
+        <div class="card" style="border-left: 4px solid var(--danger);">
+          <div class="card-title" style="color: #fca5a5;">
+            <span>❌</span> Khó Khăn Phương Pháp Cũ (Sổ sách & Chat Zalo)
+          </div>
+          <ul class="bullet-list" style="margin-top: 14px;">
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Mất dấu vết:</strong> Tin nhắn ảnh trong group chat trôi rất nhanh, không ai biết lỗi đã sửa xong chưa.</li>
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Mô tả mơ hồ:</strong> Chụp cả góc xưởng rộng mà không chỉ rõ dây điện nào hở, pallet nào đặt sai vị trí.</li>
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Mất mạng = tắc nghẽn:</strong> Xưởng sâu, góc máy sóng yếu không gửi được báo cáo kịp thời.</li>
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Tính điểm thủ công:</strong> Cuối tháng kế toán/QA mất 3-4 ngày tổng hợp excel để trừ điểm thi đua.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-left: 4px solid var(--success);">
+          <div class="card-title" style="color: #86efac;">
+            <span>✅</span> Đột Phá Với Hệ Thống 6S Mới
+          </div>
+          <ul class="bullet-list" style="margin-top: 14px;">
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Luồng khép kín:</strong> Tạo mới &rarr; Phân công &rarr; Khắc phục (ảnh After) &rarr; Nghiệm thu &rarr; Đóng issue.</li>
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Khoanh vùng lỗi trực quan:</strong> Vẽ mũi tên, khung đỏ trực tiếp lên ảnh chỉ trong 5 giây.</li>
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Lưu đệm IndexedDB:</strong> 100% chức năng chụp & tạo issue hoạt động mượt mà khi rớt mạng.</li>
+            <li style="color: #cbd5e1;"><strong style="color: #fff;">Score Ledger tự động:</strong> Tự trừ điểm vi phạm và cộng thưởng ngay khi nghiệm thu xong.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: End-to-End Workflow -->
+    <section class="slide" id="slide-3">
+      <span class="badge badge-primary">Quy Trình Tiêu Chuẩn</span>
+      <h2 class="slide-header">Vòng Đời 1 Vấn Đề 6S (End-to-End Lifecycle)</h2>
+      <p class="subtitle">4 giai đoạn phối hợp nhịp nhàng giữa Đánh giá viên, Chuyền trưởng và Cán bộ quản trị.</p>
+
+      <div class="step-chain">
+        <div class="step-box">
+          <div class="step-num">1</div>
+          <strong style="color: #fff; font-size: 16px;">Phát Hiện & Tạo</strong>
+          <span style="font-size: 13px; color: var(--text-muted); margin: 8px 0;">Auditor / Công nhân</span>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">
+            - Chụp ảnh hiện trường<br>
+            - Vẽ chú thích trên Canvas<br>
+            - Chọn vị trí chuyền/khu vực<br>
+            - Gán danh mục 6S & mức độ
+          </p>
+          <div class="stat-box">
+            <span class="stat-label">Trạng thái</span>
+            <div style="font-size: 15px; font-weight: 600; color: #38bdf8;">OPEN (Mới tạo)</div>
+          </div>
+        </div>
+
+        <div class="step-arrow">&rarr;</div>
+
+        <div class="step-box">
+          <div class="step-num" style="background: var(--warning);">2</div>
+          <strong style="color: #fff; font-size: 16px;">Phân Công & Sửa</strong>
+          <span style="font-size: 13px; color: var(--text-muted); margin: 8px 0;">Chuyền trưởng / Kỹ thuật</span>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">
+            - Nhận việc được phân công<br>
+            - Tiến hành sắp xếp/vệ sinh<br>
+            - Chụp ảnh minh chứng sau sửa<br>
+            - Bấm gửi nghiệm thu
+          </p>
+          <div class="stat-box">
+            <span class="stat-label">Trạng thái</span>
+            <div style="font-size: 15px; font-weight: 600; color: #fbbf24;">IN PROGRESS / FIXED</div>
+          </div>
+        </div>
+
+        <div class="step-arrow">&rarr;</div>
+
+        <div class="step-box">
+          <div class="step-num" style="background: var(--success);">3</div>
+          <strong style="color: #fff; font-size: 16px;">Nghiệm Thu</strong>
+          <span style="font-size: 13px; color: var(--text-muted); margin: 8px 0;">Người tạo / Quản lý 6S</span>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">
+            - So sánh ảnh Trước & Sau<br>
+            - Đạt: Xác nhận Đóng issue<br>
+            - Chưa đạt: Trả về làm lại kèm ghi chú cụ thể
+          </p>
+          <div class="stat-box">
+            <span class="stat-label">Trạng thái</span>
+            <div style="font-size: 15px; font-weight: 600; color: #4ade80;">CLOSED (Hoàn thành)</div>
+          </div>
+        </div>
+
+        <div class="step-arrow">&rarr;</div>
+
+        <div class="step-box">
+          <div class="step-num" style="background: var(--accent);">4</div>
+          <strong style="color: #fff; font-size: 16px;">Sổ Điểm & Báo Cáo</strong>
+          <span style="font-size: 13px; color: var(--text-muted); margin: 8px 0;">Ban Giám Đốc / Toàn Xưởng</span>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">
+            - Ghi nhận lịch sử vào Ledger<br>
+            - Cập nhật điểm thi đua đội nhóm<br>
+            - Đưa vào báo cáo giao ban hàng ngày (Meeting Tab)
+          </p>
+          <div class="stat-box">
+            <span class="stat-label">Kết quả</span>
+            <div style="font-size: 15px; font-weight: 600; color: #818cf8;">KPI & Ranking</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Create Issue & Canvas Annotation -->
+    <section class="slide" id="slide-4">
+      <span class="badge badge-primary">Thao Tác Thực Tế</span>
+      <h2 class="slide-header">Hướng Dẫn 1: Tạo Mới Issue & Vẽ Chú Thích Ảnh</h2>
+      <p class="subtitle">Thực hiện nhanh dưới 30 giây ngay tại hiện trường máy móc thiết bị.</p>
+
+      <div class="grid-3">
+        <div class="card card-accent">
+          <div class="card-title">Bước 1: Chọn Vị Trí & Phân Loại</div>
+          <p class="card-desc">Chỉ định chính xác không gian vi phạm:</p>
+          <ul class="bullet-list">
+            <li><strong>Location:</strong> Chọn Nhà máy &rarr; Phân xưởng &rarr; Chuyền máy cụ thể.</li>
+            <li><strong>Danh mục 6S:</strong>
+              <div class="tag-row">
+                <span class="tag" style="border-color: #ef4444; color: #fca5a5;">Safety (An toàn)</span>
+                <span class="tag">Sort (Sàng lọc)</span>
+                <span class="tag">Set in order (Sắp xếp)</span>
+                <span class="tag">Shine (Sạch sẽ)</span>
+                <span class="tag">Standardize (Săn sóc)</span>
+                <span class="tag">Sustain (Sẵn sàng)</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card card-accent" style="border-left-color: var(--warning);">
+          <div class="card-title">Bước 2: Chụp & Dùng Canvas Annotator</div>
+          <p class="card-desc">Khoanh vùng chi tiết lỗi vi phạm:</p>
+          <ul class="bullet-list">
+            <li>Bấm <strong>Chụp ảnh</strong> hoặc tải từ thư viện.</li>
+            <li>Bộ công cụ chỉnh sửa mở tự động:
+              <ul style="padding-left: 16px; margin-top: 6px; font-size: 13px; color: #94a3b8;">
+                <li>Vẽ mũi tên chỉ thẳng vào điểm lỗi.</li>
+                <li>Vẽ hộp chữ nhật màu đỏ bao quanh vật thể.</li>
+                <li>Bút vẽ tự do & thêm ghi chú văn bản.</li>
+              </ul>
+            </li>
+            <li>Bấm <strong>Save Annotation</strong> để gắn đính kèm vào issue.</li>
+          </ul>
+        </div>
+
+        <div class="card card-accent" style="border-left-color: #8b5cf6;">
+          <div class="card-title">Bước 3: Trợ Lực Từ AI Review Panel</div>
+          <p class="card-desc">Tận dụng AI phân tích tự động:</p>
+          <ul class="bullet-list">
+            <li>Hệ thống gửi ảnh và mô tả qua AI engine.</li>
+            <li><strong>AI gợi ý:</strong>
+              <ul style="padding-left: 16px; margin-top: 6px; font-size: 13px; color: #94a3b8;">
+                <li>Mức độ nghiêm trọng (Low / Medium / High / Critical).</li>
+                <li>Các bước khắc phục khuyến nghị chuẩn OSHA / 6S.</li>
+                <li>Đề xuất biện pháp phòng ngừa tái diễn.</li>
+              </ul>
+            </li>
+            <li>Bấm <strong>Apply Suggestions</strong> để áp dụng nhanh.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Offline Outbox & Sync -->
+    <section class="slide" id="slide-5">
+      <span class="badge badge-warning">Tính Năng Cốt Lõi</span>
+      <h2 class="slide-header">Hướng Dẫn 2: Cơ Chế Ngoại Tuyến (Offline Outbox)</h2>
+      <p class="subtitle">Giải quyết triệt để vấn đề mất kết nối mạng ở các khu vực khuất sóng trong nhà xưởng.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="color: var(--primary-light);">
+            ⚡ Cách Thức Hoạt Động Của Hộp Thư Đi (Outbox)
+          </div>
+          <ul class="bullet-list">
+            <li><strong>Lưu đệm an toàn:</strong> Khi máy tính bảng mất Wi-Fi, mọi thao tác tạo issue, lưu ảnh gốc và dữ liệu vẽ vector được lưu tạm vào <strong>IndexedDB</strong> nội bộ của trình duyệt.</li>
+            <li><strong>Biểu tượng trạng thái (Sync Banner):</strong> Hiển thị huy hiệu màu cam trên góc màn hình báo rõ số lượng item đang chờ gửi (ví dụ: <em>3 items pending sync</em>).</li>
+            <li><strong>Mở Outbox Drawer:</strong> Người dùng có thể bấm vào banner để xem danh sách các issue đang đợi, kiểm tra lại ảnh hoặc xoá nếu tạo nhầm.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: var(--success);">
+            🔄 Tự Động Đồng Bộ Khi Có Sóng Lại
+          </div>
+          <ul class="bullet-list">
+            <li><strong>Tự nhận diện mạng:</strong> Ngay khi ra khỏi góc khuất có sóng Wi-Fi hoặc 4G, Sync Engine tự kích hoạt chạy nền (background sync).</li>
+            <li><strong>Ưu tiên dữ liệu:</strong> Tạo bản ghi issue trước &rarr; Tải ảnh độ phân giải cao lên CDN/Storage &rarr; Cập nhật liên kết.</li>
+            <li><strong>Cơ chế tự thử lại (Retry):</strong> Nếu nghẽn mạng nửa chừng, tiến trình tự thử lại sau vài giây mà không bao giờ làm mất ảnh hay nội dung đã nhập.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px; background: rgba(15, 23, 42, 0.8); border: 1px dashed var(--primary); border-radius: 10px; padding: 14px 20px; display: flex; align-items: center; gap: 16px;">
+        <span style="font-size: 28px;">💡</span>
+        <div style="font-size: 14px; color: #cbd5e1;">
+          <strong style="color: #fff;">Lưu ý quan trọng cho công nhân xưởng:</strong> Không cần đứng đợi tải xong. Cứ chụp và bấm Tạo Issue, sau đó tiếp tục đi tuần tra; hệ thống sẽ tự làm việc còn lại khi thiết bị bắt lại tín hiệu mạng.
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: Resolution & Confirmation -->
+    <section class="slide" id="slide-6">
+      <span class="badge badge-success">Xử Lý & Nghiệm Thu</span>
+      <h2 class="slide-header">Hướng Dẫn 3: Quy Trình Khắc Phục & Đóng Issue</h2>
+      <p class="subtitle">Đảm bảo mỗi vấn đề đều có bằng chứng trực quan và người chịu trách nhiệm rõ ràng.</p>
+
+      <div class="grid-2">
+        <div class="card" style="border-top: 4px solid var(--warning);">
+          <div class="card-title">Dành Cho Người Được Phân Công (Assignee)</div>
+          <ul class="bullet-list" style="margin-top: 8px;">
+            <li>Mở ứng dụng, vào tab <strong>My Issues</strong> để xem danh sách lỗi của chuyền mình.</li>
+            <li>Bấm vào issue để xem chi tiết ảnh chụp ban đầu kèm các ghi chú màu đỏ.</li>
+            <li>Thực hiện dọn dẹp, chỉnh trang hiện trường theo yêu cầu 6S.</li>
+            <li>Chụp ảnh <strong>After (Sau khi khắc phục)</strong> và tải lên trực tiếp tại mục giải quyết.</li>
+            <li>Bấm nút <strong>Submit for Verification (Gửi nghiệm thu)</strong>.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-top: 4px solid var(--success);">
+          <div class="card-title">Dành Cho Người Đánh Giá / Chuyền Trưởng</div>
+          <ul class="bullet-list" style="margin-top: 8px;">
+            <li>Giao diện cung cấp chế độ xem đối chiếu <strong>Before / After</strong> song song.</li>
+            <li>Kiểm tra xem hiện trường sau khắc phục đã đạt chuẩn 6S chưa:
+              <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <div style="flex: 1; background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); padding: 8px 12px; border-radius: 8px; text-align: center;">
+                  <strong style="color: #6ee7b7; font-size: 13px;">ĐẠT CHUẨN</strong>
+                  <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Bấm "Confirm & Close" &rarr; Hoàn tất, ghi nhận điểm thưởng</div>
+                </div>
+                <div style="flex: 1; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); padding: 8px 12px; border-radius: 8px; text-align: center;">
+                  <strong style="color: #fca5a5; font-size: 13px;">CHƯA ĐẠT</strong>
+                  <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Bấm "Reject" kèm lý do &rarr; Trả về trạng thái In Progress</div>
+                </div>
+              </div>
+            </li>
+            <li style="margin-top: 12px;">Mọi lịch sử duyệt, thời gian nghiệm thu đều được lưu vết minh bạch.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Score Ledger & Leaderboards -->
+    <section class="slide" id="slide-7">
+      <span class="badge badge-primary">Minh Bạch & Thi Đua</span>
+      <h2 class="slide-header">Hướng Dẫn 4: Sổ Điểm 6S (Score Ledger) & Bảng Xếp Hạng</h2>
+      <p class="subtitle">Thúc đẩy văn hóa tự giác thông qua cơ chế tính điểm thời gian thực và xếp hạng thi đua.</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-title" style="color: var(--primary-light);">
+            📖 Sổ Giao Dịch Điểm (Score Ledger)
+          </div>
+          <p class="card-desc">Mỗi phân xưởng/tổ sở hữu một ví điểm số 6S được ghi nhận tự động:</p>
+          <ul class="bullet-list">
+            <li><strong>Vi phạm phát hiện:</strong> Trừ từ 2 đến 10 điểm tùy theo mức độ nghiêm trọng (Safety bị trừ nặng nhất).</li>
+            <li><strong>Khắc phục đúng hạn:</strong> Hoàn lại một phần điểm và cộng thưởng tốc độ.</li>
+            <li><strong>Lịch sử bất biến:</strong> Tra cứu chính xác từng ngày ai trừ điểm vì lỗi gì, có mã issue đi kèm.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #fde68a;">
+            🏆 Bảng Xếp Hạng (Leaderboards)
+          </div>
+          <p class="card-desc">Vinh danh các tập thể xuất sắc:</p>
+          <ul class="bullet-list">
+            <li>Xếp hạng trực quan Top chuyền sạch đẹp, tuân thủ an toàn cao nhất trong tuần/tháng.</li>
+            <li>Hiển thị chỉ số hoàn thành đúng hạn (On-Time Resolution Rate).</li>
+            <li>Tạo động lực thi đua tích cực giữa các ca làm việc.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #6ee7b7;">
+            ⚙️ Cấu Hình Điểm Linh Hoạt
+          </div>
+          <p class="card-desc">Quản trị viên có thể tinh chỉnh:</p>
+          <ul class="bullet-list">
+            <li>Điểm chuẩn ban đầu mỗi tháng của đơn vị (Baseline).</li>
+            <li>Hệ số điểm trừ cho từng danh mục 6S đặc thù ngành.</li>
+            <li>Thời gian quy định giải quyết (SLA) theo từng bậc ưu tiên.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Reports & Meeting Mode -->
+    <section class="slide" id="slide-8">
+      <span class="badge badge-primary">Báo Cáo & Điều Hành</span>
+      <h2 class="slide-header">Hướng Dẫn 5: Báo Cáo Phân Tích & Chế Độ Họp Giao Ban</h2>
+      <p class="subtitle">Trực quan hóa dữ liệu phục vụ các buổi họp giao ban đầu ca và đánh giá định kỳ.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">📊 Báo Cáo & Phân Tích Chuyên Sâu (Reports Page)</div>
+          <ul class="bullet-list">
+            <li><strong>KPI Tổng Thể:</strong> Tổng số issue, tỷ lệ đã giải quyết, thời gian trung bình đóng lỗi (MTTR).</li>
+            <li><strong>Mật độ theo vị trí (Location Hotspots):</strong> Bản đồ nhiệt chỉ rõ phân xưởng nào hoặc chuyền nào hay xảy ra vi phạm nhất để tăng cường giám sát.</li>
+            <li><strong>Phân bố 6S:</strong> Biểu đồ tỷ lệ vi phạm (Sàng lọc hay An toàn chiếm ưu thế).</li>
+            <li><strong>Xuất báo cáo:</strong> Hỗ trợ xuất file Excel / CSV hoặc PDF nhanh chóng để lưu trữ hồ sơ ISO/Audit.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border: 1px solid var(--primary);">
+          <div class="card-title" style="color: var(--primary-light);">
+            🖥️ Chế Độ Cuộc Họp (Meeting Mode)
+          </div>
+          <p class="card-desc">Thiết kế riêng cho màn hình TV lớn tại phòng họp:</p>
+          <ul class="bullet-list">
+            <li>Bật chế độ <strong>Toàn màn hình (Fullscreen)</strong> không chứa thanh công cụ thừa.</li>
+            <li>Duyệt nhanh danh sách các issue nóng chưa được xử lý trong ngày.</li>
+            <li>Chiếu ảnh phóng to hiện trường để Chuyền trưởng giải trình trực tiếp tại cuộc họp.</li>
+            <li>Cập nhật trạng thái và kết luận ngay trên màn hình trong lúc thảo luận.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Role Matrix & Shortcuts -->
+    <section class="slide" id="slide-9">
+      <span class="badge badge-success">Sẵn Sàng Triển Khai</span>
+      <h2 class="slide-header">Phân Quyền Sử Dụng & Bắt Đầu Ngay</h2>
+      <p class="subtitle">Đảm bảo đúng người - đúng việc - thao tác chính xác.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">👥 Ma Trận Vai Trò Người Dùng</div>
+          <div style="font-size: 13px; line-height: 1.6; color: #cbd5e1; margin-top: 8px;">
+            <div style="padding: 6px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+              <strong>Công nhân / Nhân viên:</strong> <span>Báo cáo sự cố, xem điểm chuyền mình</span>
+            </div>
+            <div style="padding: 6px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+              <strong>Chuyền trưởng (Assignee):</strong> <span>Tiếp nhận, tải ảnh khắc phục, gửi duyệt</span>
+            </div>
+            <div style="padding: 6px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+              <strong>Đánh giá viên 6S (Auditor):</strong> <span>Chấm lỗi, nghiệm thu Before/After, đóng issue</span>
+            </div>
+            <div style="padding: 6px 0; display: flex; justify-content: space-between;">
+              <strong>Quản đốc / Giám đốc (Admin):</strong> <span>Xem báo cáo, thiết lập barem điểm, phân quyền</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">⌨️ Phím Tắt Trình Chiếu Nhanh</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+            <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; font-size: 13px;">
+              <span class="kbd">&rarr;</span> hoặc <span class="kbd">Space</span> : Slide kế tiếp
+            </div>
+            <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; font-size: 13px;">
+              <span class="kbd">&larr;</span> : Slide trước đó
+            </div>
+            <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; font-size: 13px;">
+              <span class="kbd">Home</span> : Về trang bìa
+            </div>
+            <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; font-size: 13px;">
+              <span class="kbd">F</span> : Bật / Tắt Toàn màn hình
+            </div>
+          </div>
+
+          <div style="margin-top: 20px; padding: 12px; background: rgba(6, 182, 212, 0.1); border-radius: 8px; text-align: center;">
+            <div style="font-weight: 600; color: var(--primary-light);">Hệ thống đã sẵn sàng vận hành</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Truy cập ứng dụng qua trình duyệt web trên máy tính bảng hoặc điện thoại.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Navigation Controller -->
+  <footer class="nav-bar">
+    <div class="brand-meta">
+      <span style="font-size: 20px;">🏭</span>
+      <span class="brand-title">6S Issue Management System</span>
+      <span style="color: rgba(255,255,255,0.2);">|</span>
+      <span id="slideTitle">1. Giới thiệu tổng quan</span>
+    </div>
+
+    <div class="nav-actions">
+      <button class="btn" onclick="prevSlide()" title="Slide trước (←)">
+        <span>← Trước</span>
+      </button>
+
+      <span class="slide-counter">
+        <span id="currentSlideNum">1</span> / <span id="totalSlideNum">9</span>
+      </span>
+
+      <button class="btn btn-primary" onclick="nextSlide()" title="Slide tiếp theo (→)">
+        <span>Tiếp theo →</span>
+      </button>
+
+      <button class="btn" onclick="toggleFullscreen()" title="Toàn màn hình (F)">
+        <span>⛶ Toàn màn hình</span>
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const total = slides.length;
+    let current = 1;
+
+    const titles = [
+      "1. Giới thiệu tổng quan hệ thống",
+      "2. Thực trạng & Giải pháp số hóa",
+      "3. Vòng đời 1 vấn đề 6S (End-to-End)",
+      "4. Hướng dẫn tạo issue & vẽ chú thích ảnh",
+      "5. Hướng dẫn cơ chế hoạt động Offline",
+      "6. Hướng dẫn quy trình khắc phục & đóng issue",
+      "7. Sổ điểm 6S & Bảng xếp hạng thi đua",
+      "8. Báo cáo phân tích & Chế độ họp giao ban",
+      "9. Phân quyền người dùng & Bắt đầu"
+    ];
+
+    document.getElementById('totalSlideNum').textContent = total;
+
+    function goToSlide(index) {
+      if (index < 1) index = 1;
+      if (index > total) index = total;
+      current = index;
+
+      slides.forEach((s, idx) => {
+        s.classList.toggle('active', idx === current - 1);
+      });
+
+      document.getElementById('currentSlideNum').textContent = current;
+      document.getElementById('slideTitle').textContent = titles[current - 1] || "";
+      document.getElementById('progressBar').style.width = ((current / total) * 100) + '%';
+    }
+
+    function nextSlide() { goToSlide(current + 1); }
+    function prevSlide() { goToSlide(current - 1); }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.warn("Fullscreen request failed", err);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        goToSlide(1);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        goToSlide(total);
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    });
+
+    // Touch swipe support for mobile/tablet
+    let touchStartX = 0;
+    document.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, false);
+
+    document.addEventListener('touchend', e => {
+      let touchEndX = e.changedTouches[0].screenX;
+      let diff = touchEndX - touchStartX;
+      if (Math.abs(diff) > 50) {
+        if (diff < 0) nextSlide();
+        else prevSlide();
+      }
+    }, false);
+
+    // Initial state
+    goToSlide(1);
+  </script>
+</body>
+</html>
