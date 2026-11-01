@@ -414,10 +414,9 @@ func registerScoringAndNotificationRoutes(ctx context.Context, r *chi.Mux, queri
 	notifHandler := notification.NewConfigHandler(queries, cipher, httpSender)
 	r.Route("/api/config/notifications", func(nr chi.Router) {
 		nr.Use(authMw.Authenticate)
-		nr.Use(auth.RequireRole(auth.RoleAdmin))
-		nr.Get("/", notifHandler.GetConfig)
-		nr.Put("/", notifHandler.UpdateConfig)
-		nr.Post("/test", notifHandler.TestConfig)
+		nr.With(auth.RequireRole(auth.RoleAdmin, auth.RoleSuperadmin)).Get("/", notifHandler.GetConfig)
+		nr.With(auth.RequireRole(auth.RoleAdmin)).Put("/", notifHandler.UpdateConfig)
+		nr.With(auth.RequireRole(auth.RoleAdmin)).Post("/test", notifHandler.TestConfig)
 	})
 
 	aiSvc := ai.NewService(queries, cipher, nil, storageDir)

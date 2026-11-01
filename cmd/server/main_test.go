@@ -347,8 +347,59 @@ func scriptedRowsFor(query string, args []driver.Value) ([]string, [][]driver.Va
 	case strings.Contains(query, "FROM ai_configs"):
 		return strings.Split("id, is_enabled, base_url, api_key, default_model, model_translate, model_vision, model_summary, updated_at, updated_by", ", "),
 			[][]driver.Value{{int64(1), true, "https://ai.example/v1", "secret", "model-a", "", "", "", time.Now(), nil}}
+	case strings.Contains(query, "FROM notification_configs"):
+		return strings.Split("id, wxpusher_enabled, wxpusher_app_token, lan_webhook_url, public_base_url, updated_at, updated_by", ", "),
+			[][]driver.Value{{int64(1), true, "secret", "https://hook.example", "https://6s.factory.lan", time.Now(), nil}}
 	default:
 		return []string{"id"}, nil
+	}
+}
+
+func TestNotificationConfigRouteRequiresAdminOrSuperadmin(t *testing.T) {
+	cfg := &config.Config{
+		Port:           "8080",
+		DataDir:        t.TempDir(),
+		JWTSecret:      "test-secret-at-least-32-bytes-long-key!",
+		TrustedProxies: "127.0.0.1",
+	}
+	scriptedDB, err := sql.Open("scripted_sql_driver", "test")
+	if err != nil {
+		t.Fatalf("failed to open scripted db: %v", err)
+	}
+	defer scriptedDB.Close()
+
+	enc, err := crypto.NewEncryptor("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+
+	r := setupRouter(scriptedDB, cfg, enc, nil)
+	tm := auth.NewTokenManager([]byte(cfg.JWTSecret))
+
+	cases := []struct {
+		name       string
+		userID     int64
+		wantStatus int
+	}{
+		{"admin", 1, http.StatusOK},
+		{"superadmin", 3, http.StatusOK},
+		{"regular user", 2, http.StatusForbidden},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			token, _, err := tm.GenerateAccessToken(tc.userID)
+			if err != nil {
+				t.Fatalf("failed to generate token: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "/api/config/notifications", nil)
+			req.AddCookie(&http.Cookie{Name: auth.AccessCookieName, Value: token})
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("GET /api/config/notifications as %s: want %d, got %d (%s)", tc.name, tc.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 

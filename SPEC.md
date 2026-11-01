@@ -881,7 +881,7 @@ Mọi phản hồi JSON tuân thủ chuẩn phong bì tại Mục 5.3. Auth resp
 
 ### 6.9. Cấu hình Kênh Thông Báo & Health
 - `GET /api/admin/users/` (Admin): danh mục nhân sự phục vụ màn Admin.
-- `GET /api/config/notifications` (Admin): trả bản ghi `notification_configs` (`id=1`), ẩn secret, chỉ trả cờ `has_app_token` / `has_webhook_url`.
+- `GET /api/config/notifications` (Admin hoặc Superadmin): trả bản ghi `notification_configs` (`id=1`), ẩn secret, chỉ trả cờ `has_app_token` / `has_webhook_url`.
 - `PUT /api/config/notifications` (Admin): upsert cấu hình; mã hóa AES-256-GCM; chỉ gửi secret khi thay đổi.
 - `POST /api/config/notifications/test` (Admin): gửi tin test theo từng kênh.
 - `GET /api/health` (public): trả trạng thái service và DB cho probe PWA/liveness.

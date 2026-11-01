@@ -3088,7 +3088,7 @@ paths:
   /config/notifications:
     get:
       operationId: getNotificationConfig
-      summary: Lấy cấu hình kênh thông báo (Admin only)
+      summary: Lấy cấu hình kênh thông báo (Admin or Superadmin)
       responses:
         '200':
           description: Cấu hình thông báo hiện hành
@@ -3116,7 +3116,7 @@ paths:
                       public_base_url:
                         type: string
         '403':
-          description: Requires the route-specific management permission
+          description: Requires Admin or Superadmin role
           content:
             application/json:
               schema:
@@ -3158,7 +3158,7 @@ paths:
                         type: boolean
                         example: true
         '403':
-          description: Requires the route-specific management permission
+          description: Requires Admin role
           content:
             application/json:
               schema:
