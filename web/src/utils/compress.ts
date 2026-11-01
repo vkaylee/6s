@@ -77,54 +77,58 @@ export async function compressImage(
     if (typeof createImageBitmap !== "undefined") {
       createImageBitmap(file)
         .then((bitmap) => {
-          let { width, height } = bitmap;
-          if (width > maxDimension || height > maxDimension) {
-            if (width > height) {
-              height = Math.round((height * maxDimension) / width);
-              width = maxDimension;
-            } else {
-              width = Math.round((width * maxDimension) / height);
-              height = maxDimension;
+          try {
+            let { width, height } = bitmap;
+            if (width > maxDimension || height > maxDimension) {
+              if (width > height) {
+                height = Math.round((height * maxDimension) / width);
+                width = maxDimension;
+              } else {
+                width = Math.round((width * maxDimension) / height);
+                height = maxDimension;
+              }
             }
-          }
 
-          if (typeof OffscreenCanvas !== "undefined") {
-            const canvas = new OffscreenCanvas(width, height);
-            const ctx = canvas.getContext("2d");
-            if (!ctx) {
-              resolve(file);
+            if (typeof OffscreenCanvas !== "undefined") {
+              const canvas = new OffscreenCanvas(width, height);
+              const ctx = canvas.getContext("2d");
+              if (!ctx) {
+                resolve(file);
+                return;
+              }
+              ctx.drawImage(bitmap, 0, 0, width, height);
+              canvas
+                .convertToBlob({ type: "image/jpeg", quality })
+                .then(resolve)
+                .catch(() => resolve(file));
               return;
             }
-            ctx.drawImage(bitmap, 0, 0, width, height);
-            canvas
-              .convertToBlob({ type: "image/jpeg", quality })
-              .then(resolve)
-              .catch(() => resolve(file));
-            return;
-          }
 
-          if (typeof document !== "undefined") {
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) {
-              resolve(file);
+            if (typeof document !== "undefined") {
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) {
+                resolve(file);
+                return;
+              }
+              ctx.drawImage(bitmap, 0, 0, width, height);
+              canvas.toBlob(
+                (blob) => {
+                  if (blob) resolve(blob);
+                  else resolve(file);
+                },
+                "image/jpeg",
+                quality,
+              );
               return;
             }
-            ctx.drawImage(bitmap, 0, 0, width, height);
-            canvas.toBlob(
-              (blob) => {
-                if (blob) resolve(blob);
-                else resolve(file);
-              },
-              "image/jpeg",
-              quality,
-            );
-            return;
-          }
 
-          resolve(file);
+            resolve(file);
+          } finally {
+            bitmap.close();
+          }
         })
         .catch(renderWithImageElement);
       return;

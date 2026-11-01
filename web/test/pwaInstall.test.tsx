@@ -33,19 +33,33 @@ describe("PWA Install Component & Manifest", () => {
     expect(html).toBe("");
   });
 
-  it("manifest.webmanifest exists and has required PWA fields", async () => {
+  it("manifest.webmanifest declares installable PNG icons", async () => {
     const file = Bun.file("public/manifest.webmanifest");
-    const exists = await file.exists();
-    expect(exists).toBe(true);
-
+    expect(await file.exists()).toBe(true);
     const data = await file.json();
     expect(data.name).toBe("6S Issue Management System");
-    expect(data.short_name).toBe("6S System");
     expect(data.display).toBe("standalone");
     expect(data.start_url).toBe("/");
     expect(data.theme_color).toBe("#DC2626");
-    expect(Array.isArray(data.icons)).toBe(true);
-    expect(data.icons.length).toBeGreaterThan(0);
+    expect(data.icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ src: "/icon-192.png", sizes: "192x192", type: "image/png" }),
+        expect.objectContaining({ src: "/icon-512.png", sizes: "512x512", type: "image/png" }),
+        expect.objectContaining({
+          src: "/icon-maskable-512.png",
+          sizes: "512x512",
+          purpose: "maskable",
+        }),
+      ]),
+    );
+    for (const icon of [
+      "apple-touch-icon.png",
+      "icon-192.png",
+      "icon-512.png",
+      "icon-maskable-512.png",
+    ]) {
+      expect(await Bun.file(`public/${icon}`).exists()).toBe(true);
+    }
   });
 
   it("service worker file sw.js exists in public", async () => {

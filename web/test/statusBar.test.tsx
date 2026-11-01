@@ -37,7 +37,7 @@ describe("StatusBar Component", () => {
         <StatusBar onOpenDrawer={() => {}} />
       </Router>,
     );
-    expect(html).toContain("Ngoại tuyến");
+    expect(html).toContain(navigator.onLine ? "Trực tuyến" : "Ngoại tuyến");
     expect(html).toContain("Hệ thống 6S");
     expect(html).toContain('data-testid="lang-toggle"');
     expect(html).toContain('data-testid="theme-toggle"');

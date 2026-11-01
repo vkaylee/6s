@@ -102,7 +102,7 @@ export function OfflineOutboxDrawer({
 
   const handleRetryAll = () => {
     haptics.success();
-    syncEngine.triggerSync();
+    syncEngine.triggerSync(true);
     setTimeout(loadData, 500);
   };
 

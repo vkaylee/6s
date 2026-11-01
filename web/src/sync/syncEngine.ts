@@ -1,4 +1,4 @@
-import { apiClient } from "../api/client.ts";
+import { ApiError, apiClient } from "../api/client.ts";
 import {
   type DraftIssue,
   type DraftResolve,
@@ -12,6 +12,9 @@ import {
 import { useAuthStore } from "../store/authStore.ts";
 import { type ProposedTagItem, SyncStatus } from "../types/index.ts";
 import { compressImage } from "../utils/compress.ts";
+
+const MAX_AUTO_RETRIES = 5;
+type SyncAttempt = "SUCCESS" | "CONFLICT" | "RETRYABLE_FAILURE" | "PERMANENT_FAILURE";
 
 async function hasSupportedImageSignature(blob: Blob): Promise<boolean> {
   const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
@@ -88,9 +91,15 @@ export interface SyncProgress {
  * resolve retry either succeeds or surfaces the conflict for user resolution.
  * Excluding SYNCING would strand those drafts forever.
  */
-export function isRecoverableSyncStatus(status: SyncStatus): boolean {
+export function isRecoverableSyncStatus(
+  status: SyncStatus,
+  manualRetry = false,
+  retryCount = 0,
+): boolean {
   return (
-    status === SyncStatus.PENDING || status === SyncStatus.FAILED || status === SyncStatus.SYNCING
+    status === SyncStatus.PENDING ||
+    status === SyncStatus.SYNCING ||
+    (status === SyncStatus.FAILED && (manualRetry || retryCount < MAX_AUTO_RETRIES))
   );
 }
 type ProgressListener = (progress: SyncProgress) => void;
@@ -172,7 +181,7 @@ class SyncEngine {
    * Step 1: Sync new draft issues via POST /api/issues/sync (multipart)
    * Step 2: Sync draft resolves via POST /api/issues/{id}/resolve (expected_version)
    */
-  public async triggerSync(): Promise<void> {
+  public async triggerSync(manualRetry = false): Promise<void> {
     if (this.isRunning) {
       return;
     }
@@ -183,11 +192,12 @@ class SyncEngine {
       const draftIssues = await getAllDraftIssues();
       const draftResolves = await getAllDraftResolves();
 
-      // SYNCING means previous attempt may have completed before the client stopped.
-      // Re-process it so interrupted uploads remain recoverable. Issue sync is idempotent
-      // by client_uuid; resolve retries preserve the draft and surface any resulting conflict.
-      const pendingIssues = draftIssues.filter((i) => isRecoverableSyncStatus(i.sync_status));
-      const pendingResolves = draftResolves.filter((r) => isRecoverableSyncStatus(r.sync_status));
+      const pendingIssues = draftIssues.filter((i) =>
+        isRecoverableSyncStatus(i.sync_status, manualRetry, i.retry_count),
+      );
+      const pendingResolves = draftResolves.filter((r) =>
+        isRecoverableSyncStatus(r.sync_status, manualRetry, r.retry_count),
+      );
       const conflictResolves = draftResolves.filter((r) => r.sync_status === SyncStatus.CONFLICT);
       const totalTasks = pendingIssues.length + pendingResolves.length;
       if (totalTasks === 0) {
@@ -222,11 +232,13 @@ class SyncEngine {
         issue.sync_status = SyncStatus.SYNCING;
         await saveDraftIssue(issue);
 
-        const success = await this.syncOneIssue(issue);
-        if (success) {
+        const result = await this.syncOneIssue(issue);
+        if (result === "SUCCESS") {
           await deleteDraftIssue(issue.client_uuid);
         } else {
           issue.sync_status = SyncStatus.FAILED;
+          issue.retry_count =
+            result === "PERMANENT_FAILURE" ? MAX_AUTO_RETRIES : (issue.retry_count ?? 0) + 1;
           await saveDraftIssue(issue);
         }
 
@@ -253,6 +265,8 @@ class SyncEngine {
           this.progress.conflictCount++;
         } else {
           resolveItem.sync_status = SyncStatus.FAILED;
+          resolveItem.retry_count =
+            result === "PERMANENT_FAILURE" ? MAX_AUTO_RETRIES : (resolveItem.retry_count ?? 0) + 1;
           await saveDraftResolve(resolveItem);
         }
 
@@ -268,21 +282,21 @@ class SyncEngine {
     }
   }
 
-  private async syncOneIssue(issue: DraftIssue): Promise<boolean> {
+  private async syncOneIssue(issue: DraftIssue): Promise<SyncAttempt> {
     try {
       await apiClient("/api/issues/sync", {
         method: "POST",
         body: await buildIssueSyncFormData(issue),
       });
-      return true;
-    } catch {
-      return false;
+      return "SUCCESS";
+    } catch (error) {
+      return error instanceof ApiError && error.status >= 400 && error.status < 500
+        ? "PERMANENT_FAILURE"
+        : "RETRYABLE_FAILURE";
     }
   }
 
-  private async syncOneResolve(
-    resolveItem: DraftResolve,
-  ): Promise<"SUCCESS" | "CONFLICT" | "FAILED"> {
+  private async syncOneResolve(resolveItem: DraftResolve): Promise<SyncAttempt> {
     try {
       const formData = new FormData();
       formData.append("resolved_client_uuid", resolveItem.resolved_client_uuid);
@@ -296,18 +310,14 @@ class SyncEngine {
         method: "POST",
         body: formData,
       });
-
       return "SUCCESS";
-    } catch (err: unknown) {
-      if (
-        typeof err === "object" &&
-        err !== null &&
-        "status" in err &&
-        ((err as { status: number }).status === 409 || (err as { status: number }).status === 404)
-      ) {
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 409 || error.status === 404)) {
         return "CONFLICT";
       }
-      return "FAILED";
+      return error instanceof ApiError && error.status >= 400 && error.status < 500
+        ? "PERMANENT_FAILURE"
+        : "RETRYABLE_FAILURE";
     }
   }
 }
