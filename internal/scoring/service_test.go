@@ -78,16 +78,30 @@ func (m *mockScoringStore) UpsertScoringRule(_ context.Context, arg db.UpsertSco
 	m.rules[arg.RuleKey] = arg.Points
 	return db.ScoringRule{RuleKey: arg.RuleKey, Points: arg.Points}, nil
 }
+func (m *mockScoringStore) UpdateScoringRulesAtomic(_ context.Context, rules []db.UpsertScoringRuleParams, retro []db.InsertScoreLogsForIssueParams, audit *db.InsertAuditLogParams) error {
+	for _, rule := range rules {
+		m.rules[rule.RuleKey] = rule.Points
+	}
+	for _, batch := range retro {
+		if err := m.InsertScoreLogsForIssue(context.Background(), batch); err != nil {
+			return err
+		}
+	}
+	if audit != nil {
+		m.auditLogs = append(m.auditLogs, *audit)
+	}
+	return nil
+}
 
 func (m *mockScoringStore) ListScoreLogsSince(_ context.Context, _ time.Time) ([]db.ScoreLog, error) {
 	return m.logs, nil
 }
 
-func (m *mockScoringStore) ListScoreLogsByIssue(_ context.Context, _ int64) ([]db.ListScoreLogsByIssueRow, error) {
+func (m *mockScoringStore) ListScoreLogsByIssue(_ context.Context, _ db.ListScoreLogsByIssueParams) ([]db.ListScoreLogsByIssueRow, error) {
 	return m.issueLogs, nil
 }
 
-func (m *mockScoringStore) ListScoreLogsByIssueIncludingDeleted(_ context.Context, _ int64) ([]db.ListScoreLogsByIssueIncludingDeletedRow, error) {
+func (m *mockScoringStore) ListScoreLogsByIssueIncludingDeleted(_ context.Context, _ db.ListScoreLogsByIssueIncludingDeletedParams) ([]db.ListScoreLogsByIssueIncludingDeletedRow, error) {
 	return nil, nil
 }
 func (m *mockScoringStore) ListScoreLogsByTargetSince(_ context.Context, _ db.ListScoreLogsByTargetSinceParams) ([]db.ListScoreLogsByTargetSinceRow, error) {
@@ -138,7 +152,6 @@ func TestScoringService_LocationLeaderboardFormula(t *testing.T) {
 
 	svc := NewService(store, time.UTC)
 	ctx := context.Background()
-
 	items, err := svc.GetLocationLeaderboard(ctx, "")
 	if err != nil {
 		t.Fatalf("GetLocationLeaderboard error: %v", err)

@@ -1146,7 +1146,8 @@ func TestIssueService_ForceResolveAndSafetyClose(t *testing.T) {
 	resResp, err := svc.ResolveIssue(ctxFor(worker), ResolveIssueRequest{
 		IssueID:            resp.ID,
 		ResolvedClientUUID: "c0a80101-0000-4000-8000-000000000078",
-		Force:              true,
+		ExpectedVersion:    1,
+		Force:              false,
 		PhotoAfter:         fhAfter,
 	}, worker)
 	if err != nil {

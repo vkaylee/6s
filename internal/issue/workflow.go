@@ -402,17 +402,31 @@ type ResolveIssueRequest struct {
 	PhotoAfter         *multipart.FileHeader
 }
 
-// ResolveIssue handles resolving an open issue with after photo.
+// ResolveIssue handles resolving an open issue with after photo. A force resolve
+// may only replace a pending review result when the caller can review the issue
+// and the supplied version still matches.
 func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest, currentUser db.User) (*Response, error) {
 	issue, err := s.store.GetIssueByID(ctx, req.IssueID)
 	if err != nil {
 		return nil, ErrIssueNotFound
 	}
-	if !s.canResolveIssue(ctx, currentUser, issue) {
-		return nil, ErrPermissionDenied
+	if req.ExpectedVersion <= 0 {
+		return nil, ErrInvalidExpectedVersion
 	}
-	if issue.Status != StatusOpen.String() {
-		return nil, fmt.Errorf("%w: current status %s", ErrIssueConflict, issue.Status)
+	if req.Force {
+		if !s.canCloseIssue(ctx, currentUser, issue) {
+			return nil, ErrPermissionDenied
+		}
+		if issue.Status != StatusOpen.String() && issue.Status != StatusPendingReview.String() {
+			return nil, fmt.Errorf("%w: current status %s", ErrIssueConflict, issue.Status)
+		}
+	} else {
+		if !s.canResolveIssue(ctx, currentUser, issue) {
+			return nil, ErrPermissionDenied
+		}
+		if issue.Status != StatusOpen.String() {
+			return nil, fmt.Errorf("%w: current status %s", ErrIssueConflict, issue.Status)
+		}
 	}
 	if req.PhotoAfter == nil {
 		return nil, storage.ErrEmptyFile
@@ -428,7 +442,7 @@ func (s *ServiceImpl) ResolveIssue(ctx context.Context, req ResolveIssueRequest,
 	}
 	var updated db.Issue
 	if req.Force {
-		updated, err = atomicStore.ResolveIssueAtomic(ctx, true, db.ResolveIssueParams{}, db.ForceResolveIssueParams{ID: issue.ID, ResolverID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, PhotoAfter: sql.NullString{String: afterBasename, Valid: true}})
+		updated, err = atomicStore.ResolveIssueAtomic(ctx, true, db.ResolveIssueParams{}, db.ForceResolveIssueParams{ID: issue.ID, ResolverID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, PhotoAfter: sql.NullString{String: afterBasename, Valid: true}, Version: req.ExpectedVersion})
 	} else {
 		updated, err = atomicStore.ResolveIssueAtomic(ctx, false, db.ResolveIssueParams{ID: issue.ID, ResolverID: sql.NullInt64{Int64: currentUser.ID, Valid: true}, PhotoAfter: sql.NullString{String: afterBasename, Valid: true}, Version: req.ExpectedVersion}, db.ForceResolveIssueParams{})
 	}

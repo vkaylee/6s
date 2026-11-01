@@ -818,7 +818,10 @@ SET status = 'PENDING_REVIEW',
     photo_after = $3,
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $1
+  AND status IN ('OPEN', 'PENDING_REVIEW')
+  AND deleted_at IS NULL
+  AND version = $4
 RETURNING id, client_uuid, version, site_id, creator_id, resolver_id, assignee_id, assigned_team_id, category, cause_type, visibility_class, location_code, asset_id, cause_team_id, cause_status, description, reject_reason, photo_before, photo_detail, photo_after, location_name_vi_snapshot, location_name_zh_snapshot, location_name_en_snapshot, location_snapshot_source, location_snapshot_recorded_at, score_rating, status, created_at, resolved_at, closed_at, deleted_at, deleted_by, delete_reason
 `
 
@@ -826,10 +829,16 @@ type ForceResolveIssueParams struct {
 	ID         int64
 	ResolverID sql.NullInt64
 	PhotoAfter sql.NullString
+	Version    int32
 }
 
 func (q *Queries) ForceResolveIssue(ctx context.Context, arg ForceResolveIssueParams) (Issue, error) {
-	row := q.db.QueryRowContext(ctx, forceResolveIssue, arg.ID, arg.ResolverID, arg.PhotoAfter)
+	row := q.db.QueryRowContext(ctx, forceResolveIssue,
+		arg.ID,
+		arg.ResolverID,
+		arg.PhotoAfter,
+		arg.Version,
+	)
 	var i Issue
 	err := row.Scan(
 		&i.ID,
@@ -1310,8 +1319,10 @@ WITH score_totals AS (
     SELECT target_id AS location_code, COALESCE(SUM(points), 0)::bigint AS sum_points
     FROM score_logs
     JOIN issues si ON si.id = score_logs.issue_id AND si.deleted_at IS NULL
-    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $2
-      AND ($1::varchar IS NULL OR score_logs.target_id = $1)
+    WHERE target_type = 'LOCATION' AND score_logs.created_at >= $5
+      AND si.site_id = $1::bigint
+      AND (si.visibility_class = 'SITE_PUBLIC' OR si.creator_id = $3::bigint OR si.assignee_id = $3::bigint OR $2::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($2::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $3::bigint AND lm.location_code = si.location_code AND l.site_id = si.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($2::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $3::bigint AND tl.location_code = si.location_code AND l.site_id = si.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (si.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = si.assigned_team_id AND tm.user_id = $3::bigint)))
+      AND ($4::varchar IS NULL OR score_logs.target_id = $4)
     GROUP BY target_id
 ), issue_totals AS (
     SELECT location_code,
@@ -1319,6 +1330,8 @@ WITH score_totals AS (
            COUNT(*) FILTER (WHERE status = 'OPEN' AND issues.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours')::bigint AS overdue_count
     FROM issues
     WHERE deleted_at IS NULL
+      AND site_id = $1::bigint
+      AND (visibility_class = 'SITE_PUBLIC' OR creator_id = $3::bigint OR assignee_id = $3::bigint OR $2::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($2::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $3::bigint AND lm.location_code = issues.location_code AND l.site_id = issues.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($2::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $3::bigint AND tl.location_code = issues.location_code AND l.site_id = issues.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (issues.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = issues.assigned_team_id AND tm.user_id = $3::bigint)))
     GROUP BY location_code
 )
 SELECT l.code AS location_code,
@@ -1330,11 +1343,16 @@ FROM locations l
 LEFT JOIN score_totals st ON st.location_code = l.code
 LEFT JOIN issue_totals it ON it.location_code = l.code
 WHERE l.is_active = TRUE
-  AND ($1::varchar IS NULL OR l.code = $1)
+  AND l.site_id = $1::bigint
+  AND ($2::varchar <> 'LINE_LEADER' OR EXISTS (SELECT 1 FROM location_memberships lm WHERE lm.user_id = $3::bigint AND lm.location_code = l.code AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)) OR EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id WHERE tm.user_id = $3::bigint AND tl.location_code = l.code AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)))
+  AND ($4::varchar IS NULL OR l.code = $4)
 ORDER BY l.code
 `
 
 type GetLocationLeaderboardStatsParams struct {
+	SiteID       int64
+	Role         string
+	UserID       int64
 	LocationCode sql.NullString
 	CreatedAt    time.Time
 }
@@ -1348,7 +1366,13 @@ type GetLocationLeaderboardStatsRow struct {
 }
 
 func (q *Queries) GetLocationLeaderboardStats(ctx context.Context, arg GetLocationLeaderboardStatsParams) ([]GetLocationLeaderboardStatsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getLocationLeaderboardStats, arg.LocationCode, arg.CreatedAt)
+	rows, err := q.db.QueryContext(ctx, getLocationLeaderboardStats,
+		arg.SiteID,
+		arg.Role,
+		arg.UserID,
+		arg.LocationCode,
+		arg.CreatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1564,6 +1588,8 @@ FROM users u
 JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
 JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
 WHERE sl.created_at >= $2
+  AND i.site_id = $3::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $4::bigint OR i.assignee_id = $4::bigint OR $5::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($5::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $4::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($5::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $4::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $4::bigint)))
 GROUP BY u.id, u.full_name
 ORDER BY points DESC, valid_count DESC, u.id ASC
 LIMIT 50
@@ -1572,6 +1598,9 @@ LIMIT 50
 type GetReporterLeaderboardInMonthParams struct {
 	LocationCode sql.NullString
 	CreatedAt    time.Time
+	SiteID       int64
+	UserID       int64
+	Role         string
 }
 
 type GetReporterLeaderboardInMonthRow struct {
@@ -1583,7 +1612,13 @@ type GetReporterLeaderboardInMonthRow struct {
 }
 
 func (q *Queries) GetReporterLeaderboardInMonth(ctx context.Context, arg GetReporterLeaderboardInMonthParams) ([]GetReporterLeaderboardInMonthRow, error) {
-	rows, err := q.db.QueryContext(ctx, getReporterLeaderboardInMonth, arg.LocationCode, arg.CreatedAt)
+	rows, err := q.db.QueryContext(ctx, getReporterLeaderboardInMonth,
+		arg.LocationCode,
+		arg.CreatedAt,
+		arg.SiteID,
+		arg.UserID,
+		arg.Role,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -3114,9 +3149,18 @@ SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points,
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
 JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
-WHERE sl.issue_id = $1
+WHERE sl.issue_id = $1::bigint
+  AND i.site_id = $2::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $3::bigint OR i.assignee_id = $3::bigint OR $4::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($4::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $3::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($4::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $3::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $3::bigint)))
 ORDER BY sl.id ASC
 `
+
+type ListScoreLogsByIssueParams struct {
+	IssueID int64
+	SiteID  int64
+	UserID  int64
+	Role    string
+}
 
 type ListScoreLogsByIssueRow struct {
 	ID              int64
@@ -3130,8 +3174,13 @@ type ListScoreLogsByIssueRow struct {
 	RuleDescription string
 }
 
-func (q *Queries) ListScoreLogsByIssue(ctx context.Context, issueID int64) ([]ListScoreLogsByIssueRow, error) {
-	rows, err := q.db.QueryContext(ctx, listScoreLogsByIssue, issueID)
+func (q *Queries) ListScoreLogsByIssue(ctx context.Context, arg ListScoreLogsByIssueParams) ([]ListScoreLogsByIssueRow, error) {
+	rows, err := q.db.QueryContext(ctx, listScoreLogsByIssue,
+		arg.IssueID,
+		arg.SiteID,
+		arg.UserID,
+		arg.Role,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -3167,9 +3216,19 @@ const listScoreLogsByIssueIncludingDeleted = `-- name: ListScoreLogsByIssueInclu
 SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points, sl.created_at, sl.penalty_date, COALESCE(sr.description, sl.rule_key) AS rule_description
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
-WHERE sl.issue_id = $1
+JOIN issues i ON i.id = sl.issue_id
+WHERE sl.issue_id = $1::bigint
+  AND i.site_id = $2::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $3::bigint OR i.assignee_id = $3::bigint OR $4::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($4::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $3::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($4::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $3::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $3::bigint)))
 ORDER BY sl.created_at ASC, sl.id ASC
 `
+
+type ListScoreLogsByIssueIncludingDeletedParams struct {
+	IssueID int64
+	SiteID  int64
+	UserID  int64
+	Role    string
+}
 
 type ListScoreLogsByIssueIncludingDeletedRow struct {
 	ID              int64
@@ -3183,8 +3242,13 @@ type ListScoreLogsByIssueIncludingDeletedRow struct {
 	RuleDescription string
 }
 
-func (q *Queries) ListScoreLogsByIssueIncludingDeleted(ctx context.Context, issueID int64) ([]ListScoreLogsByIssueIncludingDeletedRow, error) {
-	rows, err := q.db.QueryContext(ctx, listScoreLogsByIssueIncludingDeleted, issueID)
+func (q *Queries) ListScoreLogsByIssueIncludingDeleted(ctx context.Context, arg ListScoreLogsByIssueIncludingDeletedParams) ([]ListScoreLogsByIssueIncludingDeletedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listScoreLogsByIssueIncludingDeleted,
+		arg.IssueID,
+		arg.SiteID,
+		arg.UserID,
+		arg.Role,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -3224,7 +3288,12 @@ SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points,
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
 LEFT JOIN issues i ON sl.issue_id = i.id
-WHERE sl.target_type = $1 AND sl.target_id = $2 AND sl.created_at >= $3 AND i.deleted_at IS NULL
+WHERE sl.target_type = $1
+  AND sl.target_id = $2
+  AND sl.created_at >= $3
+  AND i.deleted_at IS NULL
+  AND i.site_id = $4::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = $5::bigint OR i.assignee_id = $5::bigint OR $6::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR ($6::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = $5::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR ($6::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = $5::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = $5::bigint)))
 ORDER BY sl.created_at DESC, sl.id DESC
 `
 
@@ -3232,6 +3301,9 @@ type ListScoreLogsByTargetSinceParams struct {
 	TargetType string
 	TargetID   string
 	CreatedAt  time.Time
+	SiteID     int64
+	UserID     int64
+	Role       string
 }
 
 type ListScoreLogsByTargetSinceRow struct {
@@ -3250,7 +3322,14 @@ type ListScoreLogsByTargetSinceRow struct {
 }
 
 func (q *Queries) ListScoreLogsByTargetSince(ctx context.Context, arg ListScoreLogsByTargetSinceParams) ([]ListScoreLogsByTargetSinceRow, error) {
-	rows, err := q.db.QueryContext(ctx, listScoreLogsByTargetSince, arg.TargetType, arg.TargetID, arg.CreatedAt)
+	rows, err := q.db.QueryContext(ctx, listScoreLogsByTargetSince,
+		arg.TargetType,
+		arg.TargetID,
+		arg.CreatedAt,
+		arg.SiteID,
+		arg.UserID,
+		arg.Role,
+	)
 	if err != nil {
 		return nil, err
 	}

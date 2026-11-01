@@ -453,3 +453,43 @@ func (q *Queries) ResolveIssueAtomic(ctx context.Context, force bool, params Res
 	}
 	return updated, nil
 }
+
+// UpdateScoringRulesAtomic applies rule changes, retroactive score deltas, and audit as one transaction.
+func (q *Queries) UpdateScoringRulesAtomic(ctx context.Context, rules []UpsertScoringRuleParams, retro []InsertScoreLogsForIssueParams, audit *InsertAuditLogParams) error {
+	beginner, ok := q.db.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+	})
+	if !ok {
+		return fmt.Errorf("database does not support transactions")
+	}
+	tx, err := beginner.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin scoring update transaction: %w", err)
+	}
+	rollback := func(cause error) error {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("%w; rollback scoring update: %v", cause, rollbackErr)
+		}
+		return cause
+	}
+	txQueries := q.WithTx(tx)
+	for _, rule := range rules {
+		if _, err := txQueries.UpsertScoringRule(ctx, rule); err != nil {
+			return rollback(fmt.Errorf("update scoring rule %s: %w", rule.RuleKey, err))
+		}
+	}
+	for _, batch := range retro {
+		if err := txQueries.InsertScoreLogsForIssue(ctx, batch); err != nil {
+			return rollback(fmt.Errorf("insert retroactive score delta for issue %d: %w", batch.IssueID, err))
+		}
+	}
+	if audit != nil {
+		if err := txQueries.InsertAuditLog(ctx, *audit); err != nil {
+			return rollback(fmt.Errorf("insert scoring audit log: %w", err))
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit scoring update: %w", err)
+	}
+	return nil
+}

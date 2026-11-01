@@ -40,6 +40,10 @@ func TestPostgresDeleteRestorePreservesAuditMetadataAndScoreLedger(t *testing.T)
 	sqlDB := newSetupTestDB(t)
 	ctx := context.Background()
 	issueID, adminID, locationCode := lifecycleIssueFixture(t, sqlDB)
+	var siteID int64
+	if err := sqlDB.QueryRowContext(ctx, `SELECT site_id FROM users WHERE id = $1`, adminID).Scan(&siteID); err != nil {
+		t.Fatalf("site fixture: %v", err)
+	}
 	queries := New(sqlDB)
 	createdAt := time.Date(2025, time.December, 31, 4, 5, 6, 0, time.UTC)
 	if _, err := sqlDB.ExecContext(ctx, `INSERT INTO score_logs (issue_id, target_type, target_id, rule_key, points, created_at, penalty_date) VALUES ($1, 'LOCATION', $2, 'reward_old', 7, $3, NULL), ($1, 'LOCATION', $2, 'penalty_old', -4, $3, $4), ($1, 'USER', $5::text, 'retro_old', 3, $6, NULL)`, issueID, locationCode, createdAt, createdAt.UTC().Format("2006-01-02"), strconv.FormatInt(adminID, 10), createdAt.Add(time.Hour)); err != nil {
@@ -85,7 +89,7 @@ func TestPostgresDeleteRestorePreservesAuditMetadataAndScoreLedger(t *testing.T)
 	if oldMap["status"] != beforeStatus || oldMap["version"] != float64(beforeVersion) || newMap["status"] != beforeStatus || newMap["version"] != float64(beforeVersion+1) || newMap["deleted_by"] != float64(adminID) || newMap["delete_reason"] != "duplicate issue" {
 		t.Fatalf("audit metadata lost actual transition: old=%v new=%v", oldMap, newMap)
 	}
-	if got, err := queries.ListScoreLogsByIssueIncludingDeleted(ctx, issueID); err != nil || len(got) != 3 {
+	if got, err := queries.ListScoreLogsByIssueIncludingDeleted(ctx, ListScoreLogsByIssueIncludingDeletedParams{IssueID: issueID, SiteID: siteID, UserID: adminID, Role: "ADMIN"}); err != nil || len(got) != 3 {
 		t.Fatalf("deleted issue ledger changed: rows=%d err=%v", len(got), err)
 	}
 	if got, err := queries.GetLocationScoreSumInWeek(ctx, GetLocationScoreSumInWeekParams{TargetID: locationCode, CreatedAt: createdAt.Add(-time.Hour)}); err != nil || got != 0 {

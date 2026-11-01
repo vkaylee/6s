@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"6s/internal/auth"
 	"6s/internal/db"
 )
 
@@ -38,13 +39,18 @@ type Store interface {
 	GetReporterLeaderboardInMonth(ctx context.Context, arg db.GetReporterLeaderboardInMonthParams) ([]db.GetReporterLeaderboardInMonthRow, error)
 	GetScoringRules(ctx context.Context) ([]db.ScoringRule, error)
 	GetScoringRuleByKey(ctx context.Context, ruleKey string) (db.ScoringRule, error)
-	UpsertScoringRule(ctx context.Context, arg db.UpsertScoringRuleParams) (db.ScoringRule, error)
+	UpdateScoringRulesAtomic(ctx context.Context, rules []db.UpsertScoringRuleParams, retro []db.InsertScoreLogsForIssueParams, audit *db.InsertAuditLogParams) error
 	ListScoreLogsSince(ctx context.Context, createdAt time.Time) ([]db.ScoreLog, error)
-	ListScoreLogsByIssue(ctx context.Context, issueID int64) ([]db.ListScoreLogsByIssueRow, error)
-	ListScoreLogsByIssueIncludingDeleted(ctx context.Context, issueID int64) ([]db.ListScoreLogsByIssueIncludingDeletedRow, error)
+	ListScoreLogsByIssue(ctx context.Context, arg db.ListScoreLogsByIssueParams) ([]db.ListScoreLogsByIssueRow, error)
+	ListScoreLogsByIssueIncludingDeleted(ctx context.Context, arg db.ListScoreLogsByIssueIncludingDeletedParams) ([]db.ListScoreLogsByIssueIncludingDeletedRow, error)
 	ListScoreLogsByTargetSince(ctx context.Context, arg db.ListScoreLogsByTargetSinceParams) ([]db.ListScoreLogsByTargetSinceRow, error)
 	InsertScoreLogsForIssue(ctx context.Context, arg db.InsertScoreLogsForIssueParams) error
 	InsertAuditLog(ctx context.Context, arg db.InsertAuditLogParams) error
+}
+
+func scoringScope(ctx context.Context) (int64, int64, string) {
+	user, _ := auth.GetUserFromContext(ctx)
+	return user.ID, user.SiteID, user.Role
 }
 
 // Service manages scoring algorithms, leaderboards, and retroactive adjustments.
@@ -183,10 +189,10 @@ func (s *Service) baseWeeklyScore(ctx context.Context) int64 {
 // GetLocationLeaderboard calculates real-time weekly health scores for active locations.
 func (s *Service) GetLocationLeaderboard(ctx context.Context, locationCode string) ([]LocationHealthItem, error) {
 	baseScore := s.baseWeeklyScore(ctx)
-
+	userID, siteID, role := scoringScope(ctx)
 	stats, err := s.store.GetLocationLeaderboardStats(ctx, db.GetLocationLeaderboardStatsParams{
-		LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
-		CreatedAt:    StartOfWeek(time.Now(), s.loc),
+		SiteID: siteID, LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
+		CreatedAt: StartOfWeek(time.Now(), s.loc), UserID: userID, Role: role,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get location leaderboard stats: %w", err)
@@ -223,9 +229,10 @@ func (s *Service) GetLocationLeaderboard(ctx context.Context, locationCode strin
 
 // GetReporterLeaderboard retrieves top 6S hunters for the current month.
 func (s *Service) GetReporterLeaderboard(ctx context.Context, locationCode string) ([]ReporterItem, error) {
+	userID, siteID, role := scoringScope(ctx)
 	rows, err := s.store.GetReporterLeaderboardInMonth(ctx, db.GetReporterLeaderboardInMonthParams{
-		CreatedAt:    StartOfMonth(time.Now(), s.loc),
-		LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
+		SiteID: siteID, LocationCode: sql.NullString{String: locationCode, Valid: locationCode != ""},
+		CreatedAt: StartOfMonth(time.Now(), s.loc), UserID: userID, Role: role,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get reporter leaderboard: %w", err)
@@ -251,7 +258,8 @@ func (s *Service) GetRules(ctx context.Context) ([]db.ScoringRule, error) {
 
 // GetIssueScoreLogs returns score ledger entries for an active issue.
 func (s *Service) GetIssueScoreLogs(ctx context.Context, issueID int64) ([]ScoreLogItem, error) {
-	rows, err := s.store.ListScoreLogsByIssue(ctx, issueID)
+	userID, siteID, role := scoringScope(ctx)
+	rows, err := s.store.ListScoreLogsByIssue(ctx, db.ListScoreLogsByIssueParams{IssueID: issueID, SiteID: siteID, UserID: userID, Role: role})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list score logs for issue: %w", err)
 	}
@@ -267,7 +275,8 @@ func (s *Service) GetIssueScoreLogsWithDeletion(ctx context.Context, issueID int
 	if deletion != "deleted" {
 		return s.GetIssueScoreLogs(ctx, issueID)
 	}
-	rows, err := s.store.ListScoreLogsByIssueIncludingDeleted(ctx, issueID)
+	userID, siteID, role := scoringScope(ctx)
+	rows, err := s.store.ListScoreLogsByIssueIncludingDeleted(ctx, db.ListScoreLogsByIssueIncludingDeletedParams{IssueID: issueID, SiteID: siteID, UserID: userID, Role: role})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list score logs for issue: %w", err)
 	}
@@ -286,16 +295,13 @@ func (s *Service) GetTargetScoreLogsInCycle(ctx context.Context, targetType, tar
 	} else {
 		since = StartOfMonth(time.Now(), s.loc)
 	}
-
+	userID, siteID, role := scoringScope(ctx)
 	rows, err := s.store.ListScoreLogsByTargetSince(ctx, db.ListScoreLogsByTargetSinceParams{
-		TargetType: targetType,
-		TargetID:   targetID,
-		CreatedAt:  since,
+		TargetType: targetType, TargetID: targetID, CreatedAt: since, SiteID: siteID, UserID: userID, Role: role,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list target score logs: %w", err)
 	}
-
 	items := make([]ScoreLogItem, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, mapScoreLogRow(
@@ -313,7 +319,7 @@ type UpdateRulesRequest struct {
 	Reason    string           `json:"reason,omitempty"`
 }
 
-// UpdateRules updates scoring configuration and handles retroactive delta calculation.
+// UpdateRules updates scoring configuration and handles retroactive delta calculation atomically.
 func (s *Service) UpdateRules(ctx context.Context, req UpdateRulesRequest, adminUserID int64) error {
 	if len(req.Rules) == 0 {
 		return ErrInvalidRules
@@ -321,11 +327,14 @@ func (s *Service) UpdateRules(ctx context.Context, req UpdateRulesRequest, admin
 	if req.ApplyFrom != nil && req.Reason == "" {
 		return ErrMissingReason
 	}
+	keys := make([]string, 0, len(req.Rules))
 	for key, points := range req.Rules {
 		if !validScoringRule(key, points) {
 			return fmt.Errorf("%w: %s=%d", ErrInvalidRules, key, points)
 		}
+		keys = append(keys, key)
 	}
+	sort.Strings(keys)
 	oldRules, err := s.store.GetScoringRules(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to fetch existing rules: %w", err)
@@ -334,105 +343,77 @@ func (s *Service) UpdateRules(ctx context.Context, req UpdateRulesRequest, admin
 	for _, r := range oldRules {
 		oldMap[r.RuleKey] = r.Points
 	}
-
-	// 1. Update rules in DB
-	for key, newPoints := range req.Rules {
-		_, upsertErr := s.store.UpsertScoringRule(ctx, db.UpsertScoringRuleParams{
-			RuleKey:     key,
-			Points:      newPoints,
-			Description: sql.NullString{},
-		})
-		if upsertErr != nil {
-			return fmt.Errorf("failed to update rule %s: %w", key, upsertErr)
-		}
+	rules := make([]db.UpsertScoringRuleParams, 0, len(keys))
+	for _, key := range keys {
+		rules = append(rules, db.UpsertScoringRuleParams{RuleKey: key, Points: req.Rules[key]})
 	}
-
-	// 2. Retroactive recalculation if apply_from provided
+	var retro []db.InsertScoreLogsForIssueParams
 	if req.ApplyFrom != nil {
-		if rErr := s.recalculateRetroactive(ctx, *req.ApplyFrom, req.Rules); rErr != nil {
-			return rErr
-		}
-
-		oldJSON, oErr := json.Marshal(oldMap)
-		if oErr != nil {
-			log.Printf("marshal oldMap err: %v", oErr)
-		}
-		newJSON, nErr := json.Marshal(req.Rules)
-		if nErr != nil {
-			log.Printf("marshal newRules err: %v", nErr)
-		}
-		if alErr := s.store.InsertAuditLog(ctx, db.InsertAuditLogParams{
-			UserID:      sql.NullInt64{Int64: adminUserID, Valid: true},
-			Action:      "RECALCULATE_RETROACTIVE",
-			TargetTable: "scoring_rules",
-			TargetID:    req.ApplyFrom.Format(time.RFC3339),
-			OldValue:    oldJSON,
-			NewValue:    newJSON,
-			IpAddress:   sql.NullString{},
-			UserAgent:   sql.NullString{String: req.Reason, Valid: true},
-		}); alErr != nil {
-			log.Printf("insert audit log err: %v", alErr)
+		retro, err = s.retroactiveBatches(ctx, *req.ApplyFrom, req.Rules)
+		if err != nil {
+			return err
 		}
 	}
-
+	var audit *db.InsertAuditLogParams
+	if req.ApplyFrom != nil {
+		oldJSON, err := json.Marshal(oldMap)
+		if err != nil {
+			return fmt.Errorf("marshal old scoring rules: %w", err)
+		}
+		newJSON, err := json.Marshal(req.Rules)
+		if err != nil {
+			return fmt.Errorf("marshal new scoring rules: %w", err)
+		}
+		audit = &db.InsertAuditLogParams{
+			UserID: sql.NullInt64{Int64: adminUserID, Valid: true}, Action: "RECALCULATE_RETROACTIVE",
+			TargetTable: "scoring_rules", TargetID: req.ApplyFrom.Format(time.RFC3339), OldValue: oldJSON,
+			NewValue: newJSON, UserAgent: sql.NullString{String: req.Reason, Valid: true},
+		}
+	}
+	if err := s.store.UpdateScoringRulesAtomic(ctx, rules, retro, audit); err != nil {
+		return fmt.Errorf("failed to apply scoring update atomically: %w", err)
+	}
 	return nil
 }
 
-func (s *Service) recalculateRetroactive(ctx context.Context, applyFrom time.Time, newMap map[string]int32) error {
+func (s *Service) retroactiveBatches(ctx context.Context, applyFrom time.Time, newMap map[string]int32) ([]db.InsertScoreLogsForIssueParams, error) {
 	logs, err := s.store.ListScoreLogsSince(ctx, applyFrom)
 	if err != nil {
-		return fmt.Errorf("failed to list score logs since %v: %w", applyFrom, err)
+		return nil, fmt.Errorf("failed to list score logs since %v: %w", applyFrom, err)
 	}
-
 	byIssue := make(map[int64][]db.InsertScoreLogsForIssueParams)
 	for _, logEntry := range logs {
-		// Only recalculate entries generated by standard rule keys (exclude previous retro_adjust)
 		if logEntry.RuleKey == "retro_adjust" {
 			continue
 		}
-
 		newPts, hasNew := newMap[logEntry.RuleKey]
-		if !hasNew {
+		if !hasNew || newPts == logEntry.Points {
 			continue
 		}
-
-		delta := newPts - logEntry.Points
-		if delta == 0 {
-			continue
-		}
-
 		byIssue[logEntry.IssueID] = append(byIssue[logEntry.IssueID], db.InsertScoreLogsForIssueParams{
-			IssueID:      logEntry.IssueID,
-			TargetTypes:  []string{logEntry.TargetType},
-			TargetIds:    []string{logEntry.TargetID},
-			RuleKeys:     []string{"retro_adjust"},
-			Points:       []int32{delta},
-			PenaltyDates: []string{formatPenaltyDate(logEntry.PenaltyDate)},
+			IssueID: logEntry.IssueID, TargetTypes: []string{logEntry.TargetType}, TargetIds: []string{logEntry.TargetID},
+			RuleKeys: []string{"retro_adjust"}, Points: []int32{newPts - logEntry.Points}, PenaltyDates: []string{formatPenaltyDate(logEntry.PenaltyDate)},
 		})
 	}
-
-	for issueID, entries := range byIssue {
-		targetTypes := make([]string, 0, len(entries))
-		targetIDs := make([]string, 0, len(entries))
-		ruleKeys := make([]string, 0, len(entries))
-		points := make([]int32, 0, len(entries))
-		penaltyDates := make([]string, 0, len(entries))
-		for _, entry := range entries {
-			targetTypes = append(targetTypes, entry.TargetTypes...)
-			targetIDs = append(targetIDs, entry.TargetIds...)
-			ruleKeys = append(ruleKeys, entry.RuleKeys...)
-			points = append(points, entry.Points...)
-			penaltyDates = append(penaltyDates, entry.PenaltyDates...)
-		}
-		if err := s.store.InsertScoreLogsForIssue(ctx, db.InsertScoreLogsForIssueParams{
-			IssueID: issueID, TargetTypes: targetTypes, TargetIds: targetIDs,
-			RuleKeys: ruleKeys, Points: points, PenaltyDates: penaltyDates,
-		}); err != nil {
-			return fmt.Errorf("failed to insert retro delta for issue %d: %w", issueID, err)
-		}
+	issueIDs := make([]int64, 0, len(byIssue))
+	for issueID := range byIssue {
+		issueIDs = append(issueIDs, issueID)
 	}
-
-	return nil
+	sort.Slice(issueIDs, func(i, j int) bool { return issueIDs[i] < issueIDs[j] })
+	batches := make([]db.InsertScoreLogsForIssueParams, 0, len(issueIDs))
+	for _, issueID := range issueIDs {
+		var batch db.InsertScoreLogsForIssueParams
+		batch.IssueID = issueID
+		for _, entry := range byIssue[issueID] {
+			batch.TargetTypes = append(batch.TargetTypes, entry.TargetTypes...)
+			batch.TargetIds = append(batch.TargetIds, entry.TargetIds...)
+			batch.RuleKeys = append(batch.RuleKeys, entry.RuleKeys...)
+			batch.Points = append(batch.Points, entry.Points...)
+			batch.PenaltyDates = append(batch.PenaltyDates, entry.PenaltyDates...)
+		}
+		batches = append(batches, batch)
+	}
+	return batches, nil
 }
 
 func formatPenaltyDate(value sql.NullTime) string {

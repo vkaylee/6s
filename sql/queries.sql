@@ -643,7 +643,10 @@ SET status = 'PENDING_REVIEW',
     photo_after = $3,
     resolved_at = CURRENT_TIMESTAMP,
     version = version + 1
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $1
+  AND status IN ('OPEN', 'PENDING_REVIEW')
+  AND deleted_at IS NULL
+  AND version = $4
 RETURNING *;
 -- name: CloseIssue :one
 UPDATE issues
@@ -755,6 +758,8 @@ WITH score_totals AS (
     FROM score_logs
     JOIN issues si ON si.id = score_logs.issue_id AND si.deleted_at IS NULL
     WHERE target_type = 'LOCATION' AND score_logs.created_at >= sqlc.arg('created_at')
+      AND si.site_id = sqlc.arg('site_id')::bigint
+      AND (si.visibility_class = 'SITE_PUBLIC' OR si.creator_id = sqlc.arg('user_id')::bigint OR si.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = si.location_code AND l.site_id = si.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = si.location_code AND l.site_id = si.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (si.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = si.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint)))
       AND (sqlc.narg('location_code')::varchar IS NULL OR score_logs.target_id = sqlc.narg('location_code'))
     GROUP BY target_id
 ), issue_totals AS (
@@ -763,6 +768,8 @@ WITH score_totals AS (
            COUNT(*) FILTER (WHERE status = 'OPEN' AND issues.created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours')::bigint AS overdue_count
     FROM issues
     WHERE deleted_at IS NULL
+      AND site_id = sqlc.arg('site_id')::bigint
+      AND (visibility_class = 'SITE_PUBLIC' OR creator_id = sqlc.arg('user_id')::bigint OR assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = issues.location_code AND l.site_id = issues.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = issues.location_code AND l.site_id = issues.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (issues.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = issues.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint)))
     GROUP BY location_code
 )
 SELECT l.code AS location_code,
@@ -774,6 +781,8 @@ FROM locations l
 LEFT JOIN score_totals st ON st.location_code = l.code
 LEFT JOIN issue_totals it ON it.location_code = l.code
 WHERE l.is_active = TRUE
+  AND l.site_id = sqlc.arg('site_id')::bigint
+  AND (sqlc.arg('role')::varchar <> 'LINE_LEADER' OR EXISTS (SELECT 1 FROM location_memberships lm WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = l.code AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP)) OR EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = l.code AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP)))
   AND (sqlc.narg('location_code')::varchar IS NULL OR l.code = sqlc.narg('location_code'))
 ORDER BY l.code;
 
@@ -791,10 +800,11 @@ FROM users u
 JOIN score_logs sl ON sl.target_type = 'USER' AND sl.target_id = u.id::varchar
 JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
 WHERE sl.created_at >= sqlc.arg('created_at')
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint)))
 GROUP BY u.id, u.full_name
 ORDER BY points DESC, valid_count DESC, u.id ASC
 LIMIT 50;
-
 
 -- name: ListScoreLogsSince :many
 SELECT sl.* FROM score_logs sl
@@ -807,13 +817,19 @@ SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
 JOIN issues i ON i.id = sl.issue_id AND i.deleted_at IS NULL
-WHERE sl.issue_id = $1
+WHERE sl.issue_id = sqlc.arg('issue_id')::bigint
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint)))
 ORDER BY sl.id ASC;
+
 -- name: ListScoreLogsByIssueIncludingDeleted :many
 SELECT sl.id, sl.issue_id, sl.target_type, sl.target_id, sl.rule_key, sl.points, sl.created_at, sl.penalty_date, COALESCE(sr.description, sl.rule_key) AS rule_description
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
-WHERE sl.issue_id = $1
+JOIN issues i ON i.id = sl.issue_id
+WHERE sl.issue_id = sqlc.arg('issue_id')::bigint
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint)))
 ORDER BY sl.created_at ASC, sl.id ASC;
 
 -- name: ListScoreLogsByTargetSince :many
@@ -824,7 +840,12 @@ SELECT sl.*, COALESCE(sr.description, sl.rule_key) AS rule_description,
 FROM score_logs sl
 LEFT JOIN scoring_rules sr ON sl.rule_key = sr.rule_key
 LEFT JOIN issues i ON sl.issue_id = i.id
-WHERE sl.target_type = $1 AND sl.target_id = $2 AND sl.created_at >= $3 AND i.deleted_at IS NULL
+WHERE sl.target_type = sqlc.arg('target_type')
+  AND sl.target_id = sqlc.arg('target_id')
+  AND sl.created_at >= sqlc.arg('created_at')
+  AND i.deleted_at IS NULL
+  AND i.site_id = sqlc.arg('site_id')::bigint
+  AND (i.visibility_class = 'SITE_PUBLIC' OR i.creator_id = sqlc.arg('user_id')::bigint OR i.assignee_id = sqlc.arg('user_id')::bigint OR sqlc.arg('role')::varchar IN ('SAFETY_OFFICER', 'ADMIN', 'SUPERADMIN') OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM location_memberships lm JOIN locations l ON l.code = lm.location_code WHERE lm.user_id = sqlc.arg('user_id')::bigint AND lm.location_code = i.location_code AND l.site_id = i.site_id AND lm.is_active = TRUE AND lm.valid_from <= CURRENT_TIMESTAMP AND (lm.valid_to IS NULL OR lm.valid_to > CURRENT_TIMESTAMP))) OR (sqlc.arg('role')::varchar = 'LINE_LEADER' AND EXISTS (SELECT 1 FROM team_memberships tm JOIN team_locations tl ON tl.team_id = tm.team_id JOIN locations l ON l.code = tl.location_code WHERE tm.user_id = sqlc.arg('user_id')::bigint AND tl.location_code = i.location_code AND l.site_id = i.site_id AND tl.valid_from <= CURRENT_TIMESTAMP AND (tl.valid_to IS NULL OR tl.valid_to > CURRENT_TIMESTAMP))) OR (i.assigned_team_id IS NOT NULL AND EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = i.assigned_team_id AND tm.user_id = sqlc.arg('user_id')::bigint)))
 ORDER BY sl.created_at DESC, sl.id DESC;
 
 -- name: GetNotificationConfig :one

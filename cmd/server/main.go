@@ -401,6 +401,7 @@ func registerScoringAndNotificationRoutes(ctx context.Context, r *chi.Mux, queri
 
 	r.Route("/api/issues/{id}/score-logs", func(ilr chi.Router) {
 		ilr.Use(authMw.Authenticate)
+		ilr.Use(auth.RequirePermission(auth.PermissionReportsView))
 		ilr.Get("/", scoringHandler.GetIssueScoreLogs)
 	})
 

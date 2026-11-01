@@ -404,12 +404,12 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expectedVersion := int32(1)
-	if expVerStr != "" {
-		if ev, evErr := strconv.ParseInt(expVerStr, 10, 32); evErr == nil {
-			expectedVersion = int32(ev) //nolint:gosec
-		}
+	ev, evErr := strconv.ParseInt(expVerStr, 10, 32)
+	if evErr != nil || ev <= 0 {
+		_ = response.AppError(w, r, apperror.BadRequest(i18n.ErrBadRequest).WithCause(ErrInvalidExpectedVersion))
+		return
 	}
+	expectedVersion := int32(ev) //nolint:gosec
 
 	photoAfter, _, fileErr := r.FormFile("photo_after")
 	if fileErr != nil {

@@ -315,6 +315,7 @@ func TestIssueHandler_Routes(t *testing.T) {
 	resBody := &bytes.Buffer{}
 	resWriter := multipart.NewWriter(resBody)
 	_ = resWriter.WriteField("resolved_client_uuid", "c0a80101-0000-4000-8000-000000000002")
+	_ = resWriter.WriteField("expected_version", "1")
 	resPart, _ := resWriter.CreateFormFile("photo_after", "after.jpg")
 	_, _ = resPart.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9})
 	_ = resWriter.Close()
@@ -382,6 +383,7 @@ func TestIssueHandler_ErrorPaths(t *testing.T) {
 	resBody := &bytes.Buffer{}
 	resWriter := multipart.NewWriter(resBody)
 	_ = resWriter.WriteField("resolved_client_uuid", "c0a80101-0000-4000-8000-000000000002")
+	_ = resWriter.WriteField("expected_version", "1")
 	resPart, _ := resWriter.CreateFormFile("photo_after", "after.jpg")
 	_, _ = resPart.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9})
 	_ = resWriter.Close()
