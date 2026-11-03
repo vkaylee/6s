@@ -22,6 +22,11 @@ function applyTheme(isDark: boolean) {
   } else {
     document.documentElement.classList.remove("dark");
   }
+  const color = isDark ? "#18181b" : "#ffffff";
+  const metas = document.querySelectorAll?.('meta[name="theme-color"]');
+  metas?.forEach((m) => {
+    m.setAttribute("content", color);
+  });
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({

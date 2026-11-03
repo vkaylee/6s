@@ -40,7 +40,7 @@ describe("PWA Install Component & Manifest", () => {
     expect(data.name).toBe("6S Issue Management System");
     expect(data.display).toBe("standalone");
     expect(data.start_url).toBe("/");
-    expect(data.theme_color).toBe("#DC2626");
+    expect(data.theme_color).toBe("#18181b");
     expect(data.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ src: "/icon-192.png", sizes: "192x192", type: "image/png" }),

@@ -113,4 +113,38 @@ describe("themeStore", () => {
       globalThis.window = originalWindow;
     }
   });
+
+  it("updates theme-color meta tags when theme changes", () => {
+    const originalDocument = globalThis.document;
+    const metaElements: { content: string; setAttribute: (k: string, v: string) => void }[] = [
+      {
+        content: "#ffffff",
+        setAttribute(k: string, v: string) {
+          if (k === "content") this.content = v;
+        },
+      },
+    ];
+
+    globalThis.document = {
+      documentElement: {
+        classList: {
+          add: () => {},
+          remove: () => {},
+          contains: () => false,
+        },
+      },
+      querySelectorAll: (sel: string) => (sel === 'meta[name="theme-color"]' ? metaElements : []),
+    } as unknown as Document;
+
+    try {
+      useThemeStore.setState({ isDark: false });
+      useThemeStore.getState().toggleTheme();
+      expect(metaElements[0].content).toBe("#18181b");
+
+      useThemeStore.getState().toggleTheme();
+      expect(metaElements[0].content).toBe("#ffffff");
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
 });
