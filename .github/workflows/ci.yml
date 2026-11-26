@@ -39,6 +39,8 @@ jobs:
           chmod +x leedevkit
       - name: Build pinned security scanner image
         run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.26 .
+      - name: Ensure embedded web dist placeholder
+        run: mkdir -p web/dist && touch web/dist/.placeholder
       - name: Server lint
         run: ./leedevkit test server --lint-only
       - name: Server unit tests

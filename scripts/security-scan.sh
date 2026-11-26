@@ -71,6 +71,9 @@ run_scanner() { # <binary> <image> <pinned version> <args...>
     -v 6s-test-go-build-cache:/root/.cache/go-build \
     -w /workspace \
     -e CGO_ENABLED=0 \
+    -e GIT_CONFIG_COUNT=1 \
+    -e GIT_CONFIG_KEY_0=safe.directory \
+    -e GIT_CONFIG_VALUE_0=/workspace \
     "$image" "$binary" "$@"
 }
 

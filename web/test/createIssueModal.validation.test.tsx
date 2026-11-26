@@ -1,17 +1,21 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { act } from "react";
 import { CreateIssueModal } from "../src/pages/CreateIssueModal.tsx";
 import { useDialogStore } from "../src/store/dialogStore.ts";
 import {
   attachPhoto,
   calls,
+  cleanupMounted,
   findButton,
   mockLocations,
   mockTags,
   mount,
+  resetTestState,
 } from "./createIssueModal.fixtures.tsx";
 
 describe("CreateIssueModal validation and hints", () => {
+  beforeEach(resetTestState);
+  afterEach(cleanupMounted);
   it("rejects an incomplete report with a message instead of sending anything", async () => {
     const { container, root } = await mount(
       <CreateIssueModal

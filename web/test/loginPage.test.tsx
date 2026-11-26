@@ -7,26 +7,32 @@ import { UserRole } from "../src/types/index.ts";
 import { WithMockState } from "./fixtures/mockState.tsx";
 
 describe("LoginPage Component", () => {
-  const originalLocation = (globalThis as unknown as { location?: unknown }).location;
-  const originalLocalStorage = globalThis.localStorage;
+  let originalLocation: unknown;
+  let originalLocalStorageDescriptor: PropertyDescriptor | undefined;
   const storage = new Map<string, string>();
 
   beforeEach(() => {
     storage.clear();
+    originalLocation = (globalThis as unknown as { location?: unknown }).location;
+    originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     (globalThis as unknown as { location: unknown }).location = {
       search: "",
       pathname: "/login",
       hash: "",
       href: "/login",
     };
-    globalThis.localStorage = {
-      getItem: (k: string) => storage.get(k) ?? null,
-      setItem: (k: string, v: string) => storage.set(k, String(v)),
-      removeItem: (k: string) => storage.delete(k),
-      clear: () => storage.clear(),
-      length: 0,
-      key: () => null,
-    };
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      writable: true,
+      value: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => storage.set(k, String(v)),
+        removeItem: (k: string) => storage.delete(k),
+        clear: () => storage.clear(),
+        length: 0,
+        key: () => null,
+      },
+    });
     useAuthStore.setState({ user: null, isLoading: false });
   });
 
@@ -36,7 +42,11 @@ describe("LoginPage Component", () => {
     } else {
       (globalThis as unknown as { location: unknown }).location = originalLocation;
     }
-    globalThis.localStorage = originalLocalStorage;
+    if (originalLocalStorageDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", originalLocalStorageDescriptor);
+    } else {
+      delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
+    }
   });
 
   it("renders default login form with username and password inputs", () => {
