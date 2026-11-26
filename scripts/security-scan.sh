@@ -6,7 +6,7 @@ set -euo pipefail
 : "${SYFT_VERSION:=v1.18.1}"
 : "${GITLEAKS_VERSION:=v8.24.2}"
 : "${BUN_IMAGE:=docker.io/oven/bun:1.4.1}"
-: "${GO_DEV_IMAGE:=6s-go-dev:1.23}"
+: "${GO_DEV_IMAGE:=6s-go-dev:1.26}"
 
 mode=${1:?usage: $0 {go|web|sbom|secrets}}
 mode=${mode%\}}
@@ -14,7 +14,22 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 mkdir -p artifacts/security
 
-container_runtime() {
+container_runtime() { # [image]
+  local image=${1:-}
+  if [ -n "${CONTAINER_RUNTIME:-}" ]; then
+    printf '%s' "$CONTAINER_RUNTIME"
+    return
+  fi
+  if [ -n "$image" ]; then
+    if command -v podman >/dev/null 2>&1 && podman image exists "$image" >/dev/null 2>&1; then
+      printf 'podman'
+      return
+    fi
+    if command -v docker >/dev/null 2>&1 && docker image inspect "$image" >/dev/null 2>&1; then
+      printf 'docker'
+      return
+    fi
+  fi
   if command -v podman >/dev/null 2>&1; then
     printf 'podman'
   elif command -v docker >/dev/null 2>&1; then
@@ -40,7 +55,7 @@ run_scanner() { # <binary> <image> <pinned version> <args...>
     return
   fi
   local runtime suffix
-  runtime=$(container_runtime)
+  runtime=$(container_runtime "$image")
   if [ -z "$runtime" ]; then
     echo "$binary $version required: install it or provide podman/docker with image $image" >&2
     exit 1
@@ -65,7 +80,7 @@ audit_web() {
     return
   fi
   local runtime suffix
-  runtime=$(container_runtime)
+  runtime=$(container_runtime "$BUN_IMAGE")
   if [ -z "$runtime" ]; then
     echo 'bun >=1.4 with `bun audit` required: install it or provide podman/docker to run '"$BUN_IMAGE" >&2
     exit 1

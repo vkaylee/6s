@@ -2,15 +2,23 @@
 set -euo pipefail
 
 # Wrapper to run sqlc inside the container hermetically
-CONTAINER_RUNTIME="podman"
-if ! command -v podman >/dev/null 2>&1; then
-    CONTAINER_RUNTIME="docker"
+IMAGE_NAME="${GO_DEV_IMAGE:-6s-go-dev:1.26}"
+if [[ -z "${CONTAINER_RUNTIME:-}" ]]; then
+    if command -v podman >/dev/null 2>&1 && podman image exists "$IMAGE_NAME" >/dev/null 2>&1; then
+        CONTAINER_RUNTIME="podman"
+    else
+        CONTAINER_RUNTIME="docker"
+    fi
 fi
 
-IMAGE_NAME="6s-go-dev:1.23"
+RUNTIME_ARGS=()
+MOUNT_SUFFIX=""
+if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    RUNTIME_ARGS+=(--userns=keep-id)
+    MOUNT_SUFFIX=":Z"
+fi
 
-exec "$CONTAINER_RUNTIME" run --rm -i \
-    --userns=keep-id \
-    -v "$PWD":/workspace:Z \
+exec "$CONTAINER_RUNTIME" run --rm -i "${RUNTIME_ARGS[@]}" \
+    -v "$PWD:/workspace${MOUNT_SUFFIX}" \
     -w /workspace \
     "$IMAGE_NAME" sqlc "$@"

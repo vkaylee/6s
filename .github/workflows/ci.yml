@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
   schedule:
     - cron: '17 3 * * 1'
@@ -33,16 +33,19 @@ jobs:
           mkdir .leedevkit
           tar -xzf "$archive" --strip-components=1 -C .leedevkit
           rm "$archive"
-          DEVKIT_HOME="$PWD/.leedevkit" python3 .leedevkit/scripts/_devkit_integrity.py checksum
+          python_bin="$(.leedevkit/scripts/_ensure-venv.sh | tail -n 1)"
+          DEVKIT_HOME="$PWD/.leedevkit" "$python_bin" .leedevkit/scripts/_devkit_integrity.py checksum
           printf '%s\n' '#!/bin/bash' 'exec "$(cd "$(dirname "$0")" && pwd)/.leedevkit/bin/leedevkit" "$@"' > leedevkit
           chmod +x leedevkit
       - name: Build pinned security scanner image
-        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.23 .
+        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.26 .
       - name: Server lint
         run: ./leedevkit test server --lint-only
       - name: Server unit tests
         run: ./leedevkit test server --unit-only
       - name: Go vulnerability scan
+        env:
+          CONTAINER_RUNTIME: docker
         run: ./scripts/security-scan.sh go
 
 
@@ -66,8 +69,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Build pinned Go runner image
+        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.26 .
       - name: Run PostgreSQL migration regressions
         env:
+          CONTAINER_RUNTIME: docker
           TEST_DB_DSN: postgres://test:test_password@127.0.0.1:5432/test?sslmode=disable
           GO_NETWORK: host
         run: ./scripts/_go.sh test ./internal/database -run '^TestPostgres' -count=1
@@ -88,7 +94,8 @@ jobs:
           mkdir .leedevkit
           tar -xzf "$archive" --strip-components=1 -C .leedevkit
           rm "$archive"
-          DEVKIT_HOME="$PWD/.leedevkit" python3 .leedevkit/scripts/_devkit_integrity.py checksum
+          python_bin="$(.leedevkit/scripts/_ensure-venv.sh | tail -n 1)"
+          DEVKIT_HOME="$PWD/.leedevkit" "$python_bin" .leedevkit/scripts/_devkit_integrity.py checksum
           printf '%s\n' '#!/bin/bash' 'exec "$(cd "$(dirname "$0")" && pwd)/.leedevkit/bin/leedevkit" "$@"' > leedevkit
           chmod +x leedevkit
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.1
@@ -132,10 +139,14 @@ jobs:
           cache: true
           check-latest: false
       - name: Build pinned security scanner image
-        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.23 .
+        run: docker build -f .compose/Dockerfile.golang -t 6s-go-dev:1.26 .
       - name: Generate SBOM
+        env:
+          CONTAINER_RUNTIME: docker
         run: ./scripts/security-scan.sh sbom
       - name: Secret scan
+        env:
+          CONTAINER_RUNTIME: docker
         run: ./scripts/security-scan.sh secrets
       - name: Upload security artifacts
         if: always()

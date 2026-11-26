@@ -1976,6 +1976,8 @@ export type SuggestTagsWithAiData = {
     body: {
         query: string;
         category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+        description?: string;
+        image_data_url?: string;
     };
     path?: never;
     query?: never;
@@ -1997,6 +1999,8 @@ export type SuggestTagsWithAiResponses = {
      */
     200: {
         data: {
+            category?: '1S' | '2S' | '3S' | '4S' | '5S' | '6S';
+            cause_type?: 'CONDITION' | 'BEHAVIOR';
             existing_tags: Array<string>;
             proposed_tags: Array<{
                 name_vi: string;
@@ -2415,7 +2419,7 @@ export type GetNotificationConfigData = {
 
 export type GetNotificationConfigErrors = {
     /**
-     * Requires the route-specific management permission
+     * Requires Admin or Superadmin role
      */
     403: ErrorEnvelope;
 };
@@ -2458,7 +2462,7 @@ export type UpdateNotificationConfigData = {
 
 export type UpdateNotificationConfigErrors = {
     /**
-     * Requires the route-specific management permission
+     * Requires Admin role
      */
     403: ErrorEnvelope;
 };
