@@ -1,29 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { useHeaderVisibility } from "../src/hooks/useHeaderVisibility.ts";
-
-function WithEffectSupport({ children }: { children: React.ReactNode }) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: {
-          current: {
-            useEffect: (cb: () => undefined | (() => void)) => void;
-          };
-        };
-      };
-    }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-
-  const originalEffect = internals.current.useEffect;
-  internals.current.useEffect = (cb: () => undefined | (() => void)) => {
-    cb();
-    internals.current.useEffect = originalEffect;
-  };
-
-  return <>{children}</>;
-}
+import { WithEffectSupport } from "./fixtures/mockState.tsx";
 
 describe("useHeaderVisibility", () => {
   it("attaches scroll listener and reacts to window scroll changes", () => {

@@ -1,36 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { PermissionMatrixPage } from "../src/pages/PermissionMatrixPage.tsx";
+import { WithMockState } from "./fixtures/mockState.tsx";
 
 // State order in PermissionMatrixPage:
 // [isHeaderVisible, permissions, matrix, drafts, isLoading, loadError, savingRole]
-function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: { current: unknown };
-      };
-    }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-  let idx = 0;
-  const real = internals.current as Record<string, unknown>;
-  internals.current = new Proxy(real, {
-    get(target, prop) {
-      if (prop === "useState") {
-        return (init: unknown) => {
-          const v = values[idx] ?? init;
-          idx += 1;
-          return [v, () => {}];
-        };
-      }
-      return (target as Record<PropertyKey, unknown>)[prop];
-    },
-  });
-  return <>{children}</>;
-}
-
 const SAMPLE_PERMISSIONS = [
   { code: "issue:create", description: "Tạo issue" },
   { code: "issue:close_any", description: "Đóng mọi issue" },

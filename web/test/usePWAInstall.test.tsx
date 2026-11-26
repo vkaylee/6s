@@ -1,50 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { usePWAInstall } from "../src/hooks/usePWAInstall.ts";
-
-function WithHookMocks({
-  children,
-  initialStates,
-}: {
-  children: React.ReactNode;
-  initialStates?: unknown[];
-}) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: {
-          current: {
-            useEffect: (cb: () => undefined | (() => void)) => void;
-            useState: (init: unknown) => [unknown, () => void];
-          };
-        };
-      };
-    }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-
-  const originalEffect = internals.current.useEffect;
-  const originalState = internals.current.useState;
-  let idx = 0;
-  internals.current.useEffect = (cb: () => undefined | (() => void)) => {
-    cb();
-    internals.current.useEffect = originalEffect;
-  };
-  internals.current.useState = (init: unknown) => {
-    const val =
-      initialStates && idx < initialStates.length
-        ? initialStates[idx++]
-        : typeof init === "function"
-          ? (init as () => unknown)()
-          : init;
-    if (idx >= (initialStates?.length ?? 1)) {
-      internals.current.useState = originalState;
-    }
-    return [val, () => {}];
-  };
-
-  return <>{children}</>;
-}
+import { WithHookMocks } from "./fixtures/mockState.tsx";
 
 function makeWindow(userAgent: string, standalone: boolean) {
   let promptHandler: ((e: unknown) => void) | null = null;

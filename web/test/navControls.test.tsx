@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { NavActions } from "../src/components/NavActions.tsx";
@@ -9,27 +8,7 @@ import { LoginPage } from "../src/pages/LoginPage.tsx";
 import { useAuthStore } from "../src/store/authStore.ts";
 import { useThemeStore } from "../src/store/themeStore.ts";
 import { UserRole } from "../src/types/index.ts";
-
-function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: { current: { useState: (init: unknown) => [unknown, () => void] } };
-      };
-    }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-  let idx = 0;
-  internals.current.useState = (init: unknown) => {
-    const value =
-      idx < values.length
-        ? values[idx++]
-        : typeof init === "function"
-          ? (init as () => unknown)()
-          : init;
-    return [value, () => {}];
-  };
-  return <>{children}</>;
-}
+import { WithMockState } from "./fixtures/mockState.tsx";
 
 describe("NavActions (Language & Theme toggle controls)", () => {
   it("renders both language and theme toggle buttons with required testids", () => {
