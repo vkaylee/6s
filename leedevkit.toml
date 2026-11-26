@@ -1,24 +1,28 @@
 # =============================================================================
-# 6S Issue Management System — LeeDevKit Configuration
+# 6S Issue Management System — LeeDevKit Configuration (v0.17)
 # =============================================================================
-
-[devkit]
-version = "0.7.30"
-install = "per-project"
-source = "release"
 
 [project]
 name = "6s"
 namespace = "6s"
 languages = ["go", "typescript"]
 
+[container]
+provider = "docker"
+
+[container.providers.docker]
+cli = ["docker"]
+compose = ["docker", "compose"]
+
 [services.server]
 lang = "go"
 go = true
 go_version = "1.26"
+health_check = "/api/ready"
 
 [services.webdashboard]
 lang = "typescript"
+workdir = "web"
 bun = true
 
 [targets]
@@ -26,15 +30,36 @@ server = ["server"]
 web = ["webdashboard"]
 all = ["server", "webdashboard"]
 
+[test]
+build_policy = "once"
+
 [test.dependencies]
-e2e-web = ["db", "e2e-server"]
-go = ["test-db"]
-unit-go = ["test-db"]
-int-go = ["test-db"]
-all = ["test-db"]
+lint-server = ["server"]
+unit-server = ["test-db", "server"]
+int-server = ["test-db", "server"]
+lint-web = ["webdashboard"]
+unit-web = ["webdashboard"]
+e2e-web = ["db", "e2e-server", "e2e-seed", "webdashboard"]
+
+[test.gates.int-server]
+command = ["go", "test", "-count=1", "./internal/database", "-run", "^TestPostgres"]
+required_env = ["TEST_DB_DSN"]
+
+[dev]
+# Dev compose runs `migrator` automatically before `server` via depends_on.
+auto_migrate = false
+
+[mcp.playwright]
+endpoint = "http://server:8080"
+login_path = "/login"
+network = "6s-dev_6s-network"
+startup_timeout = 15
+request_timeout = 45
+session_idle_timeout = 300
 
 [ai]
 extra_rules = []
+harnesses = ["claude"]
 rules_dir = ".agent/rules"
 override_manifest = ".agent/overrides.yaml"
 
@@ -46,12 +71,12 @@ default_model = "sonnet"
 skills = []
 
 [ci]
-server_lint = "./leedevkit test server --lint-only"
-server_unit = "./leedevkit test server --unit-only"
-web_lint = "./leedevkit test web --lint-only"
-web_unit = "./leedevkit test web --unit-only"
-web_e2e = "./leedevkit test web --e2e-only"
-openapi_drift = "cd web && bun run openapi:drift"
+server_lint = "leedevkit test server --lint-only"
+server_unit = "leedevkit test server --unit-only"
+web_lint = "leedevkit test web --lint-only"
+web_unit = "leedevkit test web --unit-only"
+web_e2e = "leedevkit test web --e2e-only"
+openapi_drift = "leedevkit exec webdashboard -- bun run openapi:drift"
 security_scan = "./scripts/security-scan.sh"
 sbom = "./scripts/security-scan.sh sbom"
 secrets = "./scripts/security-scan.sh secrets"

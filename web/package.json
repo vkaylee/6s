@@ -15,7 +15,8 @@
     "openapi:generate": "openapi-ts --file openapi-ts.config.ts --output src/api/generated",
     "openapi:drift": "node scripts/openapi-generate-check.mjs",
     "test": "bun test",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "test:e2e": "bunx playwright test --workers=1"
   },
   "dependencies": {
     "idb": "^8.0.2",

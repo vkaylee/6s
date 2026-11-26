@@ -1,6 +1,6 @@
 services:
   migrator:
-    profiles: ["go"]
+    profiles: ["server", "lint-server", "unit-server", "int-server", "go", "lint-go", "unit-go", "int-go"]
     build:
       context: ..
       dockerfile: .compose/Dockerfile.golang
@@ -46,7 +46,7 @@ services:
     healthcheck:
       test: ["CMD", "go", "version"]
   test-db:
-    profiles: ["go"]
+    profiles: ["server", "lint-server", "unit-server", "int-server", "go", "lint-go", "unit-go", "int-go"]
     image: docker.io/library/postgres:18-alpine
     environment:
       POSTGRES_USER: test

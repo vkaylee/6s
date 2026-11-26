@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "leedevkit": {
+      "command": "leedevkit",
+      "args": [
+        "mcp",
+        "--stdio"
+      ]
+    },
+    "playwright": {
+      "command": "leedevkit",
+      "args": [
+        "mcp",
+        "playwright"
+      ]
+    }
+  }
+}
