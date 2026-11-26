@@ -58,9 +58,24 @@ describe("authStore", () => {
   });
 
   it("restoreSession handles non-indexedDB runtime safely", async () => {
-    const store = useAuthStore.getState();
-    const restored = await store.restoreSession();
-    expect(typeof restored).toBe("boolean");
+    const originalFetch = globalThis.fetch;
+    const user = { id: 4, username: "restored", full_name: "Restored User", role: UserRole.USER };
+    let requestedUrl = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      return new Response(JSON.stringify({ data: user }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      expect(await useAuthStore.getState().restoreSession()).toBe(true);
+      expect(requestedUrl).toContain("/api/auth/me");
+      expect(useAuthStore.getState().user).toEqual(user);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("saves and clears remembered user in localStorage", async () => {
