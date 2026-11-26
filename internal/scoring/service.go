@@ -23,6 +23,7 @@ var (
 // TargetType identifies score recipient scope.
 type TargetType string
 
+// Supported score recipient target types.
 const (
 	TargetTypeLocation TargetType = "LOCATION"
 	TargetTypeUser     TargetType = "USER"
@@ -30,6 +31,7 @@ const (
 
 func (t TargetType) String() string { return string(t) }
 
+// IsValid reports whether t is a recognized score recipient target type.
 func (t TargetType) IsValid() bool { return t == TargetTypeLocation || t == TargetTypeUser }
 
 // Store defines database operations required by the scoring service.

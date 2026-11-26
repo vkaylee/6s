@@ -98,6 +98,7 @@ func NormalizeCauseType(causeType string, category string) string {
 // CauseStatus represents cause verification state.
 type CauseStatus string
 
+// Supported cause verification statuses.
 const (
 	CauseStatusUnverified    CauseStatus = "UNVERIFIED"
 	CauseStatusConfirmed     CauseStatus = "CONFIRMED"
@@ -106,6 +107,7 @@ const (
 
 func (s CauseStatus) String() string { return string(s) }
 
+// IsValid reports whether s is a recognized cause verification status.
 func (s CauseStatus) IsValid() bool {
 	switch s {
 	case CauseStatusUnverified, CauseStatusConfirmed, CauseStatusNotApplicable:
@@ -120,6 +122,7 @@ func isValidCauseStatus(status string) bool { return CauseStatus(status).IsValid
 // VisibilityClass controls issue visibility within a site.
 type VisibilityClass string
 
+// Supported issue visibility classes.
 const (
 	VisibilitySitePublic       VisibilityClass = "SITE_PUBLIC"
 	VisibilitySafetyRestricted VisibilityClass = "SAFETY_RESTRICTED"
@@ -127,6 +130,7 @@ const (
 
 func (v VisibilityClass) String() string { return string(v) }
 
+// IsValid reports whether v is a recognized visibility class.
 func (v VisibilityClass) IsValid() bool {
 	return v == VisibilitySitePublic || v == VisibilitySafetyRestricted
 }
@@ -134,6 +138,7 @@ func (v VisibilityClass) IsValid() bool {
 // LocationSnapshotSource records where a location name snapshot came from.
 type LocationSnapshotSource string
 
+// Supported location snapshot sources.
 const (
 	LocationSnapshotClient LocationSnapshotSource = "CLIENT_CAPTURE"
 	LocationSnapshotServer LocationSnapshotSource = "SERVER_CAPTURE"
@@ -141,6 +146,7 @@ const (
 
 func (s LocationSnapshotSource) String() string { return string(s) }
 
+// IsValid reports whether s is a recognized location snapshot source.
 func (s LocationSnapshotSource) IsValid() bool {
 	return s == LocationSnapshotClient || s == LocationSnapshotServer
 }
@@ -148,6 +154,7 @@ func (s LocationSnapshotSource) IsValid() bool {
 // ResponsibilityType identifies a user's location responsibility.
 type ResponsibilityType string
 
+// Supported location responsibility types.
 const (
 	ResponsibilityOwner    ResponsibilityType = "OWNER"
 	ResponsibilityBackup   ResponsibilityType = "BACKUP"
@@ -156,6 +163,7 @@ const (
 
 func (r ResponsibilityType) String() string { return string(r) }
 
+// IsValid reports whether r is a recognized location responsibility type.
 func (r ResponsibilityType) IsValid() bool {
 	return r == ResponsibilityOwner || r == ResponsibilityBackup || r == ResponsibilityReviewer
 }
@@ -163,6 +171,7 @@ func (r ResponsibilityType) IsValid() bool {
 // HistoryAction is the stable API action for responsibility history.
 type HistoryAction string
 
+// Supported responsibility history actions.
 const (
 	HistoryActionAssign      HistoryAction = "ASSIGN"
 	HistoryActionTransfer    HistoryAction = "TRANSFER"
@@ -172,6 +181,7 @@ const (
 
 func (a HistoryAction) String() string { return string(a) }
 
+// IsValid reports whether a is a recognized responsibility history action.
 func (a HistoryAction) IsValid() bool {
 	switch a {
 	case HistoryActionAssign, HistoryActionTransfer, HistoryActionCauseVerify, HistoryActionOther:

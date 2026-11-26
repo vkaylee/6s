@@ -128,7 +128,6 @@ func setupRouter(dbConn *sql.DB, cfg *config.Config, cipher *crypto.Cipher, ldap
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(timeoutByRoute)

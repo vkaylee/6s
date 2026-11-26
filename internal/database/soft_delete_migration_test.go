@@ -37,8 +37,7 @@ func seedMigrationIssue(t *testing.T, db *sql.DB) (int64, int64) {
 	if err := db.QueryRowContext(ctx, `SELECT id FROM sites ORDER BY id LIMIT 1`).Scan(&siteID); err != nil {
 		t.Fatalf("find migration test site: %v", err)
 	}
-	var locationCode string
-	locationCode = fmt.Sprintf("MIGRATION_%d", time.Now().UnixNano())
+	locationCode := fmt.Sprintf("MIGRATION_%d", time.Now().UnixNano())
 	if _, err := db.ExecContext(ctx, `INSERT INTO locations (code, name_vi, name_zh, name_en, qr_code, site_id) VALUES ($1, 'Migration Test', 'Migration Test', 'Migration Test', $2, $3)`, locationCode, locationCode, siteID); err != nil {
 		t.Fatalf("insert migration test location: %v", err)
 	}

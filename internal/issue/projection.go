@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +19,8 @@ import (
 func (s *ServiceImpl) OpenMedia(ctx context.Context, id int64, folder, basename string) (*os.File, error) {
 	return s.openMedia(ctx, id, folder, basename, false)
 }
+
+// OpenMediaWithDeletion authorizes issue media, optionally including soft-deleted issues when deletion is "deleted".
 func (s *ServiceImpl) OpenMediaWithDeletion(ctx context.Context, id int64, folder, basename, deletion string) (*os.File, error) {
 	return s.openMedia(ctx, id, folder, basename, deletion == "deleted")
 }
@@ -148,11 +149,12 @@ func (s *ServiceImpl) getIssueByID(ctx context.Context, id int64, includeDeleted
 // ListIssuesFiltered lists issues with filter criteria.
 func (s *ServiceImpl) ListIssuesFiltered(ctx context.Context, filter ListFilter) ([]Response, int64, error) {
 	filter = normalizeListFilter(filter)
-	if filter.Limit > math.MaxInt32 || filter.Offset() > math.MaxInt32 {
-		return nil, 0, fmt.Errorf("pagination exceeds database limit")
-	}
 	currentUser := userFromContext(ctx)
-	rows, err := s.store.ListIssuesFiltered(ctx, filter.toListParams(currentUser))
+	params, err := filter.toListParams(currentUser)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.store.ListIssuesFiltered(ctx, params)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list issues failed: %w", err)
 	}

@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"math"
 
 	"6s/internal/db"
 	"6s/internal/storage"
@@ -105,6 +107,7 @@ type UserItem struct {
 	FullName string `json:"full_name"`
 }
 
+// Reader provides read-only queries for issues and responsibility history.
 type Reader interface {
 	GetIssueByID(ctx context.Context, id int64) (db.Issue, error)
 	GetIssueByUUID(ctx context.Context, clientUUID string) (db.Issue, error)
@@ -130,10 +133,14 @@ type Writer interface {
 type ProposedPatchAtomic interface {
 	PatchIssueWithProposedTagsAtomic(ctx context.Context, patch db.PatchIssueParams, tags []string, proposed []db.UpsertProposedTagParams) (db.Issue, error)
 }
+
+// LifecycleAtomic atomically soft-deletes or restores an issue with its audit log.
 type LifecycleAtomic interface {
 	DeleteIssueAtomic(ctx context.Context, params db.SoftDeleteIssueParams, audit db.InsertAuditLogParams) (db.Issue, error)
 	RestoreIssueAtomic(ctx context.Context, params db.RestoreIssueParams, audit db.InsertAuditLogParams) (db.Issue, error)
 }
+
+// LifecycleEffectsAtomic atomically transitions issue status with score logs and audit entries.
 type LifecycleEffectsAtomic interface {
 	CloseIssueWithEffectsAtomic(ctx context.Context, params db.CloseIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
 	ReopenIssueWithEffectsAtomic(ctx context.Context, params db.ReopenIssueParams, scores []db.InsertScoreLogParams, audit db.InsertAuditLogParams) (db.Issue, error)
@@ -154,8 +161,24 @@ type ListFilter struct {
 	Limit          int
 }
 
-func (f ListFilter) toListParams(user db.User) db.ListIssuesFilteredParams {
-	return db.ListIssuesFilteredParams{Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode), Overdue: sql.NullBool{Bool: f.Overdue, Valid: f.Overdue}, AssignedTeamID: nullInt64(f.AssignedTeamID), MineTeam: sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam}, Deletion: f.Deletion, UserID: user.ID, SiteID: user.SiteID, Role: user.Role, Offset: int32(f.Offset()), Limit: int32(f.Limit)}
+func (f ListFilter) toListParams(user db.User) (db.ListIssuesFilteredParams, error) {
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > math.MaxInt32 {
+		return db.ListIssuesFilteredParams{}, fmt.Errorf("pagination exceeds database limit")
+	}
+	dbLimit := int32(limit)
+	if page-1 > math.MaxInt32/limit {
+		return db.ListIssuesFilteredParams{}, fmt.Errorf("pagination exceeds database limit")
+	}
+	offset := (page - 1) * limit
+	if offset < 0 || offset > math.MaxInt32 {
+		return db.ListIssuesFilteredParams{}, fmt.Errorf("pagination exceeds database limit")
+	}
+	return db.ListIssuesFilteredParams{Statuses: f.Statuses, Categories: f.Categories, LocationCodes: f.LocationCodes, TagCode: nullString(f.TagCode), Overdue: sql.NullBool{Bool: f.Overdue, Valid: f.Overdue}, AssignedTeamID: nullInt64(f.AssignedTeamID), MineTeam: sql.NullBool{Bool: f.MineTeam, Valid: f.MineTeam}, Deletion: f.Deletion, UserID: user.ID, SiteID: user.SiteID, Role: user.Role, Offset: int32(offset), Limit: dbLimit}, nil
 }
 
 func (f ListFilter) toCountParams(user db.User) db.CountIssuesFilteredParams {
@@ -210,15 +233,21 @@ type DirectoryStore interface {
 type TranslationStore interface {
 	GetTranslationCacheBatch(ctx context.Context, arg db.GetTranslationCacheBatchParams) ([]db.GetTranslationCacheBatchRow, error)
 }
+
+// DeleteIssueRequest holds parameters for soft-deleting an issue.
 type DeleteIssueRequest struct {
 	IssueID         int64
 	Reason          string
 	ExpectedVersion int32
 }
+
+// RestoreIssueRequest holds parameters for restoring a soft-deleted issue.
 type RestoreIssueRequest struct {
 	IssueID         int64
 	ExpectedVersion int32
 }
+
+// MutationResponse returns the updated issue ID, version, and deletion timestamp.
 type MutationResponse struct {
 	ID        int64   `json:"id"`
 	Version   int32   `json:"version"`

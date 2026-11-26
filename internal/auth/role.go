@@ -32,21 +32,24 @@ func (r Role) IsValid() bool {
 	}
 }
 
-// AuthSource identifies the identity provider for a user.
-type AuthSource string
+// Source identifies the identity provider for a user.
+type Source string
 
+// Supported identity provider sources.
 const (
-	AuthSourceLocal AuthSource = "LOCAL"
-	AuthSourceAD    AuthSource = "AD"
+	SourceLocal Source = "LOCAL"
+	SourceAD    Source = "AD"
 )
 
-func (s AuthSource) String() string { return string(s) }
+func (s Source) String() string { return string(s) }
 
-func (s AuthSource) IsValid() bool { return s == AuthSourceLocal || s == AuthSourceAD }
+// IsValid reports whether s is a recognized identity provider source.
+func (s Source) IsValid() bool { return s == SourceLocal || s == SourceAD }
 
 // ResponsibilityType identifies a user's location responsibility.
 type ResponsibilityType string
 
+// Supported location responsibility types.
 const (
 	ResponsibilityOwner    ResponsibilityType = "OWNER"
 	ResponsibilityBackup   ResponsibilityType = "BACKUP"
@@ -55,6 +58,7 @@ const (
 
 func (r ResponsibilityType) String() string { return string(r) }
 
+// IsValid reports whether r is a recognized location responsibility type.
 func (r ResponsibilityType) IsValid() bool {
 	return r == ResponsibilityOwner || r == ResponsibilityBackup || r == ResponsibilityReviewer
 }
