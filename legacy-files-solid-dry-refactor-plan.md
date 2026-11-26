@@ -44,7 +44,7 @@ Decompose all 16 legacy files exceeding 500 lines down to `<= 500` lines (target
 - [ ] Task 1.1: Extract shared issue form hook `web/src/pages/create-issue/useIssueForm.ts` containing draft saving, photo compression, tag toggles, and form submission.
 - [ ] Task 1.2: Extract shared presentation subcomponents (`IssueCategorySection.tsx`, `IssueMediaAttachments.tsx`, `IssueTaxonomySection.tsx`).
 - [ ] Task 1.3: Refactor `CreateIssuePage.tsx` and `CreateIssueModal.tsx` to consume shared hook and subcomponents; verify both are `< 250` lines.
-- [ ] Task 1.4: Remove `CreateIssuePage.tsx` and `CreateIssueModal.tsx` from `.max-lines-baseline.json`. Verify with `./leedevkit test web --lint-only` and unit tests.
+- [ ] Task 1.4: Remove `CreateIssuePage.tsx` and `CreateIssueModal.tsx` from `.max-lines-baseline.json`. Verify with `leedevkit test web --lint-only` and unit tests.
 
 ### Wave 2: AdminConfigPage Domain Separation (SRP)
 - [ ] Task 2.1: Extract `ScoringConfigSection.tsx`, `ActiveDirectoryConfigSection.tsx`, `NotificationConfigSection.tsx`, `AIConfigSection.tsx`, and `TimezoneConfigSection.tsx` under `web/src/pages/admin-config/`.
@@ -82,7 +82,7 @@ Decompose all 16 legacy files exceeding 500 lines down to `<= 500` lines (target
 
 1. **Lint & Line-count Check**:
    ```sh
-   ./leedevkit test web --lint-only
+   leedevkit test web --lint-only
    ```
 2. **Focused Unit Tests**:
    ```sh
@@ -90,11 +90,11 @@ Decompose all 16 legacy files exceeding 500 lines down to `<= 500` lines (target
    ```
 3. **Full Suite Regression**:
    ```sh
-   ./leedevkit test all
+   leedevkit test all
    ```
 
 ## Done When
 - [ ] All target source files in `web/src/` and `web/test/` are `<= 500` lines.
 - [ ] `web/.max-lines-baseline.json` has `0` entries.
 - [ ] All existing public component exports, props, and behaviors remain 100% backward compatible.
-- [ ] `./leedevkit test all` passes completely with zero regressions.
+- [ ] `leedevkit test all` passes completely with zero regressions.

@@ -14,6 +14,7 @@ import (
 	"6s/internal/response"
 )
 
+// Authentication and CSRF cookie names.
 const (
 	AccessCookieName  = "6s_access"
 	RefreshCookieName = "6s_refresh"

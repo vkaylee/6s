@@ -387,7 +387,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 	}
 	if len(existingByDNS) == 1 {
 		existingByDN := existingByDNS[0]
-		if AuthSource(existingByDN.AuthSource) != AuthSourceAD || !sameADIdentity(existingByDN.AdDn, adDN) {
+		if Source(existingByDN.AuthSource) != SourceAD || !sameADIdentity(existingByDN.AdDn, adDN) {
 			return db.User{}, errIdentityCollision
 		}
 		return h.updateADUser(ctx, existingByDN, ldapUser)
@@ -395,7 +395,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 
 	existingByName, findErr := h.store.GetUserByUsername(ctx, jitUsername)
 	if findErr == nil {
-		if AuthSource(existingByName.AuthSource) != AuthSourceAD || !sameADIdentity(existingByName.AdDn, adDN) {
+		if Source(existingByName.AuthSource) != SourceAD || !sameADIdentity(existingByName.AdDn, adDN) {
 			return db.User{}, errIdentityCollision
 		}
 		return h.updateADUser(ctx, existingByName, ldapUser)
@@ -425,7 +425,7 @@ func (h *Handler) jitProvisionUser(ctx context.Context, username string, ldapUse
 	if len(concurrent) != 1 {
 		return db.User{}, errIdentityCollision
 	}
-	if AuthSource(concurrent[0].AuthSource) != AuthSourceAD || !sameADIdentity(concurrent[0].AdDn, adDN) {
+	if Source(concurrent[0].AuthSource) != SourceAD || !sameADIdentity(concurrent[0].AdDn, adDN) {
 		return db.User{}, errIdentityCollision
 	}
 	return h.updateADUser(ctx, concurrent[0], ldapUser)
@@ -457,7 +457,7 @@ func (h *Handler) authenticateLocal(ctx context.Context, req LoginRequest) (db.U
 		if err != nil {
 			return db.User{}, false, fmt.Errorf("find local user: %w", err)
 		}
-		if AuthSource(u.AuthSource) != AuthSourceLocal || !u.PasswordHash.Valid {
+		if Source(u.AuthSource) != SourceLocal || !u.PasswordHash.Valid {
 			return db.User{}, false, nil
 		}
 
@@ -656,6 +656,7 @@ type RevokeRequest struct {
 	UserID         *int64 `json:"user_id"`
 }
 
+// Revoke invalidates refresh tokens for a user or specific token ID.
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	currentUser, ok := GetUserFromContext(r.Context())

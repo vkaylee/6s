@@ -15,9 +15,9 @@ Use project-provided wrappers when they exist and apply to the selected target. 
 | Diesel/DB | `diesel print-schema` | `./scripts/_diesel.sh print-schema` | `apiserver_test` |
 
 ## 2. Test Execution & Coverage (MANDATORY)
-- **Running Tests:** NEVER run framework test commands directly on the host. ALWAYS use the project-local LeeDevKit wrapper.
-  - Examples: `./leedevkit test api`, `./leedevkit test web`, `./leedevkit test all`
-- **Checking Coverage:** Use the `--coverage` flag on the applicable target (e.g., `./leedevkit test api --coverage`).
+- **Running Tests:** NEVER run framework test commands directly on the host. ALWAYS use the globally installed LeeDevKit CLI.
+  - Examples: `leedevkit test api`, `leedevkit test web`, `leedevkit test all`
+- **Checking Coverage:** Use the `--coverage` flag on the applicable target (e.g., `leedevkit test api --coverage`).
 
 ## 3. Git Protocol
 - **Git Protocol:** Use a project-provided Git wrapper when the repository documents one and the wrapper exists. Otherwise use non-interactive Git commands directly.

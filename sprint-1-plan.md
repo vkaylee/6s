@@ -28,9 +28,9 @@ Sửa các lỗi có thể gây dữ liệu không nhất quán hoặc bỏ qua 
 ## Verification
 
 ```sh
-./leedevkit test server
-./leedevkit test web
-./leedevkit test all
+leedevkit test server
+leedevkit test web
+leedevkit test all
 ```
 
 Chưa xác minh export qua Chromium thật: browser trên host thiếu `libcups.so.2`; lần thử trong container thiếu executable Chromium. Gate Playwright hiện tại không được coi là bằng chứng E2E export. Việc đóng gói browser và kiểm thử ứng dụng thật thuộc Sprint 3.

@@ -21,8 +21,8 @@ Xây dựng toàn bộ giao diện PWA Industrial theo tiêu chuẩn nhà xưở
 - [x] Task 7: Tạo `web/src/pages/IssueDetailModal.tsx` xem chi tiết: in-place category edit, nút hành động RBAC rõ ràng (Explainable disabled), modal xác nhận 1 chạm, chấm điểm sao -> Verify: Test phân quyền nút bấm theo role
 - [x] Task 8: Tạo `web/src/pages/AdminConfigModal.tsx` cấu hình điểm số Stepper tăng giảm 1 đơn vị, toggle hồi tố, cấu hình AD test bind và thông báo -> Verify: Test stepper giá trị
 - [x] Task 9: Tạo `web/src/pages/LoginModal.tsx` hỗ trợ đăng nhập Local DB & AD LDAP, và tích hợp toàn bộ vào `web/src/App.tsx`, `web/src/main.tsx`, `web/index.html` -> Verify: Build static `vite build` và `leedevkit test web` thành công
-- [x] Task 10: Chạy toàn bộ kiểm thử web (`./leedevkit test web --lint-only` và `./leedevkit test web --unit-only`) -> Verify: Pass 100% không lỗi
+- [x] Task 10: Chạy toàn bộ kiểm thử web (`leedevkit test web --lint-only` và `leedevkit test web --unit-only`) -> Verify: Pass 100% không lỗi
 
 ## Done When
-- [x] `./leedevkit test web --lint-only` và `./leedevkit test web --unit-only` pass 100%
+- [x] `leedevkit test web --lint-only` và `leedevkit test web --unit-only` pass 100%
 - [x] `bun run build` trong thư mục web sinh thư mục `web/dist` sẵn sàng nhúng Go binary

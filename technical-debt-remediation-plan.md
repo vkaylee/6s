@@ -4,7 +4,7 @@
 
 - Mỗi subagent chỉ sở hữu một nhóm file và một kết quả quan sát được.
 - Không sửa generated code bằng tay. Không suppress lint diện rộng.
-- Subagent đọc `.leedevkit/templates/CLAUDE.base.md` và rulebook liên quan trước khi sửa.
+- Subagent đọc `~/.leedevkit/current/templates/CLAUDE.base.md` và rulebook liên quan trước khi sửa.
 - Không chạy full suite khi các slice khác chưa tích hợp. Integration owner là người duy nhất xử lý conflict/cherry-pick.
 - Slice thay đổi runtime phải có regression test; slice docs/config phải có kiểm tra cấu hình tương ứng.
 
@@ -14,7 +14,7 @@
 
 ## Wave 1 — Backend độc lập
 
-2. **go-format-and-lint** — `internal/db/queries_test.go`, `internal/i18n/i18n.go`, `internal/issue/service_test.go`, `internal/scoring/*_test.go`. Sửa gofmt, shadow, ineffassign, exported comments trong phạm vi test. Gate: `./leedevkit test server --lint-only` không còn finding test-format.
+2. **go-format-and-lint** — `internal/db/queries_test.go`, `internal/i18n/i18n.go`, `internal/issue/service_test.go`, `internal/scoring/*_test.go`. Sửa gofmt, shadow, ineffassign, exported comments trong phạm vi test. Gate: `leedevkit test server --lint-only` không còn finding test-format.
 
 3. **error-return-handling** — `internal/response/response.go`, `internal/database/database.go`, `internal/db/auth_refresh.go`. Xử lý Encode/Close/Rollback/Exec; giữ response contract. Gate: focused Go tests + lint không còn errcheck production ở các file này.
 
@@ -24,7 +24,7 @@
 
 6. **config-security** — `internal/config/config.go`, `internal/auth/token.go`, startup validation, `.env.example`. Fail closed DB/JWT/TLS theo môi trường; test thiếu secret, secret ngắn, TTL. Gate: focused config/token tests; security review bắt buộc.
 
-7. **migration-readiness** — migration runner, migration SQL/runbook, health/readiness, Docker healthcheck. Version tracking, restart-safe, readiness kiểm tra DB. Gate: migration tests, readiness smoke, `./leedevkit test server --unit-only`.
+7. **migration-readiness** — migration runner, migration SQL/runbook, health/readiness, Docker healthcheck. Version tracking, restart-safe, readiness kiểm tra DB. Gate: migration tests, readiness smoke, `leedevkit test server --unit-only`.
 
 8. **auth-refresh-hardening** — refresh rotation atomic, reuse detection, token-family revoke, bootstrap authorization, query-token decision. Gate: success, revoked, replay race, transaction failure; security review bắt buộc.
 
@@ -42,7 +42,7 @@
 
 ## Wave 3 — Frontend độc lập rồi tích hợp
 
-14. **frontend-i18n** — locale JSON, hardcoded UI strings, i18n guard/tests. Ba locale parity, runtime strings đều dịch. Gate: i18n test + `./leedevkit test web --lint-only`.
+14. **frontend-i18n** — locale JSON, hardcoded UI strings, i18n guard/tests. Ba locale parity, runtime strings đều dịch. Gate: i18n test + `leedevkit test web --lint-only`.
 
 15. **frontend-a11y** — Biome a11y, dialog/drawer/combobox/icon controls. Keyboard, focus trap/restore, labels, Escape, ARIA. Gate: focused UI tests + web lint/typecheck.
 
@@ -57,11 +57,11 @@
 19. **test-quality-and-docs** — test mock yếu, skipped E2E metadata, duplicate Playwright config, README, retention/backup evidence. Không đổi production behavior ngoài testability cần thiết. Gate: test lỗi thật, skip có owner/reason/expiry, docs khớp config.
 
 20. **integration-verification** — branch tích hợp, không merge `master`. Cherry-pick theo phụ thuộc; regenerate artifacts; resolve conflict có review. Gate cuối:
-   - `./leedevkit test server --lint-only`
-   - `./leedevkit test server --unit-only`
-   - `./leedevkit test web --lint-only`
-   - `./leedevkit test web --unit-only`
-   - `./leedevkit test all`
+   - `leedevkit test server --lint-only`
+   - `leedevkit test server --unit-only`
+   - `leedevkit test web --lint-only`
+   - `leedevkit test web --unit-only`
+   - `leedevkit test all`
    - OpenAPI drift, security scan, auth/readiness/token-leakage smoke tests
 
 ## Phụ thuộc và ownership

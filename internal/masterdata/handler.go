@@ -64,6 +64,7 @@ type LocationResponse struct {
 // TagStatus tracks moderation lifecycle.
 type TagStatus string
 
+// Supported tag moderation statuses.
 const (
 	TagStatusPending  TagStatus = "PENDING"
 	TagStatusApproved TagStatus = "APPROVED"
@@ -73,6 +74,7 @@ const (
 
 func (s TagStatus) String() string { return string(s) }
 
+// IsValid reports whether s is a recognized tag moderation status.
 func (s TagStatus) IsValid() bool {
 	switch s {
 	case TagStatusPending, TagStatusApproved, TagStatusRejected, TagStatusMerged:
@@ -85,6 +87,7 @@ func (s TagStatus) IsValid() bool {
 // TagReviewAction selects moderation operation.
 type TagReviewAction string
 
+// Supported tag moderation review actions.
 const (
 	TagReviewApprove TagReviewAction = "APPROVE"
 	TagReviewReject  TagReviewAction = "REJECT"
@@ -93,6 +96,7 @@ const (
 
 func (a TagReviewAction) String() string { return string(a) }
 
+// IsValid reports whether a is a recognized tag moderation review action.
 func (a TagReviewAction) IsValid() bool {
 	return a == TagReviewApprove || a == TagReviewReject || a == TagReviewMerge
 }

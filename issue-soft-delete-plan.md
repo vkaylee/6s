@@ -38,12 +38,12 @@ Phụ thuộc: 1 → 2 → 3 → 4/5 → 6. Chốt contract API trước khi n�
 
 ## Lệnh kiểm chứng dự kiến
 ```sh
-./leedevkit test server --lint-only
-./leedevkit test server --unit-only
-./leedevkit test web --lint-only
-./leedevkit test web --unit-only
-COMPOSE_PROFILES=e2e-web ./leedevkit manage prebuild
-./leedevkit test web --e2e-only --pattern 'soft-delete'
+leedevkit test server --lint-only
+leedevkit test server --unit-only
+leedevkit test web --lint-only
+leedevkit test web --unit-only
+COMPOSE_PROFILES=e2e-web leedevkit manage prebuild
+leedevkit test web --e2e-only --pattern 'soft-delete'
 ```
 
 Đạt khi: xoá/khôi phục nhất quán giữa dữ liệu, quyền, UI, điểm và báo cáo; dữ liệu lịch sử còn nguyên; không cộng điểm trùng hoặc tạo side effect mới cho issue đang xoá. Đã triển khai và kiểm chứng. Prebuild profile e2e-web trước E2E vì runtime dùng image chứa binary/frontend, không mount source.

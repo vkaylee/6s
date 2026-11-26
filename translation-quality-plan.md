@@ -46,8 +46,8 @@
   - Sửa câu tại locale, không rút ngắn bằng cách làm mất nghĩa.
 
 - [ ] **Chạy kiểm thử và xác nhận tiêu chí hoàn tất**
-  - Chạy `./leedevkit test web --lint-only`.
-  - Chạy `./leedevkit test web --unit-only`.
+  - Chạy `leedevkit test web --lint-only`.
+  - Chạy `leedevkit test web --unit-only`.
   - Chạy smoke/E2E locale switch nếu môi trường cho phép.
   - Xác nhận: 3 locale đủ key, placeholder khớp, không còn lỗi severity HIGH/MEDIUM, glossary nhất quán, UI không tràn.
 

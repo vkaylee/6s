@@ -144,14 +144,18 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	_ = response.JSON(w, http.StatusOK, resp)
 }
 
+// DeleteRequest defines the payload for soft-deleting an issue.
 type DeleteRequest struct {
 	Reason          string `json:"reason"`
 	ExpectedVersion int32  `json:"expected_version"`
 }
+
+// RestoreRequest defines the payload for restoring a soft-deleted issue.
 type RestoreRequest struct {
 	ExpectedVersion int32 `json:"expected_version"`
 }
 
+// Delete soft-deletes an issue by ID with optimistic version checking.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -175,6 +179,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = response.JSON(w, http.StatusOK, out)
 }
+
+// Restore restores a soft-deleted issue by ID with optimistic version checking.
 func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

@@ -15,7 +15,7 @@ Mỗi phiên chỉ nạp một file sprint. Trước khi sửa:
 
 ```sh
 cat sprint-N-plan.md
-./leedevkit doctor
+leedevkit doctor
 ```
 
 Sau khi hoàn thành sprint, cập nhật checkbox, bằng chứng kiểm thử và residual debt trong chính file đó. Không chạy sprint sau nếu gate hoặc dependency của sprint trước chưa đạt.

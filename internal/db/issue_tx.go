@@ -264,8 +264,9 @@ func (q *Queries) lifecycleEffectsAtomic(ctx context.Context, operation func(*Qu
 	return updated, nil
 }
 
-// buildOutbox receives the created issue and returns outbox rows with payloads bound to that ID.
-// buildScores receives the created issue and returns score rows bound to that ID.
+// CreateIssueWithSideEffects creates an issue along with tags, outbox entries, and score logs atomically.
+// buildOutbox receives the created issue ID and returns outbox rows bound to that ID.
+// buildScores receives the created issue ID and returns score rows bound to that ID.
 func (q *Queries) CreateIssueWithSideEffects(
 	ctx context.Context,
 	issueParams CreateIssueParams,

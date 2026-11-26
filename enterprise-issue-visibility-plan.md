@@ -39,8 +39,8 @@ Implement site-isolated, policy-based issue visibility with team/person assignme
 
 ### Phase 5 — Full verification and release
 - [ ] Add regression tests: cross-site access denial across list/detail/media/export/SSE; action-vs-read authorization matrix; assignment validation.
-- [ ] Run `./leedevkit test server --lint-only` and `./leedevkit test server --unit-only`.
-- [ ] Run `./leedevkit test web --lint-only` and `./leedevkit test web --unit-only`.
+- [ ] Run `leedevkit test server --lint-only` and `leedevkit test server --unit-only`.
+- [ ] Run `leedevkit test web --lint-only` and `leedevkit test web --unit-only`.
 - [ ] Smoke-test login, workspace switching, media loading, assignment, and close flow across `USER`, `LINE_LEADER`, `SAFETY_OFFICER`, and `ADMIN`.
 
 ### Phase 6 — Protected media migration (completed)

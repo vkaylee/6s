@@ -13,6 +13,6 @@ Xây dựng hệ thống 6S mobile-first Go + React PWA offline-resilient, trans
 7. [x] Domain 7: Verification & Binary Embed (`plan-verification.md`)
 
 ## Done When
-- [x] Backend Go pass toàn bộ test suite (`./leedevkit test server --unit-only`)
-- [x] Web PWA pass build và lint (`./leedevkit test web --lint-only`)
+- [x] Backend Go pass toàn bộ test suite (`leedevkit test server --unit-only`)
+- [x] Web PWA pass build và lint (`leedevkit test web --lint-only`)
 - [x] Binary duy nhất nhúng PWA serve HTTPS trên mạng LAN

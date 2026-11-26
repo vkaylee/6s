@@ -46,7 +46,7 @@ Thêm permission editor riêng cho Admin: quản lý ma trận `role → permiss
 - [ ] Task 6: UI `web/src/pages/PermissionMatrixPage.tsx`: bảng role × permission với checkbox, dirty state, save confirm, explainable disabled cho ô khóa (ADMIN self-lockout guard). → Verify: render + i18n + test UI states.
 - [ ] Task 7: Route `/admin/permissions` + link menu Admin. i18n VI/EN/ZH. → Verify: type-check, biome, bun test.
 - [ ] Task 8: Migrate issue handlers sang `RequirePermission` thay `RequireRole` (close/reopen/invalid/patch — mapping theo role_permissions seed). → Verify: toàn bộ test auth/issue pass, hành vi không đổi với seed mặc định.
-- [ ] Task 9: `./leedevkit test server --lint-only`, `--unit-only`; `./leedevkit test web --lint-only`, `--unit-only`. → Verify: 100% pass.
+- [ ] Task 9: `leedevkit test server --lint-only`, `--unit-only`; `leedevkit test web --lint-only`, `--unit-only`. → Verify: 100% pass.
 
 ## Done When
 - Admin sửa ma trận qua UI, thay đổi áp dụng ngay không cần re-login.

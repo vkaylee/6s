@@ -8,7 +8,7 @@ Reduce `web/src/pages/IssueDetailModal.tsx` from 2,512 lines to under 500 withou
 ## Current evidence
 - `IssueDetailModal` owns state, effects, API mutations, AI flows, photo gallery, modal focus handling, and nearly all JSX in one function.
 - Existing characterization coverage: `web/test/issueDetailModal.test.tsx`, 27 tests passing.
-- Baseline checks: `./leedevkit test web --unit-only` and `./leedevkit test web --lint-only` pass.
+- Baseline checks: `leedevkit test web --unit-only` and `leedevkit test web --lint-only` pass.
 
 ## Proposed boundaries
 Keep `IssueDetailModal.tsx` as the controller/composition root. Extract cohesive behavior; do not create a generic modal framework or change public contracts.
@@ -40,6 +40,6 @@ Boundary/failure cases: offline mutation blocking, stale-version conflicts and r
 - `IssueDetailModal.tsx` is fewer than 500 lines.
 - No user-visible behavior or public prop contract changes.
 - Existing modal tests pass; any added tests assert observable behavior.
-- `./leedevkit test web --lint-only` passes.
-- `./leedevkit test web --unit-only` passes.
-- `./leedevkit test all` passes before implementation is reported complete.
+- `leedevkit test web --lint-only` passes.
+- `leedevkit test web --unit-only` passes.
+- `leedevkit test all` passes before implementation is reported complete.

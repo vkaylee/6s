@@ -22,11 +22,11 @@ Dọn nợ user-facing và nâng độ tin cậy của pipeline; chỉ giữ tes
 ## Verification
 
 ```sh
-./leedevkit test web --e2e-only
-./leedevkit test all
+leedevkit test web --e2e-only
+leedevkit test all
 ```
 
-Evidence: `./leedevkit test web --e2e-only` passed 5/5; `./leedevkit test all` passed server unit/integration/lint plus web unit/E2E/lint. Build, typecheck, locale parity, and scanner syntax verified.
+Evidence: `leedevkit test web --e2e-only` passed 5/5; `leedevkit test all` passed server unit/integration/lint plus web unit/E2E/lint. Build, typecheck, locale parity, and scanner syntax verified.
 
 ## Done when
 

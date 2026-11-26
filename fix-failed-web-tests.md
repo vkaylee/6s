@@ -14,7 +14,7 @@ Restore all 341 web unit tests to green without weakening behavior contracts or 
 - `S_CATEGORIES` and category translations are complete. Do not add duplicate translation data or change expected locale strings.
 
 ## Constraints and interfaces
-- Keep `./leedevkit` and `./scripts/_bun.sh` as execution wrappers.
+- Keep `leedevkit` and `./scripts/_bun.sh` as execution wrappers.
 - Preserve cookie credentials, CSRF double-submit behavior, 401 refresh/deduplication, generated SDK `/api` base, and relative same-origin fetch contract.
 - Prefer test-harness isolation fixes for test-only pollution. Do not make production code depend on test runner detection.
 - Do not edit generated client files manually; regenerate only if the API contract changes.
@@ -36,15 +36,15 @@ Restore all 341 web unit tests to green without weakening behavior contracts or 
 
 - [ ] **7. Run targeted regression groups and fix only remaining causes.** Run API/client, auth/routing, dashboard, i18n/modal groups with the project wrapper. If failures remain, classify each as production behavior, fixture isolation, or stale expectation before editing. No broad assertion rewrites.
 
-- [ ] **8. Run final gates.** Run `./leedevkit test web --unit-only`, `./leedevkit test web --lint-only`, then `./leedevkit test all`. Confirm server and E2E phases remain green.
+- [ ] **8. Run final gates.** Run `leedevkit test web --unit-only`, `leedevkit test web --lint-only`, then `leedevkit test all`. Confirm server and E2E phases remain green.
 
 ## Done When
 
-- [ ] `./leedevkit test web --unit-only` reports 341 passing tests and 0 failures.
+- [ ] `leedevkit test web --unit-only` reports 341 passing tests and 0 failures.
 - [ ] API tests prove relative same-origin URLs, CSRF headers, cookie credentials, refresh retry, refresh deduplication, and fresh event tickets.
 - [ ] SSR tests prove authenticated, unauthenticated, capability-denied, locale-specific, dashboard, and modal states without order dependence.
 - [ ] No global DOM, React dispatcher, Zustand, fetch, cookie, or locale state leaks across test files.
-- [ ] Web lint and full project suite pass through `./leedevkit` wrappers.
+- [ ] Web lint and full project suite pass through `leedevkit` wrappers.
 
 ## Review Focus
 

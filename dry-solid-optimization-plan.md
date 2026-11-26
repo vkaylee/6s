@@ -33,7 +33,7 @@ Rủi ro chưa xử lý:
    - Thêm `CreateIssueWithSideEffects` trong transaction: issue, `issue_tags` (+`tags.use_count`), `notification_outbox` (2 channel), `score_logs`.
    - `SyncIssue` dùng transaction; side effect lỗi → rollback, trả `AppError`, không nuốt lỗi.
    - Photo save giữ trước transaction (transaction không bao được filesystem); thêm cleanup ảnh khi DB rollback.
-   - Gate: test rollback (tag insert fail) chứng minh không còn `issue_tags`/outbox/score rác; `./leedevkit test server --unit-only`.
+   - Gate: test rollback (tag insert fail) chứng minh không còn `issue_tags`/outbox/score rác; `leedevkit test server --unit-only`.
 
 22. **issue-resolve-atomic** — `internal/db/issue_tx.go`, `internal/issue/service.go`.
    - Bọc `ResolveIssue`/`ForceResolveIssue` + `score_logs` (nếu có) trong transaction; thêm `RemoveAfterPhoto` để xóa file khi rollback.
@@ -48,7 +48,7 @@ Rủi ro chưa xử lý:
 24. **issue-store-split** — `internal/issue/service.go:68-96`, `internal/issue/handler.go:26-38`.
    - Tách `Store` (~25 method) thành port theo use case: `IssueStore` (CRUD/list/status), `TagStore`, `ScoringStore`, `NotificationStore`, `AuditStore`, `DirectoryStore` (user/location), `TranslationStore`.
    - Handler phụ thuộc `Service` mỏng theo nhóm endpoint nếu hữu ích; không tách cơ học nếu làm tăng wiring.
-   - Gate: `service_test.go` mock nhỏ hơn theo port; `./leedevkit test server --unit-only`.
+   - Gate: `service_test.go` mock nhỏ hơn theo port; `leedevkit test server --unit-only`.
 
 25. **auth-store-split** — `internal/auth/handler.go:21-38`.
    - Tách thành `UserLookupStore`, `TokenStore`, `LDAPConfigStore`, `AuditStore`.
@@ -64,7 +64,7 @@ Rủi ro chưa xử lý:
 27. **handler-param-helpers** — `internal/response/params.go` (mới), callers trong `internal/*/handler.go`.
    - `ParseID(r, "id")` gom ~10 chỗ lặp `strconv.ParseInt(chi.URLParam(r, "id"))` (`internal/issue/handler.go`, `internal/scoring/handler.go`, `internal/auth/*_handler.go`).
    - `ParsePageLimit(q, defaultLimit, maxLimit)` gom `internal/issue/handler.go:74-86`.
-   - Gate: `./leedevkit test server --lint-only`; grep xác nhận không còn pattern lặp.
+   - Gate: `leedevkit test server --lint-only`; grep xác nhận không còn pattern lặp.
 
 28. **null-and-mapper-helpers** — `internal/issue/service.go`, `internal/scoring/service.go`.
    - Helper `nullInt32FromPtr(*int32) sql.NullInt32` thay 3 chỗ lặp (`~400-403, 453-456, 498-501`).
@@ -83,8 +83,8 @@ Rủi ro chưa xử lý:
 ## Wave D — Verification
 
 31. **final-gate**
-   - `./leedevkit test server --lint-only`
-   - `./leedevkit test server --unit-only`
+   - `leedevkit test server --lint-only`
+   - `leedevkit test server --unit-only`
    - Smoke rollback: insert tag fail → không có issue/outbox/score rác, không còn ảnh mồ côi.
    - Smoke resolve fail → `photo_after` bị xóa.
 
@@ -110,7 +110,7 @@ Rủi ro chưa xử lý:
 - Không còn nhánh admin update non-atomic.
 - Port interface không quá 8 method/interface.
 - Duplicate đã liệt kê được gom hoặc có lý do giữ kèm ghi chú.
-- `./leedevkit test server --lint-only` và `--unit-only` pass; smoke rollback có bằng chứng output.
+- `leedevkit test server --lint-only` và `--unit-only` pass; smoke rollback có bằng chứng output.
 
 
 ---

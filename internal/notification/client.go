@@ -17,6 +17,7 @@ import (
 // Channel identifies notification delivery destination.
 type Channel string
 
+// Supported notification delivery channels.
 const (
 	ChannelWxPusher   Channel = "WXPUSHER"
 	ChannelLANWebhook Channel = "LAN_WEBHOOK"
@@ -24,11 +25,13 @@ const (
 
 func (c Channel) String() string { return string(c) }
 
+// IsValid reports whether c is a recognized notification delivery channel.
 func (c Channel) IsValid() bool { return c == ChannelWxPusher || c == ChannelLANWebhook }
 
 // OutboxStatus identifies notification delivery state.
 type OutboxStatus string
 
+// Supported notification outbox delivery states.
 const (
 	OutboxPending   OutboxStatus = "PENDING"
 	OutboxSending   OutboxStatus = "SENDING"
@@ -39,6 +42,7 @@ const (
 
 func (s OutboxStatus) String() string { return string(s) }
 
+// IsValid reports whether s is a recognized notification outbox status.
 func (s OutboxStatus) IsValid() bool {
 	switch s {
 	case OutboxPending, OutboxSending, OutboxSent, OutboxFailed, OutboxCancelled:

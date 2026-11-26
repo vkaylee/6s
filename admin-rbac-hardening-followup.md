@@ -24,7 +24,7 @@ Hoàn thiện bảo vệ `SUPERADMIN`, atomic state changes, rollout an toàn; k
   → Verify: ADMIN thấy user thường; không thấy privileged controls; stale mutation hiển thị lỗi, không cập nhật optimistic sai.
 
 - [ ] **Regression/security verification** — Bổ sung test authorization, persistence, rollback, migration, compatibility; chạy server/web gates và smoke test bằng hai role.
-  → Verify: `./leedevkit test server`, `./leedevkit test web`, OpenAPI drift, migration reconciliation.
+  → Verify: `leedevkit test server`, `leedevkit test web`, OpenAPI drift, migration reconciliation.
 
 ## Thứ tự triển khai
 

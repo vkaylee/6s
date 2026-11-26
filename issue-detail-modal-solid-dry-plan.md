@@ -54,7 +54,7 @@ Preserve current IssueDetailModal behavior while reducing controller coupling, s
 - [ ] Replace broad `view` props with narrow props or section-specific view models. Keep each component dependent only on data/actions it renders.
 - [ ] Split `IssueDetailSidebar.tsx` into description, assignment, history, score, and action-bar components; retain current DOM semantics, labels, classes, and translation keys.
 - [ ] Remove obsolete controller fields, duplicate handlers, imports, and dead files. Do not add compatibility aliases or duplicate implementations.
-- [ ] Run focused modal tests, web lint/typecheck/unit tests, then `./leedevkit test all`. Resolve regressions before completion; do not claim completion if full suite fails.
+- [ ] Run focused modal tests, web lint/typecheck/unit tests, then `leedevkit test all`. Resolve regressions before completion; do not claim completion if full suite fails.
 
 ## Test impact matrix
 
@@ -74,9 +74,9 @@ Preserve current IssueDetailModal behavior while reducing controller coupling, s
 - No duplicated gesture/mutation/reset implementation remains without a concrete reason.
 - Existing behavior and public contracts remain unchanged.
 - Focused modal tests pass.
-- `./leedevkit test web --lint-only` passes.
-- `./leedevkit test web --unit-only` passes.
-- `./leedevkit test all` passes.
+- `leedevkit test web --lint-only` passes.
+- `leedevkit test web --unit-only` passes.
+- `leedevkit test all` passes.
 
 ## Risks
 
