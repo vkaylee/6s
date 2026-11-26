@@ -16,7 +16,7 @@ export function IssueMobileSubmitBar({
   translate,
 }: IssueMobileSubmitBarProps) {
   return (
-    <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] z-30">
+    <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 px-4 pt-2.5 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)-10px))] z-30">
       <PageContainer>
         <IssueSubmitButton
           category={category}

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: .compose/Dockerfile.golang
-    image: 6s-go-dev:1.23
+    image: 6s-go-dev:1.26
     working_dir: /workspace
     volumes:
       - .:/workspace

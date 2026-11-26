@@ -2640,6 +2640,7 @@ paths:
                   type: string
                 image_data_url:
                   type: string
+      responses:
         '200':
           description: Tag gợi ý từ catalog đã duyệt và đề xuất mới
           content:

@@ -2,9 +2,11 @@ import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 import type {
   CauseType,
   IssueCategory,
+  LocationItem,
   LocationSnapshotSource,
   ProposedTagItem,
   SyncStatus,
+  TagItem,
   UserRole,
 } from "../types/index.ts";
 
@@ -27,6 +29,7 @@ export interface DraftIssue {
   photo_detail_blob?: Blob;
   created_at: number;
   sync_status: SyncStatus;
+  retry_count?: number;
 }
 
 export interface DraftResolve {
@@ -36,6 +39,7 @@ export interface DraftResolve {
   photo_after_blob: Blob;
   resolved_at: number;
   sync_status: SyncStatus;
+  retry_count?: number;
 }
 
 export interface AuthSession {
@@ -66,10 +70,18 @@ export interface SixSDatabase extends DBSchema {
     key: string;
     value: AuthSession;
   };
+  cached_locations: {
+    key: string;
+    value: LocationItem;
+  };
+  cached_tags: {
+    key: string;
+    value: TagItem;
+  };
 }
 
 const DB_NAME = "6s_local_db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<SixSDatabase>> | null = null;
 
@@ -102,6 +114,12 @@ export function getLocalDB(): Promise<IDBPDatabase<SixSDatabase>> {
               updated_at: oldSession.updated_at,
             });
           });
+        }
+        if (!db.objectStoreNames.contains("cached_locations")) {
+          db.createObjectStore("cached_locations", { keyPath: "code" });
+        }
+        if (!db.objectStoreNames.contains("cached_tags")) {
+          db.createObjectStore("cached_tags", { keyPath: "code" });
         }
       },
     });
@@ -165,4 +183,33 @@ export async function getAuthSession(): Promise<AuthSession | undefined> {
 export async function clearAuthSession(): Promise<void> {
   const db = await getLocalDB();
   await db.delete("auth_session", "current");
+}
+
+export async function saveCachedLocations(locations: LocationItem[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("cached_locations", "readwrite");
+  await tx.store.clear();
+  for (const location of locations) await tx.store.put(location);
+  await tx.done;
+}
+
+export async function getCachedLocations(): Promise<LocationItem[]> {
+  const db = await getLocalDB();
+  return db.getAll("cached_locations");
+}
+
+export async function saveCachedTags(tags: TagItem[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("cached_tags", "readwrite");
+  await tx.store.clear();
+  for (const tag of tags) {
+    const code = tag.code || tag.tag_code;
+    if (code) await tx.store.put({ ...tag, code });
+  }
+  await tx.done;
+}
+
+export async function getCachedTags(): Promise<TagItem[]> {
+  const db = await getLocalDB();
+  return db.getAll("cached_tags");
 }

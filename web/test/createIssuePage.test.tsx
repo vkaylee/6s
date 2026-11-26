@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { ImageAnnotatorModal } from "../src/components/ImageAnnotatorModal.tsx";
@@ -7,6 +6,7 @@ import { LocationCombobox } from "../src/components/LocationCombobox.tsx";
 import { TaxonomySelectorModal } from "../src/components/TaxonomySelectorModal.tsx";
 import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
 import { IssueCategory, type LocationItem, type TagItem, TagStatus } from "../src/types/index.ts";
+import { WithMockState } from "./fixtures/mockState.tsx";
 
 describe("Enterprise CreateIssuePage UIUX", () => {
   const mockLocations: LocationItem[] = [
@@ -367,29 +367,6 @@ describe("Enterprise CreateIssuePage UIUX", () => {
     expect(pageHtml).toContain("6S");
   });
 });
-
-function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: {
-          current: { useState: (init: unknown) => [unknown, () => void] };
-        };
-      };
-    }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-  let idx = 0;
-  internals.current.useState = (init: unknown) => {
-    const val =
-      idx < values.length
-        ? values[idx++]
-        : typeof init === "function"
-          ? (init as () => unknown)()
-          : init;
-    return [val, () => {}];
-  };
-  return <>{children}</>;
-}
 
 describe("CreateIssuePage with uploaded photos and states", () => {
   const mockLocations: LocationItem[] = [

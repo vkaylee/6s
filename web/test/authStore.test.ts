@@ -65,21 +65,28 @@ describe("authStore", () => {
 
   it("saves and clears remembered user in localStorage", async () => {
     const storage = new Map<string, string>();
-    const originalLocalStorage = globalThis.localStorage;
-    globalThis.localStorage = {
-      getItem: (k: string) => storage.get(k) ?? null,
-      setItem: (k: string, v: string) => {
-        storage.set(k, String(v));
-      },
-      removeItem: (k: string) => {
-        storage.delete(k);
-      },
-      clear: () => {
-        storage.clear();
-      },
-      key: () => null,
-      length: 0,
-    } as unknown as Storage;
+    const originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    );
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      writable: true,
+      value: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          storage.set(k, String(v));
+        },
+        removeItem: (k: string) => {
+          storage.delete(k);
+        },
+        clear: () => {
+          storage.clear();
+        },
+        key: () => null,
+        length: 0,
+      } as unknown as Storage,
+    });
 
     try {
       const store = useAuthStore.getState();
@@ -99,7 +106,11 @@ describe("authStore", () => {
       clearRememberedUser();
       expect(getRememberedUser()).toBeNull();
     } finally {
-      globalThis.localStorage = originalLocalStorage;
+      if (originalLocalStorageDescriptor) {
+        Object.defineProperty(globalThis, "localStorage", originalLocalStorageDescriptor);
+      } else {
+        delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
+      }
     }
   });
 });

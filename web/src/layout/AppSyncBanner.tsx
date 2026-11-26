@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
+import { fetchIssue } from "../api/operations.ts";
 import { ConflictModal } from "../components/ConflictModal.tsx";
-import type { DraftResolve } from "../db/indexeddb.ts";
+import { type DraftResolve, deleteDraftResolve, saveDraftResolve } from "../db/indexeddb.ts";
 import { modalDialog } from "../store/dialogStore.ts";
+import { syncEngine } from "../sync/syncEngine.ts";
+import { SyncStatus } from "../types/index.ts";
 
 interface AppSyncErrorsProps {
   masterDataError?: boolean;
@@ -91,18 +95,52 @@ interface AppConflictResolutionProps {
 }
 
 export function AppConflictResolution({ conflictItem, onResolve, t }: AppConflictResolutionProps) {
+  const [serverIssue, setServerIssue] = useState<{ version: number; photo_after?: string } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!conflictItem) return;
+    let cancelled = false;
+    setServerIssue(null);
+    fetchIssue(conflictItem.issue_id)
+      .then((issue) => {
+        if (!cancelled) setServerIssue({ version: issue.version, photo_after: issue.photo_after });
+      })
+      .catch(() => {
+        if (!cancelled) void modalDialog.alert(t("common.error"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conflictItem, t]);
+
   if (!conflictItem) return null;
+
+  const handleOverwrite = async () => {
+    if (!serverIssue) return;
+    await saveDraftResolve({
+      ...conflictItem,
+      expected_version: serverIssue.version,
+      sync_status: SyncStatus.PENDING,
+    });
+    await syncEngine.triggerSync();
+    await modalDialog.success(t("conflict.overwrite_requested"));
+    onResolve(null);
+  };
+
+  const handleDiscard = async () => {
+    await deleteDraftResolve(conflictItem.resolved_client_uuid);
+    onResolve(null);
+  };
+
   return (
     <ConflictModal
       resolveItem={conflictItem}
-      serverVersion={2}
-      onOverwrite={() => {
-        modalDialog.success(t("conflict.overwrite_requested"));
-        onResolve(null);
-      }}
-      onDiscard={() => {
-        onResolve(null);
-      }}
+      serverVersion={serverIssue?.version}
+      serverPhotoAfter={serverIssue?.photo_after}
+      onOverwrite={handleOverwrite}
+      onDiscard={handleDiscard}
       onClose={() => onResolve(null)}
     />
   );

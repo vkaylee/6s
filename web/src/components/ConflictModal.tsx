@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DraftResolve } from "../db/indexeddb.ts";
 import { useI18nStore } from "../i18n/index.ts";
 import { resolvePhotoUrl } from "../utils/photo.ts";
@@ -20,7 +20,7 @@ interface ConflictModalProps {
  */
 export function ConflictModal({
   resolveItem,
-  serverVersion = 2,
+  serverVersion = resolveItem.expected_version,
   serverPhotoAfter,
   onOverwrite,
   onDiscard,
@@ -28,7 +28,11 @@ export function ConflictModal({
 }: ConflictModalProps) {
   const { t, locale } = useI18nStore();
   const [activeTab, setActiveTab] = useState<"LOCAL" | "SERVER">("LOCAL");
-  const localPhotoUrl = URL.createObjectURL(resolveItem.photo_after_blob);
+  const localPhotoUrl = useMemo(
+    () => URL.createObjectURL(resolveItem.photo_after_blob),
+    [resolveItem.photo_after_blob],
+  );
+  useEffect(() => () => URL.revokeObjectURL(localPhotoUrl), [localPhotoUrl]);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

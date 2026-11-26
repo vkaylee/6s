@@ -1075,7 +1075,7 @@ export const batchUpdateTagStatus = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Lấy cấu hình kênh thông báo (Admin only)
+ * Lấy cấu hình kênh thông báo (Admin or Superadmin)
  */
 export const getNotificationConfig = <ThrowOnError extends boolean = false>(options?: Options<GetNotificationConfigData, ThrowOnError>): RequestResult<GetNotificationConfigResponses, GetNotificationConfigErrors, ThrowOnError> => (options?.client ?? client).get<GetNotificationConfigResponses, GetNotificationConfigErrors, ThrowOnError>({
     security: [{

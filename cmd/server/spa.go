@@ -54,6 +54,14 @@ func serveExistingFile(w http.ResponseWriter, req *http.Request, embeddedFS fs.F
 	if cErr := f.Close(); cErr != nil {
 		log.Printf("close embedded file err: %v", cErr)
 	}
+	switch {
+	case path == "sw.js" || path == "index.html":
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	case strings.HasPrefix(path, "assets/"):
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	case path == "manifest.webmanifest" || strings.HasPrefix(path, "icon"):
+		w.Header().Set("Cache-Control", "no-cache")
+	}
 	if path == "sw.js" {
 		w.Header().Set("Service-Worker-Allowed", "/")
 		w.Header().Set("Content-Type", "application/javascript")
@@ -76,6 +84,7 @@ func serveSPAFallback(w http.ResponseWriter, req *http.Request, embeddedFS fs.FS
 	if cErr := indexFile.Close(); cErr != nil {
 		log.Printf("close index file err: %v", cErr)
 	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	req.URL.Path = "/"
 	fileServer.ServeHTTP(w, req)
 	return true

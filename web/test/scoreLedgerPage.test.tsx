@@ -1,32 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import * as React from "react";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { ScoreLedgerPage } from "../src/pages/ScoreLedgerPage.tsx";
 import type { ScoreLogItem } from "../src/types/index.ts";
+import { WithMockState } from "./fixtures/mockState.tsx";
 
-function WithMockState({ values, children }: { values: unknown[]; children: React.ReactNode }) {
-  const internals = (
-    React as unknown as {
-      __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: {
-        ReactCurrentDispatcher: {
-          current: { useState: (init: unknown) => [unknown, () => void] };
-        };
-      };
-    }
-  ).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
-  let idx = 0;
-  internals.current.useState = (init: unknown) => {
-    const val =
-      idx < values.length
-        ? values[idx++]
-        : typeof init === "function"
-          ? (init as () => unknown)()
-          : init;
-    return [val, () => {}];
-  };
-  return <>{children}</>;
-}
 describe("ScoreLedgerPage", () => {
   it("renders location header, summary and navigation controls", () => {
     const html = renderToString(

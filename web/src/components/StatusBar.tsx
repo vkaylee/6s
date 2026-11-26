@@ -20,7 +20,9 @@ export function StatusBar({ onOpenDrawer, searchQuery, onSearchChange }: StatusB
   const { t } = useI18nStore();
   useAuthStore((s) => s.user);
   const user = useAuthStore.getState().user;
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof window !== "undefined" && typeof navigator !== "undefined" && navigator.onLine,
+  );
   const [progress, setProgress] = useState<SyncProgress>({
     total: 0,
     completed: 0,

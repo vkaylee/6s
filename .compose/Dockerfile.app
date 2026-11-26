@@ -13,7 +13,7 @@
 # (release-management.md §1: artifact traceable to source revision + CI run).
 
 # --- Stage 1: web assets ---------------------------------------------------
-FROM docker.io/oven/bun:1.1 AS web
+FROM docker.io/oven/bun:1.4.1 AS web
 WORKDIR /src/web
 COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
@@ -22,7 +22,7 @@ COPY web/ ./
 RUN bun run build
 
 # --- Stage 2: server binary ------------------------------------------------
-FROM docker.io/library/golang:1.23-bookworm AS server
+FROM docker.io/library/golang:1.26.11-bookworm AS server
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

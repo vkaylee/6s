@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: .compose/Dockerfile.golang
-    image: 6s-go-dev:1.23
+    image: 6s-go-dev:1.26
     volumes:
       - ..:/workspace
       - go-module-cache:/go/pkg/mod
@@ -28,7 +28,7 @@ services:
     build:
       context: ..
       dockerfile: .compose/Dockerfile.golang
-    image: 6s-go-dev:1.23
+    image: 6s-go-dev:1.26
     volumes:
       - ..:/workspace
       - go-module-cache:/go/pkg/mod

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../../api/client.ts";
 import { type DraftIssue, saveDraftIssue } from "../../db/indexeddb.ts";
 import { useI18nStore } from "../../i18n/index.ts";
@@ -51,6 +51,8 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
   const [previewDetail, setPreviewDetail] = useState<string | null>(
     initialIssue?.photo_detail ? resolvePhotoUrl(initialIssue.photo_detail, "detail") : null,
   );
+  const previewBeforeUrlRef = useRef<string | null>(null);
+  const previewDetailUrlRef = useRef<string | null>(null);
   const [assetId, setAssetId] = useState<number | null>(initialIssue?.asset_id ?? null);
   const [assignedTeamId, setAssignedTeamId] = useState<number | null>(
     initialIssue?.assigned_team_id ?? null,
@@ -73,6 +75,12 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
           : previous;
     });
   }, [tags]);
+  useEffect(() => {
+    return () => {
+      if (previewBeforeUrlRef.current) URL.revokeObjectURL(previewBeforeUrlRef.current);
+      if (previewDetailUrlRef.current) URL.revokeObjectURL(previewDetailUrlRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!initialIssue) return;
@@ -145,6 +153,9 @@ export function useIssueForm({ locations, tags, initialIssue }: UseIssueFormOpti
       try {
         const compressed = await compressImage(file, { maxDimension: 1280, quality: 0.7 });
         const previewUrl = URL.createObjectURL(compressed);
+        const previewUrlRef = isWide ? previewBeforeUrlRef : previewDetailUrlRef;
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = previewUrl;
         if (isWide) {
           setPhotoBefore(compressed);
           setPreviewBefore(previewUrl);

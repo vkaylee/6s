@@ -11,6 +11,12 @@ import {
 } from "../api/operations.ts";
 import type { FilterState } from "../components/FilterDrawer.tsx";
 import type { FacetKey } from "../components/QuickFacets.tsx";
+import {
+  getCachedLocations,
+  getCachedTags,
+  saveCachedLocations,
+  saveCachedTags,
+} from "../db/indexeddb.ts";
 import { hasCapability, type UserProfile } from "../store/authStore.ts";
 import { syncEngine } from "../sync/syncEngine.ts";
 import {
@@ -25,7 +31,6 @@ import {
   type TagItem,
 } from "../types/index.ts";
 
-/** Shared list/count/export filter set; pagination parity depends on both callers using it. */
 function buildIssueQuery(page: number, filters: FilterState): URLSearchParams {
   const queryParams = new URLSearchParams({
     page: String(page),
@@ -43,7 +48,6 @@ function buildIssueQuery(page: number, filters: FilterState): URLSearchParams {
   if (filters.mineTeam) queryParams.set("mine_team", "true");
   return queryParams;
 }
-
 const EMPTY_FILTERS: FilterState = {
   statuses: [],
   categories: [],
@@ -52,7 +56,6 @@ const EMPTY_FILTERS: FilterState = {
   mineTeam: false,
   deletion: "active",
 };
-
 export function normalizeTags(tags: TagItem[]): TagItem[] {
   return tags.map((tag) => ({
     tag_code: tag.code || tag.tag_code || "",
@@ -69,7 +72,6 @@ interface UseDashboardDataOptions {
   searchString: string;
   user: UserProfile | null;
 }
-
 export interface DashboardDataErrors {
   issues: boolean;
   masterData: boolean;
@@ -107,7 +109,6 @@ export function useDashboardData({ locale, searchString, user }: UseDashboardDat
     if (typeof window !== "undefined") {
       localStorage.setItem("6s_active_facet", facet);
     }
-    // "My team's work" is a server-side filter (mine_team=true) so paging totals stay exact.
     const nextMineTeam = facet === "MY_TEAM";
     if (nextMineTeam !== advancedFilters.mineTeam) {
       const nextFilters = { ...advancedFilters, mineTeam: nextMineTeam };
@@ -151,7 +152,6 @@ export function useDashboardData({ locale, searchString, user }: UseDashboardDat
   const masterDataRequest = useRef(0);
   const leaderboardsRequest = useRef(0);
   const canViewHealth = hasCapability(user, "reports:view");
-
   const openIssueById = async (issueId: number, deletion: "active" | "deleted" = "active") => {
     const existing = issues.find((issue) => issue.id === issueId);
     if (existing && deletion === "active") {
@@ -164,31 +164,39 @@ export function useDashboardData({ locale, searchString, user }: UseDashboardDat
           ? await fetchIssueWithDeletion(issueId, deletion)
           : await fetchIssue(issueId);
       if (fetched) setSelectedIssue(fetched);
-    } catch {
-      // ignore if not found
-    }
+    } catch {}
   };
-
   useEffect(() => {
     const issueId = new URLSearchParams(searchString).get("issue_id");
     if (issueId) openIssueById(Number(issueId), advancedFilters.deletion);
   }, [searchString, issues, advancedFilters.deletion]);
-
   const loadMasterData = async () => {
     const requestId = ++masterDataRequest.current;
     setDashboardErrors((prev) => ({ ...prev, masterData: false }));
+    let hasCachedData = false;
+    try {
+      const [cachedLocations, cachedTags] = await Promise.all([
+        getCachedLocations(),
+        getCachedTags(),
+      ]);
+      if (requestId !== masterDataRequest.current) return;
+      hasCachedData = cachedLocations.length > 0 || cachedTags.length > 0;
+      if (cachedLocations.length > 0) setLocations(cachedLocations);
+      if (cachedTags.length > 0) setTags(cachedTags);
+    } catch {}
     try {
       const [locData, tagData] = await Promise.all([fetchLocations(), fetchTags()]);
       if (requestId !== masterDataRequest.current) return;
-      setLocations(locData || []);
-      setTags(tagData || []);
+      const nextLocations = locData || [];
+      const nextTags = tagData || [];
+      setLocations(nextLocations);
+      setTags(nextTags);
+      await Promise.all([saveCachedLocations(nextLocations), saveCachedTags(nextTags)]);
     } catch {
-      if (requestId === masterDataRequest.current) {
+      if (requestId === masterDataRequest.current && !hasCachedData)
         setDashboardErrors((prev) => ({ ...prev, masterData: true }));
-      }
     }
   };
-
   const loadIssues = async (reset = false, customFilters?: FilterState) => {
     const requestId = ++issuesRequest.current;
     const targetPage = reset ? 1 : issuePage;
@@ -199,7 +207,6 @@ export function useDashboardData({ locale, searchString, user }: UseDashboardDat
       setIsLoadingMore(true);
     }
     setDashboardErrors((prev) => ({ ...prev, issues: false }));
-
     const filters = customFilters || advancedFilters;
     const queryParams = buildIssueQuery(targetPage, filters);
     try {
@@ -422,8 +429,6 @@ export function useDashboardData({ locale, searchString, user }: UseDashboardDat
     MY_LINE: user?.assigned_location_code
       ? issues.filter((issue) => issue.location_code === user.assigned_location_code).length
       : issues.length,
-    // MY_TEAM is filtered server-side, so the loaded page understates it; the pagination total
-    // for that filter is the exact number.
     MY_TEAM: advancedFilters.mineTeam ? (paginationMeta?.total ?? issues.length) : 0,
     SAFETY_6S: issues.filter(
       (issue) => issue.category === IssueCategory.S6 && issue.status === IssueStatus.OPEN,

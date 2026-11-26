@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { GlobalDialog } from "../src/components/GlobalDialog.tsx";
@@ -9,6 +9,10 @@ import { useI18nStore } from "../src/i18n/index.ts";
 import { CreateIssuePage } from "../src/pages/CreateIssuePage.tsx";
 import type { DialogOptions } from "../src/store/dialogStore.ts";
 import { type I18nObject, IssueCategory, type IssueItem, IssueStatus } from "../src/types/index.ts";
+
+afterEach(() => {
+  useI18nStore.getState().setLocale("vi");
+});
 
 describe("Component I18nObject compliance & rendering", () => {
   it("renders GlobalDialog with localized I18nObject props", () => {

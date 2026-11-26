@@ -3,7 +3,7 @@
 # =============================================================================
 
 [devkit]
-version = "0.7.28"
+version = "0.7.30"
 install = "per-project"
 source = "release"
 
@@ -15,7 +15,7 @@ languages = ["go", "typescript"]
 [services.server]
 lang = "go"
 go = true
-go_version = "1.23"
+go_version = "1.26"
 
 [services.webdashboard]
 lang = "typescript"

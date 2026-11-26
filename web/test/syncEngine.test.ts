@@ -3,9 +3,12 @@ import type { DraftIssue, DraftResolve } from "../src/db/indexeddb.ts";
 import { buildIssueSyncFormData, isRecoverableSyncStatus } from "../src/sync/syncEngine.ts";
 
 describe("syncEngine recovery filter", () => {
-  it("includes PENDING, FAILED, and SYNCING drafts so interrupted uploads recover", () => {
+  it("retries FAILED drafts until automatic retry exhaustion", () => {
     expect(isRecoverableSyncStatus("PENDING")).toBe(true);
     expect(isRecoverableSyncStatus("FAILED")).toBe(true);
+    expect(isRecoverableSyncStatus("FAILED", false, 4)).toBe(true);
+    expect(isRecoverableSyncStatus("FAILED", false, 5)).toBe(false);
+    expect(isRecoverableSyncStatus("FAILED", true, 5)).toBe(true);
     expect(isRecoverableSyncStatus("SYNCING")).toBe(true);
   });
 

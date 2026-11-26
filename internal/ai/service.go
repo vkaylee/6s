@@ -898,7 +898,18 @@ func (s *Service) TestDNS(ctx context.Context, req DNSTestRequest) (DNSTestRespo
 
 	ips := make([]string, 0, len(addrs))
 	for _, addr := range addrs {
+		if addr.IP.IsUnspecified() {
+			continue
+		}
 		ips = append(ips, addr.IP.String())
+	}
+	if len(ips) == 0 {
+		return DNSTestResponse{
+			Success:   false,
+			Host:      host,
+			LatencyMs: latencyMs,
+			Error:     "DNS resolved only to unspecified addresses",
+		}, nil
 	}
 
 	return DNSTestResponse{

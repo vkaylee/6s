@@ -12,8 +12,8 @@ interface IssueMediaAttachmentsProps {
   onDrop?: (event: React.DragEvent<HTMLElement>, isWide: boolean) => void;
   onRemove?: (isWide: boolean) => void;
   onAnnotate?: (target: "wide" | "detail") => void;
-  wideInputRef?: RefObject<HTMLInputElement>;
-  detailInputRef?: RefObject<HTMLInputElement>;
+  wideInputRef?: RefObject<HTMLInputElement | null>;
+  detailInputRef?: RefObject<HTMLInputElement | null>;
   dragOverWide?: boolean;
   dragOverDetail?: boolean;
   onDragOver?: (isWide: boolean) => void;
@@ -44,7 +44,7 @@ function PhotoCard({
   onDrop?: (event: React.DragEvent<HTMLElement>, isWide: boolean) => void;
   onRemove?: (isWide: boolean) => void;
   onAnnotate?: (target: "wide" | "detail") => void;
-  inputRef?: RefObject<HTMLInputElement>;
+  inputRef?: RefObject<HTMLInputElement | null>;
   dragOver?: boolean;
   onDragOver?: (isWide: boolean) => void;
   onDragLeave?: (isWide: boolean) => void;
