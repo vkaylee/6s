@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": ".leedevkit/.venv/bin/python3 .leedevkit/scripts/_model_router.py",
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
+      }
+    ]
+  }
+}
