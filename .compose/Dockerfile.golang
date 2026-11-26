@@ -1,6 +1,6 @@
-FROM docker.io/oven/bun:1.1 AS bun
+FROM docker.io/oven/bun:1.4.1 AS bun
 
-FROM golang:1.23-bookworm
+FROM golang:1.26.11-bookworm
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun /usr/local/bin/bunx /usr/local/bin/bunx
@@ -12,7 +12,7 @@ RUN apt-get update \
 RUN go install github.com/air-verse/air@v1.61.7 \
     && go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.28.0 \
     && go install golang.org/x/tools/cmd/goimports@v0.25.0 \
-    && go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0 \
+    && go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 \
     && go install golang.org/x/vuln/cmd/govulncheck@v1.1.4 \
     && go install github.com/anchore/syft/cmd/syft@v1.18.1 \
     && go install github.com/zricethezav/gitleaks/v8@v8.24.2

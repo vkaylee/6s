@@ -26,7 +26,7 @@ services:
     networks: [6s-network]
 
   migrator:
-    image: 6s-go-dev:1.23
+    image: 6s-go-dev:1.26
     working_dir: /workspace
     volumes:
       - .:/workspace
