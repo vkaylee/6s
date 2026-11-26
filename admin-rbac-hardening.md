@@ -21,7 +21,7 @@ Tách `SUPERADMIN` khỏi `ADMIN`; ngăn leo thang quyền, tự khóa tài kho�
 - [ ] Cập nhật frontend: capabilities từ server/auth context; ẩn control không được phép; hiển thị role `SUPERADMIN`, confirmation, lỗi policy.
 - [ ] Cập nhật LDAP/JIT: chỉ mapping role nghiệp vụ; không provision `SUPERADMIN` từ group AD thông thường; bootstrap/promote qua local-controlled path.
 - [ ] Thêm regression tests: admin-to-admin 403, superadmin actions, self-disable/self-demote, last-superadmin, privilege escalation, audit rollback, session revoke.
-- [ ] Verification: `./leedevkit test server --lint-only`, `./leedevkit test server --unit-only`, `./leedevkit test web --lint-only`, `./leedevkit test web --unit-only`; smoke test permission matrix/user admin.
+- [ ] Verification: `leedevkit test server --lint-only`, `leedevkit test server --unit-only`, `leedevkit test web --lint-only`, `leedevkit test web --unit-only`; smoke test permission matrix/user admin.
 
 ## Done When
 - ADMIN không thể sửa hoặc disable ADMIN/SUPERADMIN.

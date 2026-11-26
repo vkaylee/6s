@@ -10,7 +10,7 @@
 - [ ] Làm permission update atomic với audit: transaction bao quanh replace mappings + audit insert; audit lỗi phải rollback mutation; không nuốt lỗi. → Verify: success có audit; audit failure không đổi mappings.
 - [ ] Chuẩn bị migration rollout: backup DB, chạy `000009_permissions.up.sql` qua migration runner, không chạy down trong production; định nghĩa rollback bằng restore/roll-forward. → Verify: migration idempotent, schema/index/FK đúng.
 - [ ] Xác minh production mappings: đếm 14 permissions, 32 default role mappings; kiểm tra ADMIN giữ `permission:manage` + `user:manage`; đối chiếu SPEC 5.2. → Verify: reconciliation query pass, không có orphan/duplicate.
-- [ ] Chạy `./leedevkit test server`, `./leedevkit test web`, smoke test permission matrix + issue actions. → Verify: full gates pass.
+- [ ] Chạy `leedevkit test server`, `leedevkit test web`, smoke test permission matrix + issue actions. → Verify: full gates pass.
 
 ## Risks
 - Thay hard-code role có thể mở quyền sai nếu permission context thiếu: evaluator fail-closed.

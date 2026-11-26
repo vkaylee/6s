@@ -20,7 +20,7 @@ Chuyển nút "Xoá mềm" (và tuỳ chọn "Khôi phục") từ nút to chiế
 - [x] Task 2: Gom nút xoá mềm `canDeleteIssue` vào menu dropdown `⋯` (MoreHorizontal) với icon và màu cảnh báo rose/đỏ → Constraints: giữ nguyên nút `Pencil` (Sửa) và `X` (Đóng) ngoài header; nút khôi phục `canRestoreIssue` có thể hiển thị trong menu hoặc banner trạng thái đã xoá → Interface: `web/src/pages/IssueDetailModal.tsx` → Verify: header tiết kiệm ~100px diện tích, nút xoá không còn choán thanh tiêu đề.
 - [x] Task 3: Bổ sung unit test kiểm tra tương tác mở menu và kích hoạt dialog xoá mềm → Constraints: chạy bằng hermetic bun test runner → Interface: `web/test/issueDetailModal.test.tsx` → Verify: `./scripts/_bun.sh test test/issueDetailModal.test.tsx`.
 - [x] Task 4: Cập nhật E2E test `web/e2e/issue-deletion-smoke.spec.js` nếu bộ chọn cần mở menu hành động trước khi bấm xoá → Constraints: test E2E pass → Interface: `web/e2e/issue-deletion-smoke.spec.js` → Verify: Playwright step chọn nút xoá mềm qua menu nếu áp dụng.
-- [x] Task 5: Chạy toàn bộ test web & lint để đảm bảo không hồi quy → Constraints: tuân thủ hermetic wrappers → Interface: repo test suite → Verify: `./leedevkit test web --lint-only` && `./leedevkit test web --unit-only`.
+- [x] Task 5: Chạy toàn bộ test web & lint để đảm bảo không hồi quy → Constraints: tuân thủ hermetic wrappers → Interface: repo test suite → Verify: `leedevkit test web --lint-only` && `leedevkit test web --unit-only`.
 
 ## Done When
 - [x] Header `IssueDetailModal` không còn nút chữ dài "Xoá mềm" cố định choán diện tích.

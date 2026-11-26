@@ -59,7 +59,7 @@ Improve nearby code when the issue is verified, low-risk, behavior-preserving, a
 When working on specific concerns, also consult:
 - Read `.agent/rules/ai-agent-governance.md` — rule priority, scope, exceptions, verification, and Definition of Done.
 - Read `.agent/rules/database-rules.md` — multi-tenancy, N+1 prevention, migrations, and soft deletes.
-- Read `.agent/rules/testing-standards.md` — test gates, coverage thresholds, and `./leedevkit test`.
+- Read `.agent/rules/testing-standards.md` — test gates, coverage thresholds, and `leedevkit test`.
 - Read `.agent/rules/development-workflow.md` — implementation loop, test impact, edge cases, and evidence.
 - Read `.agent/rules/secure-development-lifecycle.md` — threat modeling and security verification.
 - Read `.agent/rules/architecture-governance.md` — ADRs, boundaries, and architecture gates.

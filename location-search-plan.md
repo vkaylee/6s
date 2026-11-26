@@ -17,7 +17,7 @@ Make location search behave like tag search: accent-insensitive, token-aware, ty
 - [x] Add location search adapter/record fields for `code`, `name_vi`, `name_en`, and `name_zh`; rank exact code above exact names, prefixes, token matches, substrings, and small typos.
 - [x] Update `web/src/components/LocationCombobox.tsx` to call ranked location search and keep recent locations pinned ahead of the ranked all-location list without duplicate entries.
 - [x] Add regression coverage in `web/test/tagSearch.test.ts` and `web/test/locationCombobox.test.tsx` for accent removal, multilingual fields, token order, exact-code priority, typo tolerance, no-match behavior, and stable ties.
-- [x] Run `./leedevkit test web --unit-only` and `./leedevkit test web --lint-only`; manually verify mobile open state shows the location list before search focus and desktop search still focuses normally.
+- [x] Run `leedevkit test web --unit-only` and `leedevkit test web --lint-only`; manually verify mobile open state shows the location list before search focus and desktop search still focuses normally.
 
 ## Done When
 - [x] Location search returns ranked results using the same matching rules as tags.

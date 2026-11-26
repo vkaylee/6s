@@ -26,7 +26,7 @@ Use `@hey-api/openapi-ts` as a dev-only generator. Generate a typed TypeScript c
 - No frontend request uses an undeclared path/method.
 - Mutation bodies match schema.
 - Auth, locale, 401 refresh, error mapping, multipart uploads preserved.
-- `./leedevkit test web --unit-only` and `./leedevkit test web --lint-only` pass.
+- `leedevkit test web --unit-only` and `leedevkit test web --lint-only` pass.
 
 ## Explicit non-goals
 No API redesign, no backend behavior changes, no new retry/idempotency layer, no broad type cleanup.

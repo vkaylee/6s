@@ -13,5 +13,5 @@ Thiết lập Go chi router, config, pool database pgx/v5, AES-256-GCM cipher v�
 - [x] Tạo endpoint `GET /api/health` trong `cmd/server/main.go` trả HTTP 200 kèm trạng thái DB → Verify: `curl localhost:8080/api/health` trả `{"data":{"status":"ok","db":"ok"}}`
 
 ## Done When
-- [x] `./leedevkit test server --lint-only` không có lỗi
-- [x] `./leedevkit test server --unit-only` pass 100%
+- [x] `leedevkit test server --lint-only` không có lỗi
+- [x] `leedevkit test server --unit-only` pass 100%

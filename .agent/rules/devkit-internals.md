@@ -21,11 +21,11 @@ This is a **meta-tool factory**. Changes here ship to ALL downstream projects vi
 ## Key Commands
 
 ```bash
-./leedevkit test infra --lint-only   # ruff + mypy
-./leedevkit test infra               # format --check + lint + pytest
-./leedevkit test all                 # full suite
-./leedevkit doctor                   # health check
-./leedevkit version                  # show version (offline; no venv)
+leedevkit test infra --lint-only   # ruff + mypy
+leedevkit test infra               # format --check + lint + pytest
+leedevkit test all                 # full suite
+leedevkit doctor                   # health check
+leedevkit version                  # show version (offline; no venv)
 ```
 
 ## Release Packaging Gate (MANDATORY for packaging changes)
@@ -53,7 +53,7 @@ What the gate proves:
 
 Notes:
 - Manifest is a **build output**, not a hand-edited source file.
-- `./leedevkit test infra` uses `ruff format --check` and must not rewrite source.
+- `leedevkit test infra` uses `ruff format --check` and must not rewrite source.
 - Keep packaging acceptance independent of Docker/PyPI/GitHub.
 
 ## Python Conventions

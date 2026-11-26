@@ -6,7 +6,7 @@ Status: Complete
 Nâng cấp trải nghiệm tạo issue đạt chuẩn Enterprise: AI trợ lý không chặn quy trình, gợi ý trọn bộ phân loại (Category 1S–6S, Cause Type CONDITION/BEHAVIOR, Thẻ nguyên nhân), và hỗ trợ áp dụng nhanh 1-chạm hoặc tùy chỉnh linh hoạt.
 
 ## Constraints & Architecture
-- Tuân thủ quy tắc hermetic (`./scripts/_bun.sh`, `./scripts/_go.sh`, `./leedevkit test ...`).
+- Tuân thủ quy tắc hermetic (`./scripts/_bun.sh`, `./scripts/_go.sh`, `leedevkit test ...`).
 - Giữ nguyên hợp đồng bảo mật: AI chỉ mang tính gợi ý (human-in-the-loop), không tự động lưu dữ liệu vào catalog khi chưa duyệt.
 - Hỗ trợ cả 2 chế độ:
   - Chỉ có mô tả (Text AI): gợi ý category, cause_type, tags.

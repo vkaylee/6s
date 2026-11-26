@@ -14,12 +14,12 @@ After implementing a change, the AI agent MUST:
 4. Record one explicit outcome in the final report:
    - **Tests added/updated:** list the scenarios covered; or
    - **No test change needed:** give a concrete, behavior-based justification.
-5. Run the focused checks needed for fast feedback, then run the **full regression gate** `./leedevkit test all` before completion. A task is unverified and MUST NOT be reported complete until this command passes.
+5. Run the focused checks needed for fast feedback, then run the **full regression gate** `leedevkit test all` before completion. A task is unverified and MUST NOT be reported complete until this command passes.
 6. Reconcile the completed tests against every applicable dimension in the pre-implementation Test Impact Matrix from `development-workflow.md`.
 
 The full regression gate MUST run for every change that can affect runtime, build output, generated code, persistence, API contracts, configuration, dependencies, or shared infrastructure. It covers all configured server, web, integration, and E2E targets. A narrower target, `--unit-only`, `--lint-only`, `--e2e-only`, `--pattern`, or a manual smoke test MAY supplement full regression but MUST NOT replace it.
 
-If `./leedevkit test all` cannot run or fails, the task remains incomplete. Report the exact failure and blocker; do not claim completion based on passing focused checks.
+If `leedevkit test all` cannot run or fails, the task remains incomplete. Report the exact failure and blocker; do not claim completion based on passing focused checks.
 
 Documentation-only, comment-only, deterministic formatting-only, or generated-artifact-only changes MAY omit full regression only when they cannot alter runtime or build behavior. The final report MUST state that reason.
 
@@ -34,14 +34,14 @@ A test change MAY be unnecessary for documentation-only, comment-only, formattin
 ## 2. Test Execution Commands
 
 > [!WARNING]
-> Prefer the project-local LeeDevKit target or documented repository wrapper. Do not assume language-specific wrappers exist. Follow the discovery order in `ai-agent-governance.md`.
+> Prefer the globally installed LeeDevKit target or documented repository wrapper. Do not assume language-specific wrappers exist. Follow the discovery order in `ai-agent-governance.md`.
 
 | Scope | Command | Purpose |
 |---|---|---|
-| **Fast feedback** | `./leedevkit test <target> --unit-only` | Focused unit-test iteration |
-| **Applicable target** | `./leedevkit test <target>` | Required verification before completion |
-| **Coverage** | `./leedevkit test <target> --coverage` | Coverage verification for changed logic |
-| **Full suite** | `./leedevkit test all` | Cross-target regression verification |
+| **Fast feedback** | `leedevkit test <target> --unit-only` | Focused unit-test iteration |
+| **Applicable target** | `leedevkit test <target>` | Required verification before completion |
+| **Coverage** | `leedevkit test <target> --coverage` | Coverage verification for changed logic |
+| **Full suite** | `leedevkit test all` | Cross-target regression verification |
 | **Release packaging** | `python3 scripts/_release_build.py ...` then `python3 scripts/_release_acceptance.py ...` | Required for packaging/install/bootstrap/update changes in LeeDevKit itself |
 
 Use the narrowest target that fully covers the change. Run the full suite when the change crosses targets or affects shared infrastructure. Do not use background execution (`&`). Follow `execution-pty-safety.md` for output handling.
@@ -66,7 +66,7 @@ When the change affects LeeDevKit packaging, bootstrap, install, update, version
 The LeeDevKit target command orchestrates the applicable type, lint, schema, and test phases:
 
 ```bash
-./leedevkit test <target>
+leedevkit test <target>
 ```
 
 Use `--lint-only`, `--unit-only`, `--e2e-only`, `--pattern`, or `--coverage` only for focused iteration. Focused checks do not replace the applicable target verification required before completion.

@@ -16,7 +16,7 @@ fi
 mkdir -p "$ROOT/tmp"
 
 echo "Starting dev stack with Cloudflare Tunnel..."
-COMPOSE_PROFILES=tunnel ./leedevkit manage up dev
+COMPOSE_PROFILES=tunnel leedevkit dev up
 
 echo "Waiting for Cloudflare Tunnel URL..."
 URL=""
@@ -30,7 +30,7 @@ done
 
 if [ -z "$URL" ]; then
   echo "Error: Timed out waiting for Cloudflare Tunnel URL." >&2
-  echo "Check logs with: ./leedevkit manage logs dev tunnel" >&2
+  echo "Check logs with: leedevkit dev logs tunnel" >&2
   exit 1
 fi
 

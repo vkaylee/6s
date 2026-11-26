@@ -12,8 +12,8 @@ Xây dựng module Scoring (Health Score khu vực theo tuần, Leaderboard cá 
 - [x] Task 6: Tạo `internal/notification/handler.go` xử lý endpoints: `GET /api/config/notifications`, `PUT /api/config/notifications`, `POST /api/config/notifications/test` (Admin, mã hóa AES-256-GCM token/webhook URL) -> Verify: Unit test admin config endpoints
 - [x] Task 7: Tạo `internal/cron/cron.go` xử lý tác vụ định kỳ: `OVERDUE_PENALTY_SCAN` (quét issue OPEN > 48h lúc 00:00 kèm chạy bù khi khởi động), `CLEANUP_ORPHANS` (dọn dẹp ảnh mồ côi lúc 01:00), `CLEANUP_AUDIT_LOGS` (dọn audit > 12 tháng), ghi nhận `cron_task_logs` -> Verify: Unit test quét bù quá hạn idempotent
 - [x] Task 8: Tích hợp scoring routes, notification routes, khởi động background Outbox Worker và Cron Runner vào `cmd/server/main.go` -> Verify: Tích hợp server biên dịch và chạy kiểm thử
-- [x] Task 9: Chạy toàn bộ kiểm thử server (`./leedevkit test server --lint-only` và `./leedevkit test server --unit-only`) -> Verify: Pass 100% không lỗi linter
+- [x] Task 9: Chạy toàn bộ kiểm thử server (`leedevkit test server --lint-only` và `leedevkit test server --unit-only`) -> Verify: Pass 100% không lỗi linter
 
 ## Done When
 - [x] Toàn bộ unit tests cho scoring, outbox worker, notification client, cron runner pass 100%
-- [x] `./leedevkit test server --lint-only` và `./leedevkit test server --unit-only` pass không lỗi
+- [x] `leedevkit test server --lint-only` và `leedevkit test server --unit-only` pass không lỗi

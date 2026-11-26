@@ -46,8 +46,8 @@ Luôn render button AI ở user flows. Khi AI chưa enable hoặc status chưa r
 - [ ] AI off hoặc status loading: button AI vẫn tồn tại trong DOM, disabled, không phát sinh request `/api/ai/*` ngoài `/api/ai/status`.
 - [ ] AI off: cảnh báo rõ cách bật; CreateTagModal nhập tay và lưu được.
 - [ ] AI on: review, translate, cached translation, tag auto-translate giữ hành vi hiện tại.
-- [ ] `./leedevkit test web --lint-only` pass.
-- [ ] `./leedevkit test web --unit-only` pass.
+- [ ] `leedevkit test web --lint-only` pass.
+- [ ] `leedevkit test web --unit-only` pass.
 
 ## Notes
 - Chỉ sửa frontend và i18n. Không thêm dependency, DB migration, hay backend endpoint.

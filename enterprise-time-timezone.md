@@ -19,7 +19,7 @@ Chuẩn hóa thời gian toàn hệ thống: lưu UTC, hiển thị theo site/us
 - [ ] **Refactor scheduler**: resolve timezone theo site, xử lý DST gap/fold, idempotency theo job/site/business-date, lưu execution instant và timezone metadata; giữ catch-up/retry/error logging.
 - [ ] **Chuẩn hóa frontend/export**: một formatter dùng locale + resolved timezone; hiển thị offset/timezone khi cần; thay `toLocaleString()` rải rác; không đổi logic SLA đang tính bằng epoch.
 - [ ] **Bổ sung test behavior**: UTC round-trip; site fallback/user override; invalid IANA; DST gap/fold; scheduler idempotency/catch-up; API compatibility; unauthorized cross-site timezone tampering; migration rollback.
-- [ ] **Verification**: chạy `./leedevkit test server --lint-only`, `./leedevkit test server --unit-only`, `./leedevkit test web --lint-only`, `./leedevkit test web --unit-only`; smoke test API, scheduler, UI hiển thị; kiểm tra migration up/down trên bản sao DB.
+- [ ] **Verification**: chạy `leedevkit test server --lint-only`, `leedevkit test server --unit-only`, `leedevkit test web --lint-only`, `leedevkit test web --unit-only`; smoke test API, scheduler, UI hiển thị; kiểm tra migration up/down trên bản sao DB.
 
 ## Done when
 - Mọi instant mới lưu UTC; API contract nhất quán.

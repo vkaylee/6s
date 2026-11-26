@@ -9,8 +9,8 @@ Xây dựng module PWA Offline Engine cho Client React: Client Image Compression
 - [x] Task 3: Tạo `web/src/store/authStore.ts` quản lý state đăng nhập: user profile và accessToken trong RAM, lưu/nạp refreshToken từ IndexedDB, hỗ trợ Offline Grace Mode khi mất mạng -> Verify: Unit test login, logout, refresh token và offline grace period
 - [x] Task 4: Tạo `web/src/api/client.ts` bọc `fetch` xử lý Authorization header, tự động gọi refresh token khi nhận 401, parse response envelope `{data}`/`{error}` -> Verify: Unit test client request, envelope unwrapping và 401 auto refresh
 - [x] Task 5: Tạo `web/src/sync/syncEngine.ts` hiện thực cơ chế Auto-Sync: lắng nghe online + polling 30s `/api/health`, sync tuần tự `draft_issues` (upload blob progress, multipart POST `/api/issues/sync`), sync `draft_resolves` (POST `/api/issues/{id}/resolve` kèm `expected_version`), bắt lỗi 409 chuyển `sync_status = 'CONFLICT'` -> Verify: Unit test luồng sync happy path và 409 conflict
-- [x] Task 6: Chạy kiểm thử web (`./leedevkit test web --lint-only` và `./leedevkit test web --unit-only`) -> Verify: Pass 100% không lỗi Biome, TypeScript hay Bun test
+- [x] Task 6: Chạy kiểm thử web (`leedevkit test web --lint-only` và `leedevkit test web --unit-only`) -> Verify: Pass 100% không lỗi Biome, TypeScript hay Bun test
 
 ## Done When
 - [x] Toàn bộ unit tests cho compress, indexeddb, authStore, syncEngine pass 100%
-- [x] `./leedevkit test web --lint-only` và `./leedevkit test web --unit-only` pass không lỗi
+- [x] `leedevkit test web --lint-only` và `leedevkit test web --unit-only` pass không lỗi

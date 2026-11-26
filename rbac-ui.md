@@ -18,7 +18,7 @@ Bổ sung giao diện Admin quản lý user, role, chuyền/khu vực, trạng t
 - [ ] Thêm route `/admin/users`, link từ `StatusBar`/`AdminConfigPage`; chỉ render entry cho Admin, route vẫn server-protected.
 - [ ] Thêm i18n VI/EN/ZH, keyboard focus, labels, `aria-live`, visible focus, skeleton, empty/error states.
 - [ ] Smoke test UI trên mobile/desktop: list, filter, update, forbidden response, refresh persistence.
-- [ ] Chạy `./leedevkit test server --lint-only`, `./leedevkit test server --unit-only`, `./leedevkit test web --lint-only`, `./leedevkit test web --unit-only`.
+- [ ] Chạy `leedevkit test server --lint-only`, `leedevkit test server --unit-only`, `leedevkit test web --lint-only`, `leedevkit test web --unit-only`.
 
 ## Done When
 - Admin quản lý được role, location, active status qua UI.

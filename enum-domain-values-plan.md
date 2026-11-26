@@ -45,9 +45,9 @@ Chuẩn hóa toàn bộ giá trị phân loại cố định thành typed enum �
 - [x] **7. Remove known drift and invalid fixtures** — cập nhật test fixtures và AI validation tests sang enum hợp lệ. Sửa kiến trúc frontend enum check (`web/test/enumPolicy.test.ts` passed).
 
 - [x] **8. Full verification and rollout** —
-  - `./leedevkit test server --lint-only`: PASSED
-  - `./leedevkit test server --unit-only`: PASSED
-  - `./leedevkit test web --lint-only`: PASSED
+  - `leedevkit test server --lint-only`: PASSED
+  - `leedevkit test server --unit-only`: PASSED
+  - `leedevkit test web --lint-only`: PASSED
   - `./scripts/_bun.sh test test/enumPolicy.test.ts`: PASSED
   - Focused test suites cho changed path: PASSED
 

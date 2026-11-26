@@ -24,11 +24,11 @@
 ## Verification
 
 ```sh
-./leedevkit test server
-./leedevkit test web
+leedevkit test server
+leedevkit test web
 ```
 
-Evidence: server unit, integration, and lint passed; web unit, lint, and 5/5 Chromium E2E passed via `./leedevkit test all`. Authorization, retry/error, and rollback behavior reviewed against existing tests/runbook.
+Evidence: server unit, integration, and lint passed; web unit, lint, and 5/5 Chromium E2E passed via `leedevkit test all`. Authorization, retry/error, and rollback behavior reviewed against existing tests/runbook.
 
 ## Done when
 

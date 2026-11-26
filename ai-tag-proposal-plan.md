@@ -35,7 +35,7 @@ Cho phép AI gợi ý tag chuẩn hoặc đề xuất tag mới từ text + cate
   **Verify:** backend tests cho approve/reject/merge, quyền 403 với non-admin, concurrency/version guard; admin UI hiển thị count và trạng thái sau thao tác.
 
 - [x] **8. Regression, smoke và tài liệu contract** — Cập nhật test web/server/OpenAPI; chạy lint/unit theo wrapper; mở browser kiểm tra tạo issue online/offline, chip pending, picker owner/non-owner và admin moderation.
-  **Verify:** `./leedevkit test server --lint-only`; `./leedevkit test server --unit-only`; `./leedevkit test web --lint-only`; `./leedevkit test web --unit-only`; browser smoke pass trên mobile và desktop.
+  **Verify:** `leedevkit test server --lint-only`; `leedevkit test server --unit-only`; `leedevkit test web --lint-only`; `leedevkit test web --unit-only`; browser smoke pass trên mobile và desktop.
 
 ## Done When
 - Người tạo chọn và dùng tag `PENDING` ngay trong issue.

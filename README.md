@@ -2,14 +2,14 @@
 
 ## Setup
 
-Requirements: Docker or Podman, LeeDevKit.
+Requirements: Docker or Podman, and LeeDevKit installed globally (`leedevkit` on `PATH`).
 
 ```sh
-./leedevkit doctor
-./leedevkit manage up dev
+leedevkit doctor
+leedevkit dev up
 ```
 
-The development stack provides PostgreSQL, the Go API, the web app, and Caddy TLS. Stop it with `./leedevkit manage down dev`.
+The development stack provides PostgreSQL, the Go API, the web app, and Caddy TLS. Stop it with `leedevkit dev down`.
 
 ### Trust the development certificate
 
@@ -23,7 +23,7 @@ podman exec leedevkit-dev_caddy_1 cat /data/caddy/pki/authorities/local/root.crt
 
 On Windows, open `caddy-root.crt` and install it for **Current User** in **Trusted Root Certification Authorities**, then restart the browser. On Linux, import it into the browser or OS trust store used by the browser. Open `https://127.0.0.1:8443` after installation.
 
-If the container name differs, find it with `./leedevkit manage ps dev` and replace `leedevkit-dev_caddy_1` in the export command.
+If the container name differs, find it with `leedevkit dev ps` and replace `leedevkit-dev_caddy_1` in the export command.
 
 Do not disable certificate validation globally. This certificate is for local development only.
 
@@ -89,16 +89,16 @@ because the setup endpoint is public during this bootstrap window.
 ## Verification
 
 ```sh
-./leedevkit test server --lint-only
-./leedevkit test server --unit-only
-./leedevkit test web --lint-only
-./leedevkit test web --unit-only
+leedevkit test server --lint-only
+leedevkit test server --unit-only
+leedevkit test web --lint-only
+leedevkit test web --unit-only
 ```
 
 Run full browser E2E in an isolated container without installing host browsers:
 
 ```sh
-./leedevkit test web --e2e-only
+leedevkit test web --e2e-only
 ```
 
 The E2E runner launches Chromium inside an isolated test environment with a dedicated disposable database and test server. Failure screenshots and traces are saved to `artifacts/e2e/`.

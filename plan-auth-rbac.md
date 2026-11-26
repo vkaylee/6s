@@ -13,8 +13,8 @@ Xây dựng module Auth & RBAC theo Mục 6.1, 6.5, 5.2 của SPEC.md gồm: Arg
 - [x] Task 7: Tạo `internal/auth/handler.go` triển khai endpoints: `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/revoke`, `GET /api/auth/sessions` → Verify: Test HTTP handler với envelope chuẩn Mục 5.3
 - [x] Task 8: Tạo endpoints cấu hình AD: `GET /api/config/ad`, `PUT /api/config/ad`, `POST /api/config/ad/test` (kèm mã hóa `bind_password` bằng AES-256-GCM) → Verify: Test API get/put/test config với quyền Admin, cấm role khác (403)
 - [x] Task 9: Đăng ký toàn bộ auth & config routes vào `cmd/server/main.go` → Verify: Test tích hợp gọi login, refresh, me/sessions, ad config
-- [x] Task 10: Chạy kiểm thử toàn diện server (`./leedevkit test server --lint-only` và `./leedevkit test server --unit-only`) → Verify: 100% tests pass và không lỗi linter
+- [x] Task 10: Chạy kiểm thử toàn diện server (`leedevkit test server --lint-only` và `leedevkit test server --unit-only`) → Verify: 100% tests pass và không lỗi linter
 
 ## Done When
 - [x] Tất cả unit tests cho auth, token, rbac, ldap, handler pass 100%
-- [x] `./leedevkit test server --lint-only` và `./leedevkit test server --unit-only` pass không lỗi
+- [x] `leedevkit test server --lint-only` và `leedevkit test server --unit-only` pass không lỗi

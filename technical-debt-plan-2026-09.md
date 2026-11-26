@@ -14,12 +14,12 @@
 
 ## Wave 0 — Baseline (chỉ đọc)
 
-- [x] **W0.1 Chốt baseline.** Chạy và lưu output: `./leedevkit test server --lint-only`, `--unit-only`, `./leedevkit test web --lint-only`, `--unit-only`, `./leedevkit test all`, `./scripts/security-scan.sh web`, `cd web && bun run openapi:drift`. → Verify: server/web lint+unit, security go/web/sbom/secrets, OpenAPI drift PASS; full suite vẫn bị chặn bởi image E2E stale thiếu `/usr/local/bin/migrate`.
+- [x] **W0.1 Chốt baseline.** Chạy và lưu output: `leedevkit test server --lint-only`, `--unit-only`, `leedevkit test web --lint-only`, `--unit-only`, `leedevkit test all`, `./scripts/security-scan.sh web`, `cd web && bun run openapi:drift`. → Verify: server/web lint+unit, security go/web/sbom/secrets, OpenAPI drift PASS; full suite vẫn bị chặn bởi image E2E stale thiếu `/usr/local/bin/migrate`.
 - [ ] **W0.2 Debt register.** Ghi mỗi finding thành row: ID, severity, owner, file:line, risk, acceptance evidence, due date. → Verify: 5 P0 có owner và ngày; không row nào thiếu acceptance.
 
 ## Wave 1 — P0 (chặn release)
 
-- [x] **W1.1 Bật lại golangci-lint.** Thêm task `golangci-lint run` vào `leedevkit_run_lint()` (`.leedevkit/scripts/_test_modules.py:272`), dùng image `6s-go-dev:1.23` (đã cài ở `.compose/Dockerfile.golang:15`). → Verify: `./leedevkit test server --lint-only` liệt kê `golangci-lint` và fail khi có finding thật; `.test_logs/Linting_golangci-lint.log` không còn `command not found`.
+- [x] **W1.1 Bật lại golangci-lint.** Thêm task `golangci-lint run` vào `leedevkit_run_lint()` (`.leedevkit/scripts/_test_modules.py:272`), dùng image `6s-go-dev:1.23` (đã cài ở `.compose/Dockerfile.golang:15`). → Verify: `leedevkit test server --lint-only` liệt kê `golangci-lint` và fail khi có finding thật; `.test_logs/Linting_golangci-lint.log` không còn `command not found`.
 - [x] **W1.2 Dọn finding golangci-lint.** Xử lý thật `errcheck`/`gosec`/`revive`/`gocyclo` theo `.golangci.yml`. → Verify: lint exit 0; mọi `//nolint` mới có lý do cụ thể. *(Không thêm `//nolint` nào.)*
 - [x] **W1.3 Fail-closed encryption key.** `cmd/server/main.go:66-74`: không cho `cipher == nil` chạy production; reject `APP_ENCRYPTION_KEY` thiếu/sai trừ khi dev flag; `internal/config/config.go` validate key base64/raw 32 byte. → Verify: `internal/config/config_test.go` có case thiếu key → fail.
 - [ ] **W1.4 Audit secret hiện hữu.** Kiểm tra config AI/notification trong DB: cái nào mã hóa, cái nào plaintext; re-encrypt nếu có; ghi audit log. → Verify: script/query đếm được số bản ghi plaintext trước và sau = 0. **(Chưa làm: cần DB production.)**
@@ -51,7 +51,7 @@
 - [x] **W4.1 CI đồng nhất.** `.github/workflows/ci.yml`: bỏ pin cứng 0.7.7, đọc `version` từ `leedevkit.toml` (0.7.9). → Verify: workflow parse; chưa chạy trên GitHub.
 - [x] **W4.2 Security scan hermetic.** `scripts/security-scan.sh`: host-first, container fallback, fail-closed khi thiếu tool/runtime. → Verify: `go|web|sbom|secrets` đều PASS.
 - [ ] **W4.3 Integration test PostgreSQL không skip im lặng.** `TEST_DB_DSN` chưa cấp; cần owner/reason/expiry metadata cho skip.
-- [x] **W4.4 Full gate.** Đã sửa 3 lỗi E2E (nested dialog selector, plain-HTTP non-secure context `crypto.randomUUID` fallback, card label selector) và rebuild image `6s-e2e-server:local`. `./leedevkit test all` chạy 12/12 E2E PASS.
+- [x] **W4.4 Full gate.** Đã sửa 3 lỗi E2E (nested dialog selector, plain-HTTP non-secure context `crypto.randomUUID` fallback, card label selector) và rebuild image `6s-e2e-server:local`. `leedevkit test all` chạy 12/12 E2E PASS.
 
 ## Dependencies
 
@@ -64,18 +64,18 @@
 
 ## Done When
 
-- [x] `./leedevkit test server --lint-only` chạy `golangci-lint` và xanh.
+- [x] `leedevkit test server --lint-only` chạy `golangci-lint` và xanh.
 - [x] Production không khởi động được khi thiếu/sai secret; cipher production không nil.
 - [x] Export có date/time/row bounds; hot query có index. EXPLAIN cần DB thật.
 - [x] `sql/schema.sql` chứa đủ index migration-backed.
 - [ ] Audit log có `request_id`; không còn log text thô ở production path.
 - [x] Modal chính đạt keyboard/focus/ARIA.
 - [x] Không thêm `t.Skip`/`nolint` mới trong wave này.
-- [x] `./leedevkit test all` xanh trên cây sạch.
+- [x] `leedevkit test all` xanh trên cây sạch.
 
 ## Notes
 - Ghi chú 2026-09-23: commit `31adafc` xử lý P0 security/reliability/N+1/readiness/a11y/offline/supply-chain/backup scaffold; commit `bfdaa27` xử lý report bounds, report query scope, scoring batch insert, AI/LDAP retry, API transport/types, i18n audit.
 - Chưa xác minh: backup/restore thật; EXPLAIN ANALYZE; TEST_DB_DSN integration; CI trên GitHub.
-- Full gate hiện tại: `./leedevkit test all` ĐÃ XANH HOÀN TOÀN (12/12 E2E pass, server lint/unit pass, web lint/unit pass).
+- Full gate hiện tại: `leedevkit test all` ĐÃ XANH HOÀN TOÀN (12/12 E2E pass, server lint/unit pass, web lint/unit pass).
 - Residual cần môi trường ngoài: debt register; audit secret DB production; backup drill; masterdata site boundary; notification resilience/circuit breaker; request_id audit persistence; remaining i18n literals.
 - Độ phủ 80.1% dựa nhiều vào mock driver; không tính bằng chứng SQL/schema/FK.

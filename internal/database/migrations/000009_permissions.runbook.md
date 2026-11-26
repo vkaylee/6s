@@ -10,11 +10,7 @@ Owner: backend/platform. Change window: deploy with the application version that
 
 ## Apply
 
-Run the normal migration runner from the release containing `000009_permissions.up.sql`:
-
-```sh
-./leedevkit manage db:setup
-```
+Run the production migration runner from the release containing `000009_permissions.up.sql`, using the approved production deployment procedure. Do not use `leedevkit dev migrate` against production.
 
 The migration is idempotent (`IF NOT EXISTS`, `ON CONFLICT`). Do **not** run `000009_permissions.down.sql` in production; it is destructive and intended only for disposable or explicitly restore-approved environments.
 

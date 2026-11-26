@@ -69,7 +69,7 @@ Khắc phục triệt để 8 lỗ hổng trong hệ thống PWA (Offline Engine
 
 ### Giai đoạn 7: Kiểm thử toàn diện & Nghiệm thu
  - [x] Task 7.1: Chạy toàn bộ kiểm thử hệ thống qua LeeDevKit wrappers.
-  - `./leedevkit test all` — 14/14 checks passed: Go unit, Go integration, Go lint/vet, web unit, Playwright E2E, web i18n/typecheck/lint.
+  - `leedevkit test all` — 14/14 checks passed: Go unit, Go integration, Go lint/vet, web unit, Playwright E2E, web i18n/typecheck/lint.
   - DNS probe rejects unspecified-only answers (`0.0.0.0`, `::`) as unusable.
   - Verify: 100% tests pass, không lỗi TypeScript, Biome hay Go vet.
 

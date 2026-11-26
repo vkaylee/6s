@@ -32,7 +32,7 @@
 - [ ] **Task 1: Chuẩn hóa UX Card Phân công trên giao diện xem chi tiết**
   - Giữ khối "Assignment & responsibility" là thẻ hiển thị chính cho hiện trường (Thiết bị, Team xử lý, Người xử lý).
   - Di chuyển box xác minh nguyên nhân thành mục mở rộng (Accordion/Secondary Action) chỉ mở khi Safety Officer / Admin có nhu cầu chủ động đối soát.
-  - *Verify:* Chạy `./leedevkit test web --unit-only`, kiểm tra thẻ hiển thị sạch sẽ trên cả mobile 390px và desktop.
+  - *Verify:* Chạy `leedevkit test web --unit-only`, kiểm tra thẻ hiển thị sạch sẽ trên cả mobile 390px và desktop.
 
 - [ ] **Task 2: Tích hợp xác minh nguyên nhân vào luồng Nghiệm thu / Đóng issue (`Close/Review Modal`)**
   - Khi Safety Officer hoặc Line Leader duyệt hoàn thành issue (`PENDING_REVIEW` -> `CLOSED`), nếu `cause_status === "UNVERIFIED"`, hiển thị thêm một trường chọn nhanh "Đơn vị gây lỗi (để tính điểm 6S)" ngay trong popup nghiệm thu.
@@ -45,7 +45,7 @@
 - [ ] **Task 4: Cập nhật bộ test tự động và từ điển i18n (vi/en/zh)**
   - Cập nhật `web/test/issueDetailModal.test.tsx` cho các luồng tương tác mới và điều kiện hiển thị theo role.
   - Bổ sung các nhãn hướng dẫn rõ ràng trong 3 ngôn ngữ: vi, en, zh.
-  - *Verify:* `./leedevkit test web --lint-only && ./leedevkit test web --unit-only` pass 100%.
+  - *Verify:* `leedevkit test web --lint-only && leedevkit test web --unit-only` pass 100%.
 
 - [ ] **Task 5: Kiểm tra trực quan trên trình duyệt (Browser Smoke Verification)**
   - Mở tab Chromium thật trên dev server `https://localhost:8443`, đăng nhập tài khoản thường và tài khoản admin, chụp ảnh màn hình so sánh mobile view và desktop view.
